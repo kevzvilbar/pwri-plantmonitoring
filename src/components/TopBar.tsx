@@ -1,5 +1,5 @@
 import { Bell } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,10 +32,14 @@ export function TopBar() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Restrict plant filter to assigned plants
-  const visiblePlants = profile?.plant_assignments?.length
-    ? plants?.filter((p) => profile.plant_assignments.includes(p.id))
-    : plants;
+  // Restrict plant filter to assigned plants (memoized for stable Select children)
+  const visiblePlants = useMemo(() => {
+    if (!plants) return [];
+    if (profile?.plant_assignments?.length) {
+      return plants.filter((p) => profile.plant_assignments.includes(p.id));
+    }
+    return plants;
+  }, [plants, profile?.plant_assignments]);
 
   const { data: notifs = [] } = useQuery({
     queryKey: ['notifications', user?.id],
