@@ -27,12 +27,8 @@ export function BottomNav() {
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {({ isActive }) => (
-              <>
-                <Icon className={cn("h-[18px] w-[18px]", isActive && "stroke-[2.5]")} />
-                <span className="leading-none">{label}</span>
-              </>
-            )}
+            <Icon className="h-[18px] w-[18px]" />
+            <span className="leading-none">{label}</span>
           </NavLink>
         ))}
       </div>
