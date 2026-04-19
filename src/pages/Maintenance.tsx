@@ -41,11 +41,11 @@ function Checklists() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { selectedPlantId } = useAppStore();
-  const [freq, setFreq] = useState<string>('Daily');
+  const [freq, setFreq] = useState<typeof FREQUENCIES[number]>('Daily');
   const { data } = useQuery({
     queryKey: ['templates', freq, selectedPlantId],
     queryFn: async () => {
-      let q = supabase.from('checklist_templates').select('*').eq('frequency', freq);
+      let q = supabase.from('checklist_templates').select('*').eq('frequency', freq as any);
       if (selectedPlantId) q = q.eq('plant_id', selectedPlantId);
       return (await q).data ?? [];
     },
