@@ -53,6 +53,11 @@ export default {
           DEFAULT: "hsl(var(--info))",
           soft: "hsl(var(--info-soft))",
         },
+        highlight: {
+          DEFAULT: "hsl(var(--highlight))",
+          foreground: "hsl(var(--highlight-foreground))",
+          soft: "hsl(var(--highlight-soft))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -90,6 +95,7 @@ export default {
       backgroundImage: {
         'gradient-stat': "var(--gradient-stat)",
         'gradient-accent': "var(--gradient-accent)",
+        'gradient-highlight': "var(--gradient-highlight)",
       },
       keyframes: {
         "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },

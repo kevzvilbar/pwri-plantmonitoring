@@ -116,7 +116,7 @@ function DosingForm() {
           </div>
         ))}
         <div><Label className="text-xs">Free Cl reagent (pcs)</Label><Input type="number" value={v.free_chlorine_reagent_pcs} onChange={e => setV({ ...v, free_chlorine_reagent_pcs: e.target.value })} /></div>
-        <div><Label className="text-xs">Product Free Cl (ppm)</Label><Input type="number" step="any" value={v.product_water_free_cl_ppm} onChange={e => setV({ ...v, product_water_free_cl_ppm: e.target.value })} /></div>
+        <div><Label className="text-xs">Product Cl Residual (ppm)</Label><Input type="number" step="any" value={v.product_water_free_cl_ppm} onChange={e => setV({ ...v, product_water_free_cl_ppm: e.target.value })} /></div>
       </div>
       <div className="bg-accent-soft p-2 rounded text-sm flex justify-between">
         <span>Calculated cost</span><span className="font-mono-num font-semibold text-accent">₱ {fmtNum(cost, 2)}</span>
