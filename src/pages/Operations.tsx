@@ -12,10 +12,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { StatusPill } from '@/components/StatusPill';
-import { calc, fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
+import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
+import { findExistingReading, countReadingsToday } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, AlertCircle } from 'lucide-react';
+import { MapPin, Pencil } from 'lucide-react';
+
+const MAX_READINGS_PER_DAY = 3;
 
 export default function Operations() {
   return (
@@ -54,6 +57,7 @@ function LocatorReadingForm() {
   const [locatorId, setLocatorId] = useState('');
   const [reading, setReading] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState<null | string>(null);
   const [pendingPayload, setPendingPayload] = useState<any>(null);
 
@@ -82,22 +86,37 @@ function LocatorReadingForm() {
     queryKey: ['op-loc-today', plantId],
     queryFn: async () => {
       const start = new Date(); start.setHours(0,0,0,0);
-      return plantId ? (await supabase.from('locator_readings').select('*,locators(name)').eq('plant_id', plantId).gte('reading_datetime', start.toISOString())).data ?? [] : [];
+      return plantId ? (await supabase.from('locator_readings').select('*,locators(name)').eq('plant_id', plantId).gte('reading_datetime', start.toISOString()).order('reading_datetime', { ascending: false })).data ?? [] : [];
     },
     enabled: !!plantId,
   });
 
-  const doSave = async (payload: any) => {
-    const { error } = await supabase.from('locator_readings').insert(payload);
+  const doSave = async (payload: any, idToUpdate?: string | null) => {
+    let error;
+    if (idToUpdate) {
+      ({ error } = await supabase.from('locator_readings').update(payload).eq('id', idToUpdate));
+    } else {
+      ({ error } = await supabase.from('locator_readings').insert(payload));
+    }
     if (error) { toast.error(error.message); return; }
-    toast.success('Reading saved');
-    setReading(''); setRemarks('');
+    toast.success(idToUpdate ? 'Reading updated' : 'Reading saved');
+    setReading(''); setRemarks(''); setEditingId(null);
     qc.invalidateQueries();
   };
 
   const handleSave = async () => {
     if (!locatorId || !reading) { toast.error('Select locator and enter reading'); return; }
     const locator = locators?.find((l: any) => l.id === locatorId);
+
+    // Max readings per day check (only on insert)
+    if (!editingId) {
+      const cnt = await countReadingsToday({ table: 'locator_readings', entityCol: 'locator_id', entityId: locatorId, date: new Date() });
+      if (cnt >= MAX_READINGS_PER_DAY) {
+        toast.error(`Max ${MAX_READINGS_PER_DAY} readings/day reached for this locator. Edit an existing reading instead.`);
+        return;
+      }
+    }
+
     let warning = null;
     if (previous != null && cur < previous) warning = 'Current reading below previous — verify before saving';
     else if (avg && dailyVol != null && dailyVol > avg * ALERTS.avg_multiplier_warn) warning = 'Volume unusually high — verify';
@@ -112,47 +131,59 @@ function LocatorReadingForm() {
       }
     } catch { /* ignore */ }
 
-    const payload = {
+    const payload: any = {
       locator_id: locatorId, plant_id: plantId, current_reading: cur, previous_reading: previous,
       gps_lat, gps_lng, off_location_flag: off, recorded_by: user?.id, remarks: remarks || null,
     };
     if (warning) { setPendingPayload(payload); setConfirmOpen(warning); }
-    else doSave(payload);
+    else doSave(payload, editingId);
+  };
+
+  const startEdit = (r: any) => {
+    setLocatorId(r.locator_id);
+    setReading(String(r.current_reading));
+    setRemarks(r.remarks ?? '');
+    setEditingId(r.id);
+    toast.info('Editing reading — save to update');
   };
 
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-3">
-        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setLocatorId(''); }} /></div>
+        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setLocatorId(''); setEditingId(null); }} /></div>
         <div><Label>Locator</Label>
-          <Select value={locatorId} onValueChange={setLocatorId}>
+          <Select value={locatorId} onValueChange={(v) => { setLocatorId(v); setEditingId(null); }}>
             <SelectTrigger><SelectValue placeholder={plantId ? "Select locator" : "Select plant first"} /></SelectTrigger>
             <SelectContent>{locators?.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>Current reading (m³)</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} />
+          <Label>Current meter reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw meter value" />
           {locatorId && (
             <div className="mt-2 text-xs space-y-0.5">
-              <div className="text-muted-foreground">Previous: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span> · Avg vol: <span className="font-mono-num">{avg ? fmtNum(avg) : '—'}</span></div>
+              <div className="text-muted-foreground">Previous: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span> · Avg vol: <span className="font-mono-num">{avg ? fmtNum(avg) : '—'}</span> m³</div>
               {dailyVol != null && <div>Daily volume: <span className="font-mono-num font-semibold">{fmtNum(dailyVol)} m³</span></div>}
-              {previous != null && cur && cur < previous && <div className="text-warn-foreground bg-warn-soft p-1.5 rounded">⚠ Below previous</div>}
+              {previous != null && cur > 0 && cur < previous && <div className="text-warn-foreground bg-warn-soft p-1.5 rounded">⚠ Below previous</div>}
               {avg && dailyVol != null && dailyVol > avg * ALERTS.avg_multiplier_warn && <div className="text-warn-foreground bg-warn-soft p-1.5 rounded">⚠ Volume unusually high</div>}
             </div>
           )}
         </div>
         <div><Label>Remarks</Label><Input value={remarks} onChange={e => setRemarks(e.target.value)} /></div>
-        <Button onClick={handleSave} className="w-full">Save reading</Button>
+        <div className="flex gap-2">
+          <Button onClick={handleSave} className="flex-1">{editingId ? 'Update reading' : 'Save reading'}</Button>
+          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setRemarks(''); }}>Cancel</Button>}
+        </div>
       </Card>
 
       <Card className="p-3">
         <h4 className="text-sm font-semibold mb-2">Today's readings</h4>
         {todays?.length ? todays.map((r: any) => (
-          <div key={r.id} className="flex justify-between items-center text-xs py-1 border-t">
-            <span>{r.locators?.name}</span>
-            <span className="font-mono-num">{fmtNum(r.daily_volume)} m³</span>
+          <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
+            <span className="flex-1 truncate">{r.locators?.name}</span>
+            <span className="font-mono-num mr-2">{fmtNum(r.daily_volume)} m³</span>
             {r.off_location_flag && <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off</StatusPill>}
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 ml-1" onClick={() => startEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
           </div>
         )) : <p className="text-xs text-muted-foreground">No readings today</p>}
       </Card>
@@ -162,7 +193,7 @@ function LocatorReadingForm() {
           <AlertDialogHeader><AlertDialogTitle>Confirm save</AlertDialogTitle><AlertDialogDescription>{confirmOpen}</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { doSave(pendingPayload); setConfirmOpen(null); }}>Save anyway</AlertDialogAction>
+            <AlertDialogAction onClick={() => { doSave(pendingPayload, editingId); setConfirmOpen(null); }}>Save anyway</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -177,6 +208,7 @@ function WellReadingForm() {
   const [wellId, setWellId] = useState('');
   const [reading, setReading] = useState('');
   const [powerReading, setPowerReading] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: wells } = useQuery({
     queryKey: ['op-wells', plantId],
@@ -188,6 +220,14 @@ function WellReadingForm() {
     queryFn: async () => wellId ? (await supabase.from('well_readings').select('*').eq('well_id', wellId).order('reading_datetime', { ascending: false }).limit(1)).data ?? [] : [],
     enabled: !!wellId,
   });
+  const { data: todays } = useQuery({
+    queryKey: ['op-well-today', plantId],
+    queryFn: async () => {
+      const start = new Date(); start.setHours(0,0,0,0);
+      return plantId ? (await supabase.from('well_readings').select('*,wells(name)').eq('plant_id', plantId).gte('reading_datetime', start.toISOString()).order('reading_datetime', { ascending: false })).data ?? [] : [];
+    },
+    enabled: !!plantId,
+  });
 
   const well = wells?.find((w: any) => w.id === wellId);
   const previous = lastReading?.[0]?.current_reading ?? null;
@@ -196,45 +236,89 @@ function WellReadingForm() {
 
   const handleSave = async () => {
     if (!wellId || !reading) { toast.error('Fill required fields'); return; }
+
+    if (!editingId) {
+      const cnt = await countReadingsToday({ table: 'well_readings', entityCol: 'well_id', entityId: wellId, date: new Date() });
+      if (cnt >= MAX_READINGS_PER_DAY) {
+        toast.error(`Max ${MAX_READINGS_PER_DAY} readings/day reached for this well. Edit an existing reading instead.`);
+        return;
+      }
+    }
+
     if (previous != null && cur < previous) {
       if (!confirm('Reading below previous — save anyway?')) return;
     }
-    let gps_lat = null, gps_lng = null, off = false;
+    let gps_lat = null, gps_lng = null;
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
     } catch {}
-    const { error } = await supabase.from('well_readings').insert({
+    const payload: any = {
       well_id: wellId, plant_id: plantId, current_reading: cur, previous_reading: previous,
-      daily_volume: dailyVol, power_meter_reading: powerReading ? +powerReading : null,
-      gps_lat, gps_lng, off_location_flag: off, recorded_by: user?.id,
-    });
+      power_meter_reading: powerReading ? +powerReading : null,
+      gps_lat, gps_lng, off_location_flag: false, recorded_by: user?.id,
+    };
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from('well_readings').update(payload).eq('id', editingId));
+    } else {
+      ({ error } = await supabase.from('well_readings').insert(payload));
+    }
     if (error) { toast.error(error.message); return; }
-    toast.success('Well reading saved'); setReading(''); setPowerReading('');
+    toast.success(editingId ? 'Well reading updated' : 'Well reading saved');
+    setReading(''); setPowerReading(''); setEditingId(null);
     qc.invalidateQueries();
   };
 
+  const startEdit = (r: any) => {
+    setWellId(r.well_id);
+    setReading(String(r.current_reading ?? ''));
+    setPowerReading(r.power_meter_reading != null ? String(r.power_meter_reading) : '');
+    setEditingId(r.id);
+    toast.info('Editing reading');
+  };
+
   return (
-    <Card className="p-3 space-y-3">
-      <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setWellId(''); }} /></div>
-      <div><Label>Well</Label>
-        <Select value={wellId} onValueChange={setWellId}>
-          <SelectTrigger><SelectValue placeholder={plantId ? "Select well" : "Select plant first"} /></SelectTrigger>
-          <SelectContent>{wells?.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label>Current meter (m³)</Label>
-        <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} />
-        {wellId && (
-          <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{previous ?? '—'}</span> {dailyVol != null && <>· Vol: <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}</div>
+    <div className="space-y-3">
+      <Card className="p-3 space-y-3">
+        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setWellId(''); setEditingId(null); }} /></div>
+        <div><Label>Well</Label>
+          <Select value={wellId} onValueChange={(v) => { setWellId(v); setEditingId(null); }}>
+            <SelectTrigger><SelectValue placeholder={plantId ? "Select well" : "Select plant first"} /></SelectTrigger>
+            <SelectContent>{wells?.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Current meter reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw meter value" />
+          {wellId && (
+            <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{previous ?? '—'}</span> {dailyVol != null && <>· Vol: <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}</div>
+          )}
+        </div>
+        {well?.has_power_meter && (
+          <div>
+            <Label>Power meter reading</Label>
+            <Input type="number" step="any" value={powerReading} onChange={e => setPowerReading(e.target.value)} placeholder="Raw kWh meter value" />
+            <p className="text-xs text-muted-foreground mt-0.5">Daily kWh = current − previous</p>
+          </div>
         )}
-      </div>
-      {well?.has_power_meter && (
-        <div><Label>Power meter (kWh)</Label><Input type="number" step="any" value={powerReading} onChange={e => setPowerReading(e.target.value)} /></div>
-      )}
-      <Button onClick={handleSave} className="w-full">Save reading</Button>
-    </Card>
+        <div className="flex gap-2">
+          <Button onClick={handleSave} className="flex-1">{editingId ? 'Update reading' : 'Save reading'}</Button>
+          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); }}>Cancel</Button>}
+        </div>
+      </Card>
+
+      <Card className="p-3">
+        <h4 className="text-sm font-semibold mb-2">Today's readings</h4>
+        {todays?.length ? todays.map((r: any) => (
+          <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
+            <span className="flex-1 truncate">{r.wells?.name}</span>
+            <span className="font-mono-num mr-2">{fmtNum(r.daily_volume)} m³</span>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+          </div>
+        )) : <p className="text-xs text-muted-foreground">No readings today</p>}
+      </Card>
+    </div>
   );
 }
 
@@ -244,44 +328,76 @@ function PowerForm() {
   const [plantId, setPlantId] = useState('');
   const [reading, setReading] = useState('');
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
     queryFn: async () => plantId ? (await supabase.from('power_readings').select('*').eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? [] : [],
     enabled: !!plantId,
   });
-  const previous = history?.[0]?.meter_reading_kwh ?? null;
+  const previous = history?.find((r: any) => r.id !== editingId)?.meter_reading_kwh ?? null;
   const daily = previous != null && reading ? +reading - previous : null;
 
   const submit = async () => {
     if (!plantId || !reading) return;
-    const { error } = await supabase.from('power_readings').insert({
+
+    // Same-day duplicate check (only on insert)
+    if (!editingId) {
+      const dup = await findExistingReading({
+        table: 'power_readings', entityCol: 'plant_id', entityId: plantId,
+        datetime: new Date(dt), windowKind: 'day',
+      });
+      if (dup) {
+        if (!confirm('A power reading already exists for this plant today. Edit it instead?')) return;
+        setEditingId(dup);
+      }
+    }
+
+    const payload: any = {
       plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
-      meter_reading_kwh: +reading, daily_consumption_kwh: daily, recorded_by: user?.id,
-    });
+      meter_reading_kwh: +reading, recorded_by: user?.id,
+    };
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from('power_readings').update(payload).eq('id', editingId));
+    } else {
+      ({ error } = await supabase.from('power_readings').insert(payload));
+    }
     if (error) { toast.error(error.message); return; }
-    toast.success('Power reading saved'); setReading('');
+    toast.success(editingId ? 'Updated' : 'Power reading saved');
+    setReading(''); setEditingId(null);
     qc.invalidateQueries();
+  };
+
+  const startEdit = (r: any) => {
+    setReading(String(r.meter_reading_kwh));
+    setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
+    setEditingId(r.id);
+    toast.info('Editing power reading');
   };
 
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-3">
-        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={setPlantId} /></div>
+        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setEditingId(null); }} /></div>
         <div><Label>Date & time</Label><Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} /></div>
         <div>
-          <Label>Meter reading (kWh)</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} />
+          <Label>Meter reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw kWh meter value" />
           {previous != null && <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{fmtNum(previous)}</span> {daily != null && <>· Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}</div>}
         </div>
-        <Button onClick={submit} className="w-full">Save</Button>
+        <div className="flex gap-2">
+          <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
+          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); }}>Cancel</Button>}
+        </div>
       </Card>
       <Card className="p-3">
         <h4 className="text-sm font-semibold mb-2">Last 7 readings</h4>
         {history?.length ? history.map((r: any) => (
-          <div key={r.id} className="flex justify-between text-xs py-1 border-t">
-            <span>{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
-            <span className="font-mono-num">{fmtNum(r.daily_consumption_kwh ?? 0)} kWh</span>
+          <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
+            <span className="flex-1">{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
+            <span className="font-mono-num mr-2">{fmtNum(r.daily_consumption_kwh ?? 0)} kWh</span>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
           </div>
         )) : <p className="text-xs text-muted-foreground">No readings</p>}
       </Card>
