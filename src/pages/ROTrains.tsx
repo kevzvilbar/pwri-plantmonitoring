@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { StatusPill } from '@/components/StatusPill';
 import { calc, fmtNum, ALERTS } from '@/lib/calculations';
+import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -184,6 +185,7 @@ function AFMLog() {
   const [trainId, setTrainId] = useState('');
   const [unit, setUnit] = useState('1');
   const [mode, setMode] = useState<'Running' | 'Backwash'>('Running');
+  const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [v, setV] = useState({ inlet: '', outlet: '', start: '', end: '', initial: '', final: '' });
 
   const { data: trains } = useQuery({
@@ -199,6 +201,7 @@ function AFMLog() {
     if (!trainId) return;
     const { error } = await supabase.from('afm_readings').insert({
       train_id: trainId, plant_id: plantId, afm_unit_number: +unit, mode,
+      reading_datetime: new Date(dt).toISOString(),
       inlet_pressure_psi: mode === 'Running' && v.inlet ? +v.inlet : null,
       outlet_pressure_psi: mode === 'Running' && v.outlet ? +v.outlet : null,
       dp_psi: dp,
@@ -208,7 +211,9 @@ function AFMLog() {
       backwash_volume: vol, recorded_by: user?.id,
     });
     if (error) { toast.error(error.message); return; }
-    toast.success('AFM saved'); qc.invalidateQueries();
+    toast.success('AFM saved');
+    setV({ inlet: '', outlet: '', start: '', end: '', initial: '', final: '' });
+    qc.invalidateQueries();
   };
 
   return (
@@ -234,6 +239,7 @@ function AFMLog() {
           </Select>
         </div>
       </div>
+      <div><Label>Date & time</Label><Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} /></div>
       {mode === 'Running' ? (
         <div className="grid grid-cols-3 gap-2">
           <div><Label className="text-xs">Inlet psi</Label><Input type="number" step="any" value={v.inlet} onChange={e => setV({ ...v, inlet: e.target.value })} /></div>
