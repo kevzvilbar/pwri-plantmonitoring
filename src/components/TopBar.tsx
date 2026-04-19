@@ -87,7 +87,7 @@ export function TopBar() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All plants</SelectItem>
-              {visiblePlants?.map((p) => (
+              {visiblePlants.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
               ))}
             </SelectContent>
