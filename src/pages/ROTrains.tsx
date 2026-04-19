@@ -121,6 +121,14 @@ function TrainLog() {
 
   const submit = async () => {
     if (!trainId) { toast.error('Select train'); return; }
+    const dup = await findExistingReading({
+      table: 'ro_train_readings', entityCol: 'train_id', entityId: trainId,
+      datetime: new Date(dt), windowKind: 'hour',
+    });
+    if (dup) {
+      toast.error('A reading already exists for this train within this hour. Edit it from the Overview tab to avoid duplicates.');
+      return;
+    }
     const payload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       ...Object.fromEntries(Object.entries(v).map(([k, val]) => [k, val ? +val : null])),
