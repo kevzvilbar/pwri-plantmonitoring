@@ -25,6 +25,9 @@ interface Notification {
   created_at: string;
 }
 
+const EMPTY_NOTIFICATIONS: Notification[] = [];
+const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
+
 export function TopBar() {
   const { user, profile, signOut } = useAuth();
   const { data: plants } = usePlants();
@@ -32,34 +35,38 @@ export function TopBar() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Restrict plant filter to assigned plants (memoized for stable Select children)
   const visiblePlants = useMemo(() => {
-    if (!plants) return [];
+    if (!plants) return EMPTY_PLANTS;
     if (profile?.plant_assignments?.length) {
       return plants.filter((p) => profile.plant_assignments.includes(p.id));
     }
     return plants;
   }, [plants, profile?.plant_assignments]);
 
-  const { data: notifs = [] } = useQuery({
+  const { data: notificationsData } = useQuery({
     queryKey: ['notifications', user?.id],
     queryFn: async (): Promise<Notification[]> => {
-      if (!user) return [];
+      if (!user) return EMPTY_NOTIFICATIONS;
       const { data } = await supabase
         .from('notifications')
         .select('id,title,message,link_path,read,severity,created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
-      return (data ?? []) as Notification[];
+      return (data ?? EMPTY_NOTIFICATIONS) as Notification[];
     },
     enabled: !!user,
     refetchInterval: 60000,
   });
 
+  const notifs = notificationsData ?? EMPTY_NOTIFICATIONS;
+  const nextUnreadCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
+
   useEffect(() => {
-    setUnreadCount(notifs.filter((n) => !n.read).length);
-  }, [notifs, setUnreadCount]);
+    if (unreadCount !== nextUnreadCount) {
+      setUnreadCount(nextUnreadCount);
+    }
+  }, [nextUnreadCount, setUnreadCount, unreadCount]);
 
   const markAllRead = async () => {
     if (!user) return;

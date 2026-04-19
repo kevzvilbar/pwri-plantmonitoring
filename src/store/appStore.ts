@@ -12,9 +12,9 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       selectedPlantId: null,
-      setSelectedPlantId: (id) => set({ selectedPlantId: id }),
+      setSelectedPlantId: (id) => set((state) => (state.selectedPlantId === id ? state : { selectedPlantId: id })),
       unreadCount: 0,
-      setUnreadCount: (n) => set({ unreadCount: n }),
+      setUnreadCount: (n) => set((state) => (state.unreadCount === n ? state : { unreadCount: n })),
     }),
     { name: 'pwri-app-state', partialize: (s) => ({ selectedPlantId: s.selectedPlantId }) },
   ),
