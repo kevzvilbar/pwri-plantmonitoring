@@ -17,6 +17,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ComputedInput } from '@/components/ComputedInput';
 
 export default function ROTrains() {
   return (
@@ -163,16 +164,16 @@ function TrainLog() {
           <div><Label className="text-xs">Suction psi</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
           <div><Label className="text-xs">Feed psi</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
           <div><Label className="text-xs">Reject psi</Label><Input type="number" step="any" {...f('reject_pressure_psi')} /></div>
-          <div><Label className="text-xs">DP psi (auto)</Label><Input value={dp ?? ''} readOnly className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
+          <div><Label className="text-xs">DP psi (auto)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
           <div><Label className="text-xs">Feed flow</Label><Input type="number" step="any" {...f('feed_flow')} /></div>
           <div><Label className="text-xs">Permeate flow</Label><Input type="number" step="any" {...f('permeate_flow')} /></div>
-          <div><Label className="text-xs">Reject flow (auto)</Label><Input value={rejectFlow ?? ''} readOnly /></div>
-          <div><Label className="text-xs">Recovery % (auto)</Label><Input value={recovery ?? ''} readOnly className={recWarn ? 'border-warn text-warn-foreground' : ''} /></div>
+          <div><Label className="text-xs">Reject flow (auto)</Label><ComputedInput value={rejectFlow ?? ''} /></div>
+          <div><Label className="text-xs">Recovery % (auto)</Label><ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} /></div>
           <div><Label className="text-xs">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
           <div><Label className="text-xs">Perm TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
           <div><Label className="text-xs">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
-          <div><Label className="text-xs">Rejection % (auto)</Label><Input value={rejection ?? ''} readOnly /></div>
-          <div><Label className="text-xs">Salt pass % (auto)</Label><Input value={saltPassage ?? ''} readOnly /></div>
+          <div><Label className="text-xs">Rejection % (auto)</Label><ComputedInput value={rejection ?? ''} /></div>
+          <div><Label className="text-xs">Salt pass % (auto)</Label><ComputedInput value={saltPassage ?? ''} /></div>
           <div><Label className="text-xs">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
           <div><Label className="text-xs">Perm pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
           <div><Label className="text-xs">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
@@ -252,7 +253,7 @@ function AFMLog() {
         <div className="grid grid-cols-3 gap-2">
           <div><Label className="text-xs">Inlet psi</Label><Input type="number" step="any" value={v.inlet} onChange={e => setV({ ...v, inlet: e.target.value })} /></div>
           <div><Label className="text-xs">Outlet psi</Label><Input type="number" step="any" value={v.outlet} onChange={e => setV({ ...v, outlet: e.target.value })} /></div>
-          <div><Label className="text-xs">DP (auto)</Label><Input value={dp ?? ''} readOnly className={dp != null && dp >= 40 ? 'border-danger text-danger' : ''} /></div>
+          <div><Label className="text-xs">DP (auto)</Label><ComputedInput value={dp ?? ''} className={dp != null && dp >= 40 ? 'border-danger text-danger' : ''} /></div>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
