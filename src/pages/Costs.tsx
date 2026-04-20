@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,24 +19,104 @@ import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 
 export default function Costs() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') ?? 'rollup';
   return (
     <div className="space-y-3 animate-fade-in">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Costs</h1>
-        <p className="text-sm text-muted-foreground">Power tariffs, electric bills, and production costs</p>
+        <p className="text-sm text-muted-foreground">Tariffs, bills, production cost, and chemical prices</p>
       </div>
-      <Tabs defaultValue="rollup">
-        <TabsList className="grid grid-cols-4 w-full">
+      <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="rollup">Rollup</TabsTrigger>
           <TabsTrigger value="tariff">Tariff</TabsTrigger>
           <TabsTrigger value="bills">Bills</TabsTrigger>
           <TabsTrigger value="compare">Compare</TabsTrigger>
+          <TabsTrigger value="prices">Prices</TabsTrigger>
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
         <TabsContent value="tariff" className="mt-3"><Tariff /></TabsContent>
         <TabsContent value="bills" className="mt-3"><Bills /></TabsContent>
         <TabsContent value="compare" className="mt-3"><Compare /></TabsContent>
+        <TabsContent value="prices" className="mt-3"><ChemicalPrices /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function ChemicalPrices() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Caustic Soda', 'HCl', 'SLS'];
+  const UNITS = ['kg', 'g', 'L', 'mL'];
+  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+  const { data } = useQuery({
+    queryKey: ['chem-prices'],
+    queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
+  });
+  const submit = async () => {
+    const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
+    if (!finalName || !v.unit_price) { toast.error('Chemical and price required'); return; }
+    const { error } = await supabase.from('chemical_prices').insert({
+      chemical_name: `${finalName} (${v.unit})`, unit_price: +v.unit_price,
+      effective_date: v.effective_date, updated_by: user?.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success('Price added');
+    setV({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+    qc.invalidateQueries({ queryKey: ['chem-prices'] });
+  };
+  return (
+    <div className="space-y-3">
+      <Card className="p-3 space-y-2">
+        <h4 className="text-sm font-semibold">Add price</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2">
+            <Label className="text-xs">Chemical</Label>
+            <Select value={v.chemical_name} onValueChange={(x) => setV({ ...v, chemical_name: x })}>
+              <SelectTrigger><SelectValue placeholder="Pick chemical" /></SelectTrigger>
+              <SelectContent>
+                {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                <SelectItem value="__custom__">+ Custom…</SelectItem>
+              </SelectContent>
+            </Select>
+            {v.chemical_name === '__custom__' && (
+              <Input className="mt-2" placeholder="Custom name" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} />
+            )}
+          </div>
+          <div>
+            <Label className="text-xs">Unit</Label>
+            <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Price ₱ / {v.unit}</Label>
+            <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs">Effective date</Label>
+            <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} />
+          </div>
+        </div>
+        <Button onClick={submit} className="w-full" size="sm">Add price</Button>
+      </Card>
+      <Card className="p-3">
+        <h4 className="text-sm font-semibold mb-2">Price history</h4>
+        <div className="grid grid-cols-[1fr_100px_90px] gap-2 text-[10px] text-muted-foreground pb-1 border-b">
+          <div>Chemical</div><div className="text-right">Price</div><div className="text-right">Date</div>
+        </div>
+        {data?.map((p: any) => (
+          <div key={p.id} className="grid grid-cols-[1fr_100px_90px] gap-2 text-xs py-1.5 border-b last:border-0 items-center">
+            <span>{p.chemical_name}</span>
+            <span className="font-mono-num font-semibold text-right">₱{(+p.unit_price).toFixed(2)}</span>
+            <span className="text-muted-foreground font-mono-num text-right">{p.effective_date}</span>
+          </div>
+        ))}
+        {!data?.length && <p className="text-xs text-muted-foreground py-2 text-center">No prices yet</p>}
+      </Card>
     </div>
   );
 }
