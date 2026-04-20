@@ -272,6 +272,56 @@ export type Database = {
           },
         ]
       }
+      chemical_deliveries: {
+        Row: {
+          chemical_name: string
+          created_at: string
+          delivery_date: string
+          id: string
+          plant_id: string
+          quantity: number
+          recorded_by: string | null
+          remarks: string | null
+          supplier: string | null
+          unit: string
+          unit_cost: number | null
+        }
+        Insert: {
+          chemical_name: string
+          created_at?: string
+          delivery_date?: string
+          id?: string
+          plant_id: string
+          quantity: number
+          recorded_by?: string | null
+          remarks?: string | null
+          supplier?: string | null
+          unit?: string
+          unit_cost?: number | null
+        }
+        Update: {
+          chemical_name?: string
+          created_at?: string
+          delivery_date?: string
+          id?: string
+          plant_id?: string
+          quantity?: number
+          recorded_by?: string | null
+          remarks?: string | null
+          supplier?: string | null
+          unit?: string
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chemical_deliveries_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chemical_dosing_logs: {
         Row: {
           anti_scalant_l: number
@@ -341,6 +391,7 @@ export type Database = {
           plant_id: string
           price_per_unit: number | null
           unit: string | null
+          unit_type: string | null
           updated_at: string
         }
         Insert: {
@@ -351,6 +402,7 @@ export type Database = {
           plant_id: string
           price_per_unit?: number | null
           unit?: string | null
+          unit_type?: string | null
           updated_at?: string
         }
         Update: {
@@ -361,6 +413,7 @@ export type Database = {
           plant_id?: string
           price_per_unit?: number | null
           unit?: string | null
+          unit_type?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -404,6 +457,51 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chemical_residual_samples: {
+        Row: {
+          created_at: string
+          dosing_log_id: string
+          id: string
+          plant_id: string
+          residual_ppm: number | null
+          sample_index: number
+          sampling_point: string | null
+        }
+        Insert: {
+          created_at?: string
+          dosing_log_id: string
+          id?: string
+          plant_id: string
+          residual_ppm?: number | null
+          sample_index: number
+          sampling_point?: string | null
+        }
+        Update: {
+          created_at?: string
+          dosing_log_id?: string
+          id?: string
+          plant_id?: string
+          residual_ppm?: number | null
+          sample_index?: number
+          sampling_point?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chemical_residual_samples_dosing_log_id_fkey"
+            columns: ["dosing_log_id"]
+            isOneToOne: false
+            referencedRelation: "chemical_dosing_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chemical_residual_samples_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
             referencedColumns: ["id"]
           },
         ]
@@ -1152,6 +1250,75 @@ export type Database = {
           },
           {
             foreignKeyName: "pump_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ro_pretreatment_readings: {
+        Row: {
+          afm_units: Json | null
+          backwash_end: string | null
+          backwash_start: string | null
+          bag_filters_changed: number | null
+          booster_pumps: Json | null
+          created_at: string
+          filter_housings: Json | null
+          hpp_target_pressure_psi: number | null
+          id: string
+          mmf_readings: Json | null
+          plant_id: string
+          reading_datetime: string
+          recorded_by: string | null
+          remarks: string | null
+          train_id: string
+        }
+        Insert: {
+          afm_units?: Json | null
+          backwash_end?: string | null
+          backwash_start?: string | null
+          bag_filters_changed?: number | null
+          booster_pumps?: Json | null
+          created_at?: string
+          filter_housings?: Json | null
+          hpp_target_pressure_psi?: number | null
+          id?: string
+          mmf_readings?: Json | null
+          plant_id: string
+          reading_datetime?: string
+          recorded_by?: string | null
+          remarks?: string | null
+          train_id: string
+        }
+        Update: {
+          afm_units?: Json | null
+          backwash_end?: string | null
+          backwash_start?: string | null
+          bag_filters_changed?: number | null
+          booster_pumps?: Json | null
+          created_at?: string
+          filter_housings?: Json | null
+          hpp_target_pressure_psi?: number | null
+          id?: string
+          mmf_readings?: Json | null
+          plant_id?: string
+          reading_datetime?: string
+          recorded_by?: string | null
+          remarks?: string | null
+          train_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_pretreatment_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_pretreatment_readings_train_id_fkey"
             columns: ["train_id"]
             isOneToOne: false
             referencedRelation: "ro_trains"
