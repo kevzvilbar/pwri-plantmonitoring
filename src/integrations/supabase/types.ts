@@ -339,6 +339,7 @@ export type Database = {
           id: string
           low_stock_threshold: number
           plant_id: string
+          price_per_unit: number | null
           unit: string | null
           updated_at: string
         }
@@ -348,6 +349,7 @@ export type Database = {
           id?: string
           low_stock_threshold?: number
           plant_id: string
+          price_per_unit?: number | null
           unit?: string | null
           updated_at?: string
         }
@@ -357,6 +359,7 @@ export type Database = {
           id?: string
           low_stock_threshold?: number
           plant_id?: string
+          price_per_unit?: number | null
           unit?: string | null
           updated_at?: string
         }
@@ -465,6 +468,74 @@ export type Database = {
             columns: ["train_id"]
             isOneToOne: false
             referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      electric_bills: {
+        Row: {
+          billing_month: string
+          created_at: string
+          current_reading: number
+          distribution_charge: number | null
+          generation_charge: number | null
+          id: string
+          multiplier: number
+          other_charges: number | null
+          period_end: string
+          period_start: string
+          plant_id: string
+          previous_reading: number
+          recorded_by: string | null
+          remarks: string | null
+          total_amount: number
+          total_kwh: number | null
+          updated_at: string
+        }
+        Insert: {
+          billing_month: string
+          created_at?: string
+          current_reading: number
+          distribution_charge?: number | null
+          generation_charge?: number | null
+          id?: string
+          multiplier?: number
+          other_charges?: number | null
+          period_end: string
+          period_start: string
+          plant_id: string
+          previous_reading: number
+          recorded_by?: string | null
+          remarks?: string | null
+          total_amount: number
+          total_kwh?: number | null
+          updated_at?: string
+        }
+        Update: {
+          billing_month?: string
+          created_at?: string
+          current_reading?: number
+          distribution_charge?: number | null
+          generation_charge?: number | null
+          id?: string
+          multiplier?: number
+          other_charges?: number | null
+          period_end?: string
+          period_start?: string
+          plant_id?: string
+          previous_reading?: number
+          recorded_by?: string | null
+          remarks?: string | null
+          total_amount?: number
+          total_kwh?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "electric_bills_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
             referencedColumns: ["id"]
           },
         ]
@@ -927,6 +998,97 @@ export type Database = {
           },
         ]
       }
+      power_tariffs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          id: string
+          multiplier: number
+          plant_id: string
+          provider: string | null
+          rate_per_kwh: number
+          remarks: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_date: string
+          id?: string
+          multiplier?: number
+          plant_id: string
+          provider?: string | null
+          rate_per_kwh: number
+          remarks?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          id?: string
+          multiplier?: number
+          plant_id?: string
+          provider?: string | null
+          rate_per_kwh?: number
+          remarks?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "power_tariffs_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_costs: {
+        Row: {
+          chem_cost: number
+          cost_date: string
+          cost_per_m3: number | null
+          driver_notes: string | null
+          id: string
+          plant_id: string
+          power_cost: number
+          production_m3: number
+          total_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          chem_cost?: number
+          cost_date: string
+          cost_per_m3?: number | null
+          driver_notes?: string | null
+          id?: string
+          plant_id: string
+          power_cost?: number
+          production_m3?: number
+          total_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          chem_cost?: number
+          cost_date?: string
+          cost_per_m3?: number | null
+          driver_notes?: string | null
+          id?: string
+          plant_id?: string
+          power_cost?: number
+          production_m3?: number
+          total_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_costs_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pump_readings: {
         Row: {
           created_at: string
@@ -1161,6 +1323,51 @@ export type Database = {
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      train_status_log: {
+        Row: {
+          confirmed_at: string
+          confirmed_by: string | null
+          id: string
+          plant_id: string
+          reason: string | null
+          status: string
+          train_id: string
+        }
+        Insert: {
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          plant_id: string
+          reason?: string | null
+          status: string
+          train_id: string
+        }
+        Update: {
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          plant_id?: string
+          reason?: string | null
+          status?: string
+          train_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "train_status_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "train_status_log_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
             referencedColumns: ["id"]
           },
         ]
@@ -1534,6 +1741,10 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      recompute_production_cost: {
+        Args: { _date: string; _plant_id: string }
+        Returns: undefined
+      }
       user_has_plant_access: { Args: { _plant_id: string }; Returns: boolean }
     }
     Enums: {
