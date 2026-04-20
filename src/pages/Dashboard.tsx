@@ -11,10 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ComposedChart, Bar } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
-import { Droplet, Activity, Zap, FlaskConical, AlertTriangle } from 'lucide-react';
+import { Droplet, Activity, Zap, FlaskConical, AlertTriangle, Cog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 
 type RangeKey = '7D' | '14D' | '30D' | '90D' | '200' | 'CUSTOM';
 
@@ -106,7 +107,10 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
+  const trainGaps = useTrainAutoOffline(plantIds);
+
   const alerts: { tone: 'danger' | 'warn'; text: string }[] = [];
+  trainGaps.forEach((g) => alerts.push({ tone: 'warn', text: `Train ${g.train_number} no reading ${g.hours_gap.toFixed(1)}h — auto-flagged Offline` }));
   (latestRO ?? []).forEach((r: any) => {
     if (r.dp_psi >= 40) alerts.push({ tone: 'danger', text: `DP alert: ${r.dp_psi} psi` });
     if (r.permeate_tds >= 600) alerts.push({ tone: 'danger', text: `TDS alert: ${r.permeate_tds} ppm` });
@@ -246,7 +250,7 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="flex flex-wrap gap-1.5">
           {(['7D', '14D', '30D', '90D', '200'] as RangeKey[]).map((r) => (
@@ -260,25 +264,34 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
             <div className="flex-1"><Label>To</Label><Input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
           </div>
         )}
-        <div className="h-72">
+        <div className="h-[420px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {metric === 'nrw' ? (
-                <Line type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2} dot={false} name="NRW %" />
-              ) : (
-                <>
-                  <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                  <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
-                </>
-              )}
-            </LineChart>
+            {metric === 'nrw' ? (
+              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" label={{ value: 'm³', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' } }} />
+                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: 'NRW %', angle: 90, position: 'insideRight', style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' } }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
+                <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+                <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
+              </ComposedChart>
+            ) : (
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+              </LineChart>
+            )}
           </ResponsiveContainer>
         </div>
+        <p className="text-xs text-muted-foreground">NRW = (Production − Consumption) / Production × 100%</p>
       </DialogContent>
     </Dialog>
   );
