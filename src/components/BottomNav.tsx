@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle, Users } from 'lucide-react';
+import { LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle, Users, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
@@ -8,6 +8,7 @@ const items = [
   { to: '/operations', label: 'Ops', icon: Activity },
   { to: '/ro-trains', label: 'RO', icon: Cog },
   { to: '/chemicals', label: 'Chem', icon: FlaskConical },
+  { to: '/costs', label: 'Costs', icon: DollarSign },
   { to: '/maintenance', label: 'PMS', icon: Wrench },
   { to: '/incidents', label: 'Issues', icon: AlertTriangle },
   { to: '/employees', label: 'Staff', icon: Users },
@@ -16,7 +17,7 @@ const items = [
 export function BottomNav() {
   return (
     <nav className="sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]">
-      <div className="grid grid-cols-8 max-w-3xl mx-auto">
+      <div className="grid grid-cols-9 max-w-3xl mx-auto">
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}

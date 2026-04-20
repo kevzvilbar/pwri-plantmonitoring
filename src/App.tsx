@@ -13,6 +13,7 @@ import Plants from "./pages/Plants";
 import Operations from "./pages/Operations";
 import ROTrains from "./pages/ROTrains";
 import Chemicals from "./pages/Chemicals";
+import Costs from "./pages/Costs";
 import Maintenance from "./pages/Maintenance";
 import Incidents from "./pages/Incidents";
 import Employees from "./pages/Employees";
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/operations" element={<Operations />} />
               <Route path="/ro-trains" element={<ROTrains />} />
               <Route path="/chemicals" element={<Chemicals />} />
+              <Route path="/costs" element={<Costs />} />
               <Route path="/maintenance" element={<Maintenance />} />
               <Route path="/incidents" element={<Incidents />} />
               <Route path="/employees" element={<Employees />} />
