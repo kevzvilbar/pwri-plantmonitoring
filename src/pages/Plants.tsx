@@ -78,6 +78,8 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </div>
       </Card>
 
+      <BackwashModeCard plant={plant} />
+
       <div className="grid grid-cols-3 gap-2">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
           <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)} className="capitalize">{t}</Button>
