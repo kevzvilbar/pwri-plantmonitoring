@@ -570,6 +570,92 @@ export type Database = {
           },
         ]
       }
+      daily_plant_summary: {
+        Row: {
+          blending_m3: number | null
+          created_at: string
+          downtime_hrs: number | null
+          feed_pressure_psi: number | null
+          feed_tds: number | null
+          id: string
+          locator_consumption_m3: number | null
+          notes: string | null
+          permeate_tds: number | null
+          plant_id: string
+          power_kwh: number | null
+          product_tds: number | null
+          production_m3: number | null
+          pv_ratio: number | null
+          raw_turbidity_ntu: number | null
+          raw_water_consumption_m3: number | null
+          recovery_pct: number | null
+          reject_pressure_psi: number | null
+          reject_tds: number | null
+          rejection_pct: number | null
+          source: string | null
+          summary_date: string
+          updated_at: string
+        }
+        Insert: {
+          blending_m3?: number | null
+          created_at?: string
+          downtime_hrs?: number | null
+          feed_pressure_psi?: number | null
+          feed_tds?: number | null
+          id?: string
+          locator_consumption_m3?: number | null
+          notes?: string | null
+          permeate_tds?: number | null
+          plant_id: string
+          power_kwh?: number | null
+          product_tds?: number | null
+          production_m3?: number | null
+          pv_ratio?: number | null
+          raw_turbidity_ntu?: number | null
+          raw_water_consumption_m3?: number | null
+          recovery_pct?: number | null
+          reject_pressure_psi?: number | null
+          reject_tds?: number | null
+          rejection_pct?: number | null
+          source?: string | null
+          summary_date: string
+          updated_at?: string
+        }
+        Update: {
+          blending_m3?: number | null
+          created_at?: string
+          downtime_hrs?: number | null
+          feed_pressure_psi?: number | null
+          feed_tds?: number | null
+          id?: string
+          locator_consumption_m3?: number | null
+          notes?: string | null
+          permeate_tds?: number | null
+          plant_id?: string
+          power_kwh?: number | null
+          product_tds?: number | null
+          production_m3?: number | null
+          pv_ratio?: number | null
+          raw_turbidity_ntu?: number | null
+          raw_water_consumption_m3?: number | null
+          recovery_pct?: number | null
+          reject_pressure_psi?: number | null
+          reject_tds?: number | null
+          rejection_pct?: number | null
+          source?: string | null
+          summary_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_plant_summary_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       electric_bills: {
         Row: {
           billing_month: string
@@ -1012,6 +1098,7 @@ export type Database = {
       plants: {
         Row: {
           address: string | null
+          backwash_mode: string
           created_at: string
           design_capacity_m3: number | null
           geofence_radius_m: number
@@ -1025,6 +1112,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          backwash_mode?: string
           created_at?: string
           design_capacity_m3?: number | null
           geofence_radius_m?: number
@@ -1038,6 +1126,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          backwash_mode?: string
           created_at?: string
           design_capacity_m3?: number | null
           geofence_radius_m?: number
