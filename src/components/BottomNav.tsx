@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Activity, Wrench, DollarSign, Menu,
-  Building2, Cog, FlaskConical, Filter, AlertTriangle, Users, Receipt,
+  Building2, Cog, FlaskConical, Filter, AlertTriangle, Users, Receipt, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -24,7 +24,10 @@ const financeRoutes = [
   { to: '/costs', label: 'Costs & Tariffs', icon: DollarSign },
   { to: '/costs?tab=prices', label: 'Chemical Prices', icon: Receipt },
 ];
-const adminRoutes = [{ to: '/employees', label: 'Employees', icon: Users }];
+const adminRoutes = [
+  { to: '/employees', label: 'Employees', icon: Users },
+  { to: '/exports', label: 'Data Exports', icon: Download },
+];
 
 const operationsPaths = ['/plants', '/operations', '/ro-trains', '/pretreatment', '/chemicals'];
 const maintPaths = ['/maintenance', '/incidents'];
