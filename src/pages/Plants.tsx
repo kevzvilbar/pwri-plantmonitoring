@@ -78,6 +78,8 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </div>
       </Card>
 
+      <BackwashModeCard plant={plant} />
+
       <div className="grid grid-cols-3 gap-2">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
           <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)} className="capitalize">{t}</Button>
@@ -88,6 +90,39 @@ function PlantDetail({ plantId }: { plantId: string }) {
       {tab === 'wells' && <WellsList plantId={plantId} />}
       {tab === 'trains' && <TrainsList plantId={plantId} />}
     </div>
+  );
+}
+
+function BackwashModeCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
+  const save = async (next: 'independent' | 'synchronized') => {
+    setMode(next);
+    const { error } = await supabase.from('plants').update({ backwash_mode: next }).eq('id', plant.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Backwash mode set to ${next}`);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+  return (
+    <Card className="p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold">AFM/MMF backwash mode</div>
+          <div className="text-[11px] text-muted-foreground">
+            {mode === 'synchronized' ? 'All units on a train backwash together (e.g. Guizo).' : 'Each unit backwashes independently.'}
+          </div>
+        </div>
+        <div className="flex gap-1">
+          {(['independent', 'synchronized'] as const).map((m) => (
+            <Button key={m} size="sm" variant={mode === m ? 'default' : 'outline'}
+              disabled={!isManager} onClick={() => save(m)} className="capitalize">
+              {m}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -12,6 +12,7 @@ export interface Plant {
   gps_lat: number | null;
   gps_lng: number | null;
   geofence_radius_m: number;
+  backwash_mode: 'independent' | 'synchronized';
 }
 
 export function usePlants() {

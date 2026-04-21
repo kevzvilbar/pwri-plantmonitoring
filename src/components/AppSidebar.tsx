@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Filter,
+  Users, DollarSign, Receipt, Filter, Download,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -40,7 +40,10 @@ const groups = [
   },
   {
     label: 'Admin',
-    items: [{ to: '/employees', label: 'Employees', icon: Users }],
+    items: [
+      { to: '/employees', label: 'Employees', icon: Users },
+      { to: '/exports', label: 'Data Exports', icon: Download },
+    ],
   },
 ];
 
