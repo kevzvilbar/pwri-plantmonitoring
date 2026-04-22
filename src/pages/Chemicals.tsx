@@ -27,7 +27,7 @@ const KNOWN_CHEMICALS = [
   { name: 'HCl', defaultUnit: 'L' },
   { name: 'SLS', defaultUnit: 'g' },
 ];
-const UNITS = ['kg', 'g', 'L', 'mL'];
+const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
 const DOSING_KEYS = [
   { key: 'chlorine_kg', name: 'Chlorine', unit: 'kg' },
