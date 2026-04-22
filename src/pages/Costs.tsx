@@ -26,19 +26,19 @@ export default function Costs() {
     <div className="space-y-3 animate-fade-in">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Costs</h1>
-        <p className="text-sm text-muted-foreground">Tariffs, bills, production cost, and chemical prices</p>
+        <p className="text-sm text-muted-foreground">Production cost, power bills & tariffs, chemical prices</p>
       </div>
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
-        <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="rollup">Rollup</TabsTrigger>
-          <TabsTrigger value="tariff">Tariff</TabsTrigger>
-          <TabsTrigger value="bills">Bills</TabsTrigger>
-          <TabsTrigger value="compare">Compare</TabsTrigger>
-          <TabsTrigger value="prices">Prices</TabsTrigger>
+        <TabsList className="grid grid-cols-4 w-full h-auto">
+          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2">Rollup</TabsTrigger>
+          <TabsTrigger value="power" className="text-xs sm:text-sm py-2">Power</TabsTrigger>
+          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2">Compare</TabsTrigger>
+          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2">Prices</TabsTrigger>
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
-        <TabsContent value="tariff" className="mt-3"><Tariff /></TabsContent>
-        <TabsContent value="bills" className="mt-3"><Bills /></TabsContent>
+        <TabsContent value="power" className="mt-3"><Power /></TabsContent>
+        <TabsContent value="tariff" className="mt-3"><Power /></TabsContent>
+        <TabsContent value="bills" className="mt-3"><Power /></TabsContent>
         <TabsContent value="compare" className="mt-3"><Compare /></TabsContent>
         <TabsContent value="prices" className="mt-3"><ChemicalPrices /></TabsContent>
       </Tabs>
