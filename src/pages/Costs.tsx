@@ -287,7 +287,10 @@ function Tariff() {
         <Button onClick={submit} className="w-full" size="sm">Add tariff</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">History</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">History</h4>
+          {plantId && <ExportButton table="power_tariffs" label="Export" filters={{ plant_id: plantId }} />}
+        </div>
         <div className="space-y-1.5">
           {tariffs?.map((t: any) => (
             <div key={t.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
