@@ -112,7 +112,10 @@ function ChemicalPrices() {
         <Button onClick={submit} className="w-full" size="sm">Add price</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Price history</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Price history</h4>
+          <ExportButton table="chemical_prices" label="Export" />
+        </div>
         <div className="grid grid-cols-[1fr_100px_90px] gap-2 text-[10px] text-muted-foreground pb-1 border-b">
           <div>Chemical</div><div className="text-right">Price</div><div className="text-right">Date</div>
         </div>
