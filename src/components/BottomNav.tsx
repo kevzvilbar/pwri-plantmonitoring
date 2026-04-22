@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Activity, Wrench, DollarSign, Menu,
-  Building2, Cog, FlaskConical, Filter, AlertTriangle, Users, Receipt, Download,
+  Building2, Cog, FlaskConical, AlertTriangle, Users, Receipt, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -13,7 +13,6 @@ const operationsRoutes = [
   { to: '/plants', label: 'Plants', icon: Building2 },
   { to: '/operations', label: 'Wells & Locators', icon: Activity },
   { to: '/ro-trains', label: 'RO Trains', icon: Cog },
-  { to: '/pretreatment', label: 'Pre-Treatment', icon: Filter },
   { to: '/chemicals', label: 'Chemicals', icon: FlaskConical },
 ];
 const maintRoutes = [
@@ -29,7 +28,7 @@ const adminRoutes = [
   { to: '/exports', label: 'Data Exports', icon: Download },
 ];
 
-const operationsPaths = ['/plants', '/operations', '/ro-trains', '/pretreatment', '/chemicals'];
+const operationsPaths = ['/plants', '/operations', '/ro-trains', '/chemicals'];
 const maintPaths = ['/maintenance', '/incidents'];
 const financePaths = ['/costs'];
 

@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Filter, Download,
+  Users, DollarSign, Receipt, Download,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -20,7 +20,6 @@ const groups = [
       { to: '/plants', label: 'Plants', icon: Building2 },
       { to: '/operations', label: 'Wells & Locators', icon: Activity },
       { to: '/ro-trains', label: 'RO Trains', icon: Cog },
-      { to: '/pretreatment', label: 'Pre-Treatment', icon: Filter },
       { to: '/chemicals', label: 'Chemicals', icon: FlaskConical },
     ],
   },
