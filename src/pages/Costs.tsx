@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
@@ -26,19 +26,19 @@ export default function Costs() {
     <div className="space-y-3 animate-fade-in">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Costs</h1>
-        <p className="text-sm text-muted-foreground">Tariffs, bills, production cost, and chemical prices</p>
+        <p className="text-sm text-muted-foreground">Production cost, power bills & tariffs, chemical prices</p>
       </div>
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
-        <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="rollup">Rollup</TabsTrigger>
-          <TabsTrigger value="tariff">Tariff</TabsTrigger>
-          <TabsTrigger value="bills">Bills</TabsTrigger>
-          <TabsTrigger value="compare">Compare</TabsTrigger>
-          <TabsTrigger value="prices">Prices</TabsTrigger>
+        <TabsList className="grid grid-cols-4 w-full h-auto">
+          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2">Rollup</TabsTrigger>
+          <TabsTrigger value="power" className="text-xs sm:text-sm py-2">Power</TabsTrigger>
+          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2">Compare</TabsTrigger>
+          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2">Prices</TabsTrigger>
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
-        <TabsContent value="tariff" className="mt-3"><Tariff /></TabsContent>
-        <TabsContent value="bills" className="mt-3"><Bills /></TabsContent>
+        <TabsContent value="power" className="mt-3"><Power /></TabsContent>
+        <TabsContent value="tariff" className="mt-3"><Power /></TabsContent>
+        <TabsContent value="bills" className="mt-3"><Power /></TabsContent>
         <TabsContent value="compare" className="mt-3"><Compare /></TabsContent>
         <TabsContent value="prices" className="mt-3"><ChemicalPrices /></TabsContent>
       </Tabs>
@@ -181,10 +181,12 @@ function Rollup() {
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
-          <div><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
+          <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1 min-w-0"><Label className="text-xs">From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+            <div className="flex-1 min-w-0"><Label className="text-xs">To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          </div>
         </div>
       </Card>
       {plantId && (
@@ -200,7 +202,7 @@ function Rollup() {
           </div>
           <Card className="p-3">
             <h4 className="text-sm font-semibold mb-2">Daily costs</h4>
-            <div className="h-72">
+            <div className="h-64 sm:h-72">
               <ResponsiveContainer>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -214,10 +216,7 @@ function Rollup() {
               </ResponsiveContainer>
             </div>
           </Card>
-          <Card className="p-3">
-            <h4 className="text-sm font-semibold mb-2">Driver notes</h4>
-            <DriverNotes plantId={plantId} rows={data ?? []} onSaved={refetch} />
-          </Card>
+          <CostInsights rows={data ?? []} totals={totals} from={from} to={to} />
         </>
       )}
       {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
@@ -225,38 +224,75 @@ function Rollup() {
   );
 }
 
-function DriverNotes({ plantId, rows, onSaved }: { plantId: string; rows: any[]; onSaved: () => void }) {
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [notes, setNotes] = useState('');
-  const save = async () => {
-    const { error } = await supabase.from('production_costs')
-      .update({ driver_notes: notes }).eq('plant_id', plantId).eq('cost_date', date);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Notes saved'); setNotes(''); onSaved();
-  };
+function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; from: string; to: string }) {
+  const insights = useMemo(() => {
+    const out: { label: string; tone: 'accent' | 'warn' | 'danger' | 'info'; text: string }[] = [];
+    if (!rows.length) return out;
+    const days = rows.length;
+    const avgCost = totals.total / days;
+    const peak = rows.reduce((m: any, r: any) => ((+r.chem_cost + +r.power_cost) > (+m.chem_cost + +m.power_cost) ? r : m), rows[0]);
+    const peakTotal = (+peak.chem_cost || 0) + (+peak.power_cost || 0);
+    const chemShare = totals.total ? (totals.chem / totals.total) * 100 : 0;
+    out.push({ label: 'Period', tone: 'info', text: `${days} day(s) · ₱${fmtNum(avgCost, 0)} avg/day · ${chemShare.toFixed(0)}% chem / ${(100 - chemShare).toFixed(0)}% power.` });
+    if (peakTotal > avgCost * 1.5) {
+      out.push({ label: 'Spike', tone: 'warn', text: `${peak.cost_date}: ₱${fmtNum(peakTotal, 0)} (${((peakTotal / avgCost - 1) * 100).toFixed(0)}% above average). Check for tariff change or chemical top-up.` });
+    }
+    if (totals.perM3 && totals.perM3 > 25) {
+      out.push({ label: 'Cost/m³', tone: 'danger', text: `₱${totals.perM3.toFixed(2)}/m³ exceeds ₱25 benchmark. Review power efficiency or chemical dosing.` });
+    } else if (totals.perM3) {
+      out.push({ label: 'Cost/m³', tone: 'accent', text: `₱${totals.perM3.toFixed(2)}/m³ within healthy range.` });
+    }
+    if (totals.prod === 0) {
+      out.push({ label: 'No production', tone: 'danger', text: 'Production volume is zero — verify well meter readings are recorded.' });
+    }
+    return out;
+  }, [rows, totals]);
+
+  if (!rows.length) return (
+    <Card className="p-4 text-center text-sm text-muted-foreground">No cost data in {from} → {to}</Card>
+  );
+
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <div><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+    <Card className="p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Auto insights</h4>
+        <span className="text-[10px] text-muted-foreground">Computed monthly · no manual notes needed</span>
       </div>
-      <Textarea placeholder="What drove cost change today? (e.g., chlorine top-up, new tariff effective)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-      <Button onClick={save} size="sm">Save note</Button>
-      <div className="space-y-1 mt-2">
-        {rows.filter((r: any) => r.driver_notes).slice(-5).reverse().map((r: any) => (
-          <div key={r.id} className="text-xs border-l-2 border-primary pl-2"><span className="font-mono-num">{r.cost_date}</span> · {r.driver_notes}</div>
+      <div className="space-y-1.5">
+        {insights.map((i, idx) => (
+          <div key={idx} className="flex items-start gap-2 text-xs">
+            <StatusPill tone={i.tone}>{i.label}</StatusPill>
+            <span className="flex-1 pt-0.5">{i.text}</span>
+          </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
-function Tariff() {
+function Power() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
-  const [v, setV] = useState({ effective_date: format(new Date(), 'yyyy-MM-dd'), rate_per_kwh: '', multiplier: '1', provider: '', remarks: '' });
+  const [v, setV] = useState({
+    billing_month: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    period_start: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
+    period_end: format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
+    previous_reading: '', current_reading: '', multiplier: '1',
+    generation_charge: '', distribution_charge: '', other_charges: '', total_amount: '',
+    provider: '', remarks: '',
+  });
 
+  const totalKwh = v.previous_reading && v.current_reading
+    ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
+  const derivedRate = totalKwh && +v.total_amount ? (+v.total_amount / totalKwh) : null;
+
+  const { data: bills } = useQuery({
+    queryKey: ['bills', plantId],
+    queryFn: async () => plantId ? (await supabase.from('electric_bills').select('*').eq('plant_id', plantId).order('billing_month', { ascending: false })).data ?? [] : [],
+    enabled: !!plantId,
+  });
   const { data: tariffs } = useQuery({
     queryKey: ['tariffs', plantId],
     queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false })).data ?? [] : [],
@@ -264,34 +300,103 @@ function Tariff() {
   });
 
   const submit = async () => {
-    if (!plantId || !v.rate_per_kwh) { toast.error('Plant and rate required'); return; }
-    const { error } = await supabase.from('power_tariffs').insert({
-      plant_id: plantId, effective_date: v.effective_date,
-      rate_per_kwh: +v.rate_per_kwh, multiplier: +v.multiplier || 1,
-      provider: v.provider || null, remarks: v.remarks || null, created_by: user?.id,
+    if (!plantId || !v.total_amount) { toast.error('Plant and total required'); return; }
+    const billRes = await supabase.from('electric_bills').insert({
+      plant_id: plantId, billing_month: v.billing_month,
+      period_start: v.period_start, period_end: v.period_end,
+      previous_reading: +v.previous_reading || 0, current_reading: +v.current_reading || 0,
+      multiplier: +v.multiplier || 1, total_kwh: totalKwh,
+      generation_charge: v.generation_charge ? +v.generation_charge : null,
+      distribution_charge: v.distribution_charge ? +v.distribution_charge : null,
+      other_charges: v.other_charges ? +v.other_charges : null,
+      total_amount: +v.total_amount, remarks: v.remarks || null, recorded_by: user?.id,
     });
-    if (error) { toast.error(error.message); return; }
-    toast.success('Tariff saved');
-    setV({ effective_date: format(new Date(), 'yyyy-MM-dd'), rate_per_kwh: '', multiplier: '1', provider: '', remarks: '' });
+    if (billRes.error) { toast.error(billRes.error.message); return; }
+    if (derivedRate) {
+      await supabase.from('power_tariffs').insert({
+        plant_id: plantId, effective_date: v.period_start,
+        rate_per_kwh: derivedRate, multiplier: +v.multiplier || 1,
+        provider: v.provider || null,
+        remarks: `Derived from bill ${format(parseISO(v.billing_month), 'MMM yyyy')}`,
+        created_by: user?.id,
+      });
+    }
+    toast.success(derivedRate ? 'Bill saved · tariff auto-derived' : 'Bill saved');
+    qc.invalidateQueries({ queryKey: ['bills'] });
     qc.invalidateQueries({ queryKey: ['tariffs'] });
   };
 
   return (
     <div className="space-y-3">
-      <Card className="p-3 space-y-2">
-        <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
-        <div className="grid grid-cols-2 gap-2">
-          <div><Label className="text-xs">Effective date</Label><Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} /></div>
-          <div><Label className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" /></div>
-          <div><Label className="text-xs">Rate ₱/kWh</Label><Input type="number" step="any" value={v.rate_per_kwh} onChange={(e) => setV({ ...v, rate_per_kwh: e.target.value })} /></div>
-          <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-          <div className="col-span-2"><Label className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} /></div>
+      <Card className="p-3 space-y-3">
+        <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Billing month</Label><Input type="date" value={v.billing_month} onChange={(e) => setV({ ...v, billing_month: e.target.value })} /></div>
+            <div><Label className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" /></div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1 min-w-0"><Label className="text-xs">Period from</Label><Input type="date" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} /></div>
+            <div className="flex-1 min-w-0"><Label className="text-xs">Period to</Label><Input type="date" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} /></div>
+          </div>
         </div>
-        <Button onClick={submit} className="w-full" size="sm">Add tariff</Button>
+
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Meter</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
+            <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
+            <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
+            <div><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly className="bg-muted" /></div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Charges (₱)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Generation</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} /></div>
+            <div><Label className="text-xs">Distribution</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} /></div>
+            <div><Label className="text-xs">Other</Label><Input type="number" step="any" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} /></div>
+            <div><Label className="text-xs font-semibold">Total</Label><Input type="number" step="any" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} /></div>
+          </div>
+        </div>
+
+        {derivedRate && (
+          <div className="rounded-md bg-accent-soft border border-accent/30 p-2 text-xs">
+            <span className="font-semibold">Auto-derived tariff:</span>{' '}
+            <span className="font-mono-num">₱{derivedRate.toFixed(4)}/kWh</span>
+            <span className="text-muted-foreground"> · effective {v.period_start}</span>
+          </div>
+        )}
+
+        <div><Label className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} /></div>
+        <Button onClick={submit} className="w-full">Save bill {derivedRate ? '+ tariff' : ''}</Button>
       </Card>
+
       <Card className="p-3">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">History</h4>
+          <h4 className="text-sm font-semibold">Recent bills</h4>
+          {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
+        </div>
+        <div className="space-y-1.5">
+          {bills?.map((b: any) => (
+            <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
+              <div>
+                <div className="font-mono-num">{format(parseISO(b.billing_month), 'MMM yyyy')}</div>
+                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh</div>
+              </div>
+              <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
+            </div>
+          ))}
+          {!bills?.length && plantId && <p className="text-xs text-center text-muted-foreground py-2">No bills yet</p>}
+        </div>
+      </Card>
+
+      <Card className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Tariff history</h4>
           {plantId && <ExportButton table="power_tariffs" label="Export" filters={{ plant_id: plantId }} />}
         </div>
         <div className="space-y-1.5">
@@ -310,89 +415,6 @@ function Tariff() {
     </div>
   );
 }
-
-function Bills() {
-  const qc = useQueryClient();
-  const { user } = useAuth();
-  const { selectedPlantId } = useAppStore();
-  const [plantId, setPlantId] = useState(selectedPlantId ?? '');
-  const [v, setV] = useState({
-    billing_month: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-    period_start: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
-    period_end: format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
-    previous_reading: '', current_reading: '', multiplier: '1',
-    generation_charge: '', distribution_charge: '', other_charges: '', total_amount: '',
-    remarks: '',
-  });
-
-  const totalKwh = v.previous_reading && v.current_reading
-    ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
-
-  const { data: bills } = useQuery({
-    queryKey: ['bills', plantId],
-    queryFn: async () => plantId ? (await supabase.from('electric_bills').select('*').eq('plant_id', plantId).order('billing_month', { ascending: false })).data ?? [] : [],
-    enabled: !!plantId,
-  });
-
-  const submit = async () => {
-    if (!plantId || !v.total_amount) { toast.error('Plant and total required'); return; }
-    const { error } = await supabase.from('electric_bills').insert({
-      plant_id: plantId, billing_month: v.billing_month,
-      period_start: v.period_start, period_end: v.period_end,
-      previous_reading: +v.previous_reading || 0, current_reading: +v.current_reading || 0,
-      multiplier: +v.multiplier || 1, total_kwh: totalKwh,
-      generation_charge: v.generation_charge ? +v.generation_charge : null,
-      distribution_charge: v.distribution_charge ? +v.distribution_charge : null,
-      other_charges: v.other_charges ? +v.other_charges : null,
-      total_amount: +v.total_amount, remarks: v.remarks || null, recorded_by: user?.id,
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success('Bill saved');
-    qc.invalidateQueries({ queryKey: ['bills'] });
-  };
-
-  return (
-    <div className="space-y-3">
-      <Card className="p-3 space-y-2">
-        <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
-        <div className="grid grid-cols-2 gap-2">
-          <div><Label className="text-xs">Billing month</Label><Input type="date" value={v.billing_month} onChange={(e) => setV({ ...v, billing_month: e.target.value })} /></div>
-          <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-          <div><Label className="text-xs">Period start</Label><Input type="date" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} /></div>
-          <div><Label className="text-xs">Period end</Label><Input type="date" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} /></div>
-          <div><Label className="text-xs">Previous reading</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
-          <div><Label className="text-xs">Current reading</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
-          <div className="col-span-2"><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly /></div>
-          <div><Label className="text-xs">Generation ₱</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} /></div>
-          <div><Label className="text-xs">Distribution ₱</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} /></div>
-          <div><Label className="text-xs">Other ₱</Label><Input type="number" step="any" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} /></div>
-          <div><Label className="text-xs">Total ₱</Label><Input type="number" step="any" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} /></div>
-          <div className="col-span-2"><Label className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} /></div>
-        </div>
-        <Button onClick={submit} className="w-full" size="sm">Save bill</Button>
-      </Card>
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">Recent bills</h4>
-          {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
-        </div>
-        <div className="space-y-1.5">
-          {bills?.map((b: any) => (
-            <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
-              <div>
-                <div className="font-mono-num">{format(parseISO(b.billing_month), 'MMM yyyy')}</div>
-                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh</div>
-              </div>
-              <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
-            </div>
-          ))}
-          {!bills?.length && plantId && <p className="text-xs text-center text-muted-foreground py-2">No bills</p>}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 function Compare() {
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
