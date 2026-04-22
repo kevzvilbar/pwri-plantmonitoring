@@ -57,14 +57,15 @@ function ChemicalPrices() {
   });
   const submit = async () => {
     const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
-    if (!finalName || !v.unit_price) { toast.error('Chemical and price required'); return; }
+    const finalUnit = v.unit === '__custom__' ? v.customUnit.trim() : v.unit;
+    if (!finalName || !v.unit_price || !finalUnit) { toast.error('Chemical, unit and price required'); return; }
     const { error } = await supabase.from('chemical_prices').insert({
-      chemical_name: `${finalName} (${v.unit})`, unit_price: +v.unit_price,
+      chemical_name: `${finalName} (${finalUnit})`, unit_price: +v.unit_price,
       effective_date: v.effective_date, updated_by: user?.id,
     });
     if (error) { toast.error(error.message); return; }
     toast.success('Price added');
-    setV({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+    setV({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
     qc.invalidateQueries({ queryKey: ['chem-prices'] });
   };
   return (
