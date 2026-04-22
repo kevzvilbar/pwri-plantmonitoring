@@ -18,8 +18,6 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 
 export default function ROTrains() {
@@ -95,7 +93,16 @@ function TrainCard({ train }: { train: any }) {
   );
 }
 
-type AfmRow = { unit: number; bw: boolean; bwStart: string; bwEnd: string; reading: string; pressureIn: string; pressureOut: string };
+type AfmRow = {
+  unit: number;
+  bw: boolean;
+  bwStart: string;
+  bwEnd: string;
+  meterStart: string;
+  meterEnd: string;
+  pressureIn: string;
+  pressureOut: string;
+};
 
 function PretreatmentAndROLog() {
   const qc = useQueryClient();
@@ -110,6 +117,8 @@ function PretreatmentAndROLog() {
   const [syncBwOn, setSyncBwOn] = useState(false);
   const [syncBwStart, setSyncBwStart] = useState('');
   const [syncBwEnd, setSyncBwEnd] = useState('');
+  const [syncMeterStart, setSyncMeterStart] = useState('');
+  const [syncMeterEnd, setSyncMeterEnd] = useState('');
 
   const [hppTarget, setHppTarget] = useState('');
   const [bagsChanged, setBagsChanged] = useState('0');
@@ -146,6 +155,7 @@ function PretreatmentAndROLog() {
   useEffect(() => {
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
+    setSyncMeterStart(''); setSyncMeterEnd('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '',
@@ -157,7 +167,11 @@ function PretreatmentAndROLog() {
 
   const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => ({
     ...p,
-    [u]: { unit: u, bw: false, bwStart: '', bwEnd: '', reading: '', pressureIn: '', pressureOut: '', ...(p[u] ?? {}), ...patch },
+    [u]: {
+      unit: u, bw: false, bwStart: '', bwEnd: '',
+      meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '',
+      ...(p[u] ?? {}), ...patch,
+    },
   }));
 
   // RO calculations
@@ -196,23 +210,46 @@ function PretreatmentAndROLog() {
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
 
     // Save pre-treatment reading
-    const mmf_readings = Object.values(afmmf).filter((r) => r.reading)
-      .map((r) => ({ unit: r.unit, reading: +r.reading }));
+    // mmf_readings keeps per-unit meter start/end (synchronized = shared values across all units)
+    const rowsArr = Object.values(afmmf);
+    const mmf_readings = isSynchronized
+      ? (syncBwOn && (syncMeterStart || syncMeterEnd)
+          ? Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => ({
+              unit: u,
+              meter_start: syncMeterStart ? +syncMeterStart : null,
+              meter_end: syncMeterEnd ? +syncMeterEnd : null,
+            }))
+          : [])
+      : rowsArr.filter((r) => r.bw && (r.meterStart || r.meterEnd))
+          .map((r) => ({
+            unit: r.unit,
+            meter_start: r.meterStart ? +r.meterStart : null,
+            meter_end: r.meterEnd ? +r.meterEnd : null,
+          }));
 
     // Merge backwash + inlet/outlet pressures into the single afm_units jsonb column
-    const afm_units = Object.values(afmmf)
+    const afm_units = rowsArr
       .filter((r) => r.bw || r.pressureIn || r.pressureOut)
       .map((r) => {
         const pIn = r.pressureIn ? +r.pressureIn : null;
         const pOut = r.pressureOut ? +r.pressureOut : null;
         const dp_psi = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
+        const bwOngoing = isSynchronized ? syncBwOn : r.bw;
         return {
           unit: r.unit,
-          backwash_start: r.bw && r.bwStart ? new Date(r.bwStart).toISOString() : null,
-          backwash_end: r.bw && r.bwEnd ? new Date(r.bwEnd).toISOString() : null,
-          inlet_psi: pIn,
-          outlet_psi: pOut,
-          dp_psi,
+          backwash_start: bwOngoing
+            ? (isSynchronized
+                ? (syncBwStart ? new Date(syncBwStart).toISOString() : null)
+                : (r.bwStart ? new Date(r.bwStart).toISOString() : null))
+            : null,
+          backwash_end: bwOngoing
+            ? (isSynchronized
+                ? (syncBwEnd ? new Date(syncBwEnd).toISOString() : null)
+                : (r.bwEnd ? new Date(r.bwEnd).toISOString() : null))
+            : null,
+          inlet_psi: bwOngoing ? null : pIn,
+          outlet_psi: bwOngoing ? null : pOut,
+          dp_psi: bwOngoing ? null : dp_psi,
         };
       });
 
@@ -237,6 +274,7 @@ function PretreatmentAndROLog() {
     toast.success('Pre-treatment & RO reading saved');
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
+    setSyncMeterStart(''); setSyncMeterEnd('');
     setHppTarget(''); setBagsChanged('0'); setRemarks('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
@@ -296,10 +334,23 @@ function PretreatmentAndROLog() {
                 <Label htmlFor="sync-bw" className="text-sm font-semibold cursor-pointer">Train backwash performed?</Label>
               </div>
               {syncBwOn && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div><Label className="text-xs">Started</Label><Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} /></div>
-                  <div><Label className="text-xs">Ended</Label><Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} /></div>
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label className="text-xs">Started</Label><Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} /></div>
+                    <div><Label className="text-xs">Ended</Label><Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Meter reading start</Label>
+                      <Input type="number" step="any" value={syncMeterStart} onChange={(e) => setSyncMeterStart(e.target.value)} placeholder="usually previous bw end" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Meter reading end</Label>
+                      <Input type="number" step="any" value={syncMeterEnd} onChange={(e) => setSyncMeterEnd(e.target.value)} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">All AFM/MMF units share these values during backwash.</p>
+                </>
               )}
             </Card>
           )}
@@ -309,81 +360,82 @@ function PretreatmentAndROLog() {
               <h4 className="text-xs font-semibold uppercase text-muted-foreground">AFM/MMF units ({train.num_afm})</h4>
               <div className="space-y-2">
                 {Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => {
-                  const row = afmmf[u] ?? { unit: u, bw: false, bwStart: '', bwEnd: '', reading: '', pressureIn: '', pressureOut: '' };
+                  const row = afmmf[u] ?? { unit: u, bw: false, bwStart: '', bwEnd: '', meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '' };
                   const pIn = row.pressureIn ? +row.pressureIn : null;
                   const pOut = row.pressureOut ? +row.pressureOut : null;
                   const afmDp = pIn !== null && pOut !== null ? (pIn - pOut).toFixed(2) : '';
                   const dpWarn = afmDp && +afmDp >= 40;
+                  // backwash ongoing? in synchronized mode it's the train-wide checkbox; in independent it's per-unit
+                  const bwOngoing = isSynchronized ? syncBwOn : row.bw;
                   return (
-                    <Collapsible key={u} className="border rounded-md">
-                      <div className="flex items-center justify-between p-2 gap-2">
+                    <div key={u} className="border rounded-md p-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="text-sm font-medium">AFM/MMF {u}</div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number" step="any" placeholder="Reading"
-                            value={row.reading} className="h-8 w-24"
-                            onChange={(e) => setAfmmfField(u, { reading: e.target.value })}
-                          />
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 px-2">
-                              Details <ChevronDown className="h-3 w-3 ml-1" />
-                            </Button>
-                          </CollapsibleTrigger>
-                        </div>
-                      </div>
-                      <CollapsibleContent className="border-t p-2 space-y-3 bg-muted/30">
-                        {/* Pressure readings */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-muted-foreground">Pressure</Label>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <Label className="text-xs">P. In (psi)</Label>
-                              <Input type="number" step="any" value={row.pressureIn}
-                                onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} />
-                            </div>
-                            <div>
-                              <Label className="text-xs">P. Out (psi)</Label>
-                              <Input type="number" step="any" value={row.pressureOut}
-                                onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
-                            </div>
-                            <div>
-                              <Label className="text-xs">DP (auto)</Label>
-                              <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger' : ''} />
-                            </div>
+                        {!isSynchronized && (
+                          <div className="flex items-center gap-2">
+                            <Checkbox id={`bw-${u}`} checked={row.bw} onCheckedChange={(c) => setAfmmfField(u, { bw: !!c })} />
+                            <Label htmlFor={`bw-${u}`} className="text-xs cursor-pointer">Backwash on</Label>
                           </div>
-                        </div>
+                        )}
+                      </div>
 
-                        {/* Backwash section */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-muted-foreground">Backwash</Label>
+                      {bwOngoing ? (
+                        // Backwash ongoing → show meter start/end (+ time for independent mode); pressure hidden
+                        <div className="space-y-2 bg-muted/30 rounded p-2">
                           {!isSynchronized && (
-                            <div className="flex items-center gap-2">
-                              <Checkbox id={`bw-${u}`} checked={row.bw} onCheckedChange={(c) => setAfmmfField(u, { bw: !!c })} />
-                              <Label htmlFor={`bw-${u}`} className="text-xs cursor-pointer">Backwash done for this unit?</Label>
-                            </div>
-                          )}
-                          {(isSynchronized || row.bw) && (
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <Label className="text-xs">Started</Label>
-                                <Input type="datetime-local" value={isSynchronized ? syncBwStart : row.bwStart}
-                                  disabled={isSynchronized}
+                                <Input type="datetime-local" value={row.bwStart}
                                   onChange={(e) => setAfmmfField(u, { bwStart: e.target.value })} />
                               </div>
                               <div>
                                 <Label className="text-xs">Ended</Label>
-                                <Input type="datetime-local" value={isSynchronized ? syncBwEnd : row.bwEnd}
-                                  disabled={isSynchronized}
+                                <Input type="datetime-local" value={row.bwEnd}
                                   onChange={(e) => setAfmmfField(u, { bwEnd: e.target.value })} />
                               </div>
                             </div>
                           )}
-                          {isSynchronized && (
-                            <p className="text-[10px] text-muted-foreground">Window controlled by the train-level backwash above.</p>
+                          {isSynchronized ? (
+                            <p className="text-[10px] text-muted-foreground">
+                              Train-wide backwash {syncBwStart || '—'} → {syncBwEnd || '—'} · meter {syncMeterStart || '—'} → {syncMeterEnd || '—'}
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">Meter reading start</Label>
+                                <Input type="number" step="any" value={row.meterStart}
+                                  onChange={(e) => setAfmmfField(u, { meterStart: e.target.value })}
+                                  placeholder="usually previous bw end" />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Meter reading end</Label>
+                                <Input type="number" step="any" value={row.meterEnd}
+                                  onChange={(e) => setAfmmfField(u, { meterEnd: e.target.value })} />
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
+                      ) : (
+                        // No backwash → always-visible pressure In/Out (per unit)
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Label className="text-xs">P. In (psi)</Label>
+                            <Input type="number" step="any" value={row.pressureIn}
+                              onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">P. Out (psi)</Label>
+                            <Input type="number" step="any" value={row.pressureOut}
+                              onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">ΔPressure (auto)</Label>
+                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger' : ''} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -460,7 +512,7 @@ function PretreatmentAndROLog() {
               <div><Label className="text-xs">Suction psi</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
               <div><Label className="text-xs">Feed psi</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
               <div><Label className="text-xs">Reject psi</Label><Input type="number" step="any" {...f('reject_pressure_psi')} /></div>
-              <div><Label className="text-xs">DP psi (auto)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
+              <div><Label className="text-xs">ΔPressure psi (auto)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
               <div><Label className="text-xs">Feed flow</Label><Input type="number" step="any" {...f('feed_flow')} /></div>
               <div><Label className="text-xs">Permeate flow</Label><Input type="number" step="any" {...f('permeate_flow')} /></div>
               <div><Label className="text-xs">Reject flow (auto)</Label><ComputedInput value={rejectFlow ?? ''} /></div>

@@ -10,9 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { StatusPill } from '@/components/StatusPill';
-import { ChevronLeft, Plus, ChevronDown, MapPin, Gauge, Wrench } from 'lucide-react';
+import { ChevronLeft, Plus, MapPin, Gauge, Wrench } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -336,8 +335,9 @@ function WellsList({ plantId }: { plantId: string }) {
 
 function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) {
   const qc = useQueryClient();
+  const { isManager } = useAuth();
   const [replaceOpen, setReplaceOpen] = useState(false);
-  const [hydraulicOpen, setHydraulicOpen] = useState(false);
+  const [editHydraulicOpen, setEditHydraulicOpen] = useState(false);
   const { data: well } = useQuery({
     queryKey: ['well', wellId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('id', wellId).single()).data,
@@ -346,32 +346,57 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
     queryKey: ['well-pms', wellId],
     queryFn: async () => (await supabase.from('well_pms_records').select('*').eq('well_id', wellId).order('date_gathered', { ascending: false })).data ?? [],
   });
+  const { data: latestReplacement } = useQuery({
+    queryKey: ['well-latest-replacement', wellId],
+    queryFn: async () => (await supabase.from('well_meter_replacements')
+      .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
+      .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1)).maybeSingle()
+      .then(r => r.data),
+  });
   if (!well) return <div>Loading…</div>;
   const latest = pms?.[0];
+  const replacerName = latestReplacement?.replacer
+    ? [latestReplacement.replacer.first_name, latestReplacement.replacer.last_name].filter(Boolean).join(' ')
+    : null;
   return (
     <div className="space-y-3">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" /> Back</button>
       <Card className="p-3">
         <h3 className="font-semibold">{well.name}</h3>
-        <div className="text-xs text-muted-foreground">{well.diameter ?? '—'} · depth {well.drilling_depth_m ?? '—'} m</div>
+        <div className="text-xs text-muted-foreground">{well.diameter ?? '—'}</div>
       </Card>
-      <Collapsible open={hydraulicOpen} onOpenChange={setHydraulicOpen}>
-        <Card className="p-3">
-          <CollapsibleTrigger className="w-full flex items-center justify-between">
-            <span className="text-sm font-semibold flex items-center gap-2"><Gauge className="h-4 w-4" />Hydraulic data</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${hydraulicOpen ? 'rotate-180' : ''}`} />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div>SWL: <span className="font-mono-num">{latest?.static_water_level_m ?? '—'} m</span></div>
-            <div>PWL: <span className="font-mono-num">{latest?.pumping_water_level_m ?? '—'} m</span></div>
-            <div>Pump setting: <span>{latest?.pump_setting ?? '—'}</span></div>
-            <div>Motor HP: <span className="font-mono-num">{latest?.motor_hp ?? '—'}</span></div>
-            <div>TDS: <span className="font-mono-num">{latest?.tds_ppm ?? '—'} ppm</span></div>
-            <div>Turbidity: <span className="font-mono-num">{latest?.turbidity_ntu ?? '—'} NTU</span></div>
-            <div className="col-span-2 text-muted-foreground">Last gathered: {latest?.date_gathered ?? '—'}</div>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
+      <Card className="p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold flex items-center gap-2"><Gauge className="h-4 w-4" />Hydraulic data</span>
+          {isManager && (
+            <Button size="sm" variant="outline" onClick={() => setEditHydraulicOpen(true)}>
+              <Wrench className="h-3 w-3 mr-1" />Edit
+            </Button>
+          )}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div>Drilling depth: <span className="font-mono-num">{latest?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m</span></div>
+          <div>SWL: <span className="font-mono-num">{latest?.static_water_level_m ?? '—'} m</span></div>
+          <div>PWL: <span className="font-mono-num">{latest?.pumping_water_level_m ?? '—'} m</span></div>
+          <div>Pump setting: <span>{latest?.pump_setting ?? '—'}</span></div>
+          <div>Motor HP: <span className="font-mono-num">{latest?.motor_hp ?? '—'}</span></div>
+          <div>TDS: <span className="font-mono-num">{latest?.tds_ppm ?? '—'} ppm</span></div>
+          <div>Turbidity: <span className="font-mono-num">{latest?.turbidity_ntu ?? '—'} NTU</span></div>
+          <div className="col-span-2 text-muted-foreground">Last gathered: {latest?.date_gathered ?? '—'}</div>
+        </div>
+        {pms && pms.length > 1 && (
+          <details className="mt-3">
+            <summary className="text-xs text-muted-foreground cursor-pointer">History ({pms.length})</summary>
+            <div className="mt-2 space-y-1 text-[11px] max-h-48 overflow-y-auto">
+              {pms.map((p: any) => (
+                <div key={p.id} className="border-t py-1">
+                  <span className="font-medium">{p.date_gathered}</span> · depth {p.drilling_depth_m ?? '—'}m · SWL {p.static_water_level_m ?? '—'}m · PWL {p.pumping_water_level_m ?? '—'}m
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </Card>
       <Card className="p-3">
         <div className="flex justify-between items-center">
           <h4 className="text-sm font-semibold">Active meter</h4>
@@ -379,15 +404,93 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
         </div>
         <div className="mt-2 text-xs space-y-1">
           <div>Brand: {well.meter_brand ?? '—'}</div>
+          <div>Size: <span className="font-mono-num">{well.meter_size ?? '—'}</span> {well.meter_size && <span className="text-muted-foreground">inch</span>}</div>
           <div>Serial: <span className="font-mono-num">{well.meter_serial ?? '—'}</span></div>
+          <div>Installed: {well.meter_installed_date ?? '—'}</div>
+          <div className="text-muted-foreground">
+            Replaced by: {replacerName ?? '—'}
+            {latestReplacement?.replacement_date ? ` on ${latestReplacement.replacement_date}` : ''}
+          </div>
         </div>
       </Card>
       {replaceOpen && (
         <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
-          onClose={() => { setReplaceOpen(false); qc.invalidateQueries({ queryKey: ['well', wellId] }); }}
+          onClose={() => {
+            setReplaceOpen(false);
+            qc.invalidateQueries({ queryKey: ['well', wellId] });
+            qc.invalidateQueries({ queryKey: ['well-latest-replacement', wellId] });
+          }}
         />
       )}
+      {editHydraulicOpen && (
+        <EditHydraulicDialog well={well} latest={latest} onClose={() => {
+          setEditHydraulicOpen(false);
+          qc.invalidateQueries({ queryKey: ['well-pms', wellId] });
+          qc.invalidateQueries({ queryKey: ['well', wellId] });
+        }} />
+      )}
     </div>
+  );
+}
+
+function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any; onClose: () => void }) {
+  const { user } = useAuth();
+  const [form, setForm] = useState({
+    date_gathered: format(new Date(), 'yyyy-MM-dd'),
+    drilling_depth_m: latest?.drilling_depth_m ?? well.drilling_depth_m ?? '',
+    static_water_level_m: latest?.static_water_level_m ?? '',
+    pumping_water_level_m: latest?.pumping_water_level_m ?? '',
+    pump_setting: latest?.pump_setting ?? '',
+    motor_hp: latest?.motor_hp ?? '',
+    tds_ppm: latest?.tds_ppm ?? '',
+    turbidity_ntu: latest?.turbidity_ntu ?? '',
+    remarks: '',
+  });
+  const submit = async () => {
+    const num = (v: any) => v === '' || v == null ? null : +v;
+    const { error } = await supabase.from('well_pms_records').insert({
+      well_id: well.id, plant_id: well.plant_id,
+      record_type: 'PMS',
+      date_gathered: form.date_gathered,
+      drilling_depth_m: num(form.drilling_depth_m),
+      static_water_level_m: num(form.static_water_level_m),
+      pumping_water_level_m: num(form.pumping_water_level_m),
+      pump_setting: form.pump_setting || null,
+      motor_hp: num(form.motor_hp),
+      tds_ppm: num(form.tds_ppm),
+      turbidity_ntu: num(form.turbidity_ntu),
+      recorded_by: user?.id, remarks: form.remarks || null,
+    });
+    if (error) { toast.error(error.message); return; }
+    // Keep wells.drilling_depth_m in sync with the latest entry
+    if (form.drilling_depth_m !== '') {
+      await supabase.from('wells').update({ drilling_depth_m: num(form.drilling_depth_m) }).eq('id', well.id);
+    }
+    toast.success('Hydraulic data logged');
+    onClose();
+  };
+  const set = (k: string, v: string) => setForm({ ...form, [k]: v });
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit hydraulic data — {well.name}</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Date gathered *</Label><Input type="date" value={form.date_gathered} onChange={e => set('date_gathered', e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Drilling depth (m)</Label><Input type="number" step="any" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} /></div>
+            <div><Label>Pump setting</Label><Input value={form.pump_setting} onChange={e => set('pump_setting', e.target.value)} /></div>
+            <div><Label>SWL (m)</Label><Input type="number" step="any" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} /></div>
+            <div><Label>PWL (m)</Label><Input type="number" step="any" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} /></div>
+            <div><Label>Motor HP</Label><Input type="number" step="any" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} /></div>
+            <div><Label>TDS (ppm)</Label><Input type="number" step="any" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} /></div>
+            <div className="col-span-2"><Label>Turbidity (NTU)</Label><Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} /></div>
+            <div className="col-span-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => set('remarks', e.target.value)} /></div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Each save creates a new history entry so you can track changes over time.</p>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save entry</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
