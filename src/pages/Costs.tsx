@@ -49,8 +49,8 @@ function ChemicalPrices() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Caustic Soda', 'HCl', 'SLS'];
-  const UNITS = ['kg', 'g', 'L', 'mL'];
-  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+  const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
+  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
   const { data } = useQuery({
     queryKey: ['chem-prices'],
     queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
