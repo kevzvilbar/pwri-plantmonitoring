@@ -249,9 +249,13 @@ function Inventory() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground">Stock = Deliveries − Dosing usage</p>
-        {isManager && <AddStockDialog />}
+        <div className="flex gap-2">
+          <ExportButton table="chemical_deliveries" label="Deliveries" />
+          <ExportButton table="chemical_dosing_logs" label="Dosing" />
+          {isManager && <AddStockDialog />}
+        </div>
       </div>
       {stockRows?.map((c) => {
         const threshold = thresholdMap.get(`${c.plant_id}::${c.chemical_name}`) ?? 10;
