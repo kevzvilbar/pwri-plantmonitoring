@@ -288,8 +288,8 @@ function AddStockDialog() {
   const [name, setName] = useState('');
   const [customName, setCustomName] = useState('');
   const [unit, setUnit] = useState('kg');
+  const [customUnit, setCustomUnit] = useState('');
   const [qty, setQty] = useState('');
-  const [unitCost, setUnitCost] = useState('');
   const [supplier, setSupplier] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [remarks, setRemarks] = useState('');
