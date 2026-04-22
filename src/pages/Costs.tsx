@@ -90,11 +90,17 @@ function ChemicalPrices() {
             <Label className="text-xs">Unit</Label>
             <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                <SelectItem value="__custom__">+ Custom…</SelectItem>
+              </SelectContent>
             </Select>
+            {v.unit === '__custom__' && (
+              <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
+            )}
           </div>
           <div>
-            <Label className="text-xs">Price ₱ / {v.unit}</Label>
+            <Label className="text-xs">Price ₱ / {v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit}</Label>
             <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} />
           </div>
           <div className="col-span-2">
