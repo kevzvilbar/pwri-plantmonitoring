@@ -181,10 +181,12 @@ function Rollup() {
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
-          <div><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
+          <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1 min-w-0"><Label className="text-xs">From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+            <div className="flex-1 min-w-0"><Label className="text-xs">To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          </div>
         </div>
       </Card>
       {plantId && (
@@ -200,7 +202,7 @@ function Rollup() {
           </div>
           <Card className="p-3">
             <h4 className="text-sm font-semibold mb-2">Daily costs</h4>
-            <div className="h-72">
+            <div className="h-64 sm:h-72">
               <ResponsiveContainer>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -214,14 +216,57 @@ function Rollup() {
               </ResponsiveContainer>
             </div>
           </Card>
-          <Card className="p-3">
-            <h4 className="text-sm font-semibold mb-2">Driver notes</h4>
-            <DriverNotes plantId={plantId} rows={data ?? []} onSaved={refetch} />
-          </Card>
+          <CostInsights rows={data ?? []} totals={totals} from={from} to={to} />
         </>
       )}
       {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
     </div>
+  );
+}
+
+function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; from: string; to: string }) {
+  const insights = useMemo(() => {
+    const out: { label: string; tone: 'accent' | 'warn' | 'danger' | 'info'; text: string }[] = [];
+    if (!rows.length) return out;
+    const days = rows.length;
+    const avgCost = totals.total / days;
+    const peak = rows.reduce((m: any, r: any) => ((+r.chem_cost + +r.power_cost) > (+m.chem_cost + +m.power_cost) ? r : m), rows[0]);
+    const peakTotal = (+peak.chem_cost || 0) + (+peak.power_cost || 0);
+    const chemShare = totals.total ? (totals.chem / totals.total) * 100 : 0;
+    out.push({ label: 'Period', tone: 'info', text: `${days} day(s) · ₱${fmtNum(avgCost, 0)} avg/day · ${chemShare.toFixed(0)}% chem / ${(100 - chemShare).toFixed(0)}% power.` });
+    if (peakTotal > avgCost * 1.5) {
+      out.push({ label: 'Spike', tone: 'warn', text: `${peak.cost_date}: ₱${fmtNum(peakTotal, 0)} (${((peakTotal / avgCost - 1) * 100).toFixed(0)}% above average). Check for tariff change or chemical top-up.` });
+    }
+    if (totals.perM3 && totals.perM3 > 25) {
+      out.push({ label: 'Cost/m³', tone: 'danger', text: `₱${totals.perM3.toFixed(2)}/m³ exceeds ₱25 benchmark. Review power efficiency or chemical dosing.` });
+    } else if (totals.perM3) {
+      out.push({ label: 'Cost/m³', tone: 'accent', text: `₱${totals.perM3.toFixed(2)}/m³ within healthy range.` });
+    }
+    if (totals.prod === 0) {
+      out.push({ label: 'No production', tone: 'danger', text: 'Production volume is zero — verify well meter readings are recorded.' });
+    }
+    return out;
+  }, [rows, totals]);
+
+  if (!rows.length) return (
+    <Card className="p-4 text-center text-sm text-muted-foreground">No cost data in {from} → {to}</Card>
+  );
+
+  return (
+    <Card className="p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Auto insights</h4>
+        <span className="text-[10px] text-muted-foreground">Computed monthly · no manual notes needed</span>
+      </div>
+      <div className="space-y-1.5">
+        {insights.map((i, idx) => (
+          <div key={idx} className="flex items-start gap-2 text-xs">
+            <StatusPill tone={i.tone}>{i.label}</StatusPill>
+            <span className="flex-1 pt-0.5">{i.text}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
