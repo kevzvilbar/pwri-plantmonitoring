@@ -198,21 +198,24 @@ function PretreatmentAndROLog() {
     // Save pre-treatment reading
     const mmf_readings = Object.values(afmmf).filter((r) => r.reading)
       .map((r) => ({ unit: r.unit, reading: +r.reading }));
+
+    // Merge backwash + inlet/outlet pressures into the single afm_units jsonb column
     const afm_units = Object.values(afmmf)
-      .filter((r) => r.bw && (r.bwStart || r.bwEnd))
-      .map((r) => ({
-        unit: r.unit,
-        backwash_start: r.bwStart ? new Date(r.bwStart).toISOString() : null,
-        backwash_end: r.bwEnd ? new Date(r.bwEnd).toISOString() : null,
-      }));
-    const afm_pressures = Object.values(afmmf)
-      .filter((r) => r.pressureIn || r.pressureOut)
+      .filter((r) => r.bw || r.pressureIn || r.pressureOut)
       .map((r) => {
         const pIn = r.pressureIn ? +r.pressureIn : null;
         const pOut = r.pressureOut ? +r.pressureOut : null;
-        const deltaP = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
-        return { unit: r.unit, pressure_in_psi: pIn, pressure_out_psi: pOut, dp_psi: deltaP };
+        const dp_psi = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
+        return {
+          unit: r.unit,
+          backwash_start: r.bw && r.bwStart ? new Date(r.bwStart).toISOString() : null,
+          backwash_end: r.bw && r.bwEnd ? new Date(r.bwEnd).toISOString() : null,
+          inlet_psi: pIn,
+          outlet_psi: pOut,
+          dp_psi,
+        };
       });
+
     const booster_pumps = Object.entries(boosters).filter(([, v]) => v.target || v.amp)
       .map(([k, v]) => ({ unit: +k, target_pressure_psi: v.target ? +v.target : null, amperage: v.amp ? +v.amp : null }));
     const filter_housings = Object.entries(housings).filter(([, v]) => v.inP || v.outP)
@@ -223,7 +226,7 @@ function PretreatmentAndROLog() {
       reading_datetime: new Date(dt).toISOString(),
       backwash_start: isSynchronized && syncBwOn && syncBwStart ? new Date(syncBwStart).toISOString() : null,
       backwash_end: isSynchronized && syncBwOn && syncBwEnd ? new Date(syncBwEnd).toISOString() : null,
-      mmf_readings, booster_pumps, afm_units, filter_housings, afm_pressures,
+      mmf_readings, booster_pumps, afm_units, filter_housings,
       hpp_target_pressure_psi: hppTarget ? +hppTarget : null,
       bag_filters_changed: +bagsChanged || 0,
       remarks: remarks || null,
