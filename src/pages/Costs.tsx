@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusPill } from '@/components/StatusPill';
+import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
@@ -49,22 +50,23 @@ function ChemicalPrices() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Caustic Soda', 'HCl', 'SLS'];
-  const UNITS = ['kg', 'g', 'L', 'mL'];
-  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+  const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
+  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
   const { data } = useQuery({
     queryKey: ['chem-prices'],
     queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
   });
   const submit = async () => {
     const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
-    if (!finalName || !v.unit_price) { toast.error('Chemical and price required'); return; }
+    const finalUnit = v.unit === '__custom__' ? v.customUnit.trim() : v.unit;
+    if (!finalName || !v.unit_price || !finalUnit) { toast.error('Chemical, unit and price required'); return; }
     const { error } = await supabase.from('chemical_prices').insert({
-      chemical_name: `${finalName} (${v.unit})`, unit_price: +v.unit_price,
+      chemical_name: `${finalName} (${finalUnit})`, unit_price: +v.unit_price,
       effective_date: v.effective_date, updated_by: user?.id,
     });
     if (error) { toast.error(error.message); return; }
     toast.success('Price added');
-    setV({ chemical_name: '', custom: '', unit: 'kg', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+    setV({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
     qc.invalidateQueries({ queryKey: ['chem-prices'] });
   };
   return (
@@ -89,11 +91,17 @@ function ChemicalPrices() {
             <Label className="text-xs">Unit</Label>
             <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                <SelectItem value="__custom__">+ Custom…</SelectItem>
+              </SelectContent>
             </Select>
+            {v.unit === '__custom__' && (
+              <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
+            )}
           </div>
           <div>
-            <Label className="text-xs">Price ₱ / {v.unit}</Label>
+            <Label className="text-xs">Price ₱ / {v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit}</Label>
             <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} />
           </div>
           <div className="col-span-2">
@@ -104,7 +112,10 @@ function ChemicalPrices() {
         <Button onClick={submit} className="w-full" size="sm">Add price</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Price history</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Price history</h4>
+          <ExportButton table="chemical_prices" label="Export" />
+        </div>
         <div className="grid grid-cols-[1fr_100px_90px] gap-2 text-[10px] text-muted-foreground pb-1 border-b">
           <div>Chemical</div><div className="text-right">Price</div><div className="text-right">Date</div>
         </div>
@@ -178,6 +189,9 @@ function Rollup() {
       </Card>
       {plantId && (
         <>
+          <div className="flex justify-end">
+            <ExportButton table="production_costs" label="Export rollup" filters={{ plant_id: plantId }} />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Card className="p-3"><div className="text-xs text-muted-foreground">Chem cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.chem, 0)}</div></Card>
             <Card className="p-3"><div className="text-xs text-muted-foreground">Power cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.power, 0)}</div></Card>
@@ -276,7 +290,10 @@ function Tariff() {
         <Button onClick={submit} className="w-full" size="sm">Add tariff</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">History</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">History</h4>
+          {plantId && <ExportButton table="power_tariffs" label="Export" filters={{ plant_id: plantId }} />}
+        </div>
         <div className="space-y-1.5">
           {tariffs?.map((t: any) => (
             <div key={t.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
@@ -355,7 +372,10 @@ function Bills() {
         <Button onClick={submit} className="w-full" size="sm">Save bill</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Recent bills</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Recent bills</h4>
+          {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
+        </div>
         <div className="space-y-1.5">
           {bills?.map((b: any) => (
             <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">

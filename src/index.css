@@ -169,6 +169,29 @@
   }
 }
 
+/* Mobile-friendly tap targets — only on coarse pointer devices (phones/tablets) */
+@media (pointer: coarse) and (max-width: 768px) {
+  button, [role="button"], a.button, .btn {
+    min-height: 44px;
+  }
+  button[data-size="sm"], .h-8 {
+    min-height: 40px;
+  }
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 16px; /* prevents iOS auto-zoom */
+  }
+  /* Sticky save bar utility for forms */
+  .sticky-save {
+    position: sticky;
+    bottom: 0;
+    background: hsl(var(--background));
+    padding: 0.75rem 0;
+    border-top: 1px solid hsl(var(--border));
+    z-index: 10;
+  }
+}
+
 @media print {
   body { background: white; }
   .no-print { display: none !important; }

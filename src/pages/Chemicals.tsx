@@ -13,7 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
-import { ComputedInput } from '@/components/ComputedInput';
+import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -27,7 +27,7 @@ const KNOWN_CHEMICALS = [
   { name: 'HCl', defaultUnit: 'L' },
   { name: 'SLS', defaultUnit: 'g' },
 ];
-const UNITS = ['kg', 'g', 'L', 'mL'];
+const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
 const DOSING_KEYS = [
   { key: 'chlorine_kg', name: 'Chlorine', unit: 'kg' },
@@ -249,9 +249,13 @@ function Inventory() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground">Stock = Deliveries − Dosing usage</p>
-        {isManager && <AddStockDialog />}
+        <div className="flex gap-2">
+          <ExportButton table="chemical_deliveries" label="Deliveries" />
+          <ExportButton table="chemical_dosing_logs" label="Dosing" />
+          {isManager && <AddStockDialog />}
+        </div>
       </div>
       {stockRows?.map((c) => {
         const threshold = thresholdMap.get(`${c.plant_id}::${c.chemical_name}`) ?? 10;
@@ -288,18 +292,19 @@ function AddStockDialog() {
   const [name, setName] = useState('');
   const [customName, setCustomName] = useState('');
   const [unit, setUnit] = useState('kg');
+  const [customUnit, setCustomUnit] = useState('');
   const [qty, setQty] = useState('');
-  const [unitCost, setUnitCost] = useState('');
   const [supplier, setSupplier] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [remarks, setRemarks] = useState('');
 
   const submit = async () => {
     const finalName = name === '__custom__' ? customName.trim() : name;
-    if (!plantId || !finalName || !qty) { toast.error('Plant, chemical, and quantity required'); return; }
+    const finalUnit = unit === '__custom__' ? customUnit.trim() : unit;
+    if (!plantId || !finalName || !qty || !finalUnit) { toast.error('Plant, chemical, unit and quantity required'); return; }
     const { error } = await supabase.from('chemical_deliveries').insert({
-      plant_id: plantId, chemical_name: finalName, quantity: +qty, unit,
-      unit_cost: unitCost ? +unitCost : null, supplier: supplier || null,
+      plant_id: plantId, chemical_name: finalName, quantity: +qty, unit: finalUnit,
+      supplier: supplier || null,
       delivery_date: date, remarks: remarks || null, recorded_by: user?.id,
     });
     if (error) { toast.error(error.message); return; }
@@ -309,12 +314,12 @@ function AddStockDialog() {
       .select('id').eq('plant_id', plantId).eq('chemical_name', finalName).maybeSingle();
     if (!existing) {
       await supabase.from('chemical_inventory').insert({
-        plant_id: plantId, chemical_name: finalName, unit, current_stock: 0, low_stock_threshold: 10,
+        plant_id: plantId, chemical_name: finalName, unit: finalUnit, current_stock: 0, low_stock_threshold: 10,
       });
     }
 
     toast.success('Stock received'); setOpen(false);
-    setName(''); setCustomName(''); setQty(''); setUnitCost(''); setSupplier(''); setRemarks('');
+    setName(''); setCustomName(''); setQty(''); setSupplier(''); setRemarks(''); setCustomUnit('');
     qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
   };
 
@@ -340,7 +345,7 @@ function AddStockDialog() {
               <Input className="mt-2" placeholder="Custom chemical name" value={customName} onChange={(e) => setCustomName(e.target.value)} />
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs">Quantity</Label>
               <Input type="number" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
@@ -349,12 +354,14 @@ function AddStockDialog() {
               <Label className="text-xs">Unit</Label>
               <Select value={unit} onValueChange={setUnit}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                  <SelectItem value="__custom__">+ Custom…</SelectItem>
+                </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Unit cost ₱</Label>
-              <Input type="number" step="any" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+              {unit === '__custom__' && (
+                <Input className="mt-2" placeholder="e.g. drum" value={customUnit} onChange={(e) => setCustomUnit(e.target.value)} />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -362,10 +369,6 @@ function AddStockDialog() {
             <div><Label className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
           <div><Label className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
-          <div className="bg-accent-soft p-2 rounded text-xs flex justify-between">
-            <span>Total value</span>
-            <ComputedInput className="w-32 h-7 text-right" value={qty && unitCost ? `₱ ${fmtNum(+qty * +unitCost, 2)}` : ''} />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
