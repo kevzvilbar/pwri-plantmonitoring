@@ -341,7 +341,7 @@ function AddStockDialog() {
               <Input className="mt-2" placeholder="Custom chemical name" value={customName} onChange={(e) => setCustomName(e.target.value)} />
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs">Quantity</Label>
               <Input type="number" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
@@ -350,12 +350,14 @@ function AddStockDialog() {
               <Label className="text-xs">Unit</Label>
               <Select value={unit} onValueChange={setUnit}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                  <SelectItem value="__custom__">+ Custom…</SelectItem>
+                </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Unit cost ₱</Label>
-              <Input type="number" step="any" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+              {unit === '__custom__' && (
+                <Input className="mt-2" placeholder="e.g. drum" value={customUnit} onChange={(e) => setCustomUnit(e.target.value)} />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -363,10 +365,6 @@ function AddStockDialog() {
             <div><Label className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
           <div><Label className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
-          <div className="bg-accent-soft p-2 rounded text-xs flex justify-between">
-            <span>Total value</span>
-            <ComputedInput className="w-32 h-7 text-right" value={qty && unitCost ? `₱ ${fmtNum(+qty * +unitCost, 2)}` : ''} />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
