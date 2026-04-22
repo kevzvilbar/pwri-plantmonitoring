@@ -369,7 +369,10 @@ function Bills() {
         <Button onClick={submit} className="w-full" size="sm">Save bill</Button>
       </Card>
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Recent bills</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Recent bills</h4>
+          {plantId && <ExportButton table="electric_bills" label="Export" filters={{ plant_id: plantId }} />}
+        </div>
         <div className="space-y-1.5">
           {bills?.map((b: any) => (
             <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
