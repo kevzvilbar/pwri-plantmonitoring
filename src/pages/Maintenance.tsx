@@ -14,10 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusPill } from '@/components/StatusPill';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Sparkles } from 'lucide-react';
+import { PMS_TEMPLATES } from '@/lib/pmsTemplates';
 
 const FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'] as const;
-const CATEGORIES = ['Controllers', 'Pumps & Motors', 'Genset', 'TDS Meter', 'Colorimeter', 'Nephelometer', 'Filter Media', 'Safety Equipment', 'Other'];
+const CATEGORIES = [
+  'Controllers', 'Pumps & Motors', 'Genset', 'RO Membranes', 'Dosing Pump',
+  'pH Meter', 'TDS Meter', 'Colorimeter', 'Nephelometer',
+  'Filter Media', 'Safety Equipment', 'Other',
+];
 
 export default function Maintenance() {
   return (
@@ -39,9 +44,10 @@ export default function Maintenance() {
 
 function Checklists() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
   const { selectedPlantId } = useAppStore();
   const [freq, setFreq] = useState<typeof FREQUENCIES[number]>('Daily');
+  const [generating, setGenerating] = useState(false);
   const { data } = useQuery({
     queryKey: ['templates', freq, selectedPlantId],
     queryFn: async () => {
@@ -50,6 +56,35 @@ function Checklists() {
       return (await q).data ?? [];
     },
   });
+
+  const generatePms = async () => {
+    if (!selectedPlantId) { toast.error('Select a plant first (top bar)'); return; }
+    setGenerating(true);
+    try {
+      const { data: existing } = await supabase
+        .from('checklist_templates')
+        .select('equipment_name,frequency,category')
+        .eq('plant_id', selectedPlantId);
+      const existsKey = new Set((existing ?? []).map((r: any) =>
+        `${r.category}|${r.equipment_name}|${r.frequency}`));
+      const startDate = format(new Date(), 'yyyy-MM-dd');
+      const rows = PMS_TEMPLATES
+        .filter(t => !existsKey.has(`${t.category}|${t.equipment_name}|${t.frequency}`))
+        .map(t => ({
+          plant_id: selectedPlantId, category: t.category,
+          equipment_name: t.equipment_name, frequency: t.frequency,
+          checklist_steps: t.steps, schedule_start_date: startDate,
+          created_by: user?.id,
+        }));
+      if (!rows.length) { toast.info('All standard PMS templates already exist'); return; }
+      const { error } = await supabase.from('checklist_templates').insert(rows);
+      if (error) throw error;
+      toast.success(`Generated ${rows.length} PMS templates`);
+      qc.invalidateQueries({ queryKey: ['templates'] });
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to generate');
+    } finally { setGenerating(false); }
+  };
 
   const markDone = async (template: any) => {
     const findings = prompt('Findings (optional):') ?? '';
@@ -68,6 +103,21 @@ function Checklists() {
           <Button key={f} size="sm" variant={freq === f ? 'default' : 'outline'} onClick={() => setFreq(f)}>{f}</Button>
         ))}
       </div>
+      {isManager && (
+        <Card className="p-3 flex items-start gap-3 bg-accent-soft/40 border-accent/30">
+          <Sparkles className="h-4 w-4 text-accent mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold">Auto-Generate PMS Checklist</div>
+            <p className="text-[11px] text-muted-foreground">
+              Creates standard PMS templates (Genset, RO, Dosing Pump, Controllers, Cartridge Filter, Pumps & Motors, pH/NTU/Colorimeter)
+              for the selected plant, scheduled by their natural frequency. Skips templates that already exist.
+            </p>
+          </div>
+          <Button size="sm" onClick={generatePms} disabled={generating || !selectedPlantId}>
+            {generating ? 'Generating…' : 'Generate'}
+          </Button>
+        </Card>
+      )}
       {data?.map((t: any) => (
         <Card key={t.id} className="p-3">
           <div className="flex justify-between items-start mb-2">
