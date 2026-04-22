@@ -189,6 +189,9 @@ function Rollup() {
       </Card>
       {plantId && (
         <>
+          <div className="flex justify-end">
+            <ExportButton table="production_costs" label="Export rollup" filters={{ plant_id: plantId }} />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Card className="p-3"><div className="text-xs text-muted-foreground">Chem cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.chem, 0)}</div></Card>
             <Card className="p-3"><div className="text-xs text-muted-foreground">Power cost</div><div className="font-mono-num text-lg">₱{fmtNum(totals.power, 0)}</div></Card>
