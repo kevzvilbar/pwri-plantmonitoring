@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { CheckCircle2, Sparkles } from 'lucide-react';
 import { PMS_TEMPLATES } from '@/lib/pmsTemplates';
+import { PmsCalendar } from '@/components/PmsCalendar';
 
 const FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'] as const;
 const CATEGORIES = [
@@ -29,12 +30,14 @@ export default function Maintenance() {
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Maintenance</h1>
       <Tabs defaultValue="checklists">
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="checklists">Checklists</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="add">Add</TabsTrigger>
           <TabsTrigger value="records">Records</TabsTrigger>
         </TabsList>
         <TabsContent value="checklists" className="mt-3"><Checklists /></TabsContent>
+        <TabsContent value="calendar" className="mt-3"><PmsCalendar /></TabsContent>
         <TabsContent value="add" className="mt-3"><AddTemplate /></TabsContent>
         <TabsContent value="records" className="mt-3"><Records /></TabsContent>
       </Tabs>

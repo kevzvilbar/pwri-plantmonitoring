@@ -324,18 +324,18 @@ function PretreatmentAndROLog() {
       </div>
 
       <Card className="p-3 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 max-w-md">
           <div>
             <Label>Plant</Label>
             <Select value={plantId} onValueChange={(v) => { setPlantId(v); setTrainId(''); }}>
-              <SelectTrigger><SelectValue placeholder="Select Plant" /></SelectTrigger>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select Plant" /></SelectTrigger>
               <SelectContent>{plants?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <Label>Train</Label>
             <Select value={trainId} onValueChange={setTrainId} disabled={!plantId}>
-              <SelectTrigger><SelectValue placeholder="Select Train" /></SelectTrigger>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select Train" /></SelectTrigger>
               <SelectContent>{trains?.map((t: any) => (
                 <SelectItem key={t.id} value={t.id}>{t.name ?? `Train ${t.train_number}`}</SelectItem>
               ))}</SelectContent>
@@ -345,7 +345,7 @@ function PretreatmentAndROLog() {
         <div>
           <Label>Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
-            className="w-full min-w-[260px]" />
+            className="h-9 w-full max-w-[220px]" />
         </div>
         {plant && (
           <div className="text-[11px] text-muted-foreground">
