@@ -296,10 +296,11 @@ function AddStockDialog() {
 
   const submit = async () => {
     const finalName = name === '__custom__' ? customName.trim() : name;
-    if (!plantId || !finalName || !qty) { toast.error('Plant, chemical, and quantity required'); return; }
+    const finalUnit = unit === '__custom__' ? customUnit.trim() : unit;
+    if (!plantId || !finalName || !qty || !finalUnit) { toast.error('Plant, chemical, unit and quantity required'); return; }
     const { error } = await supabase.from('chemical_deliveries').insert({
-      plant_id: plantId, chemical_name: finalName, quantity: +qty, unit,
-      unit_cost: unitCost ? +unitCost : null, supplier: supplier || null,
+      plant_id: plantId, chemical_name: finalName, quantity: +qty, unit: finalUnit,
+      supplier: supplier || null,
       delivery_date: date, remarks: remarks || null, recorded_by: user?.id,
     });
     if (error) { toast.error(error.message); return; }
@@ -309,12 +310,12 @@ function AddStockDialog() {
       .select('id').eq('plant_id', plantId).eq('chemical_name', finalName).maybeSingle();
     if (!existing) {
       await supabase.from('chemical_inventory').insert({
-        plant_id: plantId, chemical_name: finalName, unit, current_stock: 0, low_stock_threshold: 10,
+        plant_id: plantId, chemical_name: finalName, unit: finalUnit, current_stock: 0, low_stock_threshold: 10,
       });
     }
 
     toast.success('Stock received'); setOpen(false);
-    setName(''); setCustomName(''); setQty(''); setUnitCost(''); setSupplier(''); setRemarks('');
+    setName(''); setCustomName(''); setQty(''); setSupplier(''); setRemarks(''); setCustomUnit('');
     qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
   };
 
