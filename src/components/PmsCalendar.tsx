@@ -386,9 +386,6 @@ function DayChecklistDialog({
     </Dialog>
   );
 }
-    </div>
-  );
-}
 
 function Legend({ dot, label }: { dot: string; label: string }) {
   return (
