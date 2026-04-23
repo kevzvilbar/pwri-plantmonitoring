@@ -1,4 +1,6 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+"use client";
+import { NavLink } from '@/components/NavLink';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet, MapPin, Cog, FlaskConical,
@@ -52,8 +54,11 @@ const sideSheetGroups = [
 ];
 
 export function BottomNav() {
-  const { pathname, search } = useLocation();
-  const navigate = useNavigate();
+  const pathname = usePathname() ?? '';
+  const sp = useSearchParams();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
+  const search = sp?.toString() ? `?${sp.toString()}` : '';
   const fullPath = pathname + search;
 
   const isPriorityActive = (item: Priority) => {

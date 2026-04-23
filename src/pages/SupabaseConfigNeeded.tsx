@@ -14,9 +14,9 @@ export default function SupabaseConfigNeeded() {
           variables are missing. Please add them in the Secrets panel:
         </p>
         <ul className="text-sm font-mono bg-muted/40 rounded p-3 space-y-1">
-          <li>VITE_SUPABASE_URL</li>
-          <li>VITE_SUPABASE_PUBLISHABLE_KEY</li>
-          <li>VITE_SUPABASE_PROJECT_ID</li>
+          <li>NEXT_PUBLIC_SUPABASE_URL</li>
+          <li>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</li>
+          <li>NEXT_PUBLIC_SUPABASE_PROJECT_ID</li>
         </ul>
         <p className="text-xs text-muted-foreground">
           Once you save them, refresh this page and the app will reconnect to your

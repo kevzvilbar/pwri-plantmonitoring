@@ -1,5 +1,6 @@
+"use client";
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,8 +22,15 @@ import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 
 export default function Costs() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') ?? 'rollup';
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname() ?? '';
+  const tab = params?.get('tab') ?? 'rollup';
+  const setParams = (next: Record<string, string>) => {
+    const sp = new URLSearchParams(params?.toString() ?? '');
+    Object.entries(next).forEach(([k, v]) => sp.set(k, v));
+    router.replace(`${pathname}?${sp.toString()}`);
+  };
   return (
     <div className="space-y-3 animate-fade-in">
       <div>

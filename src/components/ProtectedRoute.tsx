@@ -1,17 +1,31 @@
-import { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+"use client";
+
+import { ReactNode, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading, profile } = useAuth();
-  const loc = useLocation();
+  const router = useRouter();
+  const pathname = usePathname() ?? '';
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace('/auth');
+    } else if (!profile?.profile_complete && pathname !== '/onboarding') {
+      router.replace('/onboarding');
+    }
+  }, [loading, user, profile, pathname, router]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading…
+      </div>
+    );
   }
-  if (!user) return <Navigate to="/auth" state={{ from: loc }} replace />;
-  if (!profile?.profile_complete && loc.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
-  }
+  if (!user) return null;
+  if (!profile?.profile_complete && pathname !== '/onboarding') return null;
   return <>{children}</>;
 }

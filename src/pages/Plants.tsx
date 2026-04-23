@@ -1,5 +1,7 @@
+"use client";
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
@@ -16,12 +18,13 @@ import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-export default function Plants() {
-  const { id } = useParams();
+export default function Plants({ plantId }: { plantId?: string } = {}) {
+  const id = plantId;
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
 
   if (id) return <PlantDetail plantId={id} />;
 
@@ -54,7 +57,8 @@ export default function Plants() {
 }
 
 function PlantDetail({ plantId }: { plantId: string }) {
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
   const { data: plants } = usePlants();
   const plant = plants?.find(p => p.id === plantId);
 

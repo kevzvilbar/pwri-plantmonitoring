@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Notification {
@@ -33,7 +33,8 @@ export function TopBar() {
   const { user, profile, signOut } = useAuth();
   const { data: plants } = usePlants();
   const { selectedPlantId, setSelectedPlantId, setUnreadCount, unreadCount } = useAppStore();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
   const qc = useQueryClient();
 
   const visiblePlants = useMemo(() => {

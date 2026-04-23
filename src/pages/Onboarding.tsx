@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+"use client";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,7 +13,8 @@ import { toast } from 'sonner';
 
 export default function Onboarding() {
   const { user, profile, refreshProfile, loading } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
   const { data: plants } = usePlants();
   const [busy, setBusy] = useState(false);
 
@@ -21,9 +23,15 @@ export default function Onboarding() {
     designation: '', designation_other: '', plant_assignments: [] as string[],
   });
 
+  useEffect(() => {
+    if (loading) return;
+    if (!user) router.replace('/auth');
+    else if (profile?.profile_complete) router.replace('/');
+  }, [loading, user, profile, router]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
-  if (!user) return <Navigate to="/auth" replace />;
-  if (profile?.profile_complete) return <Navigate to="/" replace />;
+  if (!user) return null;
+  if (profile?.profile_complete) return null;
 
   const togglePlant = (id: string) => {
     setForm((f) => ({

@@ -1,3 +1,4 @@
+"use client";
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,7 +21,7 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Timer, Receipt, Banknote, DollarSign,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsCard } from '@/components/DowntimeEventsCard';
 
@@ -45,7 +46,8 @@ function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent }: any
 export default function Dashboard() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const navigate = (to: string) => router.push(to);
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
 
   const visiblePlants = useMemo(
