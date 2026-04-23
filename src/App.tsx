@@ -7,6 +7,8 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import Auth from "./pages/Auth";
+import SupabaseConfigNeeded from "./pages/SupabaseConfigNeeded";
+import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Plants from "./pages/Plants";
@@ -21,7 +23,9 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => !isSupabaseConfigured ? (
+  <SupabaseConfigNeeded />
+) : (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
