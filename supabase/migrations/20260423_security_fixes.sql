@@ -1,27 +1,27 @@
--- Migration File: 20260423_security_fixes.sql
--- These migrations contain security policies and helper functions to enhance system security
+-- Security Fixes for RLS Policies and Admin Functions
 
--- 1. Security Fix: Prevent users from reading all profiles
-CREATE POLICY "select_own_profile" ON profiles
-FOR SELECT
-USING (auth.uid() = user_id);
+-- 1. Profile Visibility
+-- Ensure that users can only see profiles they are authorized to view.
+ALTER POLICY profile_visibility ON profiles
+  FOR SELECT
+  USING (auth.uid() = user_id);
 
--- 2. Security Fix: Prevent users from escalating plant access
-CREATE POLICY "select_own_plant" ON plants
-FOR SELECT
-USING (auth.uid() = owner_id);
+-- 2. Plant Access Escalation
+-- Restrict access to plant records to prevent unauthorized escalation.
+ALTER POLICY plant_access ON plants
+  FOR SELECT, UPDATE
+  USING (auth.uid() = owner_id OR is_admin);
 
--- 3. Security Fix: Prevent self-reactivation of suspended accounts
-CREATE OR REPLACE FUNCTION admin_reactivate_account(user_id uuid)
-RETURNS void AS $$
-BEGIN
-  IF (SELECT status FROM users WHERE id = user_id) = 'suspended' THEN
-    UPDATE users SET status = 'active' WHERE id = user_id AND EXISTS (SELECT 1 FROM admins WHERE uid = auth.uid());
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
+-- 3. Suspension Bypass
+-- Prevent users from bypassing their suspension status.
+ALTER POLICY suspension_check ON users
+  FOR SELECT
+  USING (active = true AND (auth.uid() = user_id OR is_admin));
 
--- Grant execute on admin_reactivate_account function to admin role
-GRANT EXECUTE ON FUNCTION admin_reactivate_account(uuid) TO admin;
+-- 4. Role Manipulation Vulnerabilities
+-- Ensure that role assignments cannot be altered by unauthorized users.
+ALTER POLICY role_management ON users
+  FOR UPDATE
+  USING (auth.uid() = user_id AND is_admin);
 
--- Additional checks and functions can be added here as necessary.
+-- Additional security measures can include logging access attempts and monitoring suspicious activities.
