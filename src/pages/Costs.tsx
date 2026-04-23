@@ -1,6 +1,5 @@
-"use client";
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { StatusPill } from '@/components/StatusPill';
-import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -22,15 +20,8 @@ import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 
 export default function Costs() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname() ?? '';
-  const tab = params?.get('tab') ?? 'rollup';
-  const setParams = (next: Record<string, string>) => {
-    const sp = new URLSearchParams(params?.toString() ?? '');
-    Object.entries(next).forEach(([k, v]) => sp.set(k, v));
-    router.replace(`${pathname}?${sp.toString()}`);
-  };
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') ?? 'rollup';
   return (
     <div className="space-y-3 animate-fade-in">
       <div>
@@ -358,7 +349,7 @@ function Power() {
             <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-            <div><Label className="text-xs">Total kWh</Label><ComputedInput value={totalKwh ?? ''} /></div>
+            <div><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly className="bg-muted" /></div>
           </div>
         </div>
 

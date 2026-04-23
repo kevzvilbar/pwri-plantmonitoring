@@ -1,4 +1,3 @@
-"use client";
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,9 +20,8 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Timer, Receipt, Banknote, DollarSign,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
-import { DowntimeEventsCard } from '@/components/DowntimeEventsCard';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -46,8 +44,7 @@ function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent }: any
 export default function Dashboard() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const router = useRouter();
-  const navigate = (to: string) => router.push(to);
+  const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
 
   const visiblePlants = useMemo(
@@ -193,14 +190,12 @@ export default function Dashboard() {
       </div>
 
       {/* Operations row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <StatCard icon={Timer} label="Downtime hrs" value={fmtNum(downtime, 1)} unit="hr" />
         <StatCard icon={Droplet} label="Raw water (wells)" value={fmtNum(rawWater)} unit="m³" />
         <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
       </div>
-
-      {/* Downtime — expandable list */}
-      <DowntimeEventsCard plantIds={plantIds} />
 
       {/* Cost row — Production / Power / Chem cost */}
       <div className="grid grid-cols-3 gap-2">
@@ -344,26 +339,17 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   });
 
   const chartData = useMemo(() => {
-    const byDay = new Map<string, { ts: number; date: string; production: number; consumption: number }>();
-    const ensure = (ts: number, label: string) => {
-      const key = label;
-      const existing = byDay.get(key);
-      if (existing) return existing;
-      const created = { ts, date: label, production: 0, consumption: 0 };
-      byDay.set(key, created);
-      return created;
-    };
+    const byDay = new Map<string, { date: string; production: number; consumption: number }>();
+    const ensure = (d: string) => byDay.get(d) ?? byDay.set(d, { date: d, production: 0, consumption: 0 }).get(d)!;
     (wellReadings ?? []).forEach((r: any) => {
-      const dt = new Date(r.reading_datetime);
-      ensure(startOfDay(dt).getTime(), format(dt, 'MMM d')).production += r.daily_volume ?? 0;
+      const d = format(new Date(r.reading_datetime), 'MMM d');
+      ensure(d).production += r.daily_volume ?? 0;
     });
     (locReadings ?? []).forEach((r: any) => {
-      const dt = new Date(r.reading_datetime);
-      ensure(startOfDay(dt).getTime(), format(dt, 'MMM d')).consumption += r.daily_volume ?? 0;
+      const d = format(new Date(r.reading_datetime), 'MMM d');
+      ensure(d).consumption += r.daily_volume ?? 0;
     });
-    return Array.from(byDay.values())
-      .sort((a, b) => a.ts - b.ts)
-      .map(({ ts: _ts, ...d }) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
+    return Array.from(byDay.values()).map((d) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
   }, [locReadings, wellReadings]);
 
   return (

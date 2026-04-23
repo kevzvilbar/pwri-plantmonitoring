@@ -1,6 +1,5 @@
-"use client";
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,16 +15,13 @@ const passSchema = z.string().min(8, 'Min 8 characters').max(72);
 
 export default function Auth() {
   const { user, loading } = useAuth();
-  const router = useRouter();
-  const navigate = (to: string) => router.push(to);
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  useEffect(() => { if (!loading && user) router.replace('/'); }, [loading, user, router]);
-
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
-  if (user) return null;
+  if (user) return <Navigate to="/" replace />;
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,12 +1,10 @@
-"use client";
-
-import { ReactNode } from 'react';
+import { Outlet } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
 import { AppSidebar } from './AppSidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell() {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -19,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarTrigger />
           </div>
           <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-4 py-4 pb-6">
-            {children}
+            <Outlet />
           </main>
           <BottomNav />
         </div>

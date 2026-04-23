@@ -14,7 +14,7 @@ export const ComputedInput = React.forwardRef<HTMLInputElement, React.ComponentP
       tabIndex={-1}
       value={value ?? ''}
       className={cn(
-        'flex h-10 w-full rounded-md border border-dashed border-primary/40 bg-primary/10 px-3 py-2 text-sm font-mono-num font-semibold text-primary cursor-default focus:outline-none',
+        'flex h-10 w-full rounded-md border border-dashed border-accent/50 bg-accent-soft/40 px-3 py-2 text-sm font-mono-num text-accent-foreground/90 cursor-default focus:outline-none',
         className,
       )}
       {...props}

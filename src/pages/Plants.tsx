@@ -1,7 +1,5 @@
-"use client";
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
@@ -18,13 +16,12 @@ import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-export default function Plants({ plantId }: { plantId?: string } = {}) {
-  const id = plantId;
+export default function Plants() {
+  const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
-  const router = useRouter();
-  const navigate = (to: string) => router.push(to);
+  const navigate = useNavigate();
 
   if (id) return <PlantDetail plantId={id} />;
 
@@ -57,8 +54,7 @@ export default function Plants({ plantId }: { plantId?: string } = {}) {
 }
 
 function PlantDetail({ plantId }: { plantId: string }) {
-  const router = useRouter();
-  const navigate = (to: string) => router.push(to);
+  const navigate = useNavigate();
   const { data: plants } = usePlants();
   const plant = plants?.find(p => p.id === plantId);
 
@@ -352,12 +348,10 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
   });
   const { data: latestReplacement } = useQuery({
     queryKey: ['well-latest-replacement', wellId],
-    queryFn: async () => {
-      const { data } = await supabase.from('well_meter_replacements')
-        .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
-        .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1);
-      return (data?.[0] ?? null) as any;
-    },
+    queryFn: async () => (await supabase.from('well_meter_replacements')
+      .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
+      .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1)).maybeSingle()
+      .then(r => r.data),
   });
   if (!well) return <div>Loading…</div>;
   const latest = pms?.[0];
@@ -381,7 +375,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div>Drilling depth: <span className="font-mono-num">{well.drilling_depth_m ?? '—'} m</span></div>
+          <div>Drilling depth: <span className="font-mono-num">{latest?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m</span></div>
           <div>SWL: <span className="font-mono-num">{latest?.static_water_level_m ?? '—'} m</span></div>
           <div>PWL: <span className="font-mono-num">{latest?.pumping_water_level_m ?? '—'} m</span></div>
           <div>Pump setting: <span>{latest?.pump_setting ?? '—'}</span></div>
@@ -396,7 +390,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
             <div className="mt-2 space-y-1 text-[11px] max-h-48 overflow-y-auto">
               {pms.map((p: any) => (
                 <div key={p.id} className="border-t py-1">
-                  <span className="font-medium">{p.date_gathered}</span> · SWL {p.static_water_level_m ?? '—'}m · PWL {p.pumping_water_level_m ?? '—'}m · HP {p.motor_hp ?? '—'}
+                  <span className="font-medium">{p.date_gathered}</span> · depth {p.drilling_depth_m ?? '—'}m · SWL {p.static_water_level_m ?? '—'}m · PWL {p.pumping_water_level_m ?? '—'}m
                 </div>
               ))}
             </div>
@@ -443,7 +437,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
   const { user } = useAuth();
   const [form, setForm] = useState({
     date_gathered: format(new Date(), 'yyyy-MM-dd'),
-    drilling_depth_m: well.drilling_depth_m ?? '',
+    drilling_depth_m: latest?.drilling_depth_m ?? well.drilling_depth_m ?? '',
     static_water_level_m: latest?.static_water_level_m ?? '',
     pumping_water_level_m: latest?.pumping_water_level_m ?? '',
     pump_setting: latest?.pump_setting ?? '',
@@ -458,6 +452,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
       well_id: well.id, plant_id: well.plant_id,
       record_type: 'PMS',
       date_gathered: form.date_gathered,
+      drilling_depth_m: num(form.drilling_depth_m),
       static_water_level_m: num(form.static_water_level_m),
       pumping_water_level_m: num(form.pumping_water_level_m),
       pump_setting: form.pump_setting || null,
@@ -467,7 +462,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
       recorded_by: user?.id, remarks: form.remarks || null,
     });
     if (error) { toast.error(error.message); return; }
-    // Persist drilling depth on the well master record (one canonical value)
+    // Keep wells.drilling_depth_m in sync with the latest entry
     if (form.drilling_depth_m !== '') {
       await supabase.from('wells').update({ drilling_depth_m: num(form.drilling_depth_m) }).eq('id', well.id);
     }

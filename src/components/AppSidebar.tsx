@@ -1,6 +1,4 @@
-"use client";
-import { NavLink } from '@/components/NavLink';
-import { usePathname } from 'next/navigation';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
   Users, DollarSign, Receipt, Download,
@@ -51,7 +49,7 @@ const groups = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const pathname = usePathname() ?? '';
+  const { pathname } = useLocation();
 
   return (
     <Sidebar collapsible="icon">

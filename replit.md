@@ -11,4 +11,4 @@ Uses Supabase (project `lreqxclzoxmswglvdstv`) for database, auth, RLS policies,
 - Deployment: autoscale, build `npm run build`, run via `vite preview` static output.
 
 ## Env vars
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_PROJECT_ID` in Replit Secrets. App now runs on **Next.js 14 (App Router)** — see `app/` directory and `next.config.cjs`.
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID` in `.env`.

@@ -474,7 +474,7 @@ function PretreatmentAndROLog() {
                               onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
                           </div>
                           <div>
-                            <Label className="text-xs">ΔPressure</Label>
+                            <Label className="text-xs">ΔPressure (Auto)</Label>
                             <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger' : ''} />
                           </div>
                         </div>
@@ -536,7 +536,7 @@ function PretreatmentAndROLog() {
                         onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} />
                     </div>
                     <div>
-                      <Label className="text-xs">ΔPressure</Label>
+                      <Label className="text-xs">ΔPressure (Auto)</Label>
                       <ComputedInput value={housingDp} />
                     </div>
                   </div>
@@ -556,16 +556,16 @@ function PretreatmentAndROLog() {
               <div><Label className="text-xs">Suction Pressure (psi)</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
               <div><Label className="text-xs">Feed Pressure (psi)</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
               <div><Label className="text-xs">Reject Pressure (psi)</Label><Input type="number" step="any" {...f('reject_pressure_psi')} /></div>
-              <div><Label className="text-xs">ΔPressure (psi)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
+              <div><Label className="text-xs">ΔPressure (Auto, psi)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
               <div><Label className="text-xs">Feed Flow</Label><Input type="number" step="any" {...f('feed_flow')} /></div>
               <div><Label className="text-xs">Permeate Flow</Label><Input type="number" step="any" {...f('permeate_flow')} /></div>
-              <div><Label className="text-xs">Reject Flow</Label><ComputedInput value={rejectFlow ?? ''} /></div>
-              <div><Label className="text-xs">Recovery %</Label><ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} /></div>
+              <div><Label className="text-xs">Reject Flow (Auto)</Label><ComputedInput value={rejectFlow ?? ''} /></div>
+              <div><Label className="text-xs">Recovery % (Auto)</Label><ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} /></div>
               <div><Label className="text-xs">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
               <div><Label className="text-xs">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
               <div><Label className="text-xs">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
-              <div><Label className="text-xs">Rejection %</Label><ComputedInput value={rejection ?? ''} /></div>
-              <div><Label className="text-xs">Salt Pass %</Label><ComputedInput value={saltPassage ?? ''} /></div>
+              <div><Label className="text-xs">Rejection % (Auto)</Label><ComputedInput value={rejection ?? ''} /></div>
+              <div><Label className="text-xs">Salt Pass % (Auto)</Label><ComputedInput value={saltPassage ?? ''} /></div>
               <div><Label className="text-xs">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
               <div><Label className="text-xs">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
               <div><Label className="text-xs">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
