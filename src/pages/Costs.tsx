@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { StatusPill } from '@/components/StatusPill';
+import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
