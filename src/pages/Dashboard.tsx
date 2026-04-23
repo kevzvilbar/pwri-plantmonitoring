@@ -339,17 +339,26 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   });
 
   const chartData = useMemo(() => {
-    const byDay = new Map<string, { date: string; production: number; consumption: number }>();
-    const ensure = (d: string) => byDay.get(d) ?? byDay.set(d, { date: d, production: 0, consumption: 0 }).get(d)!;
+    const byDay = new Map<string, { ts: number; date: string; production: number; consumption: number }>();
+    const ensure = (ts: number, label: string) => {
+      const key = label;
+      const existing = byDay.get(key);
+      if (existing) return existing;
+      const created = { ts, date: label, production: 0, consumption: 0 };
+      byDay.set(key, created);
+      return created;
+    };
     (wellReadings ?? []).forEach((r: any) => {
-      const d = format(new Date(r.reading_datetime), 'MMM d');
-      ensure(d).production += r.daily_volume ?? 0;
+      const dt = new Date(r.reading_datetime);
+      ensure(startOfDay(dt).getTime(), format(dt, 'MMM d')).production += r.daily_volume ?? 0;
     });
     (locReadings ?? []).forEach((r: any) => {
-      const d = format(new Date(r.reading_datetime), 'MMM d');
-      ensure(d).consumption += r.daily_volume ?? 0;
+      const dt = new Date(r.reading_datetime);
+      ensure(startOfDay(dt).getTime(), format(dt, 'MMM d')).consumption += r.daily_volume ?? 0;
     });
-    return Array.from(byDay.values()).map((d) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
+    return Array.from(byDay.values())
+      .sort((a, b) => a.ts - b.ts)
+      .map(({ ts: _ts, ...d }) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
   }, [locReadings, wellReadings]);
 
   return (
