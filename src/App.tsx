@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import Auth from "./pages/Auth";
 import SupabaseConfigNeeded from "./pages/SupabaseConfigNeeded";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -52,7 +51,6 @@ const App = () => !isSupabaseConfigured ? (
           </Routes>
         </AuthProvider>
       </BrowserRouter>
-      <SpeedInsights />
     </TooltipProvider>
   </QueryClientProvider>
 );
