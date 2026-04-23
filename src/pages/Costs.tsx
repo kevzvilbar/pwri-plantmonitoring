@@ -349,7 +349,7 @@ function Power() {
             <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-            <div><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly className="bg-muted" /></div>
+            <div><Label className="text-xs">Total kWh</Label><ComputedInput value={totalKwh ?? ''} /></div>
           </div>
         </div>
 

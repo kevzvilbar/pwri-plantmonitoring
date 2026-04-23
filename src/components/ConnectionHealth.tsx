@@ -21,7 +21,7 @@ export function ConnectionHealth() {
     try {
       const { error } = await supabase
         .from('plants')
-        .select('id', { head: true, count: 'exact' })
+        .select('id')
         .limit(1);
       const dt = Math.round(performance.now() - t0);
       setLatencyMs(dt);
