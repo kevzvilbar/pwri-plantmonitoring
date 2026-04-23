@@ -1,4 +1,5 @@
 import { Bell } from 'lucide-react';
+import { ConnectionHealth } from './ConnectionHealth';
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -100,6 +101,8 @@ export function TopBar() {
             </SelectContent>
           </Select>
         </div>
+
+        <ConnectionHealth />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
