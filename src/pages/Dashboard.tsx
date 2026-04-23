@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
+import { DowntimeEventsCard } from '@/components/DowntimeEventsCard';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -190,12 +191,14 @@ export default function Dashboard() {
       </div>
 
       {/* Operations row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <StatCard icon={Timer} label="Downtime hrs" value={fmtNum(downtime, 1)} unit="hr" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <StatCard icon={Droplet} label="Raw water (wells)" value={fmtNum(rawWater)} unit="m³" />
         <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
       </div>
+
+      {/* Downtime — expandable list */}
+      <DowntimeEventsCard plantIds={plantIds} />
 
       {/* Cost row — Production / Power / Chem cost */}
       <div className="grid grid-cols-3 gap-2">

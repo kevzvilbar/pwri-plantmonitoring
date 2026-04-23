@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { StatusPill } from '@/components/StatusPill';
+import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -349,7 +350,7 @@ function Power() {
             <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-            <div><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly className="bg-muted" /></div>
+            <div><Label className="text-xs">Total kWh</Label><ComputedInput value={totalKwh ?? ''} /></div>
           </div>
         </div>
 
