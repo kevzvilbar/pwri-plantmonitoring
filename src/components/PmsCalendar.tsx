@@ -18,10 +18,12 @@ import {
 
 type Template = {
   id: string;
+  plant_id: string;
   category: string;
   equipment_name: string;
   frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly';
   schedule_start_date: string | null;
+  checklist_steps: string[] | null;
 };
 
 type DueItem = { template: Template; date: Date; status: 'done' | 'pending' | 'backlog' | 'upcoming' };
@@ -76,7 +78,7 @@ export function PmsCalendar() {
     queryKey: ['pms-templates', selectedPlantId],
     queryFn: async () => {
       let q = supabase.from('checklist_templates')
-        .select('id,category,equipment_name,frequency,schedule_start_date');
+        .select('id,plant_id,category,equipment_name,frequency,schedule_start_date,checklist_steps');
       if (selectedPlantId) q = q.eq('plant_id', selectedPlantId);
       return ((await q).data ?? []) as Template[];
     },
