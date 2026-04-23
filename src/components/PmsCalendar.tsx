@@ -1,10 +1,15 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
+import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, format, isSameDay, isSameMonth, isAfter, isBefore, startOfDay,
@@ -13,10 +18,12 @@ import {
 
 type Template = {
   id: string;
+  plant_id: string;
   category: string;
   equipment_name: string;
   frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly';
   schedule_start_date: string | null;
+  checklist_steps: string[] | null;
 };
 
 type DueItem = { template: Template; date: Date; status: 'done' | 'pending' | 'backlog' | 'upcoming' };
@@ -58,8 +65,10 @@ const STATUS_COLORS: Record<DueItem['status'], string> = {
 
 export function PmsCalendar() {
   const { selectedPlantId } = useAppStore();
+  const qc = useQueryClient();
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
   const [selected, setSelected] = useState<Date | null>(new Date());
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -71,7 +80,7 @@ export function PmsCalendar() {
     queryKey: ['pms-templates', selectedPlantId],
     queryFn: async () => {
       let q = supabase.from('checklist_templates')
-        .select('id,category,equipment_name,frequency,schedule_start_date');
+        .select('id,plant_id,category,equipment_name,frequency,schedule_start_date,checklist_steps');
       if (selectedPlantId) q = q.eq('plant_id', selectedPlantId);
       return ((await q).data ?? []) as Template[];
     },
@@ -163,7 +172,7 @@ export function PmsCalendar() {
             return (
               <button
                 key={key}
-                onClick={() => setSelected(day)}
+                onClick={() => { setSelected(day); setDialogOpen(true); }}
                 data-testid={`cell-day-${key}`}
                 className={[
                   'aspect-square min-h-[44px] rounded border text-left p-1 flex flex-col',
@@ -199,15 +208,22 @@ export function PmsCalendar() {
 
       {selected && (
         <Card className="p-3">
-          <div className="text-xs font-semibold mb-2">
-            {format(selected, 'EEEE, MMM d, yyyy')} · {selectedItems.length} task{selectedItems.length === 1 ? '' : 's'}
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold">
+              {format(selected, 'EEEE, MMM d, yyyy')} · {selectedItems.length} task{selectedItems.length === 1 ? '' : 's'}
+            </div>
+            {selectedItems.length > 0 && (
+              <Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>Open checklist</Button>
+            )}
           </div>
           {selectedItems.length === 0 ? (
             <p className="text-xs text-muted-foreground">No PMS tasks scheduled.</p>
           ) : (
             <div className="space-y-1.5">
               {selectedItems.map((it, i) => (
-                <div key={`${it.template.id}-${i}`} className="flex items-center gap-2 text-xs"
+                <button key={`${it.template.id}-${i}`}
+                  onClick={() => setDialogOpen(true)}
+                  className="w-full flex items-center gap-2 text-xs text-left hover:bg-accent/30 rounded px-1 py-0.5"
                   data-testid={`row-due-${it.template.id}`}>
                   <span className={`inline-block w-2 h-2 rounded-full ${STATUS_COLORS[it.status]}`} />
                   <span className="font-medium">{it.template.equipment_name}</span>
@@ -215,13 +231,159 @@ export function PmsCalendar() {
                   <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
                     {it.template.frequency} · {it.status}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </Card>
       )}
+
+      <DayChecklistDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        date={selected}
+        items={selectedItems}
+        onCompleted={() => {
+          qc.invalidateQueries({ queryKey: ['pms-executions'] });
+          qc.invalidateQueries({ queryKey: ['pms-records'] });
+        }}
+      />
     </div>
+  );
+}
+
+function DayChecklistDialog({
+  open, onClose, date, items, onCompleted,
+}: {
+  open: boolean;
+  onClose: () => void;
+  date: Date | null;
+  items: DueItem[];
+  onCompleted: () => void;
+}) {
+  const { user } = useAuth();
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [checks, setChecks] = useState<Record<number, boolean>>({});
+  const [findings, setFindings] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Reset transient state when dialog reopens or active item changes
+  const active = items[activeIdx];
+  const resetForItem = () => { setChecks({}); setFindings(''); };
+
+  if (!date) return null;
+
+  const markDone = async () => {
+    if (!active) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('checklist_executions').insert({
+        template_id: active.template.id,
+        plant_id: active.template.plant_id,
+        frequency: active.template.frequency,
+        completed: true,
+        completed_by: user?.id,
+        completed_at: new Date().toISOString(),
+        execution_date: format(date, 'yyyy-MM-dd'),
+        findings: findings || null,
+      });
+      if (error) throw error;
+      toast.success(`${active.template.equipment_name} marked complete`);
+      onCompleted();
+      // Move to next pending item or close
+      const nextIdx = items.findIndex((it, i) => i > activeIdx && it.status !== 'done');
+      if (nextIdx >= 0) { setActiveIdx(nextIdx); resetForItem(); }
+      else { onClose(); }
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to save');
+    } finally { setSaving(false); }
+  };
+
+  const steps = active?.template.checklist_steps ?? [];
+  const allChecked = steps.length > 0 && steps.every((_, i) => checks[i]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base">
+            Checklists · {format(date, 'EEE, MMM d')}
+          </DialogTitle>
+        </DialogHeader>
+
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No tasks scheduled this day.</p>
+        ) : (
+          <div className="space-y-3">
+            {/* Item picker */}
+            <div className="flex gap-1.5 flex-wrap">
+              {items.map((it, i) => (
+                <button key={`${it.template.id}-${i}`}
+                  onClick={() => { setActiveIdx(i); resetForItem(); }}
+                  className={[
+                    'text-[11px] px-2 py-1 rounded border flex items-center gap-1.5',
+                    i === activeIdx ? 'bg-primary text-primary-foreground border-primary' : 'bg-card hover:bg-accent/30',
+                  ].join(' ')}>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_COLORS[it.status]}`} />
+                  {it.template.equipment_name}
+                </button>
+              ))}
+            </div>
+
+            {active && (
+              <div className="space-y-2">
+                <div>
+                  <div className="font-semibold text-sm">{active.template.equipment_name}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {active.template.category} · {active.template.frequency} ·
+                    <span className="uppercase ml-1">{active.status}</span>
+                  </div>
+                </div>
+
+                {steps.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No checklist steps defined for this template.</p>
+                ) : (
+                  <div className="space-y-1.5 border rounded-md p-2 bg-secondary/30">
+                    {steps.map((s, i) => (
+                      <label key={i} className="flex items-start gap-2 text-xs cursor-pointer">
+                        <Checkbox
+                          checked={!!checks[i]}
+                          onCheckedChange={(v) => setChecks(prev => ({ ...prev, [i]: !!v }))}
+                          className="mt-0.5"
+                        />
+                        <span className={checks[i] ? 'line-through text-muted-foreground' : ''}>{s}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground">Findings (optional)</label>
+                  <Textarea value={findings} onChange={e => setFindings(e.target.value)} rows={2}
+                    placeholder="Anything noted during inspection?" />
+                </div>
+
+                {active.status === 'done' && (
+                  <div className="text-[11px] text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Already completed for this day.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {items.length > 0 && active && (
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button onClick={markDone} disabled={saving || active.status === 'done' || (steps.length > 0 && !allChecked)}>
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              {saving ? 'Saving…' : 'Mark complete'}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
