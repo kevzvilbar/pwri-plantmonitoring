@@ -250,7 +250,7 @@ async def chat_with_tools(
     return ChatWithToolsResponse(
         session_id=session_id,
         reply=reply_text,
-        plan=plan if req.debug else plan,
+        plan=plan,
         rows_fetched=len(fetched),
         took_ms=took_ms,
         error=error,
