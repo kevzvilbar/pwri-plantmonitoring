@@ -556,7 +556,7 @@ function PretreatmentAndROLog() {
               <div><Label className="text-xs">Suction Pressure (psi)</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
               <div><Label className="text-xs">Feed Pressure (psi)</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
               <div><Label className="text-xs">Reject Pressure (psi)</Label><Input type="number" step="any" {...f('reject_pressure_psi')} /></div>
-              <div><Label className="text-xs">ΔPressure (Auto, psi)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
+              <div><Label className="text-xs">ΔPressure (psi)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
               <div><Label className="text-xs">Feed Flow</Label><Input type="number" step="any" {...f('feed_flow')} /></div>
               <div><Label className="text-xs">Permeate Flow</Label><Input type="number" step="any" {...f('permeate_flow')} /></div>
               <div><Label className="text-xs">Reject Flow</Label><ComputedInput value={rejectFlow ?? ''} /></div>
