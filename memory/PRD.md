@@ -1,6 +1,6 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 6)_
+_Last updated: 2026-04-24 (iteration 7)_
 
 ## 1. Problem Statement (verbatim — consolidated across 6 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
@@ -22,23 +22,32 @@ _Last updated: 2026-04-24 (iteration 6)_
 > force-override flow, audit log table, profile page with plant
 > selector, plants list shows wells count.
 > Iteration 6 (current — Energy + Wells deletion + Dashboard polish):
-> 1. **Energy & Meter Integration** — dedicated electric meters for
->    wells (kWh meter beside the water meter on Well View);
->    Solar + Grid configuration per plant; foldable per-plant
->    Solar/Grid daily kWh entry on Operations → Power; Dashboard
->    EnergyMixCard with KPI tiles (Today Solar/Grid/Total) + 14-day
->    stacked-bar trend.
-> 2. **Wells Deletion (Admin)** — multi-select checkboxes on the
->    plant Wells tab + bulk hard-delete with reason + best-effort
->    audit-log row per deleted well (cascade handled by ON DELETE
->    CASCADE on `well_readings`/`well_meter_replacements`/
->    `well_pms_records`).
-> 3. **Dashboard / UX polish** — fix TrendModal 7D–90D blank issue
->    (now uses stable `useMemo` cache keys), redesigned Custom date
->    UI (inline From → To beside the range buttons),
->    "Mark as Bypass" small caption above the toggle button,
->    Booster-pump and filter-housing labels middle-aligned in
->    ROTrains.
+> 1. Energy & Meter Integration — dedicated electric meters for wells,
+>    Solar+Grid plant flags, daily kWh split, Dashboard EnergyMixCard.
+> 2. Wells Deletion (Admin) — multi-select bulk hard-delete with audit.
+> 3. Dashboard / UX polish — TrendModal Custom date inline,
+>    "Mark as Bypass" caption, middle-aligned pump labels.
+> Iteration 7 (current — Admin RBAC verification + audit log + reason
+> required + login attempts):
+> 1. **Provision Kevin Vilbar (kevzvilbar@gmail.com / @Kevz)** as the
+>    org's first Admin via the existing Sign-Up flow + a SQL promotion
+>    migration (`20260428_promote_admin_kevin.sql`).
+> 2. **Login attempts audit log** — new Supabase table `login_attempts`
+>    (RLS: anon-insert, Admin-select). Frontend `Auth.tsx` writes a
+>    success-or-failure row on every Sign-In click with email,
+>    user-agent, error reason, and resolved user_id when known.
+> 3. **Required deletion reason (min 5 chars)** for hard-delete and
+>    force-delete (users / plants / wells). Soft-delete remains
+>    optional. UI shows live char counter + disables confirm button
+>    until threshold met.
+> 4. **`deletion_audit_log.kind` accepts `'well'`** (was `'user'|'plant'`)
+>    so the iter-6 wells bulk-delete audit rows now pass the check
+>    constraint.
+> 5. **Sidebar / mobile More-sheet hide the Admin group** for non-Admins
+>    (Admin Console, Employees, Data Exports, Smart Import are now
+>    Admin-only on the nav). The `/admin` route is still
+>    `ProtectedRoute requireRole="Admin"` so deep-link bypass is
+>    blocked on top of the visual gating.
 
 ## 2. Personas
 - Plant operator — mobile-first reading entry, GPS capture, tag bypass
@@ -195,15 +204,18 @@ _Last updated: 2026-04-24 (iteration 6)_
 ## 8. Deployment & Operational Notes
 - Vercel work was explicitly abandoned in iter 4. App is served via
   Emergent preview + supervisor (FastAPI on :8001, Vite on :3000).
-- **Required manual SQL steps** (run in Supabase SQL editor):
+- **Required manual SQL steps** (run in Supabase SQL editor IN ORDER):
   1. `/app/supabase/migrations/20260424_deletion_audit_log.sql`
-     (audit log table — from iter 5).
+     (audit log table — iter 5).
   2. `/app/supabase/migrations/20260427_energy_meter_integration.sql`
-     (NEW — wells electric meter columns + plants solar/grid flags
+     (iter 6 — wells electric meter columns + plants solar/grid flags
      + power_readings solar/grid split + backfill).
-  Until #2 runs, the EnergyMixCard reads `daily_consumption_kwh`
-  as Grid, AddWell electric-meter inputs are silently dropped,
-  and the Plant EnergySourceCard cannot persist `has_solar`/
-  `has_grid`.
-- Hard-delete of a user removes `user_profiles` + `user_roles` only
-  — the `auth.users` row requires the Supabase service-role key.
+  3. `/app/supabase/migrations/20260428_admin_audit_enhancements.sql`
+     (iter 7 — `login_attempts` table + extends `deletion_audit_log.kind`
+     to accept `'well'`).
+  4. **After Kevin signs up at `/auth`** with kevzvilbar@gmail.com /
+     BPWI2025!, run
+     `/app/supabase/migrations/20260428_promote_admin_kevin.sql`
+     to attach his profile + Admin role.
+- Hard-delete of a user removes `user_profiles` + `user_roles` only —
+  the `auth.users` row requires the Supabase service-role key.

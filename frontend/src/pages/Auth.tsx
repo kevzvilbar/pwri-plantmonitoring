@@ -23,14 +23,47 @@ export default function Auth() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
   if (user) return <Navigate to="/" replace />;
 
+  const logLoginAttempt = async (params: {
+    emailAttempted: string;
+    success: boolean;
+    userId?: string | null;
+    errorReason?: string | null;
+  }) => {
+    try {
+      await supabase.from('login_attempts' as any).insert({
+        email: params.emailAttempted,
+        user_id: params.userId ?? null,
+        success: params.success,
+        error_reason: params.errorReason ?? null,
+        user_agent: navigator.userAgent.slice(0, 500),
+      } as any);
+    } catch {
+      // Best-effort — never block the user if the audit table isn't ready
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     const v = emailSchema.safeParse(email); const v2 = passSchema.safeParse(password);
-    if (!v.success || !v2.success) { toast.error(v.error?.issues[0]?.message ?? v2.error?.issues[0]?.message); return; }
+    if (!v.success || !v2.success) {
+      const msg = v.error?.issues[0]?.message ?? v2.error?.issues[0]?.message ?? 'Invalid input';
+      toast.error(msg);
+      void logLoginAttempt({ emailAttempted: email.trim(), success: false, errorReason: `validation: ${msg}` });
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      void logLoginAttempt({ emailAttempted: email.trim(), success: false, errorReason: error.message });
+      return;
+    }
+    void logLoginAttempt({
+      emailAttempted: email.trim(),
+      success: true,
+      userId: data.user?.id ?? null,
+    });
     navigate('/');
   };
 

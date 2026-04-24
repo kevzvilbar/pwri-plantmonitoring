@@ -95,6 +95,7 @@ export function DeleteEntityMenu({
 
   const copy = KIND_COPY[kind];
   const entityPath = kind === 'user' ? 'users' : 'plants';
+  const reasonValid = reason.trim().length >= 5;
 
   const resetAndClose = () => {
     setReason('');
@@ -138,6 +139,10 @@ export function DeleteEntityMenu({
   };
 
   const doHard = async (force = false) => {
+    if (!reasonValid) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
     try {
       setBusy(true);
       const params = new URLSearchParams();
@@ -271,7 +276,10 @@ export function DeleteEntityMenu({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Label className="text-xs text-muted-foreground">
+              Reason <span className="text-danger">*</span>
+              <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+            </Label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -279,7 +287,14 @@ export function DeleteEntityMenu({
               maxLength={500}
               rows={2}
               data-testid="hard-delete-reason"
+              aria-invalid={reason.length > 0 && !reasonValid}
+              className={reason.length > 0 && !reasonValid ? 'border-danger' : ''}
             />
+            {reason.length > 0 && !reasonValid && (
+              <p className="text-[10px] text-danger">
+                Reason must be at least 5 characters ({reason.trim().length}/5).
+              </p>
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-hard-delete">Cancel</AlertDialogCancel>
@@ -289,7 +304,7 @@ export function DeleteEntityMenu({
                 variant="outline"
                 className="border-danger text-danger hover:bg-danger/10"
                 onClick={promptForce}
-                disabled={busy || loadingDeps}
+                disabled={busy || loadingDeps || !reasonValid}
                 data-testid="force-hard-delete"
               >
                 Force delete (override)
@@ -297,7 +312,7 @@ export function DeleteEntityMenu({
             )}
             <AlertDialogAction
               onClick={() => doHard(false)}
-              disabled={busy || loadingDeps || (deps?.blocking ?? true)}
+              disabled={busy || loadingDeps || (deps?.blocking ?? true) || !reasonValid}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
               data-testid="confirm-hard-delete"
             >
@@ -354,7 +369,7 @@ export function DeleteEntityMenu({
             <AlertDialogCancel disabled={busy} data-testid="cancel-force-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => doHard(true)}
-              disabled={busy || !forceAck}
+              disabled={busy || !forceAck || !reasonValid}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
               data-testid="confirm-force-delete"
             >

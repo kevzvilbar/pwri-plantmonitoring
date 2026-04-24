@@ -530,6 +530,10 @@ function WellsList({ plantId }: { plantId: string }) {
 
   const doBulkDelete = async () => {
     if (!selected.size) return;
+    if (bulkReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
     setBulkBusy(true);
     const ids = Array.from(selected);
     const labels = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => w.name);
@@ -682,7 +686,10 @@ function WellsList({ plantId }: { plantId: string }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Label className="text-xs text-muted-foreground">
+              Reason <span className="text-danger">*</span>
+              <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+            </Label>
             <Textarea
               value={bulkReason}
               onChange={(e) => setBulkReason(e.target.value)}
@@ -690,13 +697,20 @@ function WellsList({ plantId }: { plantId: string }) {
               maxLength={500}
               rows={2}
               data-testid="wells-bulk-reason"
+              aria-invalid={bulkReason.length > 0 && bulkReason.trim().length < 5}
+              className={bulkReason.length > 0 && bulkReason.trim().length < 5 ? 'border-danger' : ''}
             />
+            {bulkReason.length > 0 && bulkReason.trim().length < 5 && (
+              <p className="text-[10px] text-danger">
+                Reason must be at least 5 characters ({bulkReason.trim().length}/5).
+              </p>
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={doBulkDelete}
-              disabled={bulkBusy}
+              disabled={bulkBusy || bulkReason.trim().length < 5}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
               data-testid="confirm-wells-bulk-delete"
             >

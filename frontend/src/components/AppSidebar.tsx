@@ -7,9 +7,18 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-const groups = [
+type SidebarItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  end?: boolean;
+};
+type SidebarGroup = { label: string; items: SidebarItem[] };
+
+const groups: SidebarGroup[] = [
   {
     label: 'Overview',
     items: [
@@ -41,26 +50,30 @@ const groups = [
       { to: '/costs?tab=prices', label: 'Chemical Prices', icon: Receipt },
     ],
   },
-  {
-    label: 'Admin',
-    items: [
-      { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-      { to: '/employees', label: 'Employees', icon: Users },
-      { to: '/exports', label: 'Data Exports', icon: Download },
-      { to: '/import', label: 'Smart Import', icon: Upload },
-    ],
-  },
 ];
+
+const adminGroup: SidebarGroup = {
+  label: 'Admin',
+  items: [
+    { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+    { to: '/employees', label: 'Employees', icon: Users },
+    { to: '/exports', label: 'Data Exports', icon: Download },
+    { to: '/import', label: 'Smart Import', icon: Upload },
+  ],
+};
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
+  const { isAdmin } = useAuth();
+
+  const visibleGroups = isAdmin ? [...groups, adminGroup] : groups;
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        {groups.map((g) => (
+        {visibleGroups.map((g) => (
           <SidebarGroup key={g.label}>
             {!collapsed && <SidebarGroupLabel>{g.label}</SidebarGroupLabel>}
             <SidebarGroupContent>

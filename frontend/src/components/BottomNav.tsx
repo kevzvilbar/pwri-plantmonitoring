@@ -6,6 +6,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
@@ -50,21 +51,24 @@ const sideSheetGroups = [
       { to: '/costs', label: 'Costs & Tariffs', icon: DollarSign },
     ],
   },
-  {
-    title: 'Admin',
-    items: [
-      { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-      { to: '/employees', label: 'Employees', icon: Users },
-      { to: '/exports', label: 'Data Exports', icon: Download },
-      { to: '/import', label: 'Smart Import', icon: Upload },
-    ],
-  },
 ];
+
+const adminGroup = {
+  title: 'Admin',
+  items: [
+    { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+    { to: '/employees', label: 'Employees', icon: Users },
+    { to: '/exports', label: 'Data Exports', icon: Download },
+    { to: '/import', label: 'Smart Import', icon: Upload },
+  ],
+};
 
 export function BottomNav() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const fullPath = pathname + search;
+  const visibleGroups = isAdmin ? [...sideSheetGroups, adminGroup] : sideSheetGroups;
 
   const isPriorityActive = (item: Priority) => {
     const target = item.to.split('?')[0];
@@ -126,7 +130,7 @@ export function BottomNav() {
           <SheetContent side="right" className="w-72">
             <SheetHeader><SheetTitle>More</SheetTitle></SheetHeader>
             <div className="mt-4 space-y-4 overflow-y-auto">
-              {sideSheetGroups.map((group) => (
+              {visibleGroups.map((group) => (
                 <div key={group.title}>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.title}</div>
                   <div className="flex flex-col gap-1">
