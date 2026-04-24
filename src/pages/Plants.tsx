@@ -439,7 +439,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
   const { user } = useAuth();
   const [form, setForm] = useState({
     date_gathered: format(new Date(), 'yyyy-MM-dd'),
-    drilling_depth_m: latest?.drilling_depth_m ?? well.drilling_depth_m ?? '',
+    drilling_depth_m: (latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '',
     static_water_level_m: latest?.static_water_level_m ?? '',
     pumping_water_level_m: latest?.pumping_water_level_m ?? '',
     pump_setting: latest?.pump_setting ?? '',
