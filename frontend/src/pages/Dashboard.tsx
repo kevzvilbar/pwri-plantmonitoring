@@ -311,30 +311,6 @@ export default function Dashboard() {
       </Card>
 
       <Card className="p-3">
-        <h2 className="text-sm font-semibold mb-2">Plant overview</h2>
-        <div className="space-y-2">
-          {visiblePlants?.map((p) => {
-            const plantProd = (todayWells ?? []).filter((r: any) => r.plant_id === p.id).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
-            const plantCons = (todayLocators ?? []).filter((r: any) => r.plant_id === p.id).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
-            const pNrw = calc.nrw(plantProd, plantCons);
-            return (
-              <button key={p.id} onClick={() => navigate(`/plants/${p.id}`)}
-                className="w-full flex items-center justify-between p-2 rounded-md border hover:bg-secondary transition-colors text-left">
-                <div>
-                  <div className="text-sm font-medium">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">Today: <span className="font-mono-num">{fmtNum(plantProd)}</span> m³</div>
-                </div>
-                <StatusPill tone={nrwColor(pNrw)}>NRW {pNrw == null ? '—' : `${pNrw}%`}</StatusPill>
-              </button>
-            );
-          })}
-          {!visiblePlants?.length && <p className="text-sm text-muted-foreground py-4 text-center">No plants assigned</p>}
-        </div>
-      </Card>
-
-      <PowerChart plantIds={plantIds} />
-
-      <Card className="p-3">
         <h2 className="text-sm font-semibold mb-2">Chemical stock</h2>
         <div className="space-y-2.5">
           {(chemInv ?? []).slice(0, 8).map((c: any) => {
@@ -352,6 +328,9 @@ export default function Dashboard() {
           {!chemInv?.length && <p className="text-sm text-muted-foreground py-2 text-center">No inventory yet</p>}
         </div>
       </Card>
+
+      <PowerChart plantIds={plantIds} />
+      <EnergyMixCard plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal
@@ -413,42 +392,66 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const [from, setFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  const days = range === 'CUSTOM' ? null : RANGE_DAYS[range];
-  const startISO = days ? subDays(new Date(), days).toISOString() : new Date(from).toISOString();
-  const endISO = days ? new Date().toISOString() : new Date(to + 'T23:59:59').toISOString();
+  // Stable date-bounded ISO strings so react-query can cache properly.
+  const { startISO, endISO, startKey, endKey } = useMemo(() => {
+    if (range === 'CUSTOM') {
+      const s = new Date(`${from}T00:00:00`);
+      const e = new Date(`${to}T23:59:59`);
+      return {
+        startISO: s.toISOString(), endISO: e.toISOString(),
+        startKey: from, endKey: to,
+      };
+    }
+    const days = RANGE_DAYS[range];
+    const end = new Date();
+    const start = startOfDay(subDays(end, days));
+    return {
+      startISO: start.toISOString(),
+      endISO: end.toISOString(),
+      startKey: format(start, 'yyyy-MM-dd'),
+      endKey: format(end, 'yyyy-MM-dd'),
+    };
+  }, [range, from, to]);
 
-  const { data: locReadings } = useQuery({
-    queryKey: ['trend-loc', metric, startISO, endISO, plantIds],
+  const needsWellReadings = metric === 'production' || metric === 'nrw' || metric === 'rawwater' || metric === 'pv';
+  const needsLocReadings = metric === 'production' || metric === 'nrw';
+  const needsRoReadings = metric === 'recovery' || metric === 'tds';
+  const needsPowerReadings = metric === 'pv';
+
+  const { data: locReadings, isFetching: fetchingLoc } = useQuery({
+    queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
     queryFn: async () => plantIds.length
       ? (await supabase.from('locator_readings').select('daily_volume,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0 && (metric === 'production' || metric === 'nrw'),
+    enabled: open && plantIds.length > 0 && needsLocReadings,
   });
-  const { data: wellReadings } = useQuery({
-    queryKey: ['trend-well', metric, startISO, endISO, plantIds],
+  const { data: wellReadings, isFetching: fetchingWell } = useQuery({
+    queryKey: ['trend-well', metric, startKey, endKey, plantIds],
     queryFn: async () => plantIds.length
       ? (await supabase.from('well_readings').select('daily_volume,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0 && (metric === 'production' || metric === 'nrw' || metric === 'rawwater'),
+    enabled: open && plantIds.length > 0 && needsWellReadings,
   });
-  const { data: roReadings } = useQuery({
-    queryKey: ['trend-ro', metric, startISO, endISO, plantIds],
+  const { data: roReadings, isFetching: fetchingRo } = useQuery({
+    queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
     queryFn: async () => plantIds.length
       ? (await supabase.from('ro_train_readings').select('recovery_pct,permeate_tds,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0 && (metric === 'recovery' || metric === 'tds'),
+    enabled: open && plantIds.length > 0 && needsRoReadings,
   });
-  const { data: powerReadings } = useQuery({
-    queryKey: ['trend-power', metric, startISO, endISO, plantIds],
+  const { data: powerReadings, isFetching: fetchingPower } = useQuery({
+    queryKey: ['trend-power', metric, startKey, endKey, plantIds],
     queryFn: async () => plantIds.length
       ? (await supabase.from('power_readings').select('daily_consumption_kwh,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0 && metric === 'pv',
+    enabled: open && plantIds.length > 0 && needsPowerReadings,
   });
+
+  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower;
 
   const chartData = useMemo(() => {
     const byDay = new Map<string, any>();
