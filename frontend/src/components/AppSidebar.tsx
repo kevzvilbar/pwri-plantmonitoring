@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Download,
+  Users, DollarSign, Receipt, Download, Upload,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -42,6 +42,7 @@ const groups = [
     items: [
       { to: '/employees', label: 'Employees', icon: Users },
       { to: '/exports', label: 'Data Exports', icon: Download },
+      { to: '/import', label: 'Smart Import', icon: Upload },
     ],
   },
 ];

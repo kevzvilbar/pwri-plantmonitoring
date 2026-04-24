@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 from typing import List
 import uuid
 from datetime import datetime
+
+from import_parser import parse_xlsx
 
 
 ROOT_DIR = Path(__file__).parent
@@ -32,13 +35,17 @@ class StatusCheck(BaseModel):
     client_name: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
+
 class StatusCheckCreate(BaseModel):
     client_name: str
 
-# Add your routes to the router instead of directly to app
+
+# --- Routes ----------------------------------------------------------------
+
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
@@ -47,10 +54,45 @@ async def create_status_check(input: StatusCheckCreate):
     _ = await db.status_checks.insert_one(status_obj.dict())
     return status_obj
 
+
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
+
+
+# ---- XLSX import ---------------------------------------------------------
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@api_router.post("/import/parse-wellmeter")
+async def parse_wellmeter(file: UploadFile = File(...)):
+    """
+    Accept an uploaded XLSX file with well/meter readings.
+    Returns a structured preview with detected statuses and flags.
+    Does NOT persist anything — the frontend commits rows into Supabase.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing file")
+    fname = file.filename.lower()
+    if not (fname.endswith(".xlsx") or fname.endswith(".xlsm")):
+        raise HTTPException(status_code=400, detail="Only .xlsx / .xlsm supported")
+
+    data = await file.read()
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (>10MB)")
+
+    try:
+        result = parse_xlsx(data)
+    except Exception as e:  # noqa: BLE001
+        logging.exception("parse_xlsx failed")
+        raise HTTPException(status_code=400, detail=f"Failed to parse: {e}")
+
+    return JSONResponse(result)
+
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -69,6 +111,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

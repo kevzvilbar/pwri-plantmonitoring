@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet, MapPin, Cog, FlaskConical,
-  Wrench, AlertTriangle, DollarSign, Users, Download,
+  Wrench, AlertTriangle, DollarSign, Users, Download, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -47,6 +47,7 @@ const sideSheetGroups = [
     items: [
       { to: '/employees', label: 'Employees', icon: Users },
       { to: '/exports', label: 'Data Exports', icon: Download },
+      { to: '/import', label: 'Smart Import', icon: Upload },
     ],
   },
 ];
