@@ -18,7 +18,7 @@ import {
 import { format, subDays, startOfDay } from 'date-fns';
 import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
-  Waves, Cloud, Timer, Receipt, Banknote, DollarSign,
+  Waves, Cloud, Receipt, Banknote,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
@@ -26,6 +26,14 @@ import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
+
+const TREND_Y_LABEL: Record<string, string> = {
+  production: 'Volume (m³)',
+  rawwater: 'Raw Water (m³)',
+  recovery: 'Recovery (%)',
+  tds: 'Permeate TDS (ppm)',
+  pv: 'kWh · m³',
+};
 
 function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold }: any) {
   return (
@@ -168,16 +176,32 @@ export default function Dashboard() {
 
   const trainGaps = useTrainAutoOffline(plantIds);
 
-  const alerts: { tone: 'danger' | 'warn'; text: string }[] = [];
-  trainGaps.forEach((g) => alerts.push({ tone: 'warn', text: `Train ${g.train_number} no reading ${g.hours_gap.toFixed(1)}h — auto-flagged Offline` }));
+  // Legacy RO/chem alerts (still useful, live-computed)
+  const localAlerts: { tone: 'danger' | 'warn'; text: string }[] = [];
+  trainGaps.forEach((g) => localAlerts.push({ tone: 'warn', text: `Train ${g.train_number} no reading ${g.hours_gap.toFixed(1)}h — auto-flagged Offline` }));
   (latestRO ?? []).forEach((r: any) => {
-    if (r.dp_psi >= 40) alerts.push({ tone: 'danger', text: `DP alert: ${r.dp_psi} psi` });
-    if (r.permeate_tds >= 600) alerts.push({ tone: 'danger', text: `TDS alert: ${r.permeate_tds} ppm` });
-    if (r.permeate_ph != null && (r.permeate_ph < 6.5 || r.permeate_ph > 8.5)) alerts.push({ tone: 'warn', text: `pH out of range: ${r.permeate_ph}` });
+    if (r.dp_psi >= 40) localAlerts.push({ tone: 'danger', text: `DP alert: ${r.dp_psi} psi` });
+    if (r.permeate_tds >= 600) localAlerts.push({ tone: 'danger', text: `TDS alert: ${r.permeate_tds} ppm` });
+    if (r.permeate_ph != null && (r.permeate_ph < 6.5 || r.permeate_ph > 8.5)) localAlerts.push({ tone: 'warn', text: `pH out of range: ${r.permeate_ph}` });
   });
   (chemInv ?? []).forEach((c: any) => {
-    if (c.current_stock < c.low_stock_threshold) alerts.push({ tone: 'warn', text: `Low stock: ${c.chemical_name}` });
+    if (c.current_stock < c.low_stock_threshold) localAlerts.push({ tone: 'warn', text: `Low stock: ${c.chemical_name}` });
   });
+
+  // Unified alerts feed (downtime / blending / recovery) served from backend
+  const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+  const { data: feed } = useQuery<{ count: number; alerts: any[] }>({
+    queryKey: ['alerts-feed', selectedPlantId],
+    queryFn: async () => {
+      const qs = new URLSearchParams({ days: '30' });
+      if (selectedPlantId) qs.set('plant_id', selectedPlantId);
+      const res = await fetch(`${BASE}/api/alerts/feed?${qs.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 60_000,
+  });
+  const feedAlerts = feed?.alerts ?? [];
 
   return (
     <div className="space-y-3 animate-fade-in">
@@ -210,10 +234,10 @@ export default function Dashboard() {
 
       {/* Operations row */}
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
-        <StatCard icon={Timer} label="Downtime Hrs" value={fmtNum(downtime, 1)} unit="hr"
-          onClick={() => setDowntimeOpen(true)} />
-        <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³" />
-        <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
+        <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³"
+          onClick={() => setModal({ metric: 'rawwater', title: 'Raw Water Trendline' })} />
+        <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+          onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
       </div>
 
@@ -227,23 +251,64 @@ export default function Dashboard() {
           value={`₱${fmtNum(chemCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
       </div>
 
-      {alerts.length > 0 && (
-        <Card className="p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="h-4 w-4 text-danger" />
-            <h2 className="text-sm font-semibold">Active alerts</h2>
-            <span className="pulse-dot ml-auto" />
+      <Card className="p-3" data-testid="alerts-card">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="h-4 w-4 text-danger" />
+          <h2 className="text-sm font-semibold">Active Alerts</h2>
+          <span className="text-[10px] text-muted-foreground">
+            {feedAlerts.length + localAlerts.length} active
+          </span>
+          {(feedAlerts.length + localAlerts.length) > 0 && <span className="pulse-dot ml-auto" />}
+        </div>
+
+        {/* Unified feed — downtime, blending, recovery */}
+        {feedAlerts.length > 0 && (
+          <div className="space-y-1.5 mb-2" data-testid="alerts-feed-list">
+            {feedAlerts.slice(0, 8).map((a, i) => {
+              const tone = a.severity === 'high' ? 'danger'
+                : a.severity === 'medium' ? 'warn'
+                : a.severity === 'low' ? 'accent'
+                : 'info' as const;
+              const kindLabel = a.kind === 'downtime' ? 'Downtime'
+                : a.kind === 'blending' ? 'Blending'
+                : 'Recovery';
+              return (
+                <button
+                  key={`feed-${i}`}
+                  className="w-full text-left flex items-start gap-2 text-xs hover:bg-muted/40 rounded px-1 py-1"
+                  onClick={() => {
+                    if (a.kind === 'downtime') setDowntimeOpen(true);
+                  }}
+                  data-testid={`alert-row-${a.kind}-${i}`}
+                >
+                  <StatusPill tone={tone as any}>{kindLabel}</StatusPill>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{a.title}</div>
+                    {a.detail && <div className="text-muted-foreground truncate">{a.detail}</div>}
+                  </div>
+                  <span className="font-mono-num text-[10px] text-muted-foreground shrink-0 mt-0.5">{a.date}</span>
+                </button>
+              );
+            })}
           </div>
-          <div className="space-y-1.5">
-            {alerts.slice(0, 5).map((a, i) => (
+        )}
+
+        {/* Live-computed RO / chem / train gap alerts */}
+        {localAlerts.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t">
+            {localAlerts.slice(0, 5).map((a, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <StatusPill tone={a.tone}>{a.tone}</StatusPill>
                 <span className="text-xs">{a.text}</span>
               </div>
             ))}
           </div>
-        </Card>
-      )}
+        )}
+
+        {feedAlerts.length === 0 && localAlerts.length === 0 && (
+          <p className="text-xs text-muted-foreground py-2 text-center">All clear — no alerts</p>
+        )}
+      </Card>
 
       <Card className="p-3">
         <h2 className="text-sm font-semibold mb-2">Plant overview</h2>
@@ -351,6 +416,8 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const days = range === 'CUSTOM' ? null : RANGE_DAYS[range];
   const startISO = days ? subDays(new Date(), days).toISOString() : new Date(from).toISOString();
   const endISO = days ? new Date().toISOString() : new Date(to + 'T23:59:59').toISOString();
+  const startDate = days ? format(subDays(new Date(), days), 'yyyy-MM-dd') : from;
+  const endDate = days ? format(new Date(), 'yyyy-MM-dd') : to;
 
   const { data: locReadings } = useQuery({
     queryKey: ['trend-loc', metric, startISO, endISO, plantIds],
@@ -358,7 +425,7 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
       ? (await supabase.from('locator_readings').select('daily_volume,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0,
+    enabled: open && plantIds.length > 0 && (metric === 'production' || metric === 'nrw'),
   });
   const { data: wellReadings } = useQuery({
     queryKey: ['trend-well', metric, startISO, endISO, plantIds],
@@ -366,27 +433,68 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
       ? (await supabase.from('well_readings').select('daily_volume,reading_datetime')
           .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
       : [],
-    enabled: open && plantIds.length > 0,
+    enabled: open && plantIds.length > 0 && (metric === 'production' || metric === 'nrw' || metric === 'rawwater'),
+  });
+  const { data: roReadings } = useQuery({
+    queryKey: ['trend-ro', metric, startISO, endISO, plantIds],
+    queryFn: async () => plantIds.length
+      ? (await supabase.from('ro_train_readings').select('recovery_pct,permeate_tds,reading_datetime')
+          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
+      : [],
+    enabled: open && plantIds.length > 0 && (metric === 'recovery' || metric === 'tds'),
+  });
+  const { data: powerReadings } = useQuery({
+    queryKey: ['trend-power', metric, startISO, endISO, plantIds],
+    queryFn: async () => plantIds.length
+      ? (await supabase.from('power_readings').select('daily_consumption_kwh,reading_datetime')
+          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
+      : [],
+    enabled: open && plantIds.length > 0 && metric === 'pv',
   });
 
   const chartData = useMemo(() => {
-    const byDay = new Map<string, { date: string; sortKey: number; production: number; consumption: number }>();
+    const byDay = new Map<string, any>();
     const ensure = (d: string, sortKey: number) =>
-      byDay.get(d) ?? byDay.set(d, { date: d, sortKey, production: 0, consumption: 0 }).get(d)!;
+      byDay.get(d) ?? byDay.set(d, {
+        date: d, sortKey, production: 0, consumption: 0,
+        rawwater: 0, recovery: 0, recoverySamples: 0,
+        tds: 0, tdsSamples: 0, kwh: 0,
+      }).get(d);
+
     (wellReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
-      const d = format(dt, 'MMM d');
-      ensure(d, dt.getTime()).production += r.daily_volume ?? 0;
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      row.production += r.daily_volume ?? 0;
+      row.rawwater += r.daily_volume ?? 0;
     });
     (locReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
-      const d = format(dt, 'MMM d');
-      ensure(d, dt.getTime()).consumption += r.daily_volume ?? 0;
+      const key = format(dt, 'MMM d');
+      ensure(key, dt.getTime()).consumption += r.daily_volume ?? 0;
     });
+    (roReadings ?? []).forEach((r: any) => {
+      const dt = new Date(r.reading_datetime);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      if (r.recovery_pct != null) { row.recovery += +r.recovery_pct; row.recoverySamples += 1; }
+      if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
+    });
+    (powerReadings ?? []).forEach((r: any) => {
+      const dt = new Date(r.reading_datetime);
+      const key = format(dt, 'MMM d');
+      ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
+    });
+
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, ...d }) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
-  }, [locReadings, wellReadings]);
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, ...d }) => ({
+        ...d,
+        recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
+        tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
+        nrw: calc.nrw(d.production, d.consumption),
+      }));
+  }, [locReadings, wellReadings, roReadings, powerReadings]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -394,24 +502,28 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="flex flex-wrap gap-1.5">
           {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
-            <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'} onClick={() => setRange(r)}>{r}</Button>
+            <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
+              onClick={() => setRange(r)} data-testid={`trend-range-${r}`}>{r}</Button>
           ))}
           <Button size="sm" variant={range === 'CUSTOM' ? 'default' : 'outline'} onClick={() => setRange('CUSTOM')}>Custom</Button>
         </div>
+        <p className="text-[10px] text-muted-foreground">
+          X-axis = Date (ascending · {startDate} → {endDate}) · Y-axis = Value
+        </p>
         {range === 'CUSTOM' && (
           <div className="flex gap-2 items-end">
             <div className="flex-1"><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
             <div className="flex-1"><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
           </div>
         )}
-        <div className="h-[420px] w-full">
+        <div className="h-[420px] w-full" data-testid={`trend-chart-${metric}`}>
           <ResponsiveContainer width="100%" height="100%">
             {metric === 'nrw' ? (
               <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" />
-                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" label={{ value: 'Volume (m³)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: 'NRW (%)', angle: 90, position: 'insideRight', fontSize: 10 }} />
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
@@ -419,14 +531,29 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
                 <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
               </ComposedChart>
             ) : (
-              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: TREND_Y_LABEL[metric] ?? 'Value', angle: -90, position: 'insideLeft', fontSize: 10 }} />
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+                {metric === 'production' && (<>
+                  <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                  <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+                </>)}
+                {metric === 'rawwater' && (
+                  <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
+                )}
+                {metric === 'recovery' && (
+                  <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
+                )}
+                {metric === 'tds' && (
+                  <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
+                )}
+                {metric === 'pv' && (<>
+                  <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                  <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
+                </>)}
               </LineChart>
             )}
           </ResponsiveContainer>

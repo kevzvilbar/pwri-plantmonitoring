@@ -10,14 +10,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X } from 'lucide-react';
+import { MapPin, Pencil, X, Waves } from 'lucide-react';
 
 const MAX_READINGS_PER_DAY = 3;
+const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+
+// ---- Blending wells list (Mongo-backed) ----
+function useBlendingWells(plantId: string) {
+  return useQuery<{ wells: { well_id: string }[] }>({
+    queryKey: ['blending-wells', plantId],
+    queryFn: async () => {
+      const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
+      const res = await fetch(`${BASE}/api/blending/wells${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!plantId,
+  });
+}
 
 export default function Operations() {
   return (
@@ -280,7 +296,9 @@ function LocatorRow({
 function WellReadingForm() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
+  const plantName = plants?.find((p: any) => p.id === plantId)?.name;
 
   const { data: wells } = useQuery({
     queryKey: ['op-wells', plantId],
@@ -315,6 +333,12 @@ function WellReadingForm() {
     return { latestByWell: latest, todayByWell: today };
   }, [recentReadings]);
 
+  const { data: blendingData } = useBlendingWells(plantId);
+  const blendingSet = useMemo(
+    () => new Set((blendingData?.wells ?? []).map((w) => w.well_id)),
+    [blendingData],
+  );
+
   return (
     <div className="space-y-3">
       <Card className="p-3">
@@ -335,10 +359,12 @@ function WellReadingForm() {
                   <WellRow
                     well={w}
                     plantId={plantId}
+                    plantName={plantName}
                     previousMeter={latestByWell[w.id]?.current_reading ?? null}
                     previousPower={latestByWell[w.id]?.power_meter_reading ?? null}
                     todayReadings={todayByWell[w.id] ?? []}
                     userId={user?.id}
+                    isBlending={blendingSet.has(w.id)}
                     onSaved={() => qc.invalidateQueries()}
                   />
                 </li>
@@ -354,17 +380,48 @@ function WellReadingForm() {
 }
 
 function WellRow({
-  well, plantId, previousMeter, previousPower, todayReadings, userId, onSaved,
+  well, plantId, plantName, previousMeter, previousPower, todayReadings, userId,
+  isBlending, onSaved,
 }: {
-  well: any; plantId: string;
+  well: any; plantId: string; plantName?: string;
   previousMeter: number | null; previousPower: number | null;
   todayReadings: any[];
-  userId: string | undefined; onSaved: () => void;
+  userId: string | undefined;
+  isBlending: boolean;
+  onSaved: () => void;
 }) {
+  const qc = useQueryClient();
   const [reading, setReading] = useState('');
   const [powerReading, setPowerReading] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [togglingBlend, setTogglingBlend] = useState(false);
+
+  const toggleBlending = async () => {
+    setTogglingBlend(true);
+    try {
+      const res = await fetch(`${BASE}/api/blending/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': userId ?? '' },
+        body: JSON.stringify({
+          well_id: well.id,
+          plant_id: plantId,
+          well_name: well.name,
+          plant_name: plantName,
+          is_blending: !isBlending,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(isBlending
+        ? `${well.name}: blending disabled`
+        : `${well.name}: tagged as Blending Well (injects to Product Water)`);
+      qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
+    } catch (e: any) {
+      toast.error(`Blending toggle failed: ${e.message || e}`);
+    } finally {
+      setTogglingBlend(false);
+    }
+  };
 
   const cur = +reading || 0;
   const dailyVol = previousMeter != null && reading ? cur - previousMeter : null;
@@ -402,6 +459,23 @@ function WellRow({
 
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    // Blending audit: if this well is tagged as Blending and volume > 0,
+    // log a blending event so it surfaces under Dashboard → Alerts.
+    const dailyVolAtSave = previousMeter != null ? cur - previousMeter : null;
+    if (isBlending && dailyVolAtSave != null && dailyVolAtSave > 0) {
+      try {
+        await fetch(`${BASE}/api/blending/audit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            well_id: well.id, plant_id: plantId,
+            well_name: well.name, plant_name: plantName,
+            event_date: new Date().toISOString().slice(0, 10),
+            volume_m3: dailyVolAtSave,
+          }),
+        });
+      } catch { /* non-fatal */ }
+    }
     toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
     setReading(''); setPowerReading(''); setEditingId(null);
     onSaved();
@@ -417,12 +491,21 @@ function WellRow({
   const cancelEdit = () => { setEditingId(null); setReading(''); setPowerReading(''); };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2">
+    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`well-row-${well.id}`}>
       <div className="min-w-0 flex-1 basis-[140px]">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
           {well.has_power_meter && (
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted px-1.5 py-0.5 rounded">kWh</span>
+          )}
+          {isBlending && (
+            <Badge
+              className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
+              data-testid={`blending-badge-${well.id}`}
+              title="Tagged as Blending Well — injects to Product Water"
+            >
+              <Waves className="h-3 w-3 mr-1" /> Blending
+            </Badge>
           )}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
         </div>
@@ -491,6 +574,18 @@ function WellRow({
           <X className="h-3.5 w-3.5" />
         </Button>
       )}
+
+      {/* Blending toggle */}
+      <Button
+        variant="ghost" size="sm"
+        className={`h-8 w-8 p-0 shrink-0 ${isBlending ? 'text-violet-600' : 'text-muted-foreground hover:text-violet-600'}`}
+        onClick={toggleBlending}
+        disabled={togglingBlend}
+        title={isBlending ? 'Remove Blending tag' : 'Tag as Blending Well (injects to Product Water)'}
+        data-testid={`blending-toggle-${well.id}`}
+      >
+        <Waves className="h-3.5 w-3.5" />
+      </Button>
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">

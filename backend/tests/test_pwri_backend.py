@@ -273,3 +273,200 @@ class TestCronEndpoints:
             assert data.get("ok") is True
             assert "count" in data
             assert "forecasts" in data
+
+
+# ---------------- New (batch 2): Blending wells + audit ------------------
+
+class TestBlendingWells:
+    PLANT_ID = "TEST_plant_blend_01"
+    WELL_ID = "TEST_well_blend_01"
+
+    def test_toggle_on_upserts_well(self, api_client):
+        payload = {
+            "well_id": self.WELL_ID,
+            "plant_id": self.PLANT_ID,
+            "is_blending": True,
+            "well_name": "TEST Blend Well A",
+            "plant_name": "TEST Plant Blend",
+            "note": "pytest-on",
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/blending/toggle", json=payload, timeout=30,
+            headers={"x-user-id": "pytest-user"},
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert data == {"ok": True, "is_blending": True, "well_id": self.WELL_ID}
+
+        # Verify via GET that the well shows up
+        g = api_client.get(
+            f"{BASE_URL}/api/blending/wells?plant_id={self.PLANT_ID}",
+            timeout=30,
+        )
+        assert g.status_code == 200, g.text[:500]
+        body = g.json()
+        assert "wells" in body and isinstance(body["wells"], list)
+        matches = [w for w in body["wells"] if w.get("well_id") == self.WELL_ID]
+        assert len(matches) == 1, f"expected exactly 1 match, got {body['wells']}"
+        w = matches[0]
+        assert w["plant_id"] == self.PLANT_ID
+        assert w["well_name"] == "TEST Blend Well A"
+        assert w["plant_name"] == "TEST Plant Blend"
+        assert w["tagged_by"] == "pytest-user"
+        assert w["note"] == "pytest-on"
+        assert "tagged_at" in w
+
+    def test_toggle_idempotent_upsert(self, api_client):
+        # Toggle on again with a new note — should update (upsert), not duplicate
+        payload = {
+            "well_id": self.WELL_ID,
+            "plant_id": self.PLANT_ID,
+            "is_blending": True,
+            "well_name": "TEST Blend Well A",
+            "plant_name": "TEST Plant Blend",
+            "note": "pytest-updated",
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/blending/toggle", json=payload, timeout=30,
+            headers={"x-user-id": "pytest-user-2"},
+        )
+        assert r.status_code == 200
+        g = api_client.get(
+            f"{BASE_URL}/api/blending/wells?plant_id={self.PLANT_ID}",
+            timeout=30,
+        )
+        wells = [w for w in g.json()["wells"] if w["well_id"] == self.WELL_ID]
+        assert len(wells) == 1, "upsert must not create duplicate"
+        assert wells[0]["note"] == "pytest-updated"
+        assert wells[0]["tagged_by"] == "pytest-user-2"
+
+    def test_blending_audit_logs_event(self, api_client):
+        payload = {
+            "plant_id": self.PLANT_ID,
+            "well_id": self.WELL_ID,
+            "well_name": "TEST Blend Well A",
+            "plant_name": "TEST Plant Blend",
+            "event_date": datetime_today_iso(),
+            "volume_m3": 123.4,
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/blending/audit", json=payload, timeout=30,
+        )
+        assert r.status_code == 200, r.text[:500]
+        assert r.json() == {"ok": True}
+
+    def test_toggle_off_deletes_well(self, api_client):
+        payload = {
+            "well_id": self.WELL_ID,
+            "plant_id": self.PLANT_ID,
+            "is_blending": False,
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/blending/toggle", json=payload, timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data == {"ok": True, "is_blending": False, "well_id": self.WELL_ID}
+
+        g = api_client.get(
+            f"{BASE_URL}/api/blending/wells?plant_id={self.PLANT_ID}",
+            timeout=30,
+        )
+        wells = [w for w in g.json()["wells"] if w["well_id"] == self.WELL_ID]
+        assert len(wells) == 0, "expected well to be removed after toggle off"
+
+    def test_wells_list_no_plant_filter(self, api_client):
+        """GET without plant_id must still return a wells list."""
+        r = api_client.get(f"{BASE_URL}/api/blending/wells", timeout=30)
+        assert r.status_code == 200
+        body = r.json()
+        assert isinstance(body.get("wells"), list)
+
+
+def datetime_today_iso():
+    from datetime import datetime as _dt
+    return _dt.utcnow().date().isoformat()
+
+
+# ---------------- New (batch 2): Unified alerts feed ---------------------
+
+class TestAlertsFeed:
+    def test_alerts_feed_shape(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/alerts/feed?days=30", timeout=30)
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert "count" in data and isinstance(data["count"], int)
+        assert "alerts" in data and isinstance(data["alerts"], list)
+        assert data["count"] == len(data["alerts"]) or data["count"] >= len(data["alerts"])
+        # Each alert object should have expected keys
+        for a in data["alerts"]:
+            assert a.get("kind") in ("downtime", "blending", "recovery")
+            assert "severity" in a
+            assert "title" in a
+            assert "date" in a
+
+    def test_alerts_feed_with_plant_filter(self, api_client):
+        r = api_client.get(
+            f"{BASE_URL}/api/alerts/feed?plant_id=pseudo:mambaling%203&days=30",
+            timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data.get("alerts"), list)
+
+    def test_alerts_feed_contains_blending_after_audit(self, api_client):
+        """Seed a blending event, then confirm it shows up in the feed."""
+        plant_id = "TEST_alerts_plant"
+        # Log an audit event today for this plant
+        payload = {
+            "plant_id": plant_id,
+            "well_id": "TEST_alerts_well",
+            "well_name": "TEST Alerts Well",
+            "plant_name": "TEST Alerts Plant",
+            "event_date": datetime_today_iso(),
+            "volume_m3": 42.0,
+        }
+        ar = api_client.post(
+            f"{BASE_URL}/api/blending/audit", json=payload, timeout=30,
+        )
+        assert ar.status_code == 200
+
+        r = api_client.get(
+            f"{BASE_URL}/api/alerts/feed?plant_id={plant_id}&days=7",
+            timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        blends = [a for a in data["alerts"] if a.get("kind") == "blending"]
+        assert len(blends) >= 1, f"expected a blending alert, got {data['alerts']}"
+        b = blends[0]
+        assert b.get("plant_id") == plant_id
+        assert "42.0" in b.get("detail", "") or "42" in b.get("detail", "")
+        assert b.get("severity") == "info"
+
+    def test_alerts_feed_sort_order(self, api_client):
+        """High severity alerts must appear before medium/info."""
+        r = api_client.get(f"{BASE_URL}/api/alerts/feed?days=30", timeout=30)
+        assert r.status_code == 200
+        sev_rank = {"high": 0, "medium": 1, "low": 2, "info": 3}
+        alerts = r.json()["alerts"]
+        ranks = [sev_rank.get(a.get("severity", "info"), 9) for a in alerts]
+        assert ranks == sorted(ranks), (
+            f"alerts not sorted by severity rank: {ranks}"
+        )
+
+
+# ---------------- Regression: downtime still works after batch 1 seed ----
+
+class TestDowntimeRegressionAfterBatch1:
+    def test_downtime_events_still_returns(self, api_client):
+        r = api_client.get(
+            f"{BASE_URL}/api/downtime/events?limit=5", timeout=30,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        # Previous iteration seeded Mambaling downtime; must still be visible
+        assert data["count"] >= 1
+        assert isinstance(data["by_subsystem"], list)
+        assert data["total_duration_hrs"] >= 0
+

@@ -330,6 +330,7 @@ export default function Import() {
 
   const runBulkSeed = useCallback(async () => {
     const TARGETS = [
+      // ---- Batch 1 ----
       {
         plant_name: 'Mambaling 3',
         url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/erjf0y93_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx',
@@ -348,6 +349,27 @@ export default function Import() {
       {
         plant_name: 'Umapad',
         url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/3b545p21_UMAPAD%20Well%20Meter%20Reading%202026_2.xlsx',
+        source: 'auto',
+      },
+      // ---- Batch 2 (new attachments) ----
+      {
+        plant_name: 'SRP',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/fu3pbjrb_SRP%202026_2.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'Umapad',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/7ny1dzmq_Umapad%202026_2.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'SRP MCWD',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/v4tjd639_SRP%20MCWD%202026_2.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'Guizo',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/szn7bko2_GUIZO%202026_2.xlsx',
         source: 'auto',
       },
     ];
@@ -440,9 +462,10 @@ export default function Import() {
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold">Seed attached samples</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Ingests <b>Mambaling 3 (Q1 + Q2)</b>, <b>SRP</b> &amp; <b>Umapad</b> into Supabase.
-              Existing rows for the same date are overridden, and the Q2 file&apos;s <i>Downtime</i>
-              sheet is parsed into clickable dashboard events.
+              Ingests <b>Mambaling 3 (Q1 + Q2)</b>, <b>SRP (2 files)</b>, <b>Umapad (2 files)</b>,
+              <b> SRP MCWD</b> &amp; <b>Guizo</b> into Supabase (8 files total).
+              Existing rows for the same date are overridden, and the Downtime sheets are
+              parsed into clickable dashboard events.
             </p>
           </div>
           <Button
@@ -454,7 +477,7 @@ export default function Import() {
             {seeding ? (
               <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Seeding…</>
             ) : (
-              <><Rocket className="h-3.5 w-3.5 mr-1" /> Seed 4 files</>
+              <><Rocket className="h-3.5 w-3.5 mr-1" /> Seed 8 files</>
             )}
           </Button>
         </div>

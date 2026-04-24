@@ -312,6 +312,155 @@ async def downtime_events(
     }
 
 
+# ---- Blending wells (Mongo-backed: no Supabase schema change needed) -----
+
+class BlendingToggleRequest(BaseModel):
+    well_id: str
+    plant_id: str
+    is_blending: bool
+    well_name: Optional[str] = None
+    plant_name: Optional[str] = None
+    note: Optional[str] = None
+
+
+@api_router.get("/blending/wells")
+async def blending_wells_list(plant_id: Optional[str] = None):
+    q: dict[str, Any] = {}
+    if plant_id:
+        q["plant_id"] = plant_id
+    cursor = db.blending_wells.find(q, {"_id": 0}).sort("tagged_at", -1)
+    return {"wells": [d async for d in cursor]}
+
+
+@api_router.post("/blending/toggle")
+async def blending_toggle(body: BlendingToggleRequest,
+                          x_user_id: Optional[str] = Header(None)):
+    now = datetime.utcnow()
+    if body.is_blending:
+        doc = {
+            "well_id": body.well_id,
+            "plant_id": body.plant_id,
+            "well_name": body.well_name or "",
+            "plant_name": body.plant_name or "",
+            "tagged_by": x_user_id,
+            "tagged_at": now,
+            "note": body.note or "",
+        }
+        await db.blending_wells.update_one(
+            {"well_id": body.well_id},
+            {"$set": doc}, upsert=True,
+        )
+        return {"ok": True, "is_blending": True, "well_id": body.well_id}
+    await db.blending_wells.delete_one({"well_id": body.well_id})
+    return {"ok": True, "is_blending": False, "well_id": body.well_id}
+
+
+@api_router.post("/blending/audit")
+async def blending_log_event(body: dict):
+    """Record a blending event (used when a blending well's volume > 0)."""
+    doc = {
+        "plant_id": body.get("plant_id"),
+        "well_id": body.get("well_id"),
+        "well_name": body.get("well_name"),
+        "plant_name": body.get("plant_name"),
+        "event_date": body.get("event_date"),
+        "volume_m3": body.get("volume_m3"),
+        "noted_at": datetime.utcnow(),
+    }
+    await db.blending_events.insert_one(doc)
+    return {"ok": True}
+
+
+# ---- Unified alerts feed -------------------------------------------------
+
+@api_router.get("/alerts/feed")
+async def alerts_feed(plant_id: Optional[str] = None,
+                       days: int = 7):
+    """Combined alerts from downtime, blending, and compliance snapshots."""
+    from datetime import timedelta
+    since = (datetime.utcnow() - timedelta(days=max(1, days))).date().isoformat()
+    today = datetime.utcnow().date().isoformat()
+    q_plant = {"plant_id": plant_id} if plant_id else {}
+
+    alerts: list[dict[str, Any]] = []
+
+    # Downtime alerts — prolonged (≥12h) or frequent (>3 events/day)
+    dt_q = {**q_plant, "event_date": {"$gte": since, "$lte": today}}
+    dt_cursor = db.downtime_events.find(dt_q, {"_id": 0})
+    events_by_day: dict[str, list[dict[str, Any]]] = {}
+    async for d in dt_cursor:
+        key = str(d.get("event_date", ""))[:10]
+        events_by_day.setdefault(key, []).append(d)
+    for day, evs in events_by_day.items():
+        total = sum(float(e.get("duration_hrs") or 0) for e in evs)
+        long_ones = [e for e in evs if float(e.get("duration_hrs") or 0) >= 12]
+        if long_ones:
+            alerts.append({
+                "kind": "downtime",
+                "severity": "high",
+                "date": day,
+                "plant_id": long_ones[0].get("plant_id"),
+                "plant_name": long_ones[0].get("plant_name"),
+                "title": f"Prolonged shutdown · {long_ones[0].get('subsystem')}",
+                "detail": f"{long_ones[0].get('duration_hrs')}h — {long_ones[0].get('cause') or long_ones[0].get('raw_text','')[:80]}",
+                "count": len(long_ones),
+            })
+        elif len(evs) >= 3 and total >= 6:
+            alerts.append({
+                "kind": "downtime",
+                "severity": "medium",
+                "date": day,
+                "plant_id": evs[0].get("plant_id"),
+                "plant_name": evs[0].get("plant_name"),
+                "title": f"Abnormal downtime pattern · {len(evs)} events / {total:.1f}h",
+                "detail": "Multiple short shutdowns in one day.",
+                "count": len(evs),
+            })
+
+    # Blending events (volume injected from tagged wells)
+    be_q = {**q_plant, "event_date": {"$gte": since}}
+    be_cursor = db.blending_events.find(be_q, {"_id": 0}).sort("event_date", -1).limit(50)
+    async for d in be_cursor:
+        alerts.append({
+            "kind": "blending",
+            "severity": "info",
+            "date": str(d.get("event_date", ""))[:10],
+            "plant_id": d.get("plant_id"),
+            "plant_name": d.get("plant_name"),
+            "title": f"Blending · {d.get('well_name')}",
+            "detail": f"Injected {d.get('volume_m3')} m³ into product water (audit).",
+        })
+
+    # Recovery deviations from latest compliance snapshots
+    snap_q = {**q_plant}
+    snap_cursor = (db.compliance_snapshots.find(snap_q, {"_id": 0})
+                   .sort("evaluated_at", -1).limit(20))
+    seen_plants: set[str] = set()
+    async for s in snap_cursor:
+        pid = s.get("plant_id")
+        if pid in seen_plants:
+            continue
+        seen_plants.add(pid)
+        for v in s.get("violations", []):
+            if v.get("code") == "recovery_pct_under":
+                alerts.append({
+                    "kind": "recovery",
+                    "severity": v.get("severity", "medium"),
+                    "date": str(s.get("summary_date", ""))[:10],
+                    "plant_id": pid,
+                    "plant_name": s.get("plant_name"),
+                    "title": "Recovery below threshold",
+                    "detail": f"Recovery {v.get('value')}% vs. min {v.get('limit')}%",
+                })
+                break
+
+    # Sort: high > medium > low/info, then recent first
+    sev_rank = {"high": 0, "medium": 1, "low": 2, "info": 3}
+    alerts.sort(key=lambda a: (sev_rank.get(a.get("severity", "info"), 9),
+                                -int(str(a.get("date", "")).replace("-", "") or 0)))
+    return {"count": len(alerts), "alerts": alerts[:80]}
+
+
 # ---- Serverless-friendly cron endpoints ----------------------------------
 
 @api_router.post("/cron/compliance-evaluate")

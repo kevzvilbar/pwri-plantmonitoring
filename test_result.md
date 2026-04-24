@@ -615,3 +615,31 @@ agent_communication:
            still returns 1 sheet, 90 rows.
 
         Do NOT exercise the frontend (user will manually QA via /import).
+
+    - agent: "main"
+      message: |
+        NEW BATCH 2026-04-24 (#2) — test the following:
+
+        BACKEND
+        A) Blending wells (Mongo-backed)
+          1. POST /api/blending/toggle {"well_id":"t1","plant_id":"p1","is_blending":true,"well_name":"Test","plant_name":"TP"} → 200 {ok:true, is_blending:true}
+          2. GET /api/blending/wells?plant_id=p1 → wells[] contains the toggled well
+          3. POST /api/blending/toggle {"well_id":"t1","plant_id":"p1","is_blending":false} → 200 {ok:true, is_blending:false}
+          4. GET /api/blending/wells?plant_id=p1 → wells[] is empty for this key
+          5. POST /api/blending/audit {"plant_id":"p1","well_id":"t1","well_name":"Test","plant_name":"TP","event_date":"2026-03-15","volume_m3":123.4} → 200 {ok:true}
+
+        B) Unified alerts feed
+          1. After B.1 of the previous batch (Mambaling downtime ingested), GET /api/alerts/feed?days=120 → count>=1, each alert has {kind,severity,title,date}. At least one alert has kind=="downtime".
+          2. After A.5 above, GET /api/alerts/feed?plant_id=p1&days=7 → includes a kind=="blending" alert with title containing "Blending".
+
+        C) Regressions — no changes should break these:
+          - GET /api/ai/health → {ok:true,model:"gpt-5.1"}
+          - GET /api/downtime/events?limit=3 → 200 with events[]
+          - POST /api/import/seed-from-url (no auth) with Mambaling 2026_3.xlsx downtime-only → 200, downtime_events>200
+
+        FRONTEND (optional — use signup if no test creds):
+          - /import : header shows "Seed 8 files" button
+          - /operations > Well tab : each well row has a Waves (blending) icon button
+          - / : no standalone "Downtime Hrs" tile; instead, Dashboard card "Active Alerts" shows downtime entries pulled from /api/alerts/feed
+          - Clicking Raw Water tile opens Trend modal with "Raw Water (m³)" line
+          - Clicking Recovery tile opens Trend modal with "Recovery (%)" line
