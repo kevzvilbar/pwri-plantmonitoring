@@ -110,6 +110,91 @@ user_problem_statement: |
   shut-offs, no-operation, blend, new-meter-resets, and inconsistent readings.
 
 backend:
+  - task: "Compliance thresholds + evaluate endpoints (/api/compliance/*)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend/compliance_service.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            New endpoints:
+              - GET  /api/compliance/thresholds?scope=...     -> default or stored
+              - PUT  /api/compliance/thresholds (body: {scope, thresholds})
+              - POST /api/compliance/evaluate?summarize=bool  -> violations[] + AI summary
+            Scope can be "global" or a plant UUID. Plant scope falls back to global
+            if no plant-specific doc exists. Thresholds default to sensible values
+            (NRW<20%, downtime<2h/day, permeate TDS<500, pH 6.5..8.5, DP<40, PV<1.2,
+            recovery>70%, chem supply>7d). Stored in Mongo collection
+            compliance_thresholds.
+            Evaluation classifies severity by how far the value is past threshold
+            (≤1.25x=low, ≤1.5x=medium, >1.5x=high). pH uses out-of-range.
+            AI summary uses the existing emergentintegrations setup.
+        - working: true
+          agent: "testing"
+          comment: |
+            COMPLIANCE ENDPOINTS TESTING COMPLETED ✅
+            
+            ✅ ALL 6 COMPLIANCE TESTS PASSED:
+            • GET /api/compliance/thresholds: Returns global defaults with all 10 required threshold keys
+            • PUT /api/compliance/thresholds: Successfully saves and retrieves custom plant-specific thresholds
+            • PUT validation: Correctly rejects invalid threshold data with HTTP 400
+            • POST /api/compliance/evaluate (no summary): Detects 8 violations from test data with proper severity classification
+            • POST /api/compliance/evaluate?summarize=true: Generates AI summary (45 words) within spec limit
+            • POST /api/compliance/evaluate (empty metrics): Correctly handles empty input with 0 violations
+            
+            ✅ VALIDATION & STRUCTURE VERIFICATION:
+            • Threshold persistence: Plant-specific scopes properly saved and retrieved from MongoDB
+            • Violation detection: All expected violation codes detected (nrw_pct_over, downtime_hrs_over, permeate_tds_over, permeate_ph_range, dp_psi_over, pv_ratio_over, recovery_pct_under, chem_low_stock)
+            • Severity classification: Proper low/medium/high severity based on threshold ratios
+            • AI integration: Summary generation working with EMERGENT_LLM_KEY
+            • Error handling: Invalid data properly rejected with appropriate HTTP status codes
+            
+            ALL COMPLIANCE ENDPOINTS ARE PRODUCTION READY
+
+  - task: "AI PM-forecast endpoint (/api/ai/pm-forecast)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend/compliance_service.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Accepts {equipment_name, category, frequency, last_execution_date?,
+            history[], downtime_hrs_last_30d?, chem_consumption_trend?, notes?}.
+            Returns strict-JSON {recommended_next_date, confidence, rationale,
+            risk_factors[]}. Safe fallback on invalid JSON. Uses same model.
+        - working: true
+          agent: "testing"
+          comment: |
+            AI PM-FORECAST ENDPOINT TESTING COMPLETED ✅
+            
+            ✅ BOTH PM FORECAST TESTS PASSED:
+            • Full request test: Successfully processed complete equipment data (RO Membrane Skid 1, Quarterly frequency, with operational signals)
+              - Response: confidence=medium, recommended_next_date=2026-04-10, 5 risk factors identified
+            • Minimal request test: Handled minimal input (equipment name, category, frequency only)
+              - Response: confidence=low, proper JSON structure maintained
+            
+            ✅ RESPONSE STRUCTURE VALIDATION:
+            • All required fields present: recommended_next_date, confidence, rationale, risk_factors
+            • Confidence values properly constrained to low/medium/high
+            • Rationale field contains non-empty explanatory text
+            • Risk factors returned as proper array structure
+            • Date format validation: YYYY-MM-DD or null as specified
+            
+            ✅ AI INTEGRATION VERIFICATION:
+            • Uses same EMERGENT_LLM_KEY configuration as other AI endpoints
+            • Strict JSON parsing with safe fallback on invalid responses
+            • Proper error handling for AI service failures
+            
+            PM FORECAST ENDPOINT IS PRODUCTION READY
+
   - task: "AI Assistant endpoints (/api/ai/*)"
     implemented: true
     working: true
@@ -266,6 +351,58 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
+        Please test the two NEW backend tasks. Use external REACT_APP_BACKEND_URL
+        from /app/frontend/.env.
+
+        A) Compliance
+         1. GET /api/compliance/thresholds -> {scope:"global", thresholds:{...defaults}}
+            Expect keys: nrw_pct_max, downtime_hrs_per_day_max, permeate_tds_max,
+            permeate_ph_min, permeate_ph_max, raw_turbidity_max, dp_psi_max,
+            recovery_pct_min, pv_ratio_max, chem_low_stock_days_min.
+         2. PUT /api/compliance/thresholds with:
+            {"scope":"test-plant-xyz","thresholds":{"nrw_pct_max":15,"downtime_hrs_per_day_max":1.5,
+             "permeate_tds_max":450,"permeate_ph_min":6.5,"permeate_ph_max":8.5,
+             "raw_turbidity_max":5,"dp_psi_max":40,"recovery_pct_min":72,
+             "pv_ratio_max":1.1,"chem_low_stock_days_min":5}}
+            -> 200. Then GET /api/compliance/thresholds?scope=test-plant-xyz must echo
+            the saved values (nrw_pct_max=15 etc).
+         3. PUT with invalid thresholds ({"nrw_pct_max": "abc"}) -> 400.
+         4. POST /api/compliance/evaluate (no summarize) with body
+            {"plant_id":"test-plant-xyz","scope_label":"SRP","metrics":{"nrw_pct":32.5,
+             "downtime_hrs":3.5,"permeate_tds":620,"permeate_ph":6.1,"raw_turbidity":2.3,
+             "dp_psi":45,"recovery_pct":65,"pv_ratio":1.35,
+             "chem_days_of_supply":[{"name":"Chlorine","days":3.2}]}}
+            Expect: violations[] includes at least: nrw_pct over, downtime_hrs over,
+            permeate_tds over, permeate_ph_range, dp_psi over, pv_ratio over,
+            recovery_pct under, chem_low_stock. Each has severity in {low,medium,high}.
+            thresholds echoed in response.
+         5. Same endpoint with ?summarize=true -> response additionally contains a
+            non-empty `summary` string (AI-generated narrative <=60 words).
+         6. POST /api/compliance/evaluate with metrics={} (no data): 200, violations=[].
+
+        B) Predictive PM
+         1. POST /api/ai/pm-forecast with body:
+            {"equipment_name":"RO Membrane Skid 1","category":"RO Membranes",
+             "frequency":"Quarterly","last_execution_date":"2026-01-15",
+             "downtime_hrs_last_30d":12.5,"chem_consumption_trend":"rising",
+             "notes":"DP creeping up 15% last month"}
+            Expect 200 with keys: recommended_next_date (str YYYY-MM-DD or null),
+            confidence (low|medium|high), rationale (non-empty str), risk_factors (array).
+         2. Minimal request ({"equipment_name":"X","category":"Y","frequency":"Monthly"})
+            must still return 200 with valid structure (may have null date + low
+            confidence).
+
+        Previously tested endpoints (AI chat/anomalies, XLSX importer) should still
+        work — quick health check only.
+
+        Do NOT test the /compliance, /ai or /maintenance frontend pages (user tests).
+    - agent: "testing"
+      message: |
+        (Previous) XLSX and AI endpoints verified green.
+
+agent_communication:
+    - agent: "main"
+      message: |
         Please test the new AI endpoints in this order (use external
         REACT_APP_BACKEND_URL from /app/frontend/.env, not localhost):
 
@@ -399,3 +536,36 @@ agent_communication:
         • Status classification working perfectly
         
         ENDPOINT IS PRODUCTION READY - NO ISSUES FOUND
+
+    - agent: "testing"
+      message: |
+        NEW BACKEND ENDPOINTS TESTING COMPLETED SUCCESSFULLY ✅
+        
+        Executed comprehensive test suite for the two NEW backend tasks as requested:
+        
+        ✅ COMPLIANCE ENDPOINTS (/api/compliance/*) - ALL 6 TESTS PASSED:
+        • GET /api/compliance/thresholds: Global defaults with 10 threshold keys
+        • PUT /api/compliance/thresholds: Plant-specific threshold persistence working
+        • PUT validation: Properly rejects invalid data with HTTP 400
+        • POST /api/compliance/evaluate: Detects 8 violations with proper severity
+        • POST /api/compliance/evaluate?summarize=true: AI summary generation (45 words)
+        • Empty metrics handling: Correctly returns 0 violations
+        
+        ✅ AI PM-FORECAST ENDPOINT (/api/ai/pm-forecast) - BOTH TESTS PASSED:
+        • Full request: Equipment analysis with operational signals (confidence=medium, date=2026-04-10)
+        • Minimal request: Handles basic input with proper fallback (confidence=low)
+        
+        ✅ SANITY CHECKS - ALL PREVIOUSLY WORKING ENDPOINTS STILL FUNCTIONAL:
+        • GET /api/ai/health: EMERGENT_LLM_KEY configured, responding correctly
+        • POST /api/ai/chat: Single message processing working
+        • POST /api/import/parse-wellmeter: Mambaling file processing verified
+        
+        ✅ TECHNICAL VALIDATION COMPLETE:
+        • All response structures match API specifications exactly
+        • Error handling working correctly (400 for invalid data, 422 for validation)
+        • AI integration verified with proper EMERGENT_LLM_KEY usage
+        • MongoDB persistence confirmed for compliance thresholds
+        • JSON parsing and validation working across all endpoints
+        
+        ALL 11/11 TESTS PASSED - BOTH NEW BACKEND FEATURES ARE PRODUCTION READY
+        No issues found - ready for frontend integration and user testing.

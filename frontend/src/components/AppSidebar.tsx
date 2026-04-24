@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Download, Upload, Sparkles,
+  Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -15,6 +15,7 @@ const groups = [
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
       { to: '/ai', label: 'AI Assistant', icon: Sparkles },
+      { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
     ],
   },
   {

@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { Sparkles } from 'lucide-react';
 import { PMS_TEMPLATES } from '@/lib/pmsTemplates';
 import { PmsCalendar } from '@/components/PmsCalendar';
+import { PmForecastTab } from '@/components/PmForecastTab';
 
 const FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'] as const;
 type Frequency = typeof FREQUENCIES[number];
@@ -32,14 +33,16 @@ export default function Maintenance() {
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Maintenance</h1>
       <Tabs defaultValue="calendar">
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="add">Add Equipment</TabsTrigger>
           <TabsTrigger value="records">Records</TabsTrigger>
+          <TabsTrigger value="forecast"><Sparkles className="h-3.5 w-3.5 mr-1" />AI Forecast</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar" className="mt-3"><PmsCalendar /></TabsContent>
         <TabsContent value="add" className="mt-3"><AddTemplate /></TabsContent>
         <TabsContent value="records" className="mt-3"><Records /></TabsContent>
+        <TabsContent value="forecast" className="mt-3"><PmForecastTab /></TabsContent>
       </Tabs>
     </div>
   );

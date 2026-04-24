@@ -16,6 +16,11 @@ from ai_service import (
     ChatRequest, AnomalyRequest,
     chat_turn, list_sessions, get_session, detect_anomalies,
 )
+from compliance_service import (
+    Thresholds, ViolationsPayload, EvaluateResult,
+    PmForecastRequest,
+    get_thresholds, save_thresholds, evaluate, make_summary, forecast_pm,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -147,6 +152,64 @@ async def ai_health():
     """Quick probe to verify EMERGENT_LLM_KEY is configured."""
     key_set = bool(os.environ.get("EMERGENT_LLM_KEY"))
     return {"ok": key_set, "model": "gpt-5.1", "provider": "openai"}
+
+
+# ---- Compliance ----------------------------------------------------------
+
+@api_router.get("/compliance/thresholds")
+async def get_compliance_thresholds(scope: str = "global"):
+    t = await get_thresholds(db, scope)
+    return {"scope": scope, "thresholds": t.dict()}
+
+
+@api_router.put("/compliance/thresholds")
+async def put_compliance_thresholds(body: dict):
+    scope = str(body.get("scope") or "global")
+    raw = body.get("thresholds") or {}
+    try:
+        t = Thresholds(**raw)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Invalid thresholds: {e}")
+    doc = await save_thresholds(db, scope, t)
+    return {"scope": doc.scope, "thresholds": doc.thresholds.dict(),
+            "updated_at": doc.updated_at.isoformat()}
+
+
+@api_router.post("/compliance/evaluate")
+async def compliance_evaluate(body: ViolationsPayload, summarize: bool = False):
+    scope = body.plant_id or "global"
+    t = await get_thresholds(db, scope)
+    violations = evaluate(t, body.metrics)
+    result: dict[str, Any] = {
+        "scope": scope,
+        "scope_label": body.scope_label,
+        "evaluated_at": datetime.utcnow().isoformat(),
+        "violations": [v.dict() for v in violations],
+        "thresholds": t.dict(),
+    }
+    if summarize:
+        try:
+            result["summary"] = await make_summary(
+                violations, body.metrics, body.scope_label or scope,
+            )
+        except Exception as e:  # noqa: BLE001
+            logging.exception("compliance summary failed")
+            result["summary_error"] = str(e)
+    return result
+
+
+# ---- Predictive PM -------------------------------------------------------
+
+@api_router.post("/ai/pm-forecast")
+async def ai_pm_forecast(req: PmForecastRequest):
+    try:
+        resp = await forecast_pm(req)
+        return resp
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logging.exception("pm_forecast failed")
+        raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
 
 
 # Include the router in the main app

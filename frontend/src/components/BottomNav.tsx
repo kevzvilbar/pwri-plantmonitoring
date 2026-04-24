@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet, MapPin, Cog, FlaskConical,
-  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles,
+  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -27,6 +27,7 @@ const sideSheetGroups = [
     title: 'Overview',
     items: [
       { to: '/ai', label: 'AI Assistant', icon: Sparkles },
+      { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
     ],
   },
   {

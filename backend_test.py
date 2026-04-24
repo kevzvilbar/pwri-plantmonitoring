@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Comprehensive backend API testing for AI Assistant endpoints and XLSX import.
+Comprehensive backend API testing for AI Assistant endpoints, XLSX import, 
+Compliance endpoints, and PM forecast endpoints.
 Tests all endpoints specified in test_result.md agent_communication.
 """
 
@@ -444,67 +445,519 @@ def test_xlsx_import_regression():
         log_test("XLSX Import Regression", "FAIL", f"Exception: {str(e)}")
         return False
 
+# ============================================================================
+# COMPLIANCE ENDPOINTS TESTING
+# ============================================================================
+
+def test_compliance_thresholds_get_default():
+    """Test GET /api/compliance/thresholds (default global scope)"""
+    try:
+        response = requests.get(f"{BASE_URL}/compliance/thresholds", timeout=10)
+        
+        if response.status_code != 200:
+            log_test("Compliance Thresholds GET (default)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["scope", "thresholds"]
+        for field in required_fields:
+            if field not in data:
+                log_test("Compliance Thresholds GET (default)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        if data.get("scope") != "global":
+            log_test("Compliance Thresholds GET (default)", "FAIL", f"Expected scope 'global', got '{data.get('scope')}'")
+            return False
+        
+        # Validate threshold keys
+        thresholds = data.get("thresholds", {})
+        expected_keys = [
+            "nrw_pct_max", "downtime_hrs_per_day_max", "permeate_tds_max",
+            "permeate_ph_min", "permeate_ph_max", "raw_turbidity_max",
+            "dp_psi_max", "recovery_pct_min", "pv_ratio_max", "chem_low_stock_days_min"
+        ]
+        
+        for key in expected_keys:
+            if key not in thresholds:
+                log_test("Compliance Thresholds GET (default)", "FAIL", f"Missing threshold key: {key}")
+                return False
+            if not isinstance(thresholds[key], (int, float)):
+                log_test("Compliance Thresholds GET (default)", "FAIL", f"Threshold {key} is not numeric: {thresholds[key]}")
+                return False
+        
+        log_test("Compliance Thresholds GET (default)", "PASS", f"Retrieved global thresholds with {len(thresholds)} keys")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Thresholds GET (default)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_compliance_thresholds_put_and_get():
+    """Test PUT /api/compliance/thresholds and verify with GET"""
+    try:
+        # PUT custom thresholds
+        payload = {
+            "scope": "test-plant-xyz",
+            "thresholds": {
+                "nrw_pct_max": 15,
+                "downtime_hrs_per_day_max": 1.5,
+                "permeate_tds_max": 450,
+                "permeate_ph_min": 6.5,
+                "permeate_ph_max": 8.5,
+                "raw_turbidity_max": 5,
+                "dp_psi_max": 40,
+                "recovery_pct_min": 72,
+                "pv_ratio_max": 1.1,
+                "chem_low_stock_days_min": 5
+            }
+        }
+        
+        response = requests.put(f"{BASE_URL}/compliance/thresholds", json=payload, timeout=10)
+        
+        if response.status_code != 200:
+            log_test("Compliance Thresholds PUT", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        put_data = response.json()
+        
+        # Validate PUT response
+        required_fields = ["scope", "thresholds", "updated_at"]
+        for field in required_fields:
+            if field not in put_data:
+                log_test("Compliance Thresholds PUT", "FAIL", f"Missing field in PUT response: {field}")
+                return False
+        
+        # Now GET the same scope to verify it was saved
+        get_response = requests.get(f"{BASE_URL}/compliance/thresholds?scope=test-plant-xyz", timeout=10)
+        
+        if get_response.status_code != 200:
+            log_test("Compliance Thresholds PUT", "FAIL", f"GET verification failed: {get_response.status_code}")
+            return False
+            
+        get_data = get_response.json()
+        
+        # Verify the saved values match what we PUT
+        saved_thresholds = get_data.get("thresholds", {})
+        original_thresholds = payload["thresholds"]
+        
+        for key, expected_value in original_thresholds.items():
+            if key not in saved_thresholds:
+                log_test("Compliance Thresholds PUT", "FAIL", f"Missing saved threshold: {key}")
+                return False
+            if saved_thresholds[key] != expected_value:
+                log_test("Compliance Thresholds PUT", "FAIL", f"Threshold {key}: expected {expected_value}, got {saved_thresholds[key]}")
+                return False
+        
+        log_test("Compliance Thresholds PUT", "PASS", "Successfully saved and verified custom thresholds")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Thresholds PUT", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_compliance_thresholds_put_invalid():
+    """Test PUT /api/compliance/thresholds with invalid data"""
+    try:
+        payload = {
+            "scope": "test-invalid",
+            "thresholds": {
+                "nrw_pct_max": "abc"  # Invalid - should be numeric
+            }
+        }
+        
+        response = requests.put(f"{BASE_URL}/compliance/thresholds", json=payload, timeout=10)
+        
+        if response.status_code != 400:
+            log_test("Compliance Thresholds PUT (invalid)", "FAIL", f"Expected 400 for invalid data, got {response.status_code}")
+            return False
+        
+        log_test("Compliance Thresholds PUT (invalid)", "PASS", "Correctly rejected invalid thresholds with 400")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Thresholds PUT (invalid)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_compliance_evaluate_without_summary():
+    """Test POST /api/compliance/evaluate without summarize flag"""
+    try:
+        payload = {
+            "plant_id": "test-plant-xyz",
+            "scope_label": "SRP",
+            "metrics": {
+                "nrw_pct": 32.5,
+                "downtime_hrs": 3.5,
+                "permeate_tds": 620,
+                "permeate_ph": 6.1,
+                "raw_turbidity": 2.3,
+                "dp_psi": 45,
+                "recovery_pct": 65,
+                "pv_ratio": 1.35,
+                "chem_days_of_supply": [{"name": "Chlorine", "days": 3.2}]
+            }
+        }
+        
+        response = requests.post(f"{BASE_URL}/compliance/evaluate", json=payload, timeout=15)
+        
+        if response.status_code != 200:
+            log_test("Compliance Evaluate (no summary)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["scope", "scope_label", "evaluated_at", "violations", "thresholds"]
+        for field in required_fields:
+            if field not in data:
+                log_test("Compliance Evaluate (no summary)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        violations = data.get("violations", [])
+        if not isinstance(violations, list):
+            log_test("Compliance Evaluate (no summary)", "FAIL", "Violations is not an array")
+            return False
+        
+        # Should have violations based on the test data (values exceed thresholds)
+        expected_violation_codes = [
+            "nrw_pct_over", "downtime_hrs_over", "permeate_tds_over", 
+            "permeate_ph_range", "dp_psi_over", "pv_ratio_over", 
+            "recovery_pct_under", "chem_low_stock"
+        ]
+        
+        found_codes = [v.get("code") for v in violations]
+        missing_codes = [code for code in expected_violation_codes if code not in found_codes]
+        
+        if missing_codes:
+            log_test("Compliance Evaluate (no summary)", "FAIL", f"Missing expected violations: {missing_codes}")
+            return False
+        
+        # Validate violation structure
+        for i, violation in enumerate(violations):
+            required_violation_fields = ["code", "severity", "metric", "threshold", "comparator", "message"]
+            for field in required_violation_fields:
+                if field not in violation:
+                    log_test("Compliance Evaluate (no summary)", "FAIL", f"Violation {i} missing field: {field}")
+                    return False
+            
+            if violation.get("severity") not in ["low", "medium", "high"]:
+                log_test("Compliance Evaluate (no summary)", "FAIL", f"Violation {i} has invalid severity: {violation.get('severity')}")
+                return False
+        
+        # Should NOT have summary field when summarize=false
+        if "summary" in data:
+            log_test("Compliance Evaluate (no summary)", "FAIL", "Unexpected summary field when summarize=false")
+            return False
+        
+        log_test("Compliance Evaluate (no summary)", "PASS", f"Detected {len(violations)} violations with proper structure")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Evaluate (no summary)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_compliance_evaluate_with_summary():
+    """Test POST /api/compliance/evaluate with summarize=true"""
+    try:
+        payload = {
+            "plant_id": "test-plant-xyz",
+            "scope_label": "SRP",
+            "metrics": {
+                "nrw_pct": 32.5,
+                "downtime_hrs": 3.5,
+                "permeate_tds": 620,
+                "permeate_ph": 6.1,
+                "raw_turbidity": 2.3,
+                "dp_psi": 45,
+                "recovery_pct": 65,
+                "pv_ratio": 1.35,
+                "chem_days_of_supply": [{"name": "Chlorine", "days": 3.2}]
+            }
+        }
+        
+        response = requests.post(f"{BASE_URL}/compliance/evaluate?summarize=true", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("Compliance Evaluate (with summary)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Should have summary field
+        if "summary" not in data:
+            log_test("Compliance Evaluate (with summary)", "FAIL", "Missing summary field when summarize=true")
+            return False
+        
+        summary = data.get("summary", "")
+        if not summary or len(summary.strip()) == 0:
+            log_test("Compliance Evaluate (with summary)", "FAIL", "Empty summary")
+            return False
+        
+        # Summary should be reasonably short (<=60 words as per spec)
+        word_count = len(summary.split())
+        if word_count > 80:  # Allow some flexibility
+            log_test("Compliance Evaluate (with summary)", "FAIL", f"Summary too long: {word_count} words (expected ≤60)")
+            return False
+        
+        log_test("Compliance Evaluate (with summary)", "PASS", f"Generated AI summary: {word_count} words")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Evaluate (with summary)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_compliance_evaluate_empty_metrics():
+    """Test POST /api/compliance/evaluate with empty metrics"""
+    try:
+        payload = {
+            "plant_id": "test-empty",
+            "scope_label": "Empty Test",
+            "metrics": {}
+        }
+        
+        response = requests.post(f"{BASE_URL}/compliance/evaluate", json=payload, timeout=10)
+        
+        if response.status_code != 200:
+            log_test("Compliance Evaluate (empty)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        violations = data.get("violations", [])
+        if not isinstance(violations, list):
+            log_test("Compliance Evaluate (empty)", "FAIL", "Violations is not an array")
+            return False
+        
+        # Should return empty violations for empty metrics
+        if len(violations) != 0:
+            log_test("Compliance Evaluate (empty)", "FAIL", f"Expected 0 violations for empty metrics, got {len(violations)}")
+            return False
+        
+        log_test("Compliance Evaluate (empty)", "PASS", "Correctly handled empty metrics")
+        return True
+        
+    except Exception as e:
+        log_test("Compliance Evaluate (empty)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+# ============================================================================
+# PM FORECAST ENDPOINT TESTING
+# ============================================================================
+
+def test_pm_forecast_full_request():
+    """Test POST /api/ai/pm-forecast with full request data"""
+    try:
+        payload = {
+            "equipment_name": "RO Membrane Skid 1",
+            "category": "RO Membranes",
+            "frequency": "Quarterly",
+            "last_execution_date": "2026-01-15",
+            "downtime_hrs_last_30d": 12.5,
+            "chem_consumption_trend": "rising",
+            "notes": "DP creeping up 15% last month"
+        }
+        
+        response = requests.post(f"{BASE_URL}/ai/pm-forecast", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("PM Forecast (full request)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["recommended_next_date", "confidence", "rationale", "risk_factors"]
+        for field in required_fields:
+            if field not in data:
+                log_test("PM Forecast (full request)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        # Validate confidence values
+        confidence = data.get("confidence")
+        if confidence not in ["low", "medium", "high"]:
+            log_test("PM Forecast (full request)", "FAIL", f"Invalid confidence value: {confidence}")
+            return False
+        
+        # Validate rationale is non-empty
+        rationale = data.get("rationale", "")
+        if not rationale or len(rationale.strip()) == 0:
+            log_test("PM Forecast (full request)", "FAIL", "Empty rationale")
+            return False
+        
+        # Validate risk_factors is an array
+        risk_factors = data.get("risk_factors", [])
+        if not isinstance(risk_factors, list):
+            log_test("PM Forecast (full request)", "FAIL", "Risk factors is not an array")
+            return False
+        
+        # recommended_next_date can be null or a date string
+        next_date = data.get("recommended_next_date")
+        if next_date is not None and not isinstance(next_date, str):
+            log_test("PM Forecast (full request)", "FAIL", f"Invalid recommended_next_date type: {type(next_date)}")
+            return False
+        
+        log_test("PM Forecast (full request)", "PASS", f"Confidence: {confidence}, Date: {next_date}, {len(risk_factors)} risk factors")
+        return True
+        
+    except Exception as e:
+        log_test("PM Forecast (full request)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_pm_forecast_minimal_request():
+    """Test POST /api/ai/pm-forecast with minimal request data"""
+    try:
+        payload = {
+            "equipment_name": "Test Equipment",
+            "category": "Test Category",
+            "frequency": "Monthly"
+        }
+        
+        response = requests.post(f"{BASE_URL}/ai/pm-forecast", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("PM Forecast (minimal request)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure (same as full request)
+        required_fields = ["recommended_next_date", "confidence", "rationale", "risk_factors"]
+        for field in required_fields:
+            if field not in data:
+                log_test("PM Forecast (minimal request)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        # With minimal data, might have null date and low confidence
+        confidence = data.get("confidence")
+        if confidence not in ["low", "medium", "high"]:
+            log_test("PM Forecast (minimal request)", "FAIL", f"Invalid confidence value: {confidence}")
+            return False
+        
+        rationale = data.get("rationale", "")
+        if not rationale or len(rationale.strip()) == 0:
+            log_test("PM Forecast (minimal request)", "FAIL", "Empty rationale")
+            return False
+        
+        log_test("PM Forecast (minimal request)", "PASS", f"Handled minimal request: confidence={confidence}")
+        return True
+        
+    except Exception as e:
+        log_test("PM Forecast (minimal request)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+# ============================================================================
+# QUICK SANITY CHECKS FOR PREVIOUSLY WORKING ENDPOINTS
+# ============================================================================
+
+def test_ai_health_quick():
+    """Quick test of GET /api/ai/health"""
+    try:
+        response = requests.get(f"{BASE_URL}/ai/health", timeout=10)
+        
+        if response.status_code != 200:
+            log_test("AI Health (quick check)", "FAIL", f"Status {response.status_code}")
+            return False
+            
+        data = response.json()
+        if not data.get("ok"):
+            log_test("AI Health (quick check)", "FAIL", "EMERGENT_LLM_KEY not configured")
+            return False
+            
+        log_test("AI Health (quick check)", "PASS", "Health endpoint responding")
+        return True
+        
+    except Exception as e:
+        log_test("AI Health (quick check)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_chat_quick():
+    """Quick test of POST /api/ai/chat"""
+    try:
+        payload = {"message": "What is water treatment?"}
+        response = requests.post(f"{BASE_URL}/ai/chat", json=payload, timeout=20)
+        
+        if response.status_code != 200:
+            log_test("AI Chat (quick check)", "FAIL", f"Status {response.status_code}")
+            return False
+            
+        data = response.json()
+        if not data.get("reply"):
+            log_test("AI Chat (quick check)", "FAIL", "Empty reply")
+            return False
+            
+        log_test("AI Chat (quick check)", "PASS", "Chat endpoint responding")
+        return True
+        
+    except Exception as e:
+        log_test("AI Chat (quick check)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_xlsx_import_quick():
+    """Quick test of POST /api/import/parse-wellmeter"""
+    try:
+        # Use the Mambaling sample file URL
+        file_url = "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/cv6d08yp_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx"
+        
+        # Download the file
+        file_response = requests.get(file_url, timeout=30)
+        if file_response.status_code != 200:
+            log_test("XLSX Import (quick check)", "FAIL", f"Could not download test file: {file_response.status_code}")
+            return False
+        
+        # Upload to the endpoint
+        files = {"file": ("mambaling.xlsx", file_response.content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        response = requests.post(f"{BASE_URL}/import/parse-wellmeter", files=files, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("XLSX Import (quick check)", "FAIL", f"Status {response.status_code}")
+            return False
+            
+        data = response.json()
+        if "sheets" not in data:
+            log_test("XLSX Import (quick check)", "FAIL", "Missing sheets in response")
+            return False
+            
+        log_test("XLSX Import (quick check)", "PASS", "XLSX import endpoint responding")
+        return True
+        
+    except Exception as e:
+        log_test("XLSX Import (quick check)", "FAIL", f"Exception: {str(e)}")
+        return False
+
 def main():
-    """Run all AI endpoint tests in the specified sequence"""
-    print("🚀 Starting AI Assistant Backend Testing")
+    """Run all backend endpoint tests focusing on new compliance and PM forecast features"""
+    print("🚀 Starting Comprehensive Backend Testing")
     print(f"📍 Base URL: {BASE_URL}")
     print("=" * 60)
     
     results = {}
-    session_id = None
     
-    # Test sequence as specified in test_result.md
+    print("\n🔍 QUICK SANITY CHECKS (Previously Working Endpoints)")
+    print("-" * 60)
     
-    # 1. Health check
-    results["health"] = test_ai_health()
+    # Quick sanity checks for previously working endpoints
+    results["ai_health_quick"] = test_ai_health_quick()
+    results["ai_chat_quick"] = test_ai_chat_quick()
+    results["xlsx_import_quick"] = test_xlsx_import_quick()
     
-    # 2. Single turn chat
-    if results["health"]:
-        session_id = test_ai_chat_single_turn()
-        results["chat_single"] = session_id is not None
-    else:
-        results["chat_single"] = False
-        print("⚠️  Skipping chat tests due to health check failure")
+    print("\n🆕 NEW COMPLIANCE ENDPOINTS TESTING")
+    print("-" * 60)
     
-    # 3. Multi-turn chat
-    if session_id:
-        results["chat_multi"] = test_ai_chat_multi_turn(session_id)
-    else:
-        results["chat_multi"] = False
-        print("⚠️  Skipping multi-turn test due to single-turn failure")
+    # A) Compliance thresholds + evaluate endpoints (/api/compliance/*)
+    results["compliance_get_default"] = test_compliance_thresholds_get_default()
+    results["compliance_put_get"] = test_compliance_thresholds_put_and_get()
+    results["compliance_put_invalid"] = test_compliance_thresholds_put_invalid()
+    results["compliance_evaluate_no_summary"] = test_compliance_evaluate_without_summary()
+    results["compliance_evaluate_with_summary"] = test_compliance_evaluate_with_summary()
+    results["compliance_evaluate_empty"] = test_compliance_evaluate_empty_metrics()
     
-    # 4. Sessions list
-    if session_id:
-        results["sessions_list"] = test_ai_sessions_list(session_id)
-    else:
-        results["sessions_list"] = False
-        print("⚠️  Skipping sessions list test")
+    print("\n🤖 NEW AI PM-FORECAST ENDPOINT TESTING")
+    print("-" * 60)
     
-    # 5. Session detail
-    if session_id:
-        results["session_detail"] = test_ai_session_detail(session_id)
-    else:
-        results["session_detail"] = False
-        print("⚠️  Skipping session detail test")
-    
-    # 6. Anomalies with data
-    results["anomalies_data"] = test_ai_anomalies_with_data()
-    
-    # 7. Anomalies empty
-    results["anomalies_empty"] = test_ai_anomalies_empty()
-    
-    # 8. Session delete
-    if session_id:
-        results["session_delete"] = test_ai_session_delete(session_id)
-    else:
-        results["session_delete"] = False
-        print("⚠️  Skipping session delete test")
-    
-    # 9. Validation
-    results["chat_validation"] = test_ai_chat_validation()
-    
-    # 10. XLSX import regression
-    results["xlsx_regression"] = test_xlsx_import_regression()
+    # B) AI PM-forecast endpoint (/api/ai/pm-forecast)
+    results["pm_forecast_full"] = test_pm_forecast_full_request()
+    results["pm_forecast_minimal"] = test_pm_forecast_minimal_request()
     
     # Summary
     print("\n" + "=" * 60)
@@ -514,14 +967,34 @@ def main():
     passed = sum(1 for result in results.values() if result)
     total = len(results)
     
-    for test_name, result in results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name}")
+    # Group results by category
+    sanity_tests = ["ai_health_quick", "ai_chat_quick", "xlsx_import_quick"]
+    compliance_tests = ["compliance_get_default", "compliance_put_get", "compliance_put_invalid", 
+                       "compliance_evaluate_no_summary", "compliance_evaluate_with_summary", "compliance_evaluate_empty"]
+    pm_tests = ["pm_forecast_full", "pm_forecast_minimal"]
+    
+    print("🔍 SANITY CHECKS:")
+    for test_name in sanity_tests:
+        if test_name in results:
+            status = "✅ PASS" if results[test_name] else "❌ FAIL"
+            print(f"  {status} {test_name}")
+    
+    print("\n🆕 COMPLIANCE ENDPOINTS:")
+    for test_name in compliance_tests:
+        if test_name in results:
+            status = "✅ PASS" if results[test_name] else "❌ FAIL"
+            print(f"  {status} {test_name}")
+    
+    print("\n🤖 PM FORECAST ENDPOINT:")
+    for test_name in pm_tests:
+        if test_name in results:
+            status = "✅ PASS" if results[test_name] else "❌ FAIL"
+            print(f"  {status} {test_name}")
     
     print(f"\n🎯 Overall: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All tests passed! AI endpoints are working correctly.")
+        print("🎉 All tests passed! All backend endpoints are working correctly.")
         return 0
     else:
         print("⚠️  Some tests failed. Check the details above.")

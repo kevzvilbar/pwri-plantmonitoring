@@ -26,15 +26,23 @@ import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
 
-function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent }: any) {
+function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold }: any) {
   return (
     <Card
-      className="stat-card p-3 min-w-0 hover:border-primary/40 transition-colors"
+      className={`stat-card p-3 min-w-0 hover:border-primary/40 transition-colors ${calc ? 'bg-gradient-to-br from-sky-50/40 to-transparent border-sky-200/50 dark:from-sky-950/20' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-2">
         <Icon className={`h-4 w-4 shrink-0 ${accent ?? 'text-muted-foreground'}`} />
-        {tone && <StatusPill tone={tone}>•</StatusPill>}
+        <div className="flex items-center gap-1">
+          {calc && (
+            <span
+              className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-200"
+              title="Calculated / derived metric"
+            >calc</span>
+          )}
+          {tone && <StatusPill tone={tone}>•</StatusPill>}
+        </div>
       </div>
       <div className="mt-2 font-mono-num text-xl text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis">
         {value}
@@ -42,6 +50,7 @@ function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent }: any
       </div>
       <div className="text-[11px] text-muted-foreground mt-1 leading-tight break-words">
         {label}
+        {threshold && <span className="ml-1 text-[10px] text-muted-foreground/70">(limit {threshold})</span>}
       </div>
     </Card>
   );
@@ -184,8 +193,10 @@ export default function Dashboard() {
         <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
           onClick={() => setModal({ metric: 'production', title: 'Production vs consumption' })} />
         <StatCard icon={Activity} label="NRW Water Loss" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
+          calc threshold="20%"
           onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
+          calc threshold="1.2"
           onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
 
         <StatCard icon={Waves} label="Blending → Product" value={fmtNum(blending)} unit="m³" />
@@ -206,7 +217,7 @@ export default function Dashboard() {
       {/* Cost row — Production / Power / Chem cost */}
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
         <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
-          value={`₱${fmtNum(productionCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
+          calc value={`₱${fmtNum(productionCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
           value={`₱${fmtNum(powerCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chem Cost"

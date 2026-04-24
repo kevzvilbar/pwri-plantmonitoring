@@ -20,6 +20,7 @@ import Incidents from "./pages/Incidents";
 import Employees from "./pages/Employees";
 import Import from "./pages/Import";
 import AIAssistant from "./pages/AIAssistant";
+import Compliance from "./pages/Compliance";
 import NotFound from "./pages/NotFound";
 
 // Global QueryClient with sensible defaults + toast on query/mutation errors.
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/ai" element={<AIAssistant />} />
+                <Route path="/compliance" element={<Compliance />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
