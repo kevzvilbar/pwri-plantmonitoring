@@ -643,3 +643,40 @@ agent_communication:
           - / : no standalone "Downtime Hrs" tile; instead, Dashboard card "Active Alerts" shows downtime entries pulled from /api/alerts/feed
           - Clicking Raw Water tile opens Trend modal with "Raw Water (m³)" line
           - Clicking Recovery tile opens Trend modal with "Recovery (%)" line
+
+    - agent: "main"
+      message: |
+        NEW BATCH 2026-04-24 (#3) — please test these FRONTEND + BACKEND
+        changes. Use external REACT_APP_BACKEND_URL. Frontend test can
+        use Auth → Sign up with throwaway email if no test creds.
+
+        FRONTEND (playwright)
+        1) /import : the old "Seed attached samples" Card is NO LONGER
+           rendered. The dropzone hint now reads:
+           "Accepts .xlsx, .xlsm, .txt, .doc, .docx".
+           `data-testid="import-parse-btn"` + `import-browse-btn` exist.
+        2) / (Dashboard): no standalone Downtime tile. Clicking Raw
+           Water tile opens a Trend modal WITHOUT the small "X-axis /
+           Y-axis = Value" paragraph. Changing the 7D/14D/30D/60D/90D
+           range buttons should re-run the query (chart x-axis domain
+           changes — inspect the network request to supabase or the
+           chart node count changes). Tiles "Bypass → Product" and
+           "Active Alerts" exist.
+        3) /ro-trains (or whatever route renders the ROTrains page):
+           the app should not log an error like
+           `Load failed (ro-last): [...] data is undefined`
+           (check browser console — previously undefined was returned).
+        4) /plants/<any plant id>: Wells section has an "Add Well"
+           button (data-testid="add-well-btn") that opens a dialog
+           with GPS Lat + GPS Lng inputs and a "Use My Location" button.
+           Locator detail card shows a `GPS: …` row.
+        5) /operations Well tab: every Well row has a
+           "Mark As Bypass" button (data-testid="blending-toggle-<wellId>").
+           Clicking it when the well has NO previous meter reading
+           should surface a toast reading
+           "Record A Meter Reading First …" and NOT tag the well.
+
+        BACKEND (pytest) — regression only
+        - Re-run /app/backend/tests/test_pwri_backend.py : must stay
+          23/23 passing. Add 1 new test that confirms the /api/alerts/feed
+          blending title now reads "Bypass ·" (not "Blending ·").

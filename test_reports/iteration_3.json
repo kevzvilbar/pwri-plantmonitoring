@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 3 — verified backend Bypass-title rename and extended pytest suite to 23/23 passing (added 'Bypass ·' assertion on /api/alerts/feed). Frontend UI smoke test BLOCKED: Supabase project has 'Confirm email' enabled and no service-role key or pre-confirmed test user is available, so signup -> signin always returns 'Email not confirmed'. All requested frontend changes were verified via source-level review instead.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/alerts/feed", "issue": "Pre-existing: returns count = total length but slices alerts to [:80] — cosmetic; flagged in iteration 2 already."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Auth (Supabase) - smoke-test blocker", "issue": "Supabase project requires email confirmation. Signup succeeds but signin returns 'Email not confirmed'. No SUPABASE_SERVICE_ROLE_KEY is set and /app/memory/test_credentials.md is empty, so the testing agent cannot reach any ProtectedRoute (/import, /dashboard, /ro-trains, /plants/:id, /operations) through the browser.", "affected_selectors": ["input[type=email]", "input[type=password]", "button: Sign in"]}
+    ],
+    "design_issues": []
+  },
+  "frontend_code_review_verification": {
+    "import_page_bulk_seed_card_removed": "Confirmed — /app/frontend/src/pages/Import.tsx has no 'Seed attached samples' / bulk-seed-card markup.",
+    "import_page_accept_types": "Confirmed — accept='.xlsx,.xlsm,.txt,.doc,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain' at Import.tsx:392.",
+    "dashboard_axis_paragraph_removed": "Confirmed — grep for 'X-axis'/'Y-axis' in Dashboard.tsx returns no matches.",
+    "dashboard_7D_90D_filters_requery": "Confirmed — setRange updates queryKey tuples (['trend-loc'|'trend-well'|'trend-ro'|'trend-power', metric, startISO, endISO, plantIds]) at Dashboard.tsx:421-445; startISO/endISO are derived from range so re-query will fire.",
+    "rotrains_console_error_fix": "Confirmed by code inspection — cannot exercise live. ROTrains queryFn should return `?? null` per reference file list. Main agent should self-test this once a confirmed user exists.",
+    "add_well_dialog_testids": "Confirmed — add-well-btn (Plants.tsx:358), add-well-name (446), add-well-lat (459), add-well-lng (462), use-my-location-btn (465), add-well-save (471).",
+    "operations_mark_as_bypass": "Confirmed — blending-toggle-<wellId> at Operations.tsx:592, button label 'Mark As Bypass' / 'Bypass On' at 595, Badge 'Bypass' at 510, toast 'Record A Meter Reading First So Injected Volume Can Be Computed.' at 404.",
+    "alerts_feed_bypass_title_backend": "Confirmed — server.py:439 emits title=f'Bypass · {well_name}'. Covered by new pytest assertion."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pwri_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "UNBLOCK UI SMOKE: Either (a) disable 'Confirm email' in the Supabase project for the preview env, (b) seed a pre-confirmed test user and record credentials in /app/memory/test_credentials.md, OR (c) provide SUPABASE_SERVICE_ROLE_KEY in backend/.env so a helper endpoint can admin-confirm signups during e2e tests.",
+    "Main agent should manually self-verify the 5 frontend behaviours listed (they were only statically reviewed in this iteration): /import card removal + mobile 390x844 visual, Dashboard trend 7D/90D re-query, ROTrains no console error, Plants Add-Well GPS + geolocation, Operations 'Mark As Bypass' toast on missing meter reading."
+  ],
+  "critical_code_review_comments": [
+    "Operations.tsx:404 toast string uses Title Case ('Record A Meter Reading First …') which matches the new global title-case rule, good; but verify non-Notes views all follow same casing (not checked exhaustively).",
+    "Plants.tsx Add Well dialog accepts free-text gps_lat/gps_lng (type='text'). Consider type='number' with step='any' + range validation (-90..90 / -180..180) before saving, else invalid coords can persist.",
+    "Dashboard.tsx TrendModal uses range -> startISO/endISO inside queryKey; no loading skeleton shown during refetch. Minor UX: user might not realize the chart is refetching when clicking 7D/30D rapidly.",
+    "ROTrains fix (queryFn returning `?? null`) — make sure TanStack Query v5 config does not set `throwOnError: true` globally, otherwise a `null` may still surface as an error. Please self-test.",
+    "server.py:439 title is now 'Bypass · …' but 'kind' field is still 'blending'. Consider renaming kind to 'bypass' in the next schema break so frontend filtering is semantically consistent; otherwise add a mapping in the alerts card."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pwri_backend.py (added assertion: alerts feed blending entry title starts with 'Bypass ·' and does not contain 'Blending')"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "0% executed via UI (blocked by auth); 100% verified via source review for the 7 requested items"},
+  "test_credentials": "/app/memory/test_credentials.md is empty. Two throwaway signups were attempted (t1test+<ts>@example.com, t1qa<ts>@pwritest.co) — both hit 'Email not confirmed' on signin. No usable credentials produced.",
+  "seed_data_creation": "None new. Existing TEST_ prefixed blending_events from iteration 2 were left in place (idempotent tests).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend suite stays at 23/23; extending is fine. For UI, you MUST first resolve Supabase email confirmation (see action_items). Once you have a confirmed user, targets are: /import (no 'Seed attached samples' card; file picker accepts xlsx/xlsm/txt/doc/docx), /dashboard (click metric tile -> TrendModal -> click 7D, 30D, 90D and assert chart re-renders / queryKey change via network), /ro-trains (assert no console error containing 'ro-last'), /plants/<id> (click Add Well -> dialog has add-well-lat/lng + use-my-location-btn), /operations (open Wells tab -> click blending-toggle-<wellId> on a well that has NO meter reading -> assert toast text starts with 'Record A Meter Reading First'). Also do 390x844 mobile screenshot on /import to confirm card visually removed.",
+  "rca of the issue": "UI smoke blocked by Supabase auth config, not a code defect. Root cause: preview Supabase project has email confirmation ON and no admin path or pre-confirmed user exists in this environment. Mitigation options listed in action_items."
+}

@@ -165,8 +165,29 @@ function LocatorsList({ plantId }: { plantId: string }) {
 
 function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
   const [form, setForm] = useState({ name: '', location_desc: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '' });
+  const [locating, setLocating] = useState(false);
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
   const submit = async () => {
-    if (!form.name) { toast.error('Name required'); return; }
+    if (!form.name) { toast.error('Name Required'); return; }
     const { error } = await supabase.from('locators').insert({
       plant_id: plantId, name: form.name, location_desc: form.location_desc || null, address: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
@@ -174,12 +195,12 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
     });
     if (error) { toast.error(error.message); return; }
-    toast.success('Locator added'); onClose();
+    toast.success('Locator Added'); onClose();
   };
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add locator</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add Locator</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
           <div><Label>Location</Label><Input value={form.location_desc} onChange={e => setForm({ ...form, location_desc: e.target.value })} /></div>
@@ -189,9 +210,13 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
             <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>GPS lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
-            <div><Label>GPS lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
+            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
           </div>
+          <Button variant="outline" size="sm" onClick={useMyLocation} disabled={locating}>
+            <MapPin className="h-3 w-3 mr-1" />
+            {locating ? 'Capturing…' : 'Use My Location'}
+          </Button>
         </div>
         <DialogFooter><Button onClick={submit}>Save</Button></DialogFooter>
       </DialogContent>
@@ -222,6 +247,14 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
           <div>Size: <span className="font-medium">{locator.meter_size ?? '—'}</span></div>
           <div>Serial: <span className="font-mono-num">{locator.meter_serial ?? '—'}</span></div>
           <div>Installed: <span>{locator.meter_installed_date ?? '—'}</span></div>
+          <div className="flex items-center gap-1">
+            <MapPin className="h-3 w-3 text-muted-foreground" />
+            GPS: <span className="font-mono-num">
+              {locator.gps_lat != null && locator.gps_lng != null
+                ? `${(+locator.gps_lat).toFixed(5)}, ${(+locator.gps_lng).toFixed(5)}`
+                : '—'}
+            </span>
+          </div>
         </div>
         <Button size="sm" className="mt-3" onClick={() => setReplaceOpen(true)}><Wrench className="h-3 w-3 mr-1" />Replace meter</Button>
       </Card>
@@ -308,6 +341,9 @@ export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose 
 }
 
 function WellsList({ plantId }: { plantId: string }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [adding, setAdding] = useState(false);
   const { data: wells } = useQuery({
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
@@ -316,20 +352,126 @@ function WellsList({ plantId }: { plantId: string }) {
   if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">Wells ({wells?.length ?? 0})</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold">Wells ({wells?.length ?? 0})</h3>
+        {isManager && (
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
+            <Plus className="h-3 w-3 mr-1" />Add Well
+          </Button>
+        )}
+      </div>
       {wells?.map((w: any) => (
         <Card key={w.id} className="p-3 cursor-pointer hover:shadow-elev" onClick={() => setDetail(w.id)}>
           <div className="flex justify-between items-start">
             <div>
               <div className="font-medium text-sm">{w.name}</div>
-              <div className="text-xs text-muted-foreground">{w.diameter ?? '—'} · {w.drilling_depth_m ?? '—'} m</div>
+              <div className="text-xs text-muted-foreground">
+                {w.diameter ?? '—'} · {w.drilling_depth_m ?? '—'} m
+                {(w.gps_lat != null && w.gps_lng != null) && (
+                  <span className="ml-1.5 inline-flex items-center gap-0.5">
+                    <MapPin className="h-2.5 w-2.5" /> {(+w.gps_lat).toFixed(4)}, {(+w.gps_lng).toFixed(4)}
+                  </span>
+                )}
+              </div>
             </div>
             <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
           </div>
         </Card>
       ))}
-      {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No wells yet</Card>}
+      {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Wells Yet</Card>}
+      {adding && (
+        <AddWellDialog plantId={plantId} onClose={() => {
+          setAdding(false);
+          qc.invalidateQueries({ queryKey: ['wells', plantId] });
+        }} />
+      )}
     </div>
+  );
+}
+
+function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: '', diameter: '', drilling_depth_m: '', has_power_meter: false,
+    meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
+    gps_lat: '', gps_lng: '',
+  });
+  const [locating, setLocating] = useState(false);
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    const { error } = await supabase.from('wells').insert({
+      plant_id: plantId,
+      name: form.name.trim(),
+      diameter: form.diameter || null,
+      drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
+      has_power_meter: form.has_power_meter,
+      meter_brand: form.meter_brand || null,
+      meter_size: form.meter_size ? +form.meter_size : null,
+      meter_serial: form.meter_serial || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null,
+      gps_lng: form.gps_lng ? +form.gps_lng : null,
+      status: 'Active',
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success('Well Added');
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Add Well</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label>
+            <Input data-testid="add-well-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Well #1" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} placeholder="8 inch" /></div>
+            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label>Meter Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>GPS Lat</Label>
+              <Input data-testid="add-well-lat" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} placeholder="10.295" />
+            </div>
+            <div><Label>GPS Lng</Label>
+              <Input data-testid="add-well-lng" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} placeholder="123.877" />
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={useMyLocation} disabled={locating} data-testid="use-my-location-btn">
+            <MapPin className="h-3 w-3 mr-1" />
+            {locating ? 'Capturing…' : 'Use My Location'}
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button data-testid="add-well-save" onClick={submit}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -365,7 +507,15 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" /> Back</button>
       <Card className="p-3">
         <h3 className="font-semibold">{well.name}</h3>
-        <div className="text-xs text-muted-foreground">{well.diameter ?? '—'}</div>
+        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+          <span>{well.diameter ?? '—'}</span>
+          {well.gps_lat != null && well.gps_lng != null && (
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              <span className="font-mono-num">{(+well.gps_lat).toFixed(5)}, {(+well.gps_lng).toFixed(5)}</span>
+            </span>
+          )}
+        </div>
       </Card>
       <Card className="p-3">
         <div className="flex items-center justify-between">

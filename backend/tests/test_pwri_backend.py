@@ -443,6 +443,14 @@ class TestAlertsFeed:
         assert b.get("plant_id") == plant_id
         assert "42.0" in b.get("detail", "") or "42" in b.get("detail", "")
         assert b.get("severity") == "info"
+        # Iteration 3: Blending title must be rebranded to "Bypass · …"
+        title = b.get("title", "")
+        assert title.startswith("Bypass ·"), (
+            f"expected title to start with 'Bypass ·', got {title!r}"
+        )
+        assert "Blending" not in title, (
+            f"old label 'Blending' should no longer appear in title: {title!r}"
+        )
 
     def test_alerts_feed_sort_order(self, api_client):
         """High severity alerts must appear before medium/info."""

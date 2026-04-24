@@ -77,7 +77,15 @@ function Overview() {
 function TrainCard({ train }: { train: any }) {
   const { data: last } = useQuery({
     queryKey: ['ro-last', train.id],
-    queryFn: async () => (await supabase.from('ro_train_readings').select('*').eq('train_id', train.id).order('reading_datetime', { ascending: false }).limit(1)).data?.[0],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('*')
+        .eq('train_id', train.id)
+        .order('reading_datetime', { ascending: false })
+        .limit(1);
+      return data?.[0] ?? null;
+    },
   });
   const tone = train.status === 'Running' ? 'accent' : train.status === 'Maintenance' ? 'warn' : 'muted';
   return (

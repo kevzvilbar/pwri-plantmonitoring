@@ -436,8 +436,8 @@ async def alerts_feed(plant_id: Optional[str] = None,
             "date": str(d.get("event_date", ""))[:10],
             "plant_id": d.get("plant_id"),
             "plant_name": d.get("plant_name"),
-            "title": f"Blending · {d.get('well_name')}",
-            "detail": f"Injected {d.get('volume_m3')} m³ into product water (audit).",
+            "title": f"Bypass · {d.get('well_name')}",
+            "detail": f"Injected {d.get('volume_m3')} m³ Directly Into Product Water (Audit).",
         })
 
     # Recovery deviations from latest compliance snapshots

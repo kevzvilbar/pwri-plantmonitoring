@@ -215,9 +215,9 @@ export default function Dashboard() {
       {/* 8 primary KPI tiles — auto-fits to longest label, slightly narrower */}
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
         <StatCard icon={Droplet} accent="text-primary" label="Production" value={fmtNum(production)} unit="m³"
-          onClick={() => setModal({ metric: 'production', title: 'Production trend' })} />
+          onClick={() => setModal({ metric: 'production', title: 'Production Trend' })} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
-          onClick={() => setModal({ metric: 'production', title: 'Production vs consumption' })} />
+          onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
         <StatCard icon={Activity} label="NRW Water Loss" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
           calc threshold="20%"
           onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
@@ -225,7 +225,7 @@ export default function Dashboard() {
           calc threshold="1.2"
           onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
 
-        <StatCard icon={Waves} label="Blending → Product" value={fmtNum(blending)} unit="m³" />
+        <StatCard icon={Waves} label="Bypass → Product" value={fmtNum(blending)} unit="m³" />
         <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
         <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
           onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
@@ -270,7 +270,7 @@ export default function Dashboard() {
                 : a.severity === 'low' ? 'accent'
                 : 'info' as const;
               const kindLabel = a.kind === 'downtime' ? 'Downtime'
-                : a.kind === 'blending' ? 'Blending'
+                : a.kind === 'blending' ? 'Bypass'
                 : 'Recovery';
               return (
                 <button
@@ -416,8 +416,6 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const days = range === 'CUSTOM' ? null : RANGE_DAYS[range];
   const startISO = days ? subDays(new Date(), days).toISOString() : new Date(from).toISOString();
   const endISO = days ? new Date().toISOString() : new Date(to + 'T23:59:59').toISOString();
-  const startDate = days ? format(subDays(new Date(), days), 'yyyy-MM-dd') : from;
-  const endDate = days ? format(new Date(), 'yyyy-MM-dd') : to;
 
   const { data: locReadings } = useQuery({
     queryKey: ['trend-loc', metric, startISO, endISO, plantIds],
@@ -507,9 +505,6 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
           ))}
           <Button size="sm" variant={range === 'CUSTOM' ? 'default' : 'outline'} onClick={() => setRange('CUSTOM')}>Custom</Button>
         </div>
-        <p className="text-[10px] text-muted-foreground">
-          X-axis = Date (ascending · {startDate} → {endDate}) · Y-axis = Value
-        </p>
         {range === 'CUSTOM' && (
           <div className="flex gap-2 items-end">
             <div className="flex-1"><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>

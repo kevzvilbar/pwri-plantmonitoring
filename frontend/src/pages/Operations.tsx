@@ -398,6 +398,12 @@ function WellRow({
   const [togglingBlend, setTogglingBlend] = useState(false);
 
   const toggleBlending = async () => {
+    // Bypass wells are required to have a meter reading recorded so the
+    // injected volume can be computed (previous_reading → current_reading).
+    if (!isBlending && previousMeter == null) {
+      toast.error(`${well.name}: Record A Meter Reading First So Injected Volume Can Be Computed.`);
+      return;
+    }
     setTogglingBlend(true);
     try {
       const res = await fetch(`${BASE}/api/blending/toggle`, {
@@ -413,11 +419,11 @@ function WellRow({
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success(isBlending
-        ? `${well.name}: blending disabled`
-        : `${well.name}: tagged as Blending Well (injects to Product Water)`);
+        ? `${well.name}: Bypass Removed`
+        : `${well.name}: Marked As Bypass Well — Injects To Product Water`);
       qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
     } catch (e: any) {
-      toast.error(`Blending toggle failed: ${e.message || e}`);
+      toast.error(`Bypass Toggle Failed: ${e.message || e}`);
     } finally {
       setTogglingBlend(false);
     }
@@ -502,12 +508,12 @@ function WellRow({
             <Badge
               className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
               data-testid={`blending-badge-${well.id}`}
-              title="Tagged as Blending Well — injects to Product Water"
+              title="Marked As Bypass Well — Injects Directly To Product Water"
             >
-              <Waves className="h-3 w-3 mr-1" /> Blending
+              <Waves className="h-3 w-3 mr-1" /> Bypass
             </Badge>
           )}
-          {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
+          {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">Editing</span>}
         </div>
         <div className="text-xs text-muted-foreground truncate">
           prev: <span className="font-mono-num">{previousMeter == null ? '—' : fmtNum(previousMeter)}</span>
@@ -575,16 +581,18 @@ function WellRow({
         </Button>
       )}
 
-      {/* Blending toggle */}
+      {/* Mark As Bypass Well toggle */}
       <Button
-        variant="ghost" size="sm"
-        className={`h-8 w-8 p-0 shrink-0 ${isBlending ? 'text-violet-600' : 'text-muted-foreground hover:text-violet-600'}`}
+        variant={isBlending ? 'default' : 'outline'}
+        size="sm"
+        className={`h-8 shrink-0 ${isBlending ? 'bg-violet-600 hover:bg-violet-600/90' : ''}`}
         onClick={toggleBlending}
         disabled={togglingBlend}
-        title={isBlending ? 'Remove Blending tag' : 'Tag as Blending Well (injects to Product Water)'}
+        title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
         data-testid={`blending-toggle-${well.id}`}
       >
-        <Waves className="h-3.5 w-3.5" />
+        <Waves className="h-3.5 w-3.5 mr-1" />
+        {isBlending ? 'Bypass On' : 'Mark As Bypass'}
       </Button>
 
       {reading && belowPrev && (
