@@ -2119,6 +2119,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      complete_onboarding: {
+        Args: {
+          _designation: string
+          _first_name: string
+          _last_name: string
+          _middle_name: string
+          _plant_assignments: string[]
+          _suffix: string
+          _username: string
+        }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2130,6 +2142,17 @@ export type Database = {
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       recompute_production_cost: {
         Args: { _date: string; _plant_id: string }
+        Returns: undefined
+      }
+      update_own_profile: {
+        Args: {
+          _designation: string
+          _first_name: string
+          _last_name: string
+          _middle_name: string
+          _suffix: string
+          _username: string
+        }
         Returns: undefined
       }
       user_has_plant_access: { Args: { _plant_id: string }; Returns: boolean }
