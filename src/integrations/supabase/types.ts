@@ -656,6 +656,63 @@ export type Database = {
           },
         ]
       }
+      downtime_events: {
+        Row: {
+          addressed: boolean
+          cause: string
+          created_at: string
+          duration_hrs: number
+          event_date: string
+          id: string
+          notes: string | null
+          plant_id: string
+          recorded_by: string | null
+          resolution: string | null
+          updated_at: string
+        }
+        Insert: {
+          addressed?: boolean
+          cause: string
+          created_at?: string
+          duration_hrs?: number
+          event_date?: string
+          id?: string
+          notes?: string | null
+          plant_id: string
+          recorded_by?: string | null
+          resolution?: string | null
+          updated_at?: string
+        }
+        Update: {
+          addressed?: boolean
+          cause?: string
+          created_at?: string
+          duration_hrs?: number
+          event_date?: string
+          id?: string
+          notes?: string | null
+          plant_id?: string
+          recorded_by?: string | null
+          resolution?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "downtime_events_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "downtime_events_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       electric_bills: {
         Row: {
           billing_month: string
