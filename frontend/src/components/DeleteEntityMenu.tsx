@@ -11,6 +11,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuSeparator, DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Trash2, MoreVertical, Loader2, ShieldAlert } from 'lucide-react';
 
 type Kind = 'user' | 'plant';
@@ -42,10 +44,18 @@ async function authHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-async function api<T>(method: 'GET' | 'POST' | 'DELETE', path: string): Promise<T> {
+async function api<T>(
+  method: 'GET' | 'POST' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
   const headers = await authHeaders();
-  const res = await fetch(`${base}${path}`, { method, headers });
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -75,21 +85,28 @@ export function DeleteEntityMenu({
   const [openSoft, setOpenSoft] = useState(false);
   const [openHard, setOpenHard] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState('');
   const [deps, setDeps] = useState<DependencySnapshot | null>(null);
   const [loadingDeps, setLoadingDeps] = useState(false);
 
   const copy = KIND_COPY[kind];
+  const entityPath = kind === 'user' ? 'users' : 'plants';
+
+  const resetAndClose = () => {
+    setReason('');
+    setDeps(null);
+    setOpenSoft(false);
+    setOpenHard(false);
+  };
 
   const doSoft = async () => {
     try {
       setBusy(true);
-      await api(
-        'POST',
-        `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}/soft-delete`,
-      );
+      await api('POST', `/api/admin/${entityPath}/${id}/soft-delete`, { reason });
       toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} marked ${copy.softName}`);
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
-      setOpenSoft(false);
+      qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
+      resetAndClose();
       onDeleted?.();
     } catch (e: any) {
       toast.error(e?.message ?? 'Soft delete failed');
@@ -103,7 +120,7 @@ export function DeleteEntityMenu({
     try {
       const snap = await api<DependencySnapshot>(
         'GET',
-        `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}/dependencies`,
+        `/api/admin/${entityPath}/${id}/dependencies`,
       );
       setDeps(snap);
     } catch (e: any) {
@@ -117,10 +134,12 @@ export function DeleteEntityMenu({
   const doHard = async () => {
     try {
       setBusy(true);
-      await api('DELETE', `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}`);
+      const qs = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+      await api('DELETE', `/api/admin/${entityPath}/${id}${qs}`);
       toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} permanently deleted`);
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
-      setOpenHard(false);
+      qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
+      resetAndClose();
       onDeleted?.();
     } catch (e: any) {
       toast.error(e?.message ?? 'Hard delete failed');
@@ -130,6 +149,8 @@ export function DeleteEntityMenu({
   };
 
   const openHardWithDeps = async () => {
+    setReason('');
+    setDeps(null);
     await loadDeps();
     setOpenHard(true);
   };
@@ -154,7 +175,7 @@ export function DeleteEntityMenu({
           <DropdownMenuSeparator />
           {canSoftDelete && (
             <DropdownMenuItem
-              onClick={() => setOpenSoft(true)}
+              onClick={() => { setReason(''); setOpenSoft(true); }}
               data-testid={`soft-delete-${kind}-${id}`}
             >
               <ShieldAlert className="h-4 w-4 mr-2 text-amber-500" />
@@ -174,7 +195,7 @@ export function DeleteEntityMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={openSoft} onOpenChange={setOpenSoft}>
+      <AlertDialog open={openSoft} onOpenChange={(o) => (o ? setOpenSoft(true) : resetAndClose())}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{copy.softVerb} {copy.label}?</AlertDialogTitle>
@@ -185,6 +206,17 @@ export function DeleteEntityMenu({
                 : ' Wells, locators and trains linked to this plant remain but the plant is hidden from active lists.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Staff change, restructuring, data correction…"
+              maxLength={500}
+              rows={2}
+              data-testid="soft-delete-reason"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-soft-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -199,7 +231,7 @@ export function DeleteEntityMenu({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={openHard} onOpenChange={setOpenHard}>
+      <AlertDialog open={openHard} onOpenChange={(o) => (o ? setOpenHard(true) : resetAndClose())}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-danger">
@@ -215,12 +247,21 @@ export function DeleteEntityMenu({
                     <Loader2 className="h-4 w-4 animate-spin" /> Checking dependencies…
                   </div>
                 )}
-                {deps && (
-                  <DependencyReport deps={deps} kind={kind} />
-                )}
+                {deps && <DependencyReport deps={deps} kind={kind} />}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why are you permanently deleting this record?"
+              maxLength={500}
+              rows={2}
+              data-testid="hard-delete-reason"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-hard-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction

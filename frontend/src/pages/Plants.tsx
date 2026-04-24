@@ -22,7 +22,7 @@ export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const { isManager } = useAuth();
+  const { isAdmin } = useAuth();
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
   const navigate = useNavigate();
 
@@ -47,7 +47,7 @@ export default function Plants() {
               </div>
               <div className="flex items-center gap-2">
                 <StatusPill tone={p.status === 'Active' ? 'accent' : 'muted'}>{p.status}</StatusPill>
-                {isManager && (
+                {isAdmin && (
                   <DeleteEntityMenu
                     kind="plant"
                     id={p.id}

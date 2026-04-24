@@ -1,21 +1,22 @@
 """
-Admin service — user & plant deletion with RBAC and dependency checks.
+Admin service — user & plant deletion with RBAC, dependency checks and
+Supabase-backed audit logging.
 
-Rules:
-    Users:
-        - Only Admin may delete users.
-        - Soft delete -> user_profiles.status = 'Suspended' (keeps audit trail, blocks login).
-        - Hard delete -> only if no dependencies (roles, logs, readings, incidents, etc).
-        - Cascade handling -> existing logs remain with the original user_id for audit.
-
-    Plants:
-        - Admin or Manager may delete plants.
+Rules (per product spec):
+    Users (Only Admin):
+        - Soft delete -> user_profiles.status = 'Suspended'.
+        - Hard delete -> only if no dependencies.
+        - Audit row in `deletion_audit_log` on every action.
+    Plants (Only Admin):
         - Soft delete -> plants.status = 'Inactive'.
-        - Hard delete -> only if no dependencies (wells, locators, trains, readings, etc).
-        - Cascade handling -> linked records are surfaced in dependency check; caller must
-          archive/reassign before hard-delete.
+        - Hard delete -> only if no dependencies.
+        - Audit row in `deletion_audit_log` on every action.
 
-Endpoints authenticate via the caller's Supabase JWT (Authorization: Bearer <jwt>).
+Cascade handling is advisory (the dependency snapshot is returned to the caller
+so linked records can be archived/reassigned before hard-delete).
+
+Endpoints authenticate via the caller's Supabase JWT
+(Authorization: Bearer <jwt>).
 """
 from __future__ import annotations
 
@@ -67,7 +68,7 @@ PLANT_REF_TABLES: list[str] = [
 
 # --- Supabase helpers -------------------------------------------------------
 
-def _service_client(access_token: Optional[str] = None) -> Client:
+def _user_scoped_client(access_token: Optional[str] = None) -> Client:
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_ANON_KEY")
     if not url or not key:
@@ -91,17 +92,16 @@ def _bearer_token(authorization: Optional[str]) -> str:
 
 
 def _caller_identity(access_token: str) -> dict[str, Any]:
-    """Resolve the caller's user_id and roles from Supabase.
-
-    Returns {"user_id": str, "roles": list[str]}.
-    """
-    client = _service_client(access_token)
+    """Resolve caller's user_id, display name, and roles from Supabase."""
+    client = _user_scoped_client(access_token)
     try:
         user_resp = client.auth.get_user(access_token)
     except Exception as e:  # noqa: BLE001
         log.exception("auth.get_user failed")
         raise HTTPException(status_code=401, detail=f"Invalid session: {e}")
-    user = getattr(user_resp, "user", None) or (user_resp.get("user") if isinstance(user_resp, dict) else None)
+    user = getattr(user_resp, "user", None) or (
+        user_resp.get("user") if isinstance(user_resp, dict) else None
+    )
     user_id = getattr(user, "id", None) if user else None
     if not user_id:
         raise HTTPException(status_code=401, detail="Unable to identify caller")
@@ -113,7 +113,20 @@ def _caller_identity(access_token: str) -> dict[str, Any]:
     except Exception:
         log.exception("Failed to load caller roles")
 
-    return {"user_id": user_id, "roles": roles}
+    label: Optional[str] = None
+    try:
+        prof = client.table("user_profiles").select(
+            "first_name,last_name,username",
+        ).eq("id", user_id).maybeSingle().execute()
+        data = prof.data or {}
+        label = (
+            " ".join(filter(None, [data.get("first_name"), data.get("last_name")])).strip()
+            or data.get("username")
+        )
+    except Exception:
+        log.debug("caller profile lookup failed", exc_info=True)
+
+    return {"user_id": user_id, "roles": roles, "label": label}
 
 
 def _require_roles(caller: dict[str, Any], allowed: set[str]) -> None:
@@ -129,7 +142,12 @@ def _require_roles(caller: dict[str, Any], allowed: set[str]) -> None:
 def _count_refs(client: Client, table: str, column: str, value: Any) -> int:
     """Cheap count() using head=True + exact count; returns 0 on failure."""
     try:
-        res = client.table(table).select("id", count="exact", head=True).eq(column, value).execute()
+        res = (
+            client.table(table)
+            .select("id", count="exact", head=True)
+            .eq(column, value)
+            .execute()
+        )
         return int(getattr(res, "count", 0) or 0)
     except Exception as e:  # noqa: BLE001
         log.debug("count failed for %s.%s=%s: %s", table, column, value, e)
@@ -137,7 +155,6 @@ def _count_refs(client: Client, table: str, column: str, value: Any) -> int:
 
 
 def user_dependencies(client: Client, user_id: str) -> dict[str, Any]:
-    """Collect dependency counts for a user deletion."""
     roles_count = _count_refs(client, "user_roles", "user_id", user_id)
     refs: list[dict[str, Any]] = []
     total = 0
@@ -147,10 +164,15 @@ def user_dependencies(client: Client, user_id: str) -> dict[str, Any]:
             refs.append({"table": table, "column": col, "count": n})
             total += n
 
-    # plants assigned (array column on user_profiles)
     assigned: list[str] = []
     try:
-        res = client.table("user_profiles").select("plant_assignments").eq("id", user_id).single().execute()
+        res = (
+            client.table("user_profiles")
+            .select("plant_assignments")
+            .eq("id", user_id)
+            .single()
+            .execute()
+        )
         assigned = list((res.data or {}).get("plant_assignments") or [])
     except Exception:
         pass
@@ -166,7 +188,6 @@ def user_dependencies(client: Client, user_id: str) -> dict[str, Any]:
 
 
 def plant_dependencies(client: Client, plant_id: str) -> dict[str, Any]:
-    """Collect dependency counts for a plant deletion."""
     refs: list[dict[str, Any]] = []
     total = 0
     for table in PLANT_REF_TABLES:
@@ -177,9 +198,12 @@ def plant_dependencies(client: Client, plant_id: str) -> dict[str, Any]:
 
     assigned_users = 0
     try:
-        res = client.table("user_profiles").select(
-            "id", count="exact", head=True,
-        ).contains("plant_assignments", [plant_id]).execute()
+        res = (
+            client.table("user_profiles")
+            .select("id", count="exact", head=True)
+            .contains("plant_assignments", [plant_id])
+            .execute()
+        )
         assigned_users = int(getattr(res, "count", 0) or 0)
     except Exception:
         log.debug("assigned_users count failed", exc_info=True)
@@ -193,35 +217,112 @@ def plant_dependencies(client: Client, plant_id: str) -> dict[str, Any]:
     }
 
 
+# --- Audit log --------------------------------------------------------------
+
+def _write_audit(
+    client: Client,
+    *,
+    kind: str,
+    entity_id: str,
+    entity_label: Optional[str],
+    action: str,
+    caller: dict[str, Any],
+    reason: Optional[str],
+    dependencies: Optional[dict[str, Any]] = None,
+) -> None:
+    """Persist one audit row. Failure is logged but never blocks the action."""
+    try:
+        client.table("deletion_audit_log").insert(
+            {
+                "kind": kind,
+                "entity_id": entity_id,
+                "entity_label": (entity_label or "")[:200] or None,
+                "action": action,
+                "actor_user_id": caller.get("user_id"),
+                "actor_label": caller.get("label"),
+                "reason": (reason or "").strip()[:500] or None,
+                "dependencies": dependencies,
+            }
+        ).execute()
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "deletion_audit_log insert skipped (%s). "
+            "Did you run supabase/migrations/20260424_deletion_audit_log.sql?",
+            e,
+        )
+
+
+def _entity_label(client: Client, kind: str, entity_id: str) -> Optional[str]:
+    try:
+        if kind == "user":
+            row = (
+                client.table("user_profiles")
+                .select("first_name,last_name,username")
+                .eq("id", entity_id)
+                .maybeSingle()
+                .execute()
+            )
+            d = row.data or {}
+            return (
+                " ".join(filter(None, [d.get("first_name"), d.get("last_name")])).strip()
+                or d.get("username")
+            )
+        if kind == "plant":
+            row = (
+                client.table("plants")
+                .select("name")
+                .eq("id", entity_id)
+                .maybeSingle()
+                .execute()
+            )
+            return (row.data or {}).get("name")
+    except Exception:
+        log.debug("entity label lookup failed", exc_info=True)
+    return None
+
+
 # --- Deletion actions -------------------------------------------------------
 
-def soft_delete_user(authorization: Optional[str], user_id: str) -> dict[str, Any]:
+def soft_delete_user(
+    authorization: Optional[str], user_id: str, reason: Optional[str] = None,
+) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
     _require_roles(caller, {"Admin"})
     if caller["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
-    client = _service_client(token)
+    client = _user_scoped_client(token)
+    label = _entity_label(client, "user", user_id)
     try:
-        res = client.table("user_profiles").update(
-            {"status": "Suspended"},
-        ).eq("id", user_id).execute()
+        res = (
+            client.table("user_profiles")
+            .update({"status": "Suspended"})
+            .eq("id", user_id)
+            .execute()
+        )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Supabase update failed: {e}")
     if not (res.data or []):
         raise HTTPException(status_code=404, detail="User not found")
+
+    _write_audit(
+        client, kind="user", entity_id=user_id, entity_label=label,
+        action="soft", caller=caller, reason=reason,
+    )
     return {"ok": True, "mode": "soft", "user_id": user_id, "status": "Suspended"}
 
 
-def hard_delete_user(authorization: Optional[str], user_id: str) -> dict[str, Any]:
+def hard_delete_user(
+    authorization: Optional[str], user_id: str, reason: Optional[str] = None,
+) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
     _require_roles(caller, {"Admin"})
     if caller["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
-    client = _service_client(token)
+    client = _user_scoped_client(token)
     deps = user_dependencies(client, user_id)
     if deps["blocking"]:
         raise HTTPException(
@@ -231,43 +332,62 @@ def hard_delete_user(authorization: Optional[str], user_id: str) -> dict[str, An
                 "dependencies": deps,
             },
         )
-
-    # Remove role rows first, then profile. auth.users row requires service key
-    # to delete — we surface that via the response.
+    label = _entity_label(client, "user", user_id)
     try:
         client.table("user_roles").delete().eq("user_id", user_id).execute()
         client.table("user_profiles").delete().eq("id", user_id).execute()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Hard delete failed: {e}")
+
+    _write_audit(
+        client, kind="user", entity_id=user_id, entity_label=label,
+        action="hard", caller=caller, reason=reason, dependencies=deps,
+    )
     return {
         "ok": True,
         "mode": "hard",
         "user_id": user_id,
-        "note": "Profile and role rows removed. Auth record (auth.users) must be removed separately via Supabase dashboard if desired.",
+        "note": (
+            "Profile and role rows removed. Auth record (auth.users) must be "
+            "removed separately via the Supabase dashboard if desired."
+        ),
     }
 
 
-def soft_delete_plant(authorization: Optional[str], plant_id: str) -> dict[str, Any]:
+def soft_delete_plant(
+    authorization: Optional[str], plant_id: str, reason: Optional[str] = None,
+) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin", "Manager"})
-    client = _service_client(token)
+    _require_roles(caller, {"Admin"})
+    client = _user_scoped_client(token)
+    label = _entity_label(client, "plant", plant_id)
     try:
-        res = client.table("plants").update(
-            {"status": "Inactive"},
-        ).eq("id", plant_id).execute()
+        res = (
+            client.table("plants")
+            .update({"status": "Inactive"})
+            .eq("id", plant_id)
+            .execute()
+        )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Supabase update failed: {e}")
     if not (res.data or []):
         raise HTTPException(status_code=404, detail="Plant not found")
+
+    _write_audit(
+        client, kind="plant", entity_id=plant_id, entity_label=label,
+        action="soft", caller=caller, reason=reason,
+    )
     return {"ok": True, "mode": "soft", "plant_id": plant_id, "status": "Inactive"}
 
 
-def hard_delete_plant(authorization: Optional[str], plant_id: str) -> dict[str, Any]:
+def hard_delete_plant(
+    authorization: Optional[str], plant_id: str, reason: Optional[str] = None,
+) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin", "Manager"})
-    client = _service_client(token)
+    _require_roles(caller, {"Admin"})
+    client = _user_scoped_client(token)
     deps = plant_dependencies(client, plant_id)
     if deps["blocking"]:
         raise HTTPException(
@@ -277,10 +397,16 @@ def hard_delete_plant(authorization: Optional[str], plant_id: str) -> dict[str, 
                 "dependencies": deps,
             },
         )
+    label = _entity_label(client, "plant", plant_id)
     try:
         client.table("plants").delete().eq("id", plant_id).execute()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Hard delete failed: {e}")
+
+    _write_audit(
+        client, kind="plant", entity_id=plant_id, entity_label=label,
+        action="hard", caller=caller, reason=reason, dependencies=deps,
+    )
     return {"ok": True, "mode": "hard", "plant_id": plant_id}
 
 
@@ -288,7 +414,7 @@ def get_user_dependencies(authorization: Optional[str], user_id: str) -> dict[st
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
     _require_roles(caller, {"Admin", "Manager"})
-    client = _service_client(token)
+    client = _user_scoped_client(token)
     return user_dependencies(client, user_id)
 
 
@@ -296,5 +422,28 @@ def get_plant_dependencies(authorization: Optional[str], plant_id: str) -> dict[
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
     _require_roles(caller, {"Admin", "Manager"})
-    client = _service_client(token)
+    client = _user_scoped_client(token)
     return plant_dependencies(client, plant_id)
+
+
+def list_audit_log(
+    authorization: Optional[str],
+    kind: Optional[str] = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    token = _bearer_token(authorization)
+    caller = _caller_identity(token)
+    _require_roles(caller, {"Admin", "Manager"})
+    client = _user_scoped_client(token)
+    limit = max(1, min(int(limit), 500))
+    try:
+        q = client.table("deletion_audit_log").select("*").order(
+            "created_at", desc=True,
+        ).limit(limit)
+        if kind in ("user", "plant"):
+            q = q.eq("kind", kind)
+        res = q.execute()
+        return {"count": len(res.data or []), "entries": res.data or []}
+    except Exception as e:  # noqa: BLE001
+        log.warning("audit log read failed: %s", e)
+        return {"count": 0, "entries": [], "warning": str(e)}

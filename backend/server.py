@@ -30,7 +30,12 @@ from admin_service import (
     soft_delete_user, hard_delete_user,
     soft_delete_plant, hard_delete_plant,
     get_user_dependencies, get_plant_dependencies,
+    list_audit_log,
 )
+
+
+class DeletionRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 ROOT_DIR = Path(__file__).parent
@@ -486,14 +491,17 @@ async def admin_user_dependencies(user_id: str,
 
 @api_router.post("/admin/users/{user_id}/soft-delete")
 async def admin_user_soft_delete(user_id: str,
+                                  body: Optional[DeletionRequest] = None,
                                   authorization: Optional[str] = Header(None)):
-    return soft_delete_user(authorization, user_id)
+    return soft_delete_user(authorization, user_id,
+                             reason=(body.reason if body else None))
 
 
 @api_router.delete("/admin/users/{user_id}")
 async def admin_user_hard_delete(user_id: str,
+                                  reason: Optional[str] = None,
                                   authorization: Optional[str] = Header(None)):
-    return hard_delete_user(authorization, user_id)
+    return hard_delete_user(authorization, user_id, reason=reason)
 
 
 @api_router.get("/admin/plants/{plant_id}/dependencies")
@@ -504,14 +512,24 @@ async def admin_plant_dependencies(plant_id: str,
 
 @api_router.post("/admin/plants/{plant_id}/soft-delete")
 async def admin_plant_soft_delete(plant_id: str,
+                                   body: Optional[DeletionRequest] = None,
                                    authorization: Optional[str] = Header(None)):
-    return soft_delete_plant(authorization, plant_id)
+    return soft_delete_plant(authorization, plant_id,
+                              reason=(body.reason if body else None))
 
 
 @api_router.delete("/admin/plants/{plant_id}")
 async def admin_plant_hard_delete(plant_id: str,
+                                   reason: Optional[str] = None,
                                    authorization: Optional[str] = Header(None)):
-    return hard_delete_plant(authorization, plant_id)
+    return hard_delete_plant(authorization, plant_id, reason=reason)
+
+
+@api_router.get("/admin/audit-log")
+async def admin_audit_log(kind: Optional[str] = None,
+                           limit: int = 100,
+                           authorization: Optional[str] = Header(None)):
+    return list_audit_log(authorization, kind=kind, limit=limit)
 
 
 # ---- Serverless-friendly cron endpoints ----------------------------------
