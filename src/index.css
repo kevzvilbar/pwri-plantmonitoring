@@ -4,37 +4,33 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PWRI Monitoring & Alert System — Industrial Teal palette
-   Primary teal #0F4C5C = hsl(192 71% 21%)
-   Accent coral  #E36414 = hsl(20 83% 49%)
-   Cream surface #FBF6EE = hsl(38 60% 96%)
-   Mint success  #2A9D8F = hsl(174 58% 39%)
-   Amber warn    #F4A261 = hsl(27 87% 67%)
-   Danger        #C5283D = hsl(351 64% 47%)
+/* PWRI Monitoring & Alert System — Modern Aqua palette
+   Refined for clarity and softer surfaces.
+   Primary deep teal · Accent warm coral · Mint success · Amber warn · Crimson danger
 */
 
 @layer base {
   :root {
-    --background: 38 60% 96%;
-    --foreground: 192 50% 12%;
+    --background: 200 30% 98%;
+    --foreground: 200 45% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 192 50% 12%;
+    --card-foreground: 200 45% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 192 50% 12%;
+    --popover-foreground: 200 45% 11%;
 
-    /* Brand teal */
-    --primary: 192 71% 21%;
-    --primary-foreground: 38 60% 96%;
-    --primary-soft: 192 50% 92%;
-    --primary-glow: 188 60% 38%;
+    /* Brand teal — slightly cooler, more modern */
+    --primary: 195 75% 24%;
+    --primary-foreground: 200 30% 98%;
+    --primary-soft: 195 55% 94%;
+    --primary-glow: 190 65% 42%;
 
-    --secondary: 192 20% 94%;
-    --secondary-foreground: 192 60% 18%;
+    --secondary: 200 25% 95%;
+    --secondary-foreground: 195 65% 18%;
 
-    --muted: 38 30% 94%;
-    --muted-foreground: 192 12% 38%;
+    --muted: 200 20% 96%;
+    --muted-foreground: 200 10% 42%;
 
     /* Mint success — used for accent semantics */
     --accent: 174 58% 39%;
@@ -60,16 +56,16 @@
     --info: 200 80% 42%;
     --info-soft: 200 60% 94%;
 
-    --border: 192 20% 88%;
-    --input: 192 20% 86%;
-    --ring: 192 71% 28%;
+    --border: 200 20% 90%;
+    --input: 200 20% 88%;
+    --ring: 195 75% 32%;
 
-    --radius: 0.75rem;
+    --radius: 0.875rem;
 
     /* Topbar */
-    --topbar: 192 71% 21%;
-    --topbar-foreground: 38 60% 96%;
-    --topbar-muted: 192 20% 70%;
+    --topbar: 195 75% 24%;
+    --topbar-foreground: 200 30% 98%;
+    --topbar-muted: 200 20% 75%;
 
     /* Charts — distinct hues for each metric */
     --chart-1: 192 71% 28%;     /* teal — production */
@@ -80,23 +76,23 @@
     --chart-6: 280 50% 48%;     /* purple — power */
 
     /* Effects */
-    --shadow-card: 0 1px 2px 0 hsl(192 50% 12% / 0.05), 0 1px 3px 0 hsl(192 50% 12% / 0.07);
-    --shadow-elev: 0 4px 14px -2px hsl(192 50% 12% / 0.10), 0 2px 6px -1px hsl(192 50% 12% / 0.05);
-    --shadow-modal: 0 24px 48px -12px hsl(192 60% 8% / 0.28);
+    --shadow-card: 0 1px 2px 0 hsl(200 50% 11% / 0.04), 0 1px 3px 0 hsl(200 50% 11% / 0.06);
+    --shadow-elev: 0 4px 16px -4px hsl(200 50% 11% / 0.10), 0 2px 6px -1px hsl(200 50% 11% / 0.05);
+    --shadow-modal: 0 24px 48px -12px hsl(200 60% 8% / 0.28);
 
-    --gradient-stat: linear-gradient(135deg, hsl(192 71% 21%) 0%, hsl(188 60% 32%) 100%);
+    --gradient-stat: linear-gradient(135deg, hsl(195 75% 24%) 0%, hsl(190 65% 38%) 100%);
     --gradient-accent: linear-gradient(135deg, hsl(174 58% 39%) 0%, hsl(170 55% 44%) 100%);
     --gradient-highlight: linear-gradient(135deg, hsl(20 83% 49%) 0%, hsl(28 85% 56%) 100%);
 
     --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 
-    --sidebar-background: 192 71% 21%;
-    --sidebar-foreground: 38 60% 96%;
+    --sidebar-background: 195 75% 24%;
+    --sidebar-foreground: 200 30% 98%;
     --sidebar-primary: 20 83% 49%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 192 60% 26%;
-    --sidebar-accent-foreground: 38 60% 96%;
-    --sidebar-border: 192 50% 26%;
+    --sidebar-accent: 195 60% 30%;
+    --sidebar-accent-foreground: 200 30% 98%;
+    --sidebar-border: 195 50% 30%;
     --sidebar-ring: 20 83% 49%;
   }
 

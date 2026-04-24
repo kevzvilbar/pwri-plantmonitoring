@@ -177,8 +177,8 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* 8 primary KPI tiles — auto-fits to longest label */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
+      {/* 8 primary KPI tiles — auto-fits to longest label, slightly narrower */}
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
         <StatCard icon={Droplet} accent="text-primary" label="Production" value={fmtNum(production)} unit="m³"
           onClick={() => setModal({ metric: 'production', title: 'Production trend' })} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
@@ -196,7 +196,7 @@ export default function Dashboard() {
       </div>
 
       {/* Operations row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
         <StatCard icon={Timer} label="Downtime Hrs" value={fmtNum(downtime, 1)} unit="hr" />
         <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³" />
         <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
@@ -204,7 +204,7 @@ export default function Dashboard() {
       </div>
 
       {/* Cost row — Production / Power / Chem cost */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
         <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
           value={`₱${fmtNum(productionCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
