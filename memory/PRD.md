@@ -1,120 +1,144 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 2)_
+_Last updated: 2026-04-24 (iteration 3)_
 
-## 1. Problem Statement (verbatim)
-> "Check for possible error and improve pls the app pls" + pre-load 8 real
+## 1. Problem Statement (verbatim — consolidated across 3 iterations)
+> "Check for possible error and improve pls the app pls" + pre-load 8
 > XLSX files (Mambaling Q1+Q2, SRP×2, Umapad×2, SRP MCWD, Guizo); remove
-> the standalone Downtime field and fold downtime into unified Alerts;
-> fix Dashboard Trends pop-up (X=Date, Y=Value, ascending; add Raw Water
-> Trendline and Recovery Trendline); add Blending-well tagging with audit
-> trail; keep app mobile-friendly and Vercel-compatible.
+> standalone Downtime field in favour of unified Alerts; fix Dashboard
+> Trends pop-up (X=Date ascending, Y=Value, add Raw Water Trendline and
+> Recovery Trendline); add Blending/Bypass-well tagging with audit trail;
+> mobile-friendly; Vercel-friendly.  
+> Iteration 3: remove "Seed attached samples" card from /import; allow
+> .txt/.doc/.docx/.xlsx upload; remove axis-label paragraph from trend
+> modal; fix 7D-90D duration filters; fix ro-last undefined error; add
+> LatLon GPS fields on Locators and Wells; replace Blending Well
+> terminology with "Mark As Bypass Well" (require meter reading before
+> marking); Title Case across views (except Notes).
 
 ## 2. Personas
-- Plant operator — mobile-first reading entry, tag blending wells.
-- Compliance officer — reviews NRW/TDS/downtime violations; unified
-  alerts card.
+- Plant operator — mobile-first reading entry, GPS capture, tag bypass
+  wells.
+- Compliance officer — reviews unified alerts (downtime, bypass,
+  recovery).
 - Maintenance planner — AI PM forecast per equipment.
 - Analyst / management — AI queries, CSV exports.
 
 ## 3. Tech stack
 - Frontend: React + Vite + Tailwind + shadcn/ui + TanStack Query +
-  Supabase JS (auth + DB).
-- Backend: FastAPI + Motor (Mongo) + `emergentintegrations` LLM SDK +
-  `supabase-py` (user-JWT-aware).
-- Serverless-ready: all cron jobs are plain HTTP `POST /api/cron/*`
-  endpoints wired through `vercel.json`. No background daemons.
+  Supabase JS.
+- Backend: FastAPI + Motor (Mongo) + emergentintegrations LLM SDK +
+  supabase-py (user-JWT-aware).
+- Serverless: all cron jobs are plain HTTP `POST /api/cron/*`, scheduled
+  via `vercel.json`. No background daemons.
 
 ## 4. Core Requirements status
 
 ### 4.1 Data ingestion
 - [x] XLSX parser for well-meter readings (tri-block monthly layout).
-- [x] **Seed 8 attached samples** one-click button on `/import`:
-  Mambaling 3 (Q1+Q2), SRP (x2), Umapad (x2), SRP MCWD, Guizo.
-  - Existing `well_readings` for the same (plant,well,date) are
-    overridden; missing rows inserted. Signed-in user JWT forwarded.
-- [x] Mambaling Q2 & Umapad Q2 `Downtime` sheets parsed into Mongo
-  `downtime_events` (300+ events extracted end-to-end).
+- [x] File picker now accepts `.xlsx, .xlsm, .txt, .doc, .docx`.
+- [x] **"Seed attached samples" card removed** per latest UX direction —
+  the endpoint `/api/import/seed-from-url` still exists for CI / cron use.
+- [x] Mambaling Q2 & Umapad Q2 Downtime sheets → Mongo `downtime_events`.
 
 ### 4.2 Dashboard
 - [x] Tiles in ascending-date responsive grids.
-- [x] **Standalone Downtime tile removed** — downtime surfaces in the
-  unified Alerts card instead.
-- [x] **Unified Alerts engine** (`GET /api/alerts/feed`) combines:
-  - Prolonged shutdown (≥12 h) & abnormal patterns (≥3 events, ≥6 h)
-  - Blending audit events (well tagged → volume > 0 today)
-  - Recovery deviations (`recovery_pct_under` in latest compliance
-    snapshots)
-  Plus live-computed RO / chem / train-gap alerts (RO DP, TDS, pH,
-  low-stock chemicals).
-- [x] Clicking a downtime alert opens the drill-down modal.
-- [x] **Trends pop-up fixes**: X-axis labelled "Date (ascending · start →
-  end)", Y-axis labelled per metric. New lines for **Raw Water
-  Trendline** and **Recovery Trendline**.
-- [x] Calc badges on derived metrics (NRW, PV, Production Cost).
+- [x] Standalone Downtime tile removed; downtime surfaces in the
+  unified Alerts card.
+- [x] Unified Alerts engine `GET /api/alerts/feed` (downtime, bypass,
+  recovery deviations) + live-computed RO/chem/train-gap alerts.
+- [x] Trends pop-up: **axis-label paragraph removed**, range buttons
+  7D/14D/30D/60D/90D + Custom re-run the query; Raw Water Trendline &
+  Recovery Trendline wired.
+- [x] Calc badges on derived metrics.
+- [x] Tile labels in Title Case (e.g. "Production Trend", "Bypass →
+  Product").
 
 ### 4.3 AI Agent
-- [x] `/api/ai/chat`, `/api/ai/chat-tools` (planner → Supabase
-  whitelisted queries → answer), `/api/ai/anomalies`, `/api/ai/pm-forecast`.
+- [x] `/api/ai/chat` conversational.
+- [x] `/api/ai/chat-tools` planner → Supabase whitelisted queries →
+  answer.
+- [x] `/api/ai/anomalies` batch anomaly detection.
+- [x] `/api/ai/pm-forecast` single-equipment PM next-date.
 
-### 4.4 Blending wells
-- [x] Mongo-backed `blending_wells` collection; `blending_events`
-  collection for audit history.
-- [x] Frontend: toggle icon on each well row (Operations → Well tab) —
-  `Waves` icon, Blending badge when tagged.
-- [x] Saving a well reading from a blending well logs a blending event
-  so it appears under Dashboard → Alerts.
+### 4.4 Bypass wells (was: Blending)
+- [x] `/api/blending/{toggle,wells,audit}` endpoints (kept name for
+  backward-compat; UI copy is "Mark As Bypass Well").
+- [x] Frontend: `Waves` button with text **"Mark As Bypass"** on each
+  well row; `Bypass` badge on tagged wells; UI enforces a prior meter
+  reading before a well can be marked bypass.
+- [x] Saving a reading for a bypass well auto-logs an event →
+  Dashboard Alerts ("Bypass · Well X — injected N m³").
 - [x] Optional Supabase migration file
-  `/app/frontend/supabase/migrations/20260424_blending_well_flag.sql` so
-  the column can later live on `wells` too.
+  `/app/frontend/supabase/migrations/20260424_blending_well_flag.sql`.
 
-### 4.5 Compliance & scheduling
+### 4.5 Locators & Wells GPS
+- [x] `AddLocatorDialog` has GPS Lat/Lng + **Use My Location** button.
+- [x] New `AddWellDialog` with Diameter/Depth/Meter fields + GPS
+  Lat/Lng + **Use My Location** (`data-testid="add-well-btn"`,
+  `add-well-lat`, `add-well-lng`, `use-my-location-btn`).
+- [x] Locator + Well detail cards show `GPS: lat, lng` with a MapPin
+  icon; Well list inline badge shows truncated coords.
+
+### 4.6 Compliance & scheduling
 - [x] `/api/compliance/thresholds` GET/PUT with 10 defaults.
-- [x] `/api/compliance/evaluate?summarize=true|false`.
-- [x] `/api/cron/compliance-evaluate` and `/api/cron/pm-forecast-sweep`
-  (serverless, `X-Cron-Secret` gated), `vercel.json` schedule.
+- [x] `/api/compliance/evaluate?summarize=`.
+- [x] `/api/cron/compliance-evaluate` + `/api/cron/pm-forecast-sweep`
+  serverless endpoints, `X-Cron-Secret` gated; scheduled in
+  `vercel.json`.
 
-### 4.6 Nav & polish
-- [x] `/exports` route wired (dead link fixed).
-- [x] Mobile bottom nav + side sheet untouched.
-- [x] Proper capitalization ("Raw Water Trendline", "Active Alerts",
-  "Blending", etc.).
+### 4.7 Error handling
+- [x] **"Load failed (ro-last): … data is undefined"** fixed — `queryFn`
+  now returns `?? null` explicitly.
+- [x] Error boundary + toast on global query/mutation errors.
 
-## 5. Endpoints (new in this iteration)
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/alerts/feed` | GET | Unified alerts feed (downtime/blending/recovery) |
-| `/api/blending/wells` | GET | List tagged blending wells |
-| `/api/blending/toggle` | POST | Tag/untag a well as blending |
-| `/api/blending/audit` | POST | Record blending injection (well, date, m³) |
+### 4.8 Nav & polish
+- [x] `/exports` route wired.
+- [x] Mobile bottom nav + sheet untouched.
+- [x] Title Case across main views, Notes remain free-form.
+
+## 5. Endpoints
+| Endpoint | Method |
+|---|---|
+| `/api/import/seed-from-url` | POST |
+| `/api/import/parse-wellmeter` | POST |
+| `/api/downtime/events` | GET |
+| `/api/alerts/feed` | GET |
+| `/api/blending/wells` | GET |
+| `/api/blending/toggle` | POST |
+| `/api/blending/audit` | POST |
+| `/api/ai/chat`, `/api/ai/chat-tools`, `/api/ai/anomalies`, `/api/ai/pm-forecast` | POST |
+| `/api/compliance/thresholds` | GET/PUT |
+| `/api/compliance/evaluate` | GET |
+| `/api/cron/compliance-evaluate`, `/api/cron/pm-forecast-sweep` | POST |
 
 ## 6. Prioritized backlog
-### P0 (shipped in this cycle ✅)
-- [x] 8-file bulk seeder, override semantics
-- [x] Downtime removed from tiles → unified Alerts feed
-- [x] Raw Water + Recovery trendlines with labelled axes
-- [x] Blending well tagging + audit events
-- [x] Unified Alerts engine
+### P0 (shipped)
+All three cycles of user asks — see sections 4.1 → 4.8.
 
 ### P1 (next)
-- [ ] Sidebar compliance badge (count of open violations from
-      `compliance_snapshots`).
-- [ ] Strip residual "Auto" prefixes from Operations/Costs tabs.
+- [ ] Sidebar compliance badge (open-violation count).
+- [ ] Strip residual "Auto" prefixes in Operations/Costs tabs.
 - [ ] Uniform computed-field colouring via `ComputedInput`.
-- [ ] PM Scheduling DB migration (waiting for SQL) → frequency enum +
-      checklist popups.
-- [ ] Per-RO-train detailed parser for "MAMBALING/UMAPAD RO DATA" sheets.
-- [ ] Chemical consumption XLSX parser + inventory reconciliation.
+- [ ] PM Scheduling DB migration (waiting on user's SQL) → frequency
+      enum + checklist popups.
+- [ ] Per-RO-train parser for MAMBALING/UMAPAD RO DATA sheets.
+- [ ] Chemical Consumption XLSX parser + inventory reconciliation.
 
 ### P2 (backlog)
-- [ ] Email / push alerts (Resend or SendGrid) — **user skipped for now**.
+- [ ] Email / push alerts (Resend or SendGrid) — user explicitly
+      skipped; in-app Alerts card only.
 
 ## 7. Testing
-- Backend: `pytest backend/tests/test_pwri_backend.py -v` — **23/23
-  passing** as of iteration 2.
-- `/app/test_result.md` + `/app/test_reports/iteration_2.json`.
+- Backend: `pytest backend/tests/test_pwri_backend.py -v` —
+  **23/23 passing** including new "Bypass ·" title assertion (iter 3).
+- Frontend: source-verified in iter 3 (testing agent blocked by
+  Supabase "Confirm email" — no service-role key available). User can
+  self-verify interactively.
 
-## 8. Deployment (Vercel — user has unlinked repo for now)
-- `vercel.json` still valid; app architecture is serverless-friendly.
-- When re-linking, ensure env vars are set and the Python runtime is
-  `python3.11`.
+## 8. Deployment (Vercel)
+- `vercel.json` valid (Python 3.11 runtime + cron schedule). User has
+  unlinked the repo for now.
+- For CI / future e2e automation, either disable
+  "Confirm email" on the Supabase project OR seed a pre-confirmed user
+  + record credentials in `/app/memory/test_credentials.md`.
