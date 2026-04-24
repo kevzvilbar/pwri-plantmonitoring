@@ -569,3 +569,49 @@ agent_communication:
         
         ALL 11/11 TESTS PASSED - BOTH NEW BACKEND FEATURES ARE PRODUCTION READY
         No issues found - ready for frontend integration and user testing.
+
+    - agent: "main"
+      message: |
+        NEW BATCH 2026-04-24 — please test the following backend endpoints.
+        Use external REACT_APP_BACKEND_URL from /app/frontend/.env.
+
+        A) AI tool-calling chat — POST /api/ai/chat-tools
+         1. Body {"message":"What does NRW stand for?"} → 200, keys
+            {session_id, reply, plan, rows_fetched, took_ms}. Reply must
+            mention "Non-Revenue" (case-insensitive). plan may be null.
+         2. Validation: empty message → 422.
+         3. Body {"message":"Show me downtime events for Mambaling 3 in the last 90 days","debug":true}
+            → 200 with non-empty reply. Do NOT assert plan contents (LLM
+            may or may not plan a query — both OK).
+
+        B) Bulk seed — POST /api/import/seed-from-url (NO auth header)
+         1. Downtime-only target:
+            {"targets":[{"plant_name":"Mambaling 3","url":"https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/1mgob29d_Mambaling%203%202026_3.xlsx","source":"downtime"}]}
+            Expect 200 with files[0].downtime_events > 200,
+            inserted == 0, errors contains a "no-auth" notice.
+         2. Empty targets → 400.
+         3. Unreachable URL (e.g. https://example.com/nope.xlsx) →
+            200, files[0].errors has a "download:" failure message.
+
+        C) Downtime events — GET /api/downtime/events
+         1. After B.1, GET /api/downtime/events?plant_id=pseudo:mambaling%203&limit=5
+            → {count>=1, total_duration_hrs>0, by_subsystem not empty,
+               events[0].subsystem/cause/duration_hrs present}.
+         2. Date range filter date_from=2026-01-01&date_to=2026-01-31 →
+            every event_date starts with "2026-01".
+         3. Fetch with no filters respects `limit` cap.
+
+        D) Cron (serverless) — no CRON_SECRET set in env (dev)
+         1. POST /api/cron/compliance-evaluate → 200 with
+            {ok:true, plant_count>=0, results: []} (empty because no
+            plants/daily_plant_summary data in test DB).
+         2. POST /api/cron/pm-forecast-sweep → 200 with count>=0.
+
+        E) Regressions (one call each):
+         - GET /api/ai/health → {ok:true, model:"gpt-5.1"}
+         - GET /api/compliance/thresholds → thresholds has 10 keys.
+         - POST /api/import/parse-wellmeter with the Mambaling Q1 file
+           (erjf0y93_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx)
+           still returns 1 sheet, 90 rows.
+
+        Do NOT exercise the frontend (user will manually QA via /import).

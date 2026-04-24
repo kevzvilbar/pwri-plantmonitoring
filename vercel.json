@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/compliance-evaluate",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/pm-forecast-sweep",
+      "schedule": "30 17 * * *"
+    }
+  ],
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.11"
+    }
+  }
+}

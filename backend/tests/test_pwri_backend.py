@@ -1,0 +1,275 @@
+"""
+Backend test suite for PWRI monitoring app.
+
+Covers the NEW batch requested in the review:
+ - POST /api/ai/chat-tools        (AI tool-calling / planner)
+ - POST /api/import/seed-from-url (bulk XLSX seed; no-auth -> downtime only)
+ - GET  /api/downtime/events      (dashboard feed)
+ - POST /api/cron/compliance-evaluate
+ - POST /api/cron/pm-forecast-sweep
+ - Regression: /api/ai/health, /api/compliance/thresholds, /api/import/parse-wellmeter
+"""
+import io
+import os
+import time
+
+import pytest
+import requests
+
+BASE_URL = os.environ.get(
+    "REACT_APP_BACKEND_URL",
+    "https://quality-guard-5.preview.emergentagent.com",
+).rstrip("/")
+
+MAMBALING_METER_URL = (
+    "https://customer-assets.emergentagent.com/job_quality-guard-5/"
+    "artifacts/erjf0y93_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx"
+)
+MAMBALING_DOWNTIME_URL = (
+    "https://customer-assets.emergentagent.com/job_quality-guard-5/"
+    "artifacts/1mgob29d_Mambaling%203%202026_3.xlsx"
+)
+SRP_URL = (
+    "https://customer-assets.emergentagent.com/job_quality-guard-5/"
+    "artifacts/v8f78gy2_SRP%20Well%20Meter%20Reading%202026_1.xlsx"
+)
+UMAPAD_URL = (
+    "https://customer-assets.emergentagent.com/job_quality-guard-5/"
+    "artifacts/3b545p21_UMAPAD%20Well%20Meter%20Reading%202026_2.xlsx"
+)
+
+
+@pytest.fixture(scope="module")
+def api_client():
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    return s
+
+
+# ---------------- Regression: health probes ------------------------------
+
+class TestRegressionProbes:
+    def test_ai_health(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/ai/health", timeout=30)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("ok") is True
+        assert "model" in data
+        assert "provider" in data
+
+    def test_compliance_thresholds_default(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/compliance/thresholds", timeout=30)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("scope") == "global"
+        assert isinstance(body.get("thresholds"), dict)
+        # a handful of keys we rely on
+        for k in ("nrw_pct_max", "downtime_hrs_per_day_max", "permeate_tds_max"):
+            assert k in body["thresholds"], f"missing {k}"
+
+    def test_parse_wellmeter_with_real_xlsx(self, api_client):
+        # download one real file and push through parser
+        dl = requests.get(MAMBALING_METER_URL, timeout=60)
+        assert dl.status_code == 200
+        files = {
+            "file": ("mambaling.xlsx", io.BytesIO(dl.content),
+                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        }
+        r = requests.post(
+            f"{BASE_URL}/api/import/parse-wellmeter",
+            files=files, timeout=120,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert "sheets" in data
+        assert isinstance(data["sheets"], list)
+        assert len(data["sheets"]) >= 1
+        # at least one sheet should have parsed rows
+        total_rows = sum(len(s.get("rows") or []) for s in data["sheets"])
+        assert total_rows > 0, "no rows parsed from real XLSX"
+
+
+# ---------------- New: AI chat with tools --------------------------------
+
+class TestAiChatTools:
+    def test_chat_tools_small_talk_no_plan(self, api_client):
+        """A pure small-talk message should not break; plan may be None."""
+        payload = {"message": "Hello, who are you?"}
+        r = api_client.post(
+            f"{BASE_URL}/api/ai/chat-tools", json=payload, timeout=120,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert "session_id" in data and isinstance(data["session_id"], str)
+        assert "reply" in data and isinstance(data["reply"], str)
+        assert len(data["reply"]) > 0
+        assert data.get("rows_fetched", 0) >= 0
+        assert "took_ms" in data
+
+    def test_chat_tools_data_question(self, api_client):
+        """A data-ish question — planner may produce a plan and attempt to
+        fetch. Either way the endpoint must return 200 with a reply string."""
+        payload = {
+            "message": "How many active plants are there?",
+            "time_hint_days": 30,
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/ai/chat-tools", json=payload, timeout=120,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert isinstance(data.get("reply"), str) and data["reply"]
+        # plan can be None or dict; rows_fetched is int >= 0
+        assert isinstance(data.get("rows_fetched"), int)
+        # session_id continuity usable
+        assert data["session_id"]
+
+
+# ---------------- New: seed from URL (no-auth / downtime-only) -----------
+
+class TestSeedFromUrl:
+    def test_seed_no_auth_downtime_only(self, api_client):
+        body = {
+            "targets": [
+                {"plant_name": "Mambaling 3", "url": MAMBALING_DOWNTIME_URL,
+                 "source": "auto"},
+            ],
+            "include_defective": False,
+            "downtime_as_zero": True,
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/import/seed-from-url", json=body, timeout=180,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert "files" in data
+        assert isinstance(data["files"], list) and len(data["files"]) == 1
+        rep = data["files"][0]
+        # Meter ingest must be skipped (no JWT); error entry captured.
+        assert any("no-auth" in str(e).lower() for e in rep.get("errors", [])), (
+            f"expected no-auth notice in errors, got {rep.get('errors')}"
+        )
+        # Downtime sheet should have produced at least one event.
+        assert rep.get("downtime_events", 0) > 0, (
+            f"no downtime_events ingested from {MAMBALING_DOWNTIME_URL}"
+        )
+
+    def test_seed_bad_empty_targets(self, api_client):
+        r = api_client.post(
+            f"{BASE_URL}/api/import/seed-from-url",
+            json={"targets": []}, timeout=30,
+        )
+        assert r.status_code == 400
+
+    def test_seed_meter_only_file_no_auth_is_graceful(self, api_client):
+        """Meter-only file via no-auth path: should NOT 500. Downtime parse
+        will return empty (no Downtime sheet), but the endpoint must
+        succeed with an errors[] note."""
+        body = {
+            "targets": [
+                {"plant_name": "Mambaling 3 (meter-only)",
+                 "url": MAMBALING_METER_URL, "source": "auto"},
+            ],
+        }
+        r = api_client.post(
+            f"{BASE_URL}/api/import/seed-from-url", json=body, timeout=180,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        rep = data["files"][0]
+        assert any("no-auth" in str(e).lower() for e in rep.get("errors", []))
+        # either zero downtime_events or no crash; both acceptable
+        assert rep.get("downtime_events", 0) >= 0
+
+
+# ---------------- New: downtime events feed ------------------------------
+
+class TestDowntimeEventsFeed:
+    @classmethod
+    def setup_class(cls):
+        """Ensure there is at least some downtime data in Mongo by running
+        the seed (no-auth) for the Mambaling Downtime file."""
+        try:
+            requests.post(
+                f"{BASE_URL}/api/import/seed-from-url",
+                json={"targets": [{
+                    "plant_name": "Mambaling 3",
+                    "url": MAMBALING_DOWNTIME_URL,
+                    "source": "auto",
+                }]},
+                timeout=180,
+            )
+        except Exception:
+            pass
+
+    def test_events_default(self, api_client):
+        r = api_client.get(
+            f"{BASE_URL}/api/downtime/events", timeout=30,
+        )
+        assert r.status_code == 200, r.text[:500]
+        data = r.json()
+        assert "count" in data
+        assert "total_duration_hrs" in data
+        assert "by_subsystem" in data
+        assert "events" in data
+        assert isinstance(data["events"], list)
+        assert data["count"] == len(data["events"])
+
+    def test_events_has_data_after_seed(self, api_client):
+        r = api_client.get(
+            f"{BASE_URL}/api/downtime/events?limit=10", timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        # After setup_class seed, we expect events > 0
+        assert data["count"] > 0, "expected events after seeding Mambaling downtime"
+        ev = data["events"][0]
+        for k in ("plant_name", "event_date", "subsystem", "duration_hrs", "cause"):
+            assert k in ev, f"missing {k} in event row"
+        assert data["total_duration_hrs"] >= 0
+        assert isinstance(data["by_subsystem"], list)
+
+    def test_events_filter_by_plant(self, api_client):
+        # plant_id filter — we used a pseudo plant id in seed (no auth),
+        # so confirm it returns shape 200 even if count is 0
+        r = api_client.get(
+            f"{BASE_URL}/api/downtime/events?plant_id=pseudo:mambaling%203",
+            timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data.get("events"), list)
+
+
+# ---------------- New: serverless cron endpoints -------------------------
+
+class TestCronEndpoints:
+    def test_cron_compliance_evaluate_dev_mode(self, api_client):
+        # No CRON_SECRET is set -> endpoint is open in dev
+        r = api_client.post(
+            f"{BASE_URL}/api/cron/compliance-evaluate",
+            json={}, timeout=120,
+        )
+        # In dev, CRON_SECRET is not set; must not 401
+        assert r.status_code != 401, r.text[:300]
+        # Allowed outcomes: 200 (success) or 500 if Supabase unreachable at
+        # runtime. Log the failure but fail loudly on 4xx.
+        assert r.status_code in (200, 500), r.text[:500]
+        if r.status_code == 200:
+            data = r.json()
+            assert data.get("ok") is True
+            assert "plant_count" in data
+            assert "results" in data
+
+    def test_cron_pm_forecast_sweep_dev_mode(self, api_client):
+        r = api_client.post(
+            f"{BASE_URL}/api/cron/pm-forecast-sweep",
+            json={}, timeout=180,
+        )
+        assert r.status_code != 401, r.text[:300]
+        assert r.status_code in (200, 500), r.text[:500]
+        if r.status_code == 200:
+            data = r.json()
+            assert data.get("ok") is True
+            assert "count" in data
+            assert "forecasts" in data

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
+import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -61,6 +62,7 @@ export default function Dashboard() {
   const { data: plants } = usePlants();
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
+  const [downtimeOpen, setDowntimeOpen] = useState(false);
 
   const visiblePlants = useMemo(
     () => (selectedPlantId ? plants?.filter((p) => p.id === selectedPlantId) : plants),
@@ -208,7 +210,8 @@ export default function Dashboard() {
 
       {/* Operations row */}
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
-        <StatCard icon={Timer} label="Downtime Hrs" value={fmtNum(downtime, 1)} unit="hr" />
+        <StatCard icon={Timer} label="Downtime Hrs" value={fmtNum(downtime, 1)} unit="hr"
+          onClick={() => setDowntimeOpen(true)} />
         <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³" />
         <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
@@ -286,6 +289,12 @@ export default function Dashboard() {
       </Card>
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
+      <DowntimeEventsModal
+        open={downtimeOpen}
+        onClose={() => setDowntimeOpen(false)}
+        plantId={selectedPlantId || undefined}
+        plantName={selectedPlantId ? visiblePlants?.[0]?.name : 'All plants'}
+      />
     </div>
   );
 }

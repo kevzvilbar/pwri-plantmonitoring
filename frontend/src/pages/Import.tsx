@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle,
-  Droplet, Activity, Filter, Loader2, Download, RefreshCcw,
+  Droplet, Activity, Filter, Loader2, Download, RefreshCcw, Rocket,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -323,6 +323,78 @@ export default function Import() {
     }
   }, [result, plantId, wells, mapping, includeDefective, includeDowntimeAsZero, user]);
 
+  // ---------------- Bulk seed 4 attached samples ----------------
+  const [seeding, setSeeding] = useState(false);
+  const [seedLog, setSeedLog] = useState<string[]>([]);
+  const [seedReport, setSeedReport] = useState<any | null>(null);
+
+  const runBulkSeed = useCallback(async () => {
+    const TARGETS = [
+      {
+        plant_name: 'Mambaling 3',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/erjf0y93_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'Mambaling 3',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/1mgob29d_Mambaling%203%202026_3.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'SRP',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/v8f78gy2_SRP%20Well%20Meter%20Reading%202026_1.xlsx',
+        source: 'auto',
+      },
+      {
+        plant_name: 'Umapad',
+        url: 'https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/3b545p21_UMAPAD%20Well%20Meter%20Reading%202026_2.xlsx',
+        source: 'auto',
+      },
+    ];
+    setSeeding(true);
+    setSeedLog(['Requesting ingest of 4 attached files…']);
+    setSeedReport(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Please sign in to seed data');
+      const res = await fetch(`${(import.meta.env.REACT_APP_BACKEND_URL as string) || ''}/api/import/seed-from-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          targets: TARGETS,
+          include_defective: false,
+          downtime_as_zero: true,
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      setSeedReport(json);
+      const files = json.files ?? [];
+      setSeedLog((l) => [
+        ...l,
+        ...files.map((f: any) =>
+          `${f.plant}: +${f.inserted} ins · ~${f.updated} upd · ${f.downtime_events} downtime-events${f.errors?.length ? ' · errors: ' + f.errors.slice(0, 2).join(' | ') : ''}`,
+        ),
+        json.ok ? '✅ Seed complete' : '⚠ Seed finished with warnings',
+      ]);
+      toast.success(
+        `Seeded ${files.reduce((s: number, f: any) => s + (f.inserted || 0), 0)} rows + ` +
+        `${files.reduce((s: number, f: any) => s + (f.downtime_events || 0), 0)} downtime events`,
+      );
+    } catch (e: any) {
+      toast.error(`Seed failed: ${e.message || e}`);
+      setSeedLog((l) => [...l, `❌ ${e.message || e}`]);
+    } finally {
+      setSeeding(false);
+    }
+  }, []);
+
   // ---------------- Export cleaned CSV ----------------
   const downloadCleanedCsv = useCallback(() => {
     if (!result) return;
@@ -358,6 +430,55 @@ export default function Import() {
           Upload plant XLSX files — auto-detects defective meters, shut-offs, blends, new-meter resets & inconsistent readings.
         </p>
       </div>
+
+      {/* --- One-click seed of the 4 provided sample XLSX files --- */}
+      <Card className="p-4 border-sky-200/60 bg-sky-50/40 dark:bg-sky-950/10">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="h-9 w-9 rounded-md bg-gradient-to-br from-sky-500 to-violet-600 text-white flex items-center justify-center shrink-0">
+            <Rocket className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold">Seed attached samples</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Ingests <b>Mambaling 3 (Q1 + Q2)</b>, <b>SRP</b> &amp; <b>Umapad</b> into Supabase.
+              Existing rows for the same date are overridden, and the Q2 file&apos;s <i>Downtime</i>
+              sheet is parsed into clickable dashboard events.
+            </p>
+          </div>
+          <Button
+            onClick={runBulkSeed}
+            disabled={seeding}
+            data-testid="import-seed-samples-btn"
+            className="shrink-0"
+          >
+            {seeding ? (
+              <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Seeding…</>
+            ) : (
+              <><Rocket className="h-3.5 w-3.5 mr-1" /> Seed 4 files</>
+            )}
+          </Button>
+        </div>
+        {seedLog.length > 0 && (
+          <div className="mt-3 rounded-md border bg-card p-2 max-h-40 overflow-auto text-[11px] font-mono-num space-y-0.5"
+               data-testid="import-seed-log">
+            {seedLog.map((l, i) => <div key={i}>{l}</div>)}
+          </div>
+        )}
+        {seedReport && (
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+            {seedReport.files?.map((f: any, i: number) => (
+              <Badge key={i} variant="outline" className="font-normal"
+                     data-testid={`import-seed-result-${i}`}>
+                <span className="font-medium">{f.plant}</span>
+                <span className="ml-1 text-emerald-700">+{f.inserted}</span>
+                <span className="ml-1 text-sky-700">~{f.updated}</span>
+                <span className="ml-1 text-amber-700">▲{f.downtime_events}</span>
+                {f.errors?.length ? <span className="ml-1 text-rose-700">✗{f.errors.length}</span> : null}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* --- Step 1: Upload --- */}
       <Card className="p-4">

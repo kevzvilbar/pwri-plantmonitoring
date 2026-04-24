@@ -60,13 +60,20 @@ READ_WHITELIST: dict[str, set[str]] = {
 ALLOWED_OPS = {"eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "in"}
 
 
-def _client() -> Optional[Client]:
+def _client(access_token: Optional[str] = None) -> Optional[Client]:
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_ANON_KEY")
     if not url or not key:
         log.warning("SUPABASE_URL / SUPABASE_ANON_KEY not set")
         return None
-    return create_client(url, key)
+    client = create_client(url, key)
+    if access_token:
+        # Attach user's JWT so RLS policies apply under their identity
+        try:
+            client.postgrest.auth(access_token)
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to attach user JWT to Supabase client")
+    return client
 
 
 def is_available() -> bool:

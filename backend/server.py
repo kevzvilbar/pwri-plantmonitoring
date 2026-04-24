@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, List, Optional
 import uuid
 from datetime import datetime
 
@@ -16,10 +16,15 @@ from ai_service import (
     ChatRequest, AnomalyRequest,
     chat_turn, list_sessions, get_session, detect_anomalies,
 )
+from ai_tools import ChatWithToolsRequest, chat_with_tools
 from compliance_service import (
     Thresholds, ViolationsPayload, EvaluateResult,
     PmForecastRequest,
     get_thresholds, save_thresholds, evaluate, make_summary, forecast_pm,
+)
+from seed_service import seed_from_urls
+from cron_service import (
+    verify_secret, run_compliance_evaluate, run_pm_forecast_sweep,
 )
 
 
@@ -147,6 +152,18 @@ async def ai_anomalies(req: AnomalyRequest):
         raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
 
 
+@api_router.post("/ai/chat-tools")
+async def ai_chat_tools(req: ChatWithToolsRequest, x_user_id: Optional[str] = Header(None)):
+    """AI chat that can query Supabase via a constrained planner."""
+    try:
+        return await chat_with_tools(db, x_user_id, req)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logging.exception("ai_chat_tools failed")
+        raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
+
+
 @api_router.get("/ai/health")
 async def ai_health():
     """Quick probe to verify EMERGENT_LLM_KEY is configured."""
@@ -210,6 +227,115 @@ async def ai_pm_forecast(req: PmForecastRequest):
     except Exception as e:  # noqa: BLE001
         logging.exception("pm_forecast failed")
         raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
+
+
+# ---- XLSX seeding (bulk ingest from URLs) --------------------------------
+
+class SeedTarget(BaseModel):
+    plant_name: str
+    url: str
+    source: str = "auto"  # 'auto' | 'meter' | 'downtime'
+
+
+class SeedRequest(BaseModel):
+    targets: List[SeedTarget]
+    include_defective: bool = False
+    downtime_as_zero: bool = True
+
+
+@api_router.post("/import/seed-from-url")
+async def import_seed_from_url(
+    body: SeedRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Download one or more XLSX files from public URLs and upsert them
+    into Supabase + Mongo. Pass the user's Supabase JWT via the
+    `Authorization: Bearer <jwt>` header so RLS policies apply under
+    their identity.
+    """
+    if not body.targets:
+        raise HTTPException(status_code=400, detail="No targets supplied")
+    token: Optional[str] = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip() or None
+    try:
+        report = await seed_from_urls(
+            db,
+            [t.dict() for t in body.targets],
+            include_defective=body.include_defective,
+            downtime_as_zero=body.downtime_as_zero,
+            access_token=token,
+        )
+        return report
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logging.exception("seed_from_urls failed")
+        raise HTTPException(status_code=500, detail=f"Seed failed: {e}")
+
+
+# ---- Downtime events (dashboard list) ------------------------------------
+
+@api_router.get("/downtime/events")
+async def downtime_events(
+    plant_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 500,
+):
+    q: dict[str, Any] = {}
+    if plant_id:
+        q["plant_id"] = plant_id
+    if date_from or date_to:
+        r: dict[str, Any] = {}
+        if date_from:
+            r["$gte"] = date_from
+        if date_to:
+            r["$lte"] = date_to
+        q["event_date"] = r
+    cursor = (db.downtime_events.find(q, {"_id": 0})
+              .sort("event_date", -1)
+              .limit(max(1, min(limit, 2000))))
+    docs: list[dict[str, Any]] = [d async for d in cursor]
+    # summary
+    total_hours = sum(float(d.get("duration_hrs") or 0) for d in docs)
+    by_sub: dict[str, float] = {}
+    for d in docs:
+        sub = d.get("subsystem") or "Plant"
+        by_sub[sub] = by_sub.get(sub, 0.0) + float(d.get("duration_hrs") or 0)
+    return {
+        "count": len(docs),
+        "total_duration_hrs": round(total_hours, 2),
+        "by_subsystem": [{"subsystem": k, "hours": round(v, 2)} for k, v in
+                          sorted(by_sub.items(), key=lambda x: -x[1])],
+        "events": docs,
+    }
+
+
+# ---- Serverless-friendly cron endpoints ----------------------------------
+
+@api_router.post("/cron/compliance-evaluate")
+async def cron_compliance_evaluate(x_cron_secret: Optional[str] = Header(None)):
+    verify_secret(x_cron_secret)
+    try:
+        return await run_compliance_evaluate(db)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logging.exception("cron compliance failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/cron/pm-forecast-sweep")
+async def cron_pm_forecast_sweep(x_cron_secret: Optional[str] = Header(None)):
+    verify_secret(x_cron_secret)
+    try:
+        return await run_pm_forecast_sweep(db)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logging.exception("cron pm sweep failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Include the router in the main app
