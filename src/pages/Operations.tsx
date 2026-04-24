@@ -560,9 +560,12 @@ function PowerForm() {
     <div className="space-y-3">
       <Card className="p-3 space-y-3">
         <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setEditingId(null); }} /></div>
-        <div><Label>Date & time</Label><Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} /></div>
         <div>
-          <Label>Meter reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
+          <Label>Date &amp; Time</Label>
+          <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
+        </div>
+        <div>
+          <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
           <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw kWh meter value" />
           {previous != null && <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{fmtNum(previous)}</span> {daily != null && <>· Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}</div>}
         </div>
