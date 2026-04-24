@@ -1,8 +1,8 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 3)_
+_Last updated: 2026-04-24 (iteration 4)_
 
-## 1. Problem Statement (verbatim — consolidated across 3 iterations)
+## 1. Problem Statement (verbatim — consolidated across 4 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
 > XLSX files (Mambaling Q1+Q2, SRP×2, Umapad×2, SRP MCWD, Guizo); remove
 > standalone Downtime field in favour of unified Alerts; fix Dashboard
@@ -15,6 +15,13 @@ _Last updated: 2026-04-24 (iteration 3)_
 > LatLon GPS fields on Locators and Wells; replace Blending Well
 > terminology with "Mark As Bypass Well" (require meter reading before
 > marking); Title Case across views (except Notes).
+> Iteration 4: "scan for error … rescan everything correct possible
+> error and forget about vercel." + "Deletion Rules: Only Admin can
+> delete users; Admin or Manager can delete plants. Check dependencies
+> (logs, assigned plants/wells, pending tasks, user accounts). Soft
+> Delete → mark Inactive/Suspended (keeps audit trail, prevents login).
+> Hard Delete → only if no active dependencies. Cascade via
+> archive/reassign."
 
 ## 2. Personas
 - Plant operator — mobile-first reading entry, GPS capture, tag bypass
@@ -111,10 +118,28 @@ _Last updated: 2026-04-24 (iteration 3)_
 | `/api/compliance/thresholds` | GET/PUT |
 | `/api/compliance/evaluate` | GET |
 | `/api/cron/compliance-evaluate`, `/api/cron/pm-forecast-sweep` | POST |
+| `/api/admin/users/{id}/dependencies`, `/api/admin/plants/{id}/dependencies` | GET |
+| `/api/admin/users/{id}/soft-delete`, `/api/admin/plants/{id}/soft-delete` | POST |
+| `/api/admin/users/{id}`, `/api/admin/plants/{id}` | DELETE |
 
 ## 6. Prioritized backlog
 ### P0 (shipped)
 All three cycles of user asks — see sections 4.1 → 4.8.
+Iteration 4 (shipped):
+- AI backend migrated from raw `openai` lib → `emergentintegrations`
+  (EMERGENT_LLM_KEY, default gpt-5.1 openai). Fixes latent
+  `_make_chat`/`UserMessage` imports in compliance_service.
+- TypeScript build fixed in `Plants.tsx` (wells insert/display
+  properly typed via `Database['public']['Tables']['wells']`).
+- Deletion feature: RBAC endpoints (`/api/admin/{users,plants}/…`) +
+  dependency scanner + new `/admin` console page with Users & Plants
+  tabs + inline Delete menus on Plants list/detail and Employees.
+  Soft-delete reuses `user_profiles.status=Suspended` and
+  `plants.status=Inactive`; hard-delete blocked while references
+  exist across ~20 linked tables.
+- Cron decorator regression fix on `/api/cron/compliance-evaluate`
+  (section comment was eating the `@api_router.post` line).
+- Cleanup: removed stray `/app/=0.27.0` and `/app/frontend/replit.md`.
 
 ### P1 (next)
 - [ ] Sidebar compliance badge (open-violation count).
@@ -130,15 +155,23 @@ All three cycles of user asks — see sections 4.1 → 4.8.
       skipped; in-app Alerts card only.
 
 ## 7. Testing
-- Backend: `pytest backend/tests/test_pwri_backend.py -v` —
-  **23/23 passing** including new "Bypass ·" title assertion (iter 3).
-- Frontend: source-verified in iter 3 (testing agent blocked by
-  Supabase "Confirm email" — no service-role key available). User can
-  self-verify interactively.
+- Backend: `pytest backend/tests/ -v` — **44/44 passing** (iter 4)
+  including 21 new tests in `test_ai_and_admin.py` covering:
+  (1) /api/ai/health returns gpt-5.1 openai;
+  (2) /api/ai/chat returns non-empty reply (emergentintegrations wired);
+  (3) /api/ai/anomalies + /api/ai/sessions response shapes;
+  (4) all 6 admin endpoints return 401 without token and 401/403 (never
+      500) on malformed bearer.
+- Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean. Source-
+  verified in iter 3/4 (testing agent blocked by Supabase "Confirm
+  email" — no service-role key available). User can self-verify
+  interactively once signed in as Admin/Manager.
 
-## 8. Deployment (Vercel)
-- `vercel.json` valid (Python 3.11 runtime + cron schedule). User has
-  unlinked the repo for now.
-- For CI / future e2e automation, either disable
-  "Confirm email" on the Supabase project OR seed a pre-confirmed user
-  + record credentials in `/app/memory/test_credentials.md`.
+## 8. Deployment
+- Vercel work was explicitly abandoned by the user in iter 4. App is
+  hosted via Emergent preview + supervisor (FastAPI on :8001, Vite on
+  :3000). `vercel.json` remains in the repo but is not maintained.
+- Hard-delete of a user removes `user_profiles` + `user_roles` only —
+  `auth.users` row requires the Supabase service-role key and should be
+  removed from the Supabase dashboard manually. The UI response
+  documents this.
