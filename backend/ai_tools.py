@@ -23,13 +23,14 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from supa_client import READ_WHITELIST, ALLOWED_OPS, safe_select, is_available
+from supa_client import READ_WHITELIST, safe_select
+from ai_service import _chat_complete, _safe_parse_json
 
 log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Planner prompt — enumerates the schema the model is allowed to touch.
+# Planner prompt
 # ---------------------------------------------------------------------------
 
 def _schema_hint() -> str:
@@ -90,7 +91,7 @@ answer the question, say so briefly and suggest what to try next."""
 class ChatWithToolsRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: Optional[str] = None
-    plant_hint_id: Optional[str] = None  # pre-filter to this plant if set
+    plant_hint_id: Optional[str] = None
     time_hint_days: Optional[int] = None
     debug: bool = False
 
@@ -113,9 +114,6 @@ def _inject_hints(
     plant_hint_id: Optional[str],
     time_hint_days: Optional[int],
 ) -> dict[str, Any]:
-    """If the user already picked a plant, enforce plant_id filter unless planner
-    explicitly set a different one. Same idea for time filter when asked for
-    'recent'."""
     filters = list(plan.get("filters") or [])
 
     if plant_hint_id:
@@ -124,7 +122,6 @@ def _inject_hints(
             filters.append({"column": "plant_id", "op": "eq", "value": plant_hint_id})
 
     if time_hint_days and time_hint_days > 0:
-        # figure out which time column this table uses
         tcol_map = {
             "well_readings": "reading_datetime",
             "locator_readings": "reading_datetime",
@@ -150,19 +147,16 @@ async def chat_with_tools(
     user_id: Optional[str],
     req: ChatWithToolsRequest,
 ) -> ChatWithToolsResponse:
-    from ai_service import _make_chat, _safe_parse_json, UserMessage  # lazy import
-
     t0 = datetime.utcnow()
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:12]}"
 
-    # --- Step 1: plan --------------------------------------------------------
-    planner = _make_chat(
-        session_id=f"plan_{uuid.uuid4().hex[:10]}",
-        system=PLANNER_SYSTEM, provider=None, model=None,
-    )
-    plan_raw = await planner.send_message(UserMessage(text=req.message))
-    if not isinstance(plan_raw, str):
-        plan_raw = str(plan_raw)
+    # --- Step 1: plan -------------------------------------------------------
+    plan_messages = [
+        {"role": "system", "content": PLANNER_SYSTEM},
+        {"role": "user", "content": req.message},
+    ]
+
+    plan_raw = await _chat_complete(plan_messages)
 
     try:
         plan_obj = _safe_parse_json(plan_raw)
@@ -188,34 +182,38 @@ async def chat_with_tools(
                 desc=bool(plan.get("desc")),
                 limit=int(plan.get("limit") or 100),
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             error = f"Data fetch failed: {e}"
             log.warning("safe_select failed: %s", e)
 
     # --- Step 3: answer -----------------------------------------------------
-    answerer = _make_chat(
-        session_id=session_id, system=ANSWER_SYSTEM, provider=None, model=None,
-    )
     answer_payload: dict[str, Any] = {
         "question": req.message,
         "data_available": bool(fetched) and not error,
         "row_count": len(fetched),
-        "sample_rows": fetched[:100],  # keep a cap
+        "sample_rows": fetched[:100],
     }
     if error:
         answer_payload["error"] = error
 
+    answer_messages = [
+        {"role": "system", "content": ANSWER_SYSTEM},
+        {
+            "role": "user",
+            "content": (
+                "QUESTION: " + req.message +
+                "\n\nDATA: " + json.dumps(answer_payload, default=str)[:12000]
+            ),
+        },
+    ]
+
     try:
-        reply = await answerer.send_message(
-            UserMessage(text="QUESTION: " + req.message +
-                        "\n\nDATA: " + json.dumps(answer_payload, default=str)[:12000]),
-        )
-        reply_text = str(reply)
-    except Exception as e:  # noqa: BLE001
+        reply_text = await _chat_complete(answer_messages)
+    except Exception as e:
         log.exception("answerer failed")
         reply_text = f"⚠ Could not produce an answer: {e}"
 
-    # Persist full turn to Mongo (same collection as plain chat).
+    # Persist to Mongo
     now = datetime.utcnow()
     try:
         await db.ai_conversations.update_one(
@@ -242,7 +240,7 @@ async def chat_with_tools(
             },
             upsert=True,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("Mongo persist failed (non-fatal)")
 
     took_ms = int((datetime.utcnow() - t0).total_seconds() * 1000)
