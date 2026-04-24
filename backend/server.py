@@ -355,16 +355,25 @@ async def blending_toggle(body: BlendingToggleRequest,
     return {"ok": True, "is_blending": False, "well_id": body.well_id}
 
 
+class BlendingAuditRequest(BaseModel):
+    plant_id: str
+    well_id: str
+    well_name: Optional[str] = None
+    plant_name: Optional[str] = None
+    event_date: str
+    volume_m3: float
+
+
 @api_router.post("/blending/audit")
-async def blending_log_event(body: dict):
+async def blending_log_event(body: BlendingAuditRequest):
     """Record a blending event (used when a blending well's volume > 0)."""
     doc = {
-        "plant_id": body.get("plant_id"),
-        "well_id": body.get("well_id"),
-        "well_name": body.get("well_name"),
-        "plant_name": body.get("plant_name"),
-        "event_date": body.get("event_date"),
-        "volume_m3": body.get("volume_m3"),
+        "plant_id": body.plant_id,
+        "well_id": body.well_id,
+        "well_name": body.well_name or "",
+        "plant_name": body.plant_name or "",
+        "event_date": body.event_date,
+        "volume_m3": body.volume_m3,
         "noted_at": datetime.utcnow(),
     }
     await db.blending_events.insert_one(doc)
@@ -458,7 +467,8 @@ async def alerts_feed(plant_id: Optional[str] = None,
     sev_rank = {"high": 0, "medium": 1, "low": 2, "info": 3}
     alerts.sort(key=lambda a: (sev_rank.get(a.get("severity", "info"), 9),
                                 -int(str(a.get("date", "")).replace("-", "") or 0)))
-    return {"count": len(alerts), "alerts": alerts[:80]}
+    capped = alerts[:80]
+    return {"count": len(capped), "alerts": capped}
 
 
 # ---- Serverless-friendly cron endpoints ----------------------------------
