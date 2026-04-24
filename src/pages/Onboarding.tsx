@@ -39,9 +39,15 @@ export default function Onboarding() {
     if (!form.username || !form.first_name || !form.last_name) { toast.error('Fill required fields'); return; }
     if (form.plant_assignments.length === 0) { toast.error('Assign at least one plant'); return; }
     setBusy(true);
-    const { error } = await supabase.from('user_profiles').update({
-      ...form, profile_complete: true, status: 'Active',
-    }).eq('id', user.id);
+    const { error } = await supabase.rpc('complete_onboarding', {
+      _username: form.username,
+      _first_name: form.first_name,
+      _middle_name: form.middle_name || null,
+      _last_name: form.last_name,
+      _suffix: form.suffix || null,
+      _designation: form.designation || null,
+      _plant_assignments: form.plant_assignments,
+    });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     await refreshProfile();
