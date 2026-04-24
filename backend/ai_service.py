@@ -5,8 +5,8 @@ Provides:
   - /api/ai/chat      : multi-turn conversational Q&A (message history persisted in Mongo)
   - /api/ai/anomalies : stateless batch anomaly detection on a list of readings
 
-Uses EMERGENT_LLM_KEY via the `emergentintegrations` library.
-Default model: OpenAI gpt-5.1 (recommended per playbook) — overridable from frontend.
+Uses OPENAI_API_KEY via the standard `openai` library.
+Default model: gpt-4o
 """
 from __future__ import annotations
 
@@ -18,14 +18,12 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
-
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 log = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER = "openai"
-DEFAULT_MODEL = "gpt-5.1"
+DEFAULT_MODEL = "gpt-4o"
 
 # --- System prompts -------------------------------------------------------
 
@@ -80,9 +78,8 @@ Do not include any prose outside the JSON.
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: Optional[str] = None
-    provider: Optional[str] = None
+    provider: Optional[str] = None   # kept for API compatibility, ignored
     model: Optional[str] = None
-    # Optional data snippet to ground this turn (e.g. filtered readings)
     context: Optional[dict[str, Any]] = None
 
 
@@ -94,7 +91,7 @@ class ChatResponse(BaseModel):
 
 class AnomalyRequest(BaseModel):
     readings: list[dict[str, Any]] = Field(..., min_items=0, max_items=2000)
-    provider: Optional[str] = None
+    provider: Optional[str] = None   # kept for API compatibility, ignored
     model: Optional[str] = None
 
 
@@ -105,24 +102,16 @@ class AnomalyResponse(BaseModel):
 
 # --- Helpers ---------------------------------------------------------------
 
-def _make_chat(session_id: str, system: str, provider: Optional[str], model: Optional[str]) -> LlmChat:
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
+def _get_client() -> AsyncOpenAI:
+    key = os.environ.get("OPENAI_API_KEY", "")
     if not key:
         raise RuntimeError(
-            "EMERGENT_LLM_KEY is not set on the backend. Add it to /app/backend/.env.",
+            "OPENAI_API_KEY is not set. Add it to your environment variables."
         )
-    p = (provider or DEFAULT_PROVIDER).lower()
-    m = model or DEFAULT_MODEL
-    chat = LlmChat(
-        api_key=key,
-        session_id=session_id,
-        system_message=system,
-    ).with_model(p, m)
-    return chat
+    return AsyncOpenAI(api_key=key)
 
 
 def _strip_code_fences(s: str) -> str:
-    """LLMs sometimes wrap JSON in ```json ... ``` fences."""
     s = s.strip()
     if s.startswith("```"):
         s = re.sub(r"^```[a-zA-Z]*\n?", "", s)
@@ -135,7 +124,6 @@ def _safe_parse_json(s: str) -> dict[str, Any]:
     try:
         return json.loads(s)
     except json.JSONDecodeError:
-        # Try to grab first {...} block
         m = re.search(r"\{[\s\S]*\}", s)
         if m:
             try:
@@ -143,6 +131,21 @@ def _safe_parse_json(s: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 pass
         raise
+
+
+async def _chat_complete(
+    messages: list[dict[str, str]],
+    model: Optional[str] = None,
+) -> str:
+    """Single wrapper around OpenAI chat completions."""
+    client = _get_client()
+    response = await client.chat.completions.create(
+        model=model or DEFAULT_MODEL,
+        messages=messages,
+        max_tokens=1024,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content or ""
 
 
 # --- Public service methods ------------------------------------------------
@@ -154,36 +157,43 @@ async def chat_turn(
 ) -> ChatResponse:
     """
     Persists the turn in `ai_conversations` (Mongo) and runs the model.
-
-    Mongo doc shape:
-      { _id (uuid), user_id, session_id, messages: [{role, content, created_at}], updated_at }
+    Loads full message history from Mongo to maintain multi-turn context.
     """
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:12]}"
-
-    # Restore persisted messages for the session so the model gets context,
-    # BUT emergentintegrations LlmChat already persists history server-side per
-    # session_id in its own store. We still keep our own Mongo copy for UI.
     now = datetime.utcnow()
 
-    # Build the user payload: include optional data snippet for grounding
+    # Build user text with optional data grounding
     user_text = req.message
     if req.context:
         try:
             ctx_json = json.dumps(req.context, default=str)[:8000]
             user_text = f"{req.message}\n\nDATA: {ctx_json}"
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
+    # Load existing conversation history from Mongo
+    messages: list[dict[str, str]] = [{"role": "system", "content": CHAT_SYSTEM}]
     try:
-        chat = _make_chat(session_id, CHAT_SYSTEM, req.provider, req.model)
-        reply = await chat.send_message(UserMessage(text=user_text))
-        if not isinstance(reply, str):
-            reply = str(reply)
-    except Exception as e:  # noqa: BLE001
+        doc = await db.ai_conversations.find_one({"session_id": session_id})
+        if doc:
+            for m in (doc.get("messages") or []):
+                role = m.get("role")
+                content = m.get("content")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": content})
+    except Exception:
+        log.exception("Failed to load conversation history (non-fatal)")
+
+    # Append new user message
+    messages.append({"role": "user", "content": user_text})
+
+    try:
+        reply = await _chat_complete(messages, model=req.model)
+    except Exception as e:
         log.exception("chat_turn failed")
         raise RuntimeError(f"AI call failed: {e}") from e
 
-    # Persist turn to Mongo (append to messages array, upsert session doc)
+    # Persist turn to Mongo
     try:
         await db.ai_conversations.update_one(
             {"session_id": session_id},
@@ -207,7 +217,7 @@ async def chat_turn(
             },
             upsert=True,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("Mongo persist failed (non-fatal)")
 
     return ChatResponse(session_id=session_id, reply=reply, created_at=datetime.utcnow())
@@ -220,7 +230,7 @@ async def list_sessions(db, user_id: Optional[str], limit: int = 20) -> list[dic
     cursor = db.ai_conversations.find(
         q,
         {"session_id": 1, "updated_at": 1, "created_at": 1,
-         "messages": {"$slice": -1}},  # last message only
+         "messages": {"$slice": -1}},
     ).sort("updated_at", -1).limit(limit)
     out: list[dict[str, Any]] = []
     async for d in cursor:
@@ -248,15 +258,10 @@ async def get_session(db, session_id: str) -> dict[str, Any]:
 
 
 async def detect_anomalies(req: AnomalyRequest) -> AnomalyResponse:
-    """
-    Send the readings payload to the model and ask for strict JSON anomaly output.
-    Truncates large payloads to keep tokens in check.
-    """
     payload = req.readings[:1500]
     if not payload:
         return AnomalyResponse(anomalies=[], summary="No readings supplied.")
 
-    # Keep only the fields we care about to save tokens
     slim = []
     for r in payload:
         slim.append({k: r.get(k) for k in
@@ -265,17 +270,18 @@ async def detect_anomalies(req: AnomalyRequest) -> AnomalyResponse:
                       "volume", "daily_volume", "status", "status_raw",
                       "flags", "off_location_flag") if k in r})
 
-    # Fire a stateless single-turn session for JSON mode
-    session_id = f"anom_{uuid.uuid4().hex[:10]}"
-    chat = _make_chat(session_id, ANOMALY_SYSTEM, req.provider, req.model)
+    messages = [
+        {"role": "system", "content": ANOMALY_SYSTEM},
+        {
+            "role": "user",
+            "content": (
+                "Analyze the following readings and return STRICT JSON as specified.\n\n"
+                "READINGS:\n" + json.dumps(slim, default=str)
+            ),
+        },
+    ]
 
-    user_text = (
-        "Analyze the following readings and return STRICT JSON as specified.\n\n"
-        "READINGS:\n" + json.dumps(slim, default=str)
-    )
-    raw = await chat.send_message(UserMessage(text=user_text))
-    if not isinstance(raw, str):
-        raw = str(raw)
+    raw = await _chat_complete(messages, model=req.model)
 
     try:
         parsed = _safe_parse_json(raw)
@@ -290,5 +296,4 @@ async def detect_anomalies(req: AnomalyRequest) -> AnomalyResponse:
     summary = parsed.get("summary", "") or "Analysis complete."
     if not isinstance(anomalies, list):
         anomalies = []
-    # clamp to max 100 anomalies for UI
     return AnomalyResponse(anomalies=anomalies[:100], summary=str(summary)[:500])
