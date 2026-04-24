@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusPill } from '@/components/StatusPill';
+import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 
 export default function Employees() {
   return (
@@ -61,7 +62,20 @@ function Staff() {
               <div className="text-xs mt-1">Plants: <span className="text-muted-foreground">{plantNames(s.plant_assignments)}</span></div>
               <div className="text-xs">Role: <span className="font-medium">{roleOf(s.id)}</span></div>
             </div>
-            <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>{s.status}</StatusPill>
+            <div className="flex items-start gap-2">
+              <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>{s.status}</StatusPill>
+              {isAdmin && (
+                <DeleteEntityMenu
+                  kind="user"
+                  id={s.id}
+                  label={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user')}
+                  canSoftDelete={s.status === 'Active'}
+                  canHardDelete
+                  invalidateKeys={[['staff'], ['all-roles']]}
+                  compact
+                />
+              )}
+            </div>
           </div>
           {isAdmin && (
             <div className="flex gap-1.5 mt-2 flex-wrap">

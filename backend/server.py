@@ -26,6 +26,11 @@ from seed_service import seed_from_urls
 from cron_service import (
     verify_secret, run_compliance_evaluate, run_pm_forecast_sweep,
 )
+from admin_service import (
+    soft_delete_user, hard_delete_user,
+    soft_delete_plant, hard_delete_plant,
+    get_user_dependencies, get_plant_dependencies,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -471,8 +476,45 @@ async def alerts_feed(plant_id: Optional[str] = None,
     return {"count": len(capped), "alerts": capped}
 
 
-# ---- Serverless-friendly cron endpoints ----------------------------------
+# ---- Admin: user & plant deletion (RBAC + dependency checks) ------------
 
+@api_router.get("/admin/users/{user_id}/dependencies")
+async def admin_user_dependencies(user_id: str,
+                                   authorization: Optional[str] = Header(None)):
+    return get_user_dependencies(authorization, user_id)
+
+
+@api_router.post("/admin/users/{user_id}/soft-delete")
+async def admin_user_soft_delete(user_id: str,
+                                  authorization: Optional[str] = Header(None)):
+    return soft_delete_user(authorization, user_id)
+
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_user_hard_delete(user_id: str,
+                                  authorization: Optional[str] = Header(None)):
+    return hard_delete_user(authorization, user_id)
+
+
+@api_router.get("/admin/plants/{plant_id}/dependencies")
+async def admin_plant_dependencies(plant_id: str,
+                                    authorization: Optional[str] = Header(None)):
+    return get_plant_dependencies(authorization, plant_id)
+
+
+@api_router.post("/admin/plants/{plant_id}/soft-delete")
+async def admin_plant_soft_delete(plant_id: str,
+                                   authorization: Optional[str] = Header(None)):
+    return soft_delete_plant(authorization, plant_id)
+
+
+@api_router.delete("/admin/plants/{plant_id}")
+async def admin_plant_hard_delete(plant_id: str,
+                                   authorization: Optional[str] = Header(None)):
+    return hard_delete_plant(authorization, plant_id)
+
+
+# ---- Serverless-friendly cron endpoints ----------------------------------
 @api_router.post("/cron/compliance-evaluate")
 async def cron_compliance_evaluate(x_cron_secret: Optional[str] = Header(None)):
     verify_secret(x_cron_secret)

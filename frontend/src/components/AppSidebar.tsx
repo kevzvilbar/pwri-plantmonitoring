@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck,
+  Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -44,6 +44,7 @@ const groups = [
   {
     label: 'Admin',
     items: [
+      { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
       { to: '/employees', label: 'Employees', icon: Users },
       { to: '/exports', label: 'Data Exports', icon: Download },
       { to: '/import', label: 'Smart Import', icon: Upload },

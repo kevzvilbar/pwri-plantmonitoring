@@ -1,0 +1,278 @@
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/sonner';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
+import { Trash2, MoreVertical, Loader2, ShieldAlert } from 'lucide-react';
+
+type Kind = 'user' | 'plant';
+
+const KIND_COPY: Record<Kind, { label: string; softName: string; softVerb: string }> = {
+  user: { label: 'user', softName: 'Suspended', softVerb: 'Suspend' },
+  plant: { label: 'plant', softName: 'Inactive', softVerb: 'Deactivate' },
+};
+
+interface Dependency {
+  table?: string;
+  column?: string;
+  count: number;
+}
+
+interface DependencySnapshot {
+  blocking: boolean;
+  total_references: number;
+  references: Dependency[];
+  role_rows?: number;
+  assigned_plants?: string[];
+  assigned_users?: number;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('You must be signed in.');
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+async function api<T>(method: 'GET' | 'POST' | 'DELETE', path: string): Promise<T> {
+  const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+  const headers = await authHeaders();
+  const res = await fetch(`${base}${path}`, { method, headers });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const j = await res.json();
+      msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return (await res.json()) as T;
+}
+
+interface DeleteMenuProps {
+  kind: Kind;
+  id: string;
+  label: string;
+  canSoftDelete: boolean;
+  canHardDelete: boolean;
+  invalidateKeys: string[][];
+  onDeleted?: () => void;
+  compact?: boolean;
+}
+
+export function DeleteEntityMenu({
+  kind, id, label, canSoftDelete, canHardDelete, invalidateKeys, onDeleted, compact,
+}: DeleteMenuProps) {
+  const qc = useQueryClient();
+  const [openSoft, setOpenSoft] = useState(false);
+  const [openHard, setOpenHard] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [deps, setDeps] = useState<DependencySnapshot | null>(null);
+  const [loadingDeps, setLoadingDeps] = useState(false);
+
+  const copy = KIND_COPY[kind];
+
+  const doSoft = async () => {
+    try {
+      setBusy(true);
+      await api(
+        'POST',
+        `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}/soft-delete`,
+      );
+      toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} marked ${copy.softName}`);
+      invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+      setOpenSoft(false);
+      onDeleted?.();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Soft delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadDeps = async () => {
+    setLoadingDeps(true);
+    try {
+      const snap = await api<DependencySnapshot>(
+        'GET',
+        `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}/dependencies`,
+      );
+      setDeps(snap);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Could not load dependencies');
+      setDeps(null);
+    } finally {
+      setLoadingDeps(false);
+    }
+  };
+
+  const doHard = async () => {
+    try {
+      setBusy(true);
+      await api('DELETE', `/api/admin/${kind === 'user' ? 'users' : 'plants'}/${id}`);
+      toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} permanently deleted`);
+      invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+      setOpenHard(false);
+      onDeleted?.();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Hard delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openHardWithDeps = async () => {
+    await loadDeps();
+    setOpenHard(true);
+  };
+
+  if (!canSoftDelete && !canHardDelete) return null;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size={compact ? 'icon' : 'sm'}
+            variant="outline"
+            data-testid={`delete-menu-trigger-${kind}-${id}`}
+            className={compact ? 'h-7 w-7' : ''}
+          >
+            {compact ? <MoreVertical className="h-4 w-4" /> : <><Trash2 className="h-3 w-3 mr-1" />Delete</>}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="truncate">{label}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {canSoftDelete && (
+            <DropdownMenuItem
+              onClick={() => setOpenSoft(true)}
+              data-testid={`soft-delete-${kind}-${id}`}
+            >
+              <ShieldAlert className="h-4 w-4 mr-2 text-amber-500" />
+              {copy.softVerb} ({copy.softName})
+            </DropdownMenuItem>
+          )}
+          {canHardDelete && (
+            <DropdownMenuItem
+              onClick={openHardWithDeps}
+              className="text-danger focus:text-danger"
+              data-testid={`hard-delete-${kind}-${id}`}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Permanently delete…
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={openSoft} onOpenChange={setOpenSoft}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{copy.softVerb} {copy.label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This marks <strong>{label}</strong> as <strong>{copy.softName}</strong>.
+              {kind === 'user'
+                ? ' They will not be able to sign in. Existing logs and records are kept for audit.'
+                : ' Wells, locators and trains linked to this plant remain but the plant is hidden from active lists.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy} data-testid="cancel-soft-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doSoft}
+              disabled={busy}
+              data-testid="confirm-soft-delete"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={openHard} onOpenChange={setOpenHard}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete {copy.label}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  This will permanently remove <strong>{label}</strong>. This action cannot be undone.
+                </p>
+                {loadingDeps && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Checking dependencies…
+                  </div>
+                )}
+                {deps && (
+                  <DependencyReport deps={deps} kind={kind} />
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy} data-testid="cancel-hard-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doHard}
+              disabled={busy || loadingDeps || (deps?.blocking ?? true)}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-hard-delete"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {deps?.blocking ? 'Blocked' : 'Delete permanently'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+function DependencyReport({ deps, kind }: { deps: DependencySnapshot; kind: Kind }) {
+  const extras: { label: string; count: number }[] = [];
+  if (kind === 'user') {
+    if (deps.role_rows) extras.push({ label: 'Role assignments', count: deps.role_rows });
+    if (deps.assigned_plants?.length) extras.push({ label: 'Assigned plants', count: deps.assigned_plants.length });
+  } else if (kind === 'plant') {
+    if (deps.assigned_users) extras.push({ label: 'Users assigned to this plant', count: deps.assigned_users });
+  }
+  const hasAny = deps.references.length > 0 || extras.length > 0;
+
+  if (!hasAny) {
+    return (
+      <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs">
+        No dependent records found. Safe to permanently delete.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-danger/40 bg-danger/5 p-2 text-xs space-y-1">
+      <div className="font-semibold text-danger">Dependencies found — cannot hard-delete:</div>
+      <ul className="list-disc ml-4 space-y-0.5">
+        {extras.map((e) => (
+          <li key={e.label}>{e.label}: <strong>{e.count}</strong></li>
+        ))}
+        {deps.references.map((r) => (
+          <li key={r.table}>
+            {r.table}{r.column ? ` (${r.column})` : ''}: <strong>{r.count}</strong>
+          </li>
+        ))}
+      </ul>
+      <div className="text-muted-foreground mt-1">
+        Use <em>{kind === 'user' ? 'Suspend' : 'Deactivate'}</em> instead, or archive/reassign the linked records first.
+      </div>
+    </div>
+  );
+}

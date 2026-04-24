@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Menu,
   Building2, Droplet, MapPin, Cog, FlaskConical,
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -52,6 +53,7 @@ const sideSheetGroups = [
   {
     title: 'Admin',
     items: [
+      { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
       { to: '/employees', label: 'Employees', icon: Users },
       { to: '/exports', label: 'Data Exports', icon: Download },
       { to: '/import', label: 'Smart Import', icon: Upload },

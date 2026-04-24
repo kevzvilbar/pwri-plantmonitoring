@@ -5,8 +5,8 @@ Provides:
   - /api/ai/chat      : multi-turn conversational Q&A (message history persisted in Mongo)
   - /api/ai/anomalies : stateless batch anomaly detection on a list of readings
 
-Uses OPENAI_API_KEY via the standard `openai` library.
-Default model: gpt-4o
+Uses EMERGENT_LLM_KEY via the `emergentintegrations` library.
+Default model: gpt-5.1 (openai).
 """
 from __future__ import annotations
 
@@ -18,12 +18,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from openai import AsyncOpenAI
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_PROVIDER = "openai"
+DEFAULT_MODEL = "gpt-5.1"
 
 # --- System prompts -------------------------------------------------------
 
@@ -78,7 +79,7 @@ Do not include any prose outside the JSON.
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: Optional[str] = None
-    provider: Optional[str] = None   # kept for API compatibility, ignored
+    provider: Optional[str] = None
     model: Optional[str] = None
     context: Optional[dict[str, Any]] = None
 
@@ -91,7 +92,7 @@ class ChatResponse(BaseModel):
 
 class AnomalyRequest(BaseModel):
     readings: list[dict[str, Any]] = Field(..., min_items=0, max_items=2000)
-    provider: Optional[str] = None   # kept for API compatibility, ignored
+    provider: Optional[str] = None
     model: Optional[str] = None
 
 
@@ -102,13 +103,29 @@ class AnomalyResponse(BaseModel):
 
 # --- Helpers ---------------------------------------------------------------
 
-def _get_client() -> AsyncOpenAI:
-    key = os.environ.get("OPENAI_API_KEY", "")
+def _get_key() -> str:
+    key = os.environ.get("EMERGENT_LLM_KEY", "")
     if not key:
         raise RuntimeError(
-            "OPENAI_API_KEY is not set. Add it to your environment variables."
+            "EMERGENT_LLM_KEY is not set. Add it to your backend environment variables."
         )
-    return AsyncOpenAI(api_key=key)
+    return key
+
+
+def _make_chat(
+    session_id: str,
+    system: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> LlmChat:
+    """Factory for an LlmChat bound to the Emergent universal key."""
+    chat = LlmChat(
+        api_key=_get_key(),
+        session_id=session_id,
+        system_message=system,
+    )
+    chat.with_model(provider or DEFAULT_PROVIDER, model or DEFAULT_MODEL)
+    return chat
 
 
 def _strip_code_fences(s: str) -> str:
@@ -136,16 +153,43 @@ def _safe_parse_json(s: str) -> dict[str, Any]:
 async def _chat_complete(
     messages: list[dict[str, str]],
     model: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> str:
-    """Single wrapper around OpenAI chat completions."""
-    client = _get_client()
-    response = await client.chat.completions.create(
-        model=model or DEFAULT_MODEL,
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.3,
+    """Single completion given a list of {role, content} messages.
+
+    Strategy: the first system message becomes the LlmChat system prompt.
+    Any prior user/assistant messages are folded into a single preamble on
+    the current user turn so the model has the full context in one call.
+    """
+    system_msg = ""
+    conv: list[dict[str, str]] = []
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content") or ""
+        if role == "system" and not system_msg:
+            system_msg = content
+        elif role in ("user", "assistant"):
+            conv.append({"role": role, "content": content})
+
+    if not conv:
+        return ""
+
+    current = conv[-1]["content"]
+    history = conv[:-1]
+    if history:
+        rendered = "\n\n".join(
+            f"[{m['role'].upper()}]: {m['content']}" for m in history
+        )
+        current = f"Conversation so far:\n{rendered}\n\n[CURRENT]: {current}"
+
+    chat = _make_chat(
+        session_id=f"oneoff_{uuid.uuid4().hex[:10]}",
+        system=system_msg or "You are a helpful assistant.",
+        provider=provider,
+        model=model,
     )
-    return response.choices[0].message.content or ""
+    reply = await chat.send_message(UserMessage(text=current))
+    return str(reply) if reply is not None else ""
 
 
 # --- Public service methods ------------------------------------------------
@@ -162,7 +206,6 @@ async def chat_turn(
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:12]}"
     now = datetime.utcnow()
 
-    # Build user text with optional data grounding
     user_text = req.message
     if req.context:
         try:
@@ -171,7 +214,6 @@ async def chat_turn(
         except Exception:
             pass
 
-    # Load existing conversation history from Mongo
     messages: list[dict[str, str]] = [{"role": "system", "content": CHAT_SYSTEM}]
     try:
         doc = await db.ai_conversations.find_one({"session_id": session_id})
@@ -184,16 +226,14 @@ async def chat_turn(
     except Exception:
         log.exception("Failed to load conversation history (non-fatal)")
 
-    # Append new user message
     messages.append({"role": "user", "content": user_text})
 
     try:
-        reply = await _chat_complete(messages, model=req.model)
+        reply = await _chat_complete(messages, model=req.model, provider=req.provider)
     except Exception as e:
         log.exception("chat_turn failed")
         raise RuntimeError(f"AI call failed: {e}") from e
 
-    # Persist turn to Mongo
     try:
         await db.ai_conversations.update_one(
             {"session_id": session_id},
@@ -230,7 +270,7 @@ async def list_sessions(db, user_id: Optional[str], limit: int = 20) -> list[dic
     cursor = db.ai_conversations.find(
         q,
         {"session_id": 1, "updated_at": 1, "created_at": 1,
-         "messages": {"$slice": -1}},
+         "messages": {"$slice": -1}, "_id": 0},
     ).sort("updated_at", -1).limit(limit)
     out: list[dict[str, Any]] = []
     async for d in cursor:
@@ -244,7 +284,7 @@ async def list_sessions(db, user_id: Optional[str], limit: int = 20) -> list[dic
 
 
 async def get_session(db, session_id: str) -> dict[str, Any]:
-    doc = await db.ai_conversations.find_one({"session_id": session_id})
+    doc = await db.ai_conversations.find_one({"session_id": session_id}, {"_id": 0})
     if not doc:
         return {"session_id": session_id, "messages": []}
     return {
@@ -281,7 +321,7 @@ async def detect_anomalies(req: AnomalyRequest) -> AnomalyResponse:
         },
     ]
 
-    raw = await _chat_complete(messages, model=req.model)
+    raw = await _chat_complete(messages, model=req.model, provider=req.provider)
 
     try:
         parsed = _safe_parse_json(raw)
@@ -297,3 +337,19 @@ async def detect_anomalies(req: AnomalyRequest) -> AnomalyResponse:
     if not isinstance(anomalies, list):
         anomalies = []
     return AnomalyResponse(anomalies=anomalies[:100], summary=str(summary)[:500])
+
+
+__all__ = [
+    "ChatRequest",
+    "ChatResponse",
+    "AnomalyRequest",
+    "AnomalyResponse",
+    "chat_turn",
+    "list_sessions",
+    "get_session",
+    "detect_anomalies",
+    "_make_chat",
+    "_chat_complete",
+    "_safe_parse_json",
+    "UserMessage",
+]

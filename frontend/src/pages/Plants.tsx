@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
+import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, Plus, MapPin, Gauge, Wrench } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -20,6 +22,7 @@ export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
+  const { isManager } = useAuth();
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
   const navigate = useNavigate();
 
@@ -32,15 +35,35 @@ export default function Plants() {
       </div>
       <div className="space-y-3">
         {list?.map((p) => (
-          <Card key={p.id} onClick={() => navigate(`/plants/${p.id}`)} className="p-4 cursor-pointer hover:shadow-elev transition-all">
-            <div className="flex items-start justify-between">
-              <div>
+          <Card key={p.id} className="p-4 hover:shadow-elev transition-all">
+            <div className="flex items-start justify-between gap-2">
+              <div
+                onClick={() => navigate(`/plants/${p.id}`)}
+                className="flex-1 cursor-pointer"
+                data-testid={`plant-card-${p.id}`}
+              >
                 <h2 className="font-semibold">{p.name}</h2>
                 <p className="text-xs text-muted-foreground">{p.address}</p>
               </div>
-              <StatusPill tone={p.status === 'Active' ? 'accent' : 'muted'}>{p.status}</StatusPill>
+              <div className="flex items-center gap-2">
+                <StatusPill tone={p.status === 'Active' ? 'accent' : 'muted'}>{p.status}</StatusPill>
+                {isManager && (
+                  <DeleteEntityMenu
+                    kind="plant"
+                    id={p.id}
+                    label={p.name}
+                    canSoftDelete={p.status === 'Active'}
+                    canHardDelete
+                    invalidateKeys={[['plants']]}
+                    compact
+                  />
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
+            <div
+              onClick={() => navigate(`/plants/${p.id}`)}
+              className="grid grid-cols-3 gap-3 mt-3 text-xs cursor-pointer"
+            >
               <div><div className="text-muted-foreground">Capacity</div><div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} m³</div></div>
               <div><div className="text-muted-foreground">RO trains</div><div className="font-mono-num text-sm">{p.num_ro_trains}</div></div>
               <div><div className="text-muted-foreground">Geofence</div><div className="font-mono-num text-sm">{p.geofence_radius_m}m</div></div>
@@ -56,6 +79,7 @@ export default function Plants() {
 function PlantDetail({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
   const { data: plants } = usePlants();
+  const { isManager } = useAuth();
   const plant = plants?.find(p => p.id === plantId);
 
   const [tab, setTab] = useState<'locators' | 'wells' | 'trains'>('locators');
@@ -64,9 +88,22 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ChevronLeft className="h-4 w-4" /> All plants
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="h-4 w-4" /> All plants
+        </button>
+        {isManager && (
+          <DeleteEntityMenu
+            kind="plant"
+            id={plant.id}
+            label={plant.name}
+            canSoftDelete={plant.status === 'Active'}
+            canHardDelete
+            invalidateKeys={[['plants']]}
+            onDeleted={() => navigate('/plants')}
+          />
+        )}
+      </div>
       <Card className="p-4 bg-gradient-stat text-topbar-foreground">
         <h1 className="text-lg font-semibold">{plant.name}</h1>
         <p className="text-xs text-topbar-muted flex items-center gap-1"><MapPin className="h-3 w-3" /> {plant.address}</p>
@@ -418,20 +455,23 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
 
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name Required'); return; }
-    const { error } = await supabase.from('wells').insert({
+    const payload: Database['public']['Tables']['wells']['Insert'] & {
+      gps_lat?: number | null; gps_lng?: number | null;
+    } = {
       plant_id: plantId,
       name: form.name.trim(),
       diameter: form.diameter || null,
       drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
       has_power_meter: form.has_power_meter,
       meter_brand: form.meter_brand || null,
-      meter_size: form.meter_size ? +form.meter_size : null,
+      meter_size: form.meter_size || null,
       meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null,
       gps_lng: form.gps_lng ? +form.gps_lng : null,
       status: 'Active',
-    });
+    };
+    const { error } = await supabase.from('wells').insert(payload as never);
     if (error) { toast.error(error.message); return; }
     toast.success('Well Added');
     onClose();
@@ -509,10 +549,10 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
         <h3 className="font-semibold">{well.name}</h3>
         <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
           <span>{well.diameter ?? '—'}</span>
-          {well.gps_lat != null && well.gps_lng != null && (
+          {(well as any).gps_lat != null && (well as any).gps_lng != null && (
             <span className="inline-flex items-center gap-1">
               <MapPin className="h-3 w-3" />
-              <span className="font-mono-num">{(+well.gps_lat).toFixed(5)}, {(+well.gps_lng).toFixed(5)}</span>
+              <span className="font-mono-num">{(+(well as any).gps_lat).toFixed(5)}, {(+(well as any).gps_lng).toFixed(5)}</span>
             </span>
           )}
         </div>
