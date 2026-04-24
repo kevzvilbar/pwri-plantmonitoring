@@ -221,6 +221,80 @@ export type Database = {
           },
         ]
       }
+      checklist_step_executions: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          execution_id: string
+          id: string
+          notes: string | null
+          plant_id: string | null
+          step_index: number
+          step_text: string
+          template_id: string
+          value: string | null
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          execution_id: string
+          id?: string
+          notes?: string | null
+          plant_id?: string | null
+          step_index: number
+          step_text: string
+          template_id: string
+          value?: string | null
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          execution_id?: string
+          id?: string
+          notes?: string | null
+          plant_id?: string | null
+          step_index?: number
+          step_text?: string
+          template_id?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_step_executions_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_step_executions_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_step_executions_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_step_executions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checklist_templates: {
         Row: {
           category: string

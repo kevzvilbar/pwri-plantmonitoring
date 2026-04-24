@@ -28,15 +28,21 @@ const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D'
 
 function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent }: any) {
   return (
-    <Card className="stat-card p-3" onClick={onClick}>
-      <div className="flex items-start justify-between">
-        <Icon className={`h-4 w-4 ${accent ?? 'text-muted-foreground'}`} />
+    <Card
+      className="stat-card p-3 min-w-0 hover:border-primary/40 transition-colors"
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <Icon className={`h-4 w-4 shrink-0 ${accent ?? 'text-muted-foreground'}`} />
         {tone && <StatusPill tone={tone}>•</StatusPill>}
       </div>
-      <div className="mt-2 font-mono-num text-xl text-foreground leading-none">
-        {value}<span className="text-xs font-sans text-muted-foreground ml-1">{unit}</span>
+      <div className="mt-2 font-mono-num text-xl text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis">
+        {value}
+        {unit && <span className="text-xs font-sans text-muted-foreground ml-1">{unit}</span>}
       </div>
-      <div className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</div>
+      <div className="text-[11px] text-muted-foreground mt-1 leading-tight break-words">
+        {label}
+      </div>
     </Card>
   );
 }
@@ -171,18 +177,18 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* 8 primary KPI tiles — operations + quality */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* 8 primary KPI tiles — auto-fits to longest label */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
         <StatCard icon={Droplet} accent="text-primary" label="Production" value={fmtNum(production)} unit="m³"
           onClick={() => setModal({ metric: 'production', title: 'Production trend' })} />
-        <StatCard icon={Receipt} accent="text-highlight" label="Locator consumption" value={fmtNum(consumption)} unit="m³"
+        <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
           onClick={() => setModal({ metric: 'production', title: 'Production vs consumption' })} />
         <StatCard icon={Activity} label="NRW Water Loss" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
           onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
           onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
 
-        <StatCard icon={Waves} label="Blending → product" value={fmtNum(blending)} unit="m³" />
+        <StatCard icon={Waves} label="Blending → Product" value={fmtNum(blending)} unit="m³" />
         <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
         <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
           onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
@@ -190,9 +196,9 @@ export default function Dashboard() {
       </div>
 
       {/* Operations row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <StatCard icon={Timer} label="Downtime hrs" value={fmtNum(downtime, 1)} unit="hr" />
-        <StatCard icon={Droplet} label="Raw water (wells)" value={fmtNum(rawWater)} unit="m³" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2">
+        <StatCard icon={Timer} label="Downtime Hrs" value={fmtNum(downtime, 1)} unit="hr" />
+        <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³" />
         <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%" />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
       </div>
@@ -287,12 +293,17 @@ function PowerChart({ plantIds }: { plantIds: string[] }) {
     enabled: plantIds.length > 0,
   });
   const chartData = useMemo(() => {
-    const m = new Map<string, number>();
+    const m = new Map<string, { sortKey: number; kwh: number }>();
     (data ?? []).forEach((r: any) => {
-      const d = format(new Date(r.reading_datetime), 'MMM d');
-      m.set(d, (m.get(d) ?? 0) + (+r.daily_consumption_kwh || 0));
+      const dt = new Date(r.reading_datetime);
+      const d = format(dt, 'MMM d');
+      const cur = m.get(d) ?? { sortKey: dt.getTime(), kwh: 0 };
+      cur.kwh += +r.daily_consumption_kwh || 0;
+      m.set(d, cur);
     });
-    return Array.from(m.entries()).map(([date, kwh]) => ({ date, kwh }));
+    return Array.from(m.entries())
+      .sort((a, b) => a[1].sortKey - b[1].sortKey)
+      .map(([date, v]) => ({ date, kwh: v.kwh }));
   }, [data]);
   return (
     <Card className="p-3">
@@ -339,17 +350,22 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   });
 
   const chartData = useMemo(() => {
-    const byDay = new Map<string, { date: string; production: number; consumption: number }>();
-    const ensure = (d: string) => byDay.get(d) ?? byDay.set(d, { date: d, production: 0, consumption: 0 }).get(d)!;
+    const byDay = new Map<string, { date: string; sortKey: number; production: number; consumption: number }>();
+    const ensure = (d: string, sortKey: number) =>
+      byDay.get(d) ?? byDay.set(d, { date: d, sortKey, production: 0, consumption: 0 }).get(d)!;
     (wellReadings ?? []).forEach((r: any) => {
-      const d = format(new Date(r.reading_datetime), 'MMM d');
-      ensure(d).production += r.daily_volume ?? 0;
+      const dt = new Date(r.reading_datetime);
+      const d = format(dt, 'MMM d');
+      ensure(d, dt.getTime()).production += r.daily_volume ?? 0;
     });
     (locReadings ?? []).forEach((r: any) => {
-      const d = format(new Date(r.reading_datetime), 'MMM d');
-      ensure(d).consumption += r.daily_volume ?? 0;
+      const dt = new Date(r.reading_datetime);
+      const d = format(dt, 'MMM d');
+      ensure(d, dt.getTime()).consumption += r.daily_volume ?? 0;
     });
-    return Array.from(byDay.values()).map((d) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
+    return Array.from(byDay.values())
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ sortKey: _s, ...d }) => ({ ...d, nrw: calc.nrw(d.production, d.consumption) }));
   }, [locReadings, wellReadings]);
 
   return (
@@ -395,7 +411,6 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
             )}
           </ResponsiveContainer>
         </div>
-        <p className="text-xs text-muted-foreground">NRW = (Production − Consumption) / Production × 100%</p>
       </DialogContent>
     </Dialog>
   );

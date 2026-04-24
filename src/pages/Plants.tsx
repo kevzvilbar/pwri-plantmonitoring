@@ -348,10 +348,12 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
   });
   const { data: latestReplacement } = useQuery({
     queryKey: ['well-latest-replacement', wellId],
-    queryFn: async () => (await supabase.from('well_meter_replacements')
-      .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
-      .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1)).maybeSingle()
-      .then(r => r.data),
+    queryFn: async () => {
+      const { data } = await supabase.from('well_meter_replacements')
+        .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
+        .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1);
+      return (data?.[0] ?? null) as any;
+    },
   });
   if (!well) return <div>Loading…</div>;
   const latest = pms?.[0];
@@ -375,7 +377,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div>Drilling depth: <span className="font-mono-num">{latest?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m</span></div>
+          <div>Drilling depth: <span className="font-mono-num">{(latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m</span></div>
           <div>SWL: <span className="font-mono-num">{latest?.static_water_level_m ?? '—'} m</span></div>
           <div>PWL: <span className="font-mono-num">{latest?.pumping_water_level_m ?? '—'} m</span></div>
           <div>Pump setting: <span>{latest?.pump_setting ?? '—'}</span></div>
@@ -437,7 +439,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
   const { user } = useAuth();
   const [form, setForm] = useState({
     date_gathered: format(new Date(), 'yyyy-MM-dd'),
-    drilling_depth_m: latest?.drilling_depth_m ?? well.drilling_depth_m ?? '',
+    drilling_depth_m: (latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '',
     static_water_level_m: latest?.static_water_level_m ?? '',
     pumping_water_level_m: latest?.pumping_water_level_m ?? '',
     pump_setting: latest?.pump_setting ?? '',
@@ -452,7 +454,6 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
       well_id: well.id, plant_id: well.plant_id,
       record_type: 'PMS',
       date_gathered: form.date_gathered,
-      drilling_depth_m: num(form.drilling_depth_m),
       static_water_level_m: num(form.static_water_level_m),
       pumping_water_level_m: num(form.pumping_water_level_m),
       pump_setting: form.pump_setting || null,
@@ -460,7 +461,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
       tds_ppm: num(form.tds_ppm),
       turbidity_ntu: num(form.turbidity_ntu),
       recorded_by: user?.id, remarks: form.remarks || null,
-    });
+    } as any);
     if (error) { toast.error(error.message); return; }
     // Keep wells.drilling_depth_m in sync with the latest entry
     if (form.drilling_depth_m !== '') {
