@@ -18,7 +18,7 @@ import requests
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://deploy-heal.preview.emergentagent.com",
+    "https://verify-error-ready.preview.emergentagent.com",
 ).rstrip("/")
 
 MAMBALING_METER_URL = (

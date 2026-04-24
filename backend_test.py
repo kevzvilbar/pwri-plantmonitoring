@@ -12,7 +12,7 @@ import time
 from typing import Dict, Any, Optional
 
 # Use external URL from frontend/.env
-BASE_URL = "https://deploy-heal.preview.emergentagent.com/api"
+BASE_URL = "https://verify-error-ready.preview.emergentagent.com/api"
 
 def log_test(test_name: str, status: str, details: str = ""):
     """Log test results with consistent formatting"""
