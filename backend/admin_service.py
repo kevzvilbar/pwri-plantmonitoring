@@ -288,7 +288,7 @@ def soft_delete_user(
 ) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin"})
+    _require_roles(caller, {"Admin", "Manager"})
     if caller["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
@@ -314,22 +314,25 @@ def soft_delete_user(
 
 
 def hard_delete_user(
-    authorization: Optional[str], user_id: str, reason: Optional[str] = None,
+    authorization: Optional[str], user_id: str,
+    reason: Optional[str] = None, force: bool = False,
 ) -> dict[str, Any]:
+    """Admin-only. If `force=True`, dependencies are orphaned but deletion proceeds."""
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin"})
+    _require_roles(caller, {"Admin"})  # only Admin can hard-delete users
     if caller["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
     client = _user_scoped_client(token)
     deps = user_dependencies(client, user_id)
-    if deps["blocking"]:
+    if deps["blocking"] and not force:
         raise HTTPException(
             status_code=409,
             detail={
                 "message": "User has active dependencies; cannot hard-delete.",
                 "dependencies": deps,
+                "force_allowed": True,  # Admin may retry with force=true
             },
         )
     label = _entity_label(client, "user", user_id)
@@ -341,15 +344,20 @@ def hard_delete_user(
 
     _write_audit(
         client, kind="user", entity_id=user_id, entity_label=label,
-        action="hard", caller=caller, reason=reason, dependencies=deps,
+        action="hard", caller=caller,
+        reason=(f"[FORCE] {reason or ''}".strip() if force else reason),
+        dependencies=deps,
     )
     return {
         "ok": True,
         "mode": "hard",
+        "forced": bool(force and deps["blocking"]),
         "user_id": user_id,
         "note": (
             "Profile and role rows removed. Auth record (auth.users) must be "
             "removed separately via the Supabase dashboard if desired."
+            + (" Linked records were ORPHANED (their recorded_by/performed_by/"
+               "replaced_by pointers now dangle)." if force and deps["blocking"] else "")
         ),
     }
 
@@ -359,7 +367,7 @@ def soft_delete_plant(
 ) -> dict[str, Any]:
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin"})
+    _require_roles(caller, {"Admin", "Manager"})
     client = _user_scoped_client(token)
     label = _entity_label(client, "plant", plant_id)
     try:
@@ -382,21 +390,32 @@ def soft_delete_plant(
 
 
 def hard_delete_plant(
-    authorization: Optional[str], plant_id: str, reason: Optional[str] = None,
+    authorization: Optional[str], plant_id: str,
+    reason: Optional[str] = None, force: bool = False,
 ) -> dict[str, Any]:
+    """Admin + Manager. Only Admin may `force=True` over a dependency block."""
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
-    _require_roles(caller, {"Admin"})
+    _require_roles(caller, {"Admin", "Manager"})
+    roles = set(caller.get("roles") or [])
+    is_admin = "Admin" in roles
+
     client = _user_scoped_client(token)
     deps = plant_dependencies(client, plant_id)
     if deps["blocking"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Plant has active dependencies; archive or reassign them first.",
-                "dependencies": deps,
-            },
-        )
+        if not (force and is_admin):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        "Plant has active dependencies; archive or reassign them first."
+                        if not force
+                        else "Only Admin may force-delete a plant with dependencies."
+                    ),
+                    "dependencies": deps,
+                    "force_allowed": is_admin,
+                },
+            )
     label = _entity_label(client, "plant", plant_id)
     try:
         client.table("plants").delete().eq("id", plant_id).execute()
@@ -405,9 +424,16 @@ def hard_delete_plant(
 
     _write_audit(
         client, kind="plant", entity_id=plant_id, entity_label=label,
-        action="hard", caller=caller, reason=reason, dependencies=deps,
+        action="hard", caller=caller,
+        reason=(f"[FORCE] {reason or ''}".strip() if force and deps["blocking"] else reason),
+        dependencies=deps,
     )
-    return {"ok": True, "mode": "hard", "plant_id": plant_id}
+    return {
+        "ok": True,
+        "mode": "hard",
+        "forced": bool(force and deps["blocking"]),
+        "plant_id": plant_id,
+    }
 
 
 def get_user_dependencies(authorization: Optional[str], user_id: str) -> dict[str, Any]:

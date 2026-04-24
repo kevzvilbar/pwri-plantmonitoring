@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DesignationCombobox } from '@/components/DesignationCombobox';
 import { toast } from 'sonner';
 
 export default function Onboarding() {
@@ -81,7 +81,14 @@ export default function Onboarding() {
           <div><Label>Last name *</Label><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required /></div>
           <div><Label>Middle name</Label><Input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} /></div>
           <div><Label>Suffix</Label><Input value={form.suffix} onChange={(e) => setForm({ ...form, suffix: e.target.value })} /></div>
-          <div className="col-span-2"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Plant Operator" /></div>
+          <div className="col-span-2"><Label>Designation</Label>
+            <DesignationCombobox
+              value={form.designation}
+              onChange={(v) => setForm({ ...form, designation: v })}
+              placeholder="Select or type a designation…"
+              data-testid="onboarding-designation"
+            />
+          </div>
         </div>
 
         <Button type="submit" disabled={busy} className="w-full">{busy ? 'Saving…' : 'Save & continue'}</Button>

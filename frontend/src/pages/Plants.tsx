@@ -22,9 +22,19 @@ export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const { isAdmin } = useAuth();
+  const { isManager } = useAuth();
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
   const navigate = useNavigate();
+
+  const { data: wellCounts } = useQuery({
+    queryKey: ['plants-well-counts'],
+    queryFn: async () => {
+      const { data } = await supabase.from('wells').select('plant_id');
+      const by: Record<string, number> = {};
+      (data ?? []).forEach((r: any) => { by[r.plant_id] = (by[r.plant_id] ?? 0) + 1; });
+      return by;
+    },
+  });
 
   if (id) return <PlantDetail plantId={id} />;
 
@@ -47,7 +57,7 @@ export default function Plants() {
               </div>
               <div className="flex items-center gap-2">
                 <StatusPill tone={p.status === 'Active' ? 'accent' : 'muted'}>{p.status}</StatusPill>
-                {isAdmin && (
+                {isManager && (
                   <DeleteEntityMenu
                     kind="plant"
                     id={p.id}
@@ -62,11 +72,12 @@ export default function Plants() {
             </div>
             <div
               onClick={() => navigate(`/plants/${p.id}`)}
-              className="grid grid-cols-3 gap-3 mt-3 text-xs cursor-pointer"
+              className="grid grid-cols-4 gap-3 mt-3 text-xs cursor-pointer"
             >
               <div><div className="text-muted-foreground">Capacity</div><div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} m³</div></div>
               <div><div className="text-muted-foreground">RO trains</div><div className="font-mono-num text-sm">{p.num_ro_trains}</div></div>
-              <div><div className="text-muted-foreground">Geofence</div><div className="font-mono-num text-sm">{p.geofence_radius_m}m</div></div>
+              <div><div className="text-muted-foreground">Wells</div><div className="font-mono-num text-sm">{wellCounts?.[p.id] ?? 0}</div></div>
+              <div><div className="text-muted-foreground">Status</div><div className="font-mono-num text-sm">{p.status}</div></div>
             </div>
           </Card>
         ))}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -82,8 +83,11 @@ export function DeleteEntityMenu({
   kind, id, label, canSoftDelete, canHardDelete, invalidateKeys, onDeleted, compact,
 }: DeleteMenuProps) {
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
   const [openSoft, setOpenSoft] = useState(false);
   const [openHard, setOpenHard] = useState(false);
+  const [openForce, setOpenForce] = useState(false);
+  const [forceAck, setForceAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
   const [deps, setDeps] = useState<DependencySnapshot | null>(null);
@@ -95,8 +99,10 @@ export function DeleteEntityMenu({
   const resetAndClose = () => {
     setReason('');
     setDeps(null);
+    setForceAck(false);
     setOpenSoft(false);
     setOpenHard(false);
+    setOpenForce(false);
   };
 
   const doSoft = async () => {
@@ -131,12 +137,19 @@ export function DeleteEntityMenu({
     }
   };
 
-  const doHard = async () => {
+  const doHard = async (force = false) => {
     try {
       setBusy(true);
-      const qs = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+      const params = new URLSearchParams();
+      if (reason) params.set('reason', reason);
+      if (force) params.set('force', 'true');
+      const qs = params.toString() ? `?${params.toString()}` : '';
       await api('DELETE', `/api/admin/${entityPath}/${id}${qs}`);
-      toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} permanently deleted`);
+      toast.success(
+        force
+          ? `${copy.label[0].toUpperCase() + copy.label.slice(1)} force-deleted (dependencies orphaned)`
+          : `${copy.label[0].toUpperCase() + copy.label.slice(1)} permanently deleted`
+      );
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
       resetAndClose();
@@ -151,8 +164,14 @@ export function DeleteEntityMenu({
   const openHardWithDeps = async () => {
     setReason('');
     setDeps(null);
+    setForceAck(false);
     await loadDeps();
     setOpenHard(true);
+  };
+
+  const promptForce = () => {
+    setOpenHard(false);
+    setOpenForce(true);
   };
 
   if (!canSoftDelete && !canHardDelete) return null;
@@ -264,14 +283,83 @@ export function DeleteEntityMenu({
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-hard-delete">Cancel</AlertDialogCancel>
+            {deps?.blocking && isAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-danger text-danger hover:bg-danger/10"
+                onClick={promptForce}
+                disabled={busy || loadingDeps}
+                data-testid="force-hard-delete"
+              >
+                Force delete (override)
+              </Button>
+            )}
             <AlertDialogAction
-              onClick={doHard}
+              onClick={() => doHard(false)}
               disabled={busy || loadingDeps || (deps?.blocking ?? true)}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
               data-testid="confirm-hard-delete"
             >
               {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               {deps?.blocking ? 'Blocked' : 'Delete permanently'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={openForce}
+        onOpenChange={(o) => (o ? setOpenForce(true) : resetAndClose())}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" /> Force delete — orphan dependencies?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  <strong>{label}</strong> is referenced by <strong>
+                    {deps?.total_references ?? 0}
+                  </strong> record(s) across the system. Forcing the delete will:
+                </p>
+                <ul className="list-disc ml-5 space-y-0.5 text-xs">
+                  <li>Permanently remove the {copy.label} row(s).</li>
+                  {kind === 'user' && <li>Leave <code>recorded_by</code>/<code>performed_by</code>/<code>replaced_by</code> pointers dangling on existing logs.</li>}
+                  {kind === 'plant' && <li>Leave wells, locators, readings and related logs pointing at a missing plant.</li>}
+                  <li>Be recorded in the audit log with a <strong>[FORCE]</strong> marker.</li>
+                </ul>
+                <div className="rounded-md border border-danger/40 bg-danger/5 p-2 text-xs text-danger">
+                  This action is irreversible. Prefer <em>Suspend/Deactivate</em> unless
+                  regulatory or legal reasons require a hard delete.
+                </div>
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={forceAck}
+                    onChange={(e) => setForceAck(e.target.checked)}
+                    className="mt-0.5"
+                    data-testid="force-ack"
+                  />
+                  <span>
+                    I understand dependencies will be orphaned and I am the Admin
+                    accountable for this action.
+                  </span>
+                </label>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy} data-testid="cancel-force-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => doHard(true)}
+              disabled={busy || !forceAck}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-force-delete"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Force delete permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

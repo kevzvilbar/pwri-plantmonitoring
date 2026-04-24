@@ -500,8 +500,9 @@ async def admin_user_soft_delete(user_id: str,
 @api_router.delete("/admin/users/{user_id}")
 async def admin_user_hard_delete(user_id: str,
                                   reason: Optional[str] = None,
+                                  force: bool = False,
                                   authorization: Optional[str] = Header(None)):
-    return hard_delete_user(authorization, user_id, reason=reason)
+    return hard_delete_user(authorization, user_id, reason=reason, force=force)
 
 
 @api_router.get("/admin/plants/{plant_id}/dependencies")
@@ -521,8 +522,9 @@ async def admin_plant_soft_delete(plant_id: str,
 @api_router.delete("/admin/plants/{plant_id}")
 async def admin_plant_hard_delete(plant_id: str,
                                    reason: Optional[str] = None,
+                                   force: bool = False,
                                    authorization: Optional[str] = Header(None)):
-    return hard_delete_plant(authorization, plant_id, reason=reason)
+    return hard_delete_plant(authorization, plant_id, reason=reason, force=force)
 
 
 @api_router.get("/admin/audit-log")

@@ -183,3 +183,161 @@ class TestAdminAuthRequired:
             timeout=30,
         )
         assert r.status_code == 401, r.text[:300]
+
+
+# ---------------- Iteration 5: audit-log endpoint + force param ----------
+
+AUDIT_PATH = "/api/admin/audit-log"
+
+
+class TestAuditLogEndpoint:
+    """GET /api/admin/audit-log — Admin+Manager gated."""
+
+    def test_audit_log_requires_bearer(self, api):
+        r = api.get(f"{BASE_URL}{AUDIT_PATH}", timeout=30)
+        assert r.status_code == 401, r.text[:300]
+        # Must be clean JSON, not a stack trace
+        body = r.text.lower()
+        assert "traceback" not in body
+        assert "bearer" in body or "token" in body or "auth" in body
+
+    def test_audit_log_malformed_bearer_not_500(self, api):
+        r = api.get(
+            f"{BASE_URL}{AUDIT_PATH}",
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+            timeout=30,
+        )
+        assert r.status_code in (401, 403), (r.status_code, r.text[:300])
+        assert r.status_code != 500
+        # Clean JSON body expected
+        try:
+            body = r.json()
+            assert isinstance(body, dict)
+            assert "detail" in body
+        except ValueError:
+            pytest.fail(f"Non-JSON error body: {r.text[:300]}")
+
+    def test_audit_log_with_kind_filter_requires_bearer(self, api):
+        r = api.get(f"{BASE_URL}{AUDIT_PATH}?kind=user&limit=10", timeout=30)
+        assert r.status_code == 401, r.text[:300]
+
+    def test_audit_log_no_auth_scheme(self, api):
+        r = api.get(
+            f"{BASE_URL}{AUDIT_PATH}",
+            headers={"Authorization": "random-not-bearer"},
+            timeout=30,
+        )
+        assert r.status_code == 401, r.text[:300]
+
+
+class TestForceParamAuthGating:
+    """DELETE with ?force=true still requires bearer auth (no 500)."""
+
+    def test_hard_delete_user_force_requires_bearer(self, api):
+        r = api.delete(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000?force=true",
+            timeout=30,
+        )
+        assert r.status_code == 401, (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+    def test_hard_delete_user_force_with_reason_requires_bearer(self, api):
+        r = api.delete(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000"
+            f"?force=true&reason=cleanup",
+            timeout=30,
+        )
+        assert r.status_code == 401, r.text[:300]
+
+    def test_hard_delete_plant_force_requires_bearer(self, api):
+        r = api.delete(
+            f"{BASE_URL}/api/admin/plants/TEST_plant_xyz?force=true",
+            timeout=30,
+        )
+        assert r.status_code == 401, r.text[:300]
+        assert r.status_code != 500
+
+    def test_hard_delete_user_force_malformed_bearer_not_500(self, api):
+        r = api.delete(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000?force=true",
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+            timeout=30,
+        )
+        assert r.status_code in (401, 403), (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+    def test_hard_delete_plant_force_malformed_bearer_not_500(self, api):
+        r = api.delete(
+            f"{BASE_URL}/api/admin/plants/TEST_plant_xyz?force=true",
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+            timeout=30,
+        )
+        assert r.status_code in (401, 403), (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+
+class TestSoftDeleteJsonBody:
+    """POST soft-delete accepts {reason:'...'} body and still requires bearer."""
+
+    def test_user_soft_delete_with_reason_body_requires_bearer(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000/soft-delete",
+            json={"reason": "resigned employee"},
+            timeout=30,
+        )
+        assert r.status_code == 401, r.text[:300]
+
+    def test_plant_soft_delete_with_reason_body_requires_bearer(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/admin/plants/TEST_plant_xyz/soft-delete",
+            json={"reason": "decommissioned"},
+            timeout=30,
+        )
+        assert r.status_code == 401, r.text[:300]
+
+    def test_user_soft_delete_empty_body_ok(self, api):
+        # Body is Optional — endpoint must not 422 when body is omitted.
+        # It should 401 first due to missing bearer.
+        r = api.post(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000/soft-delete",
+            timeout=30,
+        )
+        assert r.status_code == 401, (r.status_code, r.text[:300])
+        assert r.status_code != 422, "Body should be optional"
+
+    def test_plant_soft_delete_empty_body_ok(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/admin/plants/TEST_plant_xyz/soft-delete",
+            timeout=30,
+        )
+        assert r.status_code == 401, (r.status_code, r.text[:300])
+        assert r.status_code != 422
+
+    def test_user_soft_delete_malformed_bearer_with_body_not_500(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/admin/users/"
+            f"00000000-0000-0000-0000-000000000000/soft-delete",
+            json={"reason": "bad actor"},
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+            timeout=30,
+        )
+        assert r.status_code in (401, 403), (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+
+# ---------------- Iteration 5 regression: /api/cron/compliance-evaluate ---
+
+class TestCronComplianceEvaluate:
+    def test_cron_compliance_evaluate_returns_200(self, api):
+        r = api.post(f"{BASE_URL}/api/cron/compliance-evaluate", timeout=60)
+        # Endpoint is dev-mode open (no CRON_SECRET required by default).
+        # If a secret is set, 401 is acceptable; the critical check is NOT 404.
+        assert r.status_code != 404, (
+            f"Route not registered! {r.status_code}: {r.text[:300]}"
+        )
+        assert r.status_code in (200, 401), (r.status_code, r.text[:300])
