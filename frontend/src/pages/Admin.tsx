@@ -298,6 +298,7 @@ function AuditLogPanel() {
         count: number;
         entries: AuditEntry[];
         warning?: string;
+        table_missing?: boolean;
       };
     },
   });
@@ -320,11 +321,17 @@ function AuditLogPanel() {
           </button>
         ))}
       </div>
-      {data?.warning && (
+      {data?.table_missing && (
         <Card className="p-3 text-xs text-amber-600 border-amber-500/30 bg-amber-500/5">
-          Audit log table not reachable: <code>{data.warning}</code>.
-          Run <code>supabase/migrations/20260424_deletion_audit_log.sql</code>
-          in your Supabase project to enable full audit history.
+          <strong>Audit log table not yet created.</strong> Run{' '}
+          <code>supabase/migrations/20260424_deletion_audit_log.sql</code> in your
+          Supabase project (SQL editor) to enable full audit history. Deletions
+          will still execute — they just won't be logged until the migration runs.
+        </Card>
+      )}
+      {data?.warning && !data?.table_missing && (
+        <Card className="p-3 text-xs text-amber-600 border-amber-500/30 bg-amber-500/5">
+          Audit log warning: <code>{data.warning}</code>
         </Card>
       )}
       {isLoading && (

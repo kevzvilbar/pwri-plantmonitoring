@@ -1,8 +1,8 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 4)_
+_Last updated: 2026-04-24 (iteration 5)_
 
-## 1. Problem Statement (verbatim — consolidated across 4 iterations)
+## 1. Problem Statement (verbatim — consolidated across 5 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
 > XLSX files (Mambaling Q1+Q2, SRP×2, Umapad×2, SRP MCWD, Guizo); remove
 > standalone Downtime field in favour of unified Alerts; fix Dashboard
@@ -16,12 +16,28 @@ _Last updated: 2026-04-24 (iteration 4)_
 > terminology with "Mark As Bypass Well" (require meter reading before
 > marking); Title Case across views (except Notes).
 > Iteration 4: "scan for error … rescan everything correct possible
-> error and forget about vercel." + "Deletion Rules: Only Admin can
-> delete users; Admin or Manager can delete plants. Check dependencies
-> (logs, assigned plants/wells, pending tasks, user accounts). Soft
-> Delete → mark Inactive/Suspended (keeps audit trail, prevents login).
-> Hard Delete → only if no active dependencies. Cascade via
-> archive/reassign."
+> error and forget about vercel." + initial Deletion Rules (Admin-only
+> users, Admin/Manager plants, soft/hard, dependency check, audit log).
+> Iteration 5 (refinement):
+> - User Management: Designation dropdown with defaults Admin/Manager/
+>   Supervisor/Operator + custom input (AllowOtherValues=TRUE); access
+>   level computed dynamically (Admin → Full, Manager → Elevated,
+>   Supervisor → Limited, Operator → Restricted).
+> - User Deletion: Only Admin can permanently delete users; **Admin may
+>   force-delete over active dependencies** with explicit confirmation.
+> - Plant Deletion: Admin + Manager may hard-delete plants only when no
+>   dependencies exist; **only Admin may force-override** the block.
+> - Soft delete (both users and plants): Admin + Manager.
+> - Audit Logs: Supabase-backed `deletion_audit_log` table (who, when,
+>   reason, dependencies snapshot, FORCE marker).
+> - Plants table shows: Name, Location, Wells, RO Trains, Design
+>   Capacity, Status.
+> - Profile view must expose the plant selector post-login, show
+>   assigned plants as badges (EnumList), and let the user edit their
+>   own designation via the combobox. Plant assignments editable only
+>   by Admin.
+> - Remove stale plants "Mambaling 3" and "SRP MCWD" — user will do so
+>   via the new Admin console (no code removal required).
 
 ## 2. Personas
 - Plant operator — mobile-first reading entry, GPS capture, tag bypass
@@ -120,7 +136,8 @@ _Last updated: 2026-04-24 (iteration 4)_
 | `/api/cron/compliance-evaluate`, `/api/cron/pm-forecast-sweep` | POST |
 | `/api/admin/users/{id}/dependencies`, `/api/admin/plants/{id}/dependencies` | GET |
 | `/api/admin/users/{id}/soft-delete`, `/api/admin/plants/{id}/soft-delete` | POST |
-| `/api/admin/users/{id}`, `/api/admin/plants/{id}` | DELETE |
+| `/api/admin/users/{id}`, `/api/admin/plants/{id}` (supports `?force=true&reason=...`) | DELETE |
+| `/api/admin/audit-log` (`?kind=user|plant&limit=N`) | GET |
 
 ## 6. Prioritized backlog
 ### P0 (shipped)
@@ -131,15 +148,34 @@ Iteration 4 (shipped):
   `_make_chat`/`UserMessage` imports in compliance_service.
 - TypeScript build fixed in `Plants.tsx` (wells insert/display
   properly typed via `Database['public']['Tables']['wells']`).
-- Deletion feature: RBAC endpoints (`/api/admin/{users,plants}/…`) +
-  dependency scanner + new `/admin` console page with Users & Plants
-  tabs + inline Delete menus on Plants list/detail and Employees.
-  Soft-delete reuses `user_profiles.status=Suspended` and
-  `plants.status=Inactive`; hard-delete blocked while references
-  exist across ~20 linked tables.
-- Cron decorator regression fix on `/api/cron/compliance-evaluate`
-  (section comment was eating the `@api_router.post` line).
+- Initial deletion endpoints + inline delete menus + /admin console.
+- Cron decorator regression fix on `/api/cron/compliance-evaluate`.
 - Cleanup: removed stray `/app/=0.27.0` and `/app/frontend/replit.md`.
+
+Iteration 5 (shipped):
+- **Admin role — force-override flow**: Admin can hard-delete users
+  even with active dependencies via an extra explicit-ack confirmation
+  dialog; uses `?force=true`. Logged with `[FORCE]` audit marker.
+- **Manager role — constrained**: Manager can soft-delete both users
+  and plants, can hard-delete plants ONLY if no deps, cannot force.
+- **Audit trail**: Supabase table `deletion_audit_log` (migration at
+  `/app/supabase/migrations/20260424_deletion_audit_log.sql`). Backend
+  writes are best-effort; UI surfaces a "run migration" hint when the
+  table is missing.
+- **Designation Combobox**: defaults Admin/Manager/Supervisor/Operator
+  + free-text custom value. Wired into Onboarding, Profile, and the
+  Admin console Users tab (inline editing).
+- **Access level chip**: computed from roles
+  (Admin→Full, Manager→Elevated, Supervisor→Limited, else→Restricted);
+  shown on Profile + Admin users.
+- **Profile page**: new `/profile` route with plant selector visible
+  post-login, assigned-plant badges (EnumList), identity self-edit
+  via `update_own_profile` RPC. Admin edits others' plants from the
+  Admin console via the new `PlantAssignmentEditor` dialog.
+- **Plants list**: Geofence column swapped for Wells count.
+- Narrowed audit-log error handling: only the "table missing" case
+  returns 200 + `table_missing=true`; all other Supabase errors
+  surface as 500.
 
 ### P1 (next)
 - [ ] Sidebar compliance badge (open-violation count).
@@ -155,23 +191,24 @@ Iteration 4 (shipped):
       skipped; in-app Alerts card only.
 
 ## 7. Testing
-- Backend: `pytest backend/tests/ -v` — **44/44 passing** (iter 4)
-  including 21 new tests in `test_ai_and_admin.py` covering:
-  (1) /api/ai/health returns gpt-5.1 openai;
-  (2) /api/ai/chat returns non-empty reply (emergentintegrations wired);
-  (3) /api/ai/anomalies + /api/ai/sessions response shapes;
-  (4) all 6 admin endpoints return 401 without token and 401/403 (never
-      500) on malformed bearer.
-- Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean. Source-
-  verified in iter 3/4 (testing agent blocked by Supabase "Confirm
-  email" — no service-role key available). User can self-verify
-  interactively once signed in as Admin/Manager.
+- Backend: `pytest backend/tests/ -v` — **59/59 passing** (iter 5).
+  Covers: AI migration (health/chat/anomalies/sessions), 6 original
+  admin endpoints + new `/api/admin/audit-log`, `?force=true` flag
+  on DELETE, soft-delete JSON body, regression on core routes.
+- Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean. No
+  service-role Supabase key available to automate positive-path
+  deletion tests; user verifies interactively after running the
+  SQL migration.
 
-## 8. Deployment
-- Vercel work was explicitly abandoned by the user in iter 4. App is
-  hosted via Emergent preview + supervisor (FastAPI on :8001, Vite on
-  :3000). `vercel.json` remains in the repo but is not maintained.
+## 8. Deployment & Operational Notes
+- Vercel work was explicitly abandoned in iter 4. App is served via
+  Emergent preview + supervisor (FastAPI on :8001, Vite on :3000).
+- **Required manual step**: run
+  `/app/supabase/migrations/20260424_deletion_audit_log.sql` in the
+  Supabase SQL editor. Until then, deletions still work but rows are
+  NOT recorded in `deletion_audit_log`; the UI shows a clear warning.
 - Hard-delete of a user removes `user_profiles` + `user_roles` only —
-  `auth.users` row requires the Supabase service-role key and should be
-  removed from the Supabase dashboard manually. The UI response
-  documents this.
+  `auth.users` row requires the Supabase service-role key and must be
+  removed from the dashboard manually. The UI response documents this
+  (even more so when `force=true` is used, which orphans
+  `recorded_by`/`performed_by`/`replaced_by` pointers).

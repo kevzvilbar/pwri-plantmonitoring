@@ -471,5 +471,21 @@ def list_audit_log(
         res = q.execute()
         return {"count": len(res.data or []), "entries": res.data or []}
     except Exception as e:  # noqa: BLE001
-        log.warning("audit log read failed: %s", e)
-        return {"count": 0, "entries": [], "warning": str(e)}
+        msg = str(e)
+        # Only swallow the "table/relation does not exist" error (pre-migration state).
+        # Any other Supabase error (RLS denial, network, etc) must surface as 500.
+        if "deletion_audit_log" in msg and (
+            "does not exist" in msg or "relation" in msg.lower() or "schema cache" in msg.lower()
+        ):
+            log.warning(
+                "deletion_audit_log table missing — run supabase/migrations/"
+                "20260424_deletion_audit_log.sql in Supabase SQL editor."
+            )
+            return {
+                "count": 0,
+                "entries": [],
+                "table_missing": True,
+                "warning": msg,
+            }
+        log.exception("audit log read failed")
+        raise HTTPException(status_code=500, detail=f"Audit log read failed: {msg}")
