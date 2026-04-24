@@ -1,374 +1,531 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for XLSX Import Endpoint
-Tests the POST /api/import/parse-wellmeter endpoint with various scenarios.
+Comprehensive backend API testing for AI Assistant endpoints and XLSX import.
+Tests all endpoints specified in test_result.md agent_communication.
 """
 
 import requests
 import json
-import tempfile
-import os
-from pathlib import Path
+import sys
+import time
+from typing import Dict, Any, Optional
 
-# Backend URL from frontend/.env
-BACKEND_URL = "https://quality-guard-5.preview.emergentagent.com"
-API_BASE = f"{BACKEND_URL}/api"
+# Use external URL from frontend/.env
+BASE_URL = "https://quality-guard-5.preview.emergentagent.com/api"
 
-def test_basic_api_health():
-    """Test basic API connectivity"""
-    print("🔍 Testing basic API health...")
+def log_test(test_name: str, status: str, details: str = ""):
+    """Log test results with consistent formatting"""
+    status_emoji = "✅" if status == "PASS" else "❌" if status == "FAIL" else "⚠️"
+    print(f"{status_emoji} {test_name}: {status}")
+    if details:
+        print(f"   {details}")
+
+def test_ai_health():
+    """Test GET /api/ai/health endpoint"""
     try:
-        response = requests.get(f"{API_BASE}/")
-        print(f"   Status: {response.status_code}")
-        print(f"   Response: {response.json()}")
-        assert response.status_code == 200
-        assert response.json() == {"message": "Hello World"}
-        print("   ✅ Basic API health check passed")
-        return True
-    except Exception as e:
-        print(f"   ❌ Basic API health check failed: {e}")
-        return False
-
-def download_test_file(url, filename):
-    """Download a test file from the given URL"""
-    print(f"📥 Downloading {filename}...")
-    try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        
-        # Save to temp file
-        temp_path = Path(tempfile.gettempdir()) / filename
-        with open(temp_path, 'wb') as f:
-            f.write(response.content)
-        
-        print(f"   ✅ Downloaded {filename} ({len(response.content)} bytes)")
-        return temp_path
-    except Exception as e:
-        print(f"   ❌ Failed to download {filename}: {e}")
-        return None
-
-def test_xlsx_upload(file_path, expected_sheets=None, expected_rows=None, 
-                    expected_defective=None, expected_downtime=None, test_name=""):
-    """Test XLSX file upload and parsing"""
-    print(f"🧪 Testing XLSX upload: {test_name}")
-    
-    if not file_path or not file_path.exists():
-        print(f"   ❌ File not found: {file_path}")
-        return False
-    
-    try:
-        with open(file_path, 'rb') as f:
-            files = {'file': (file_path.name, f, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-            response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files, timeout=60)
-        
-        print(f"   Status: {response.status_code}")
+        response = requests.get(f"{BASE_URL}/ai/health", timeout=10)
         
         if response.status_code != 200:
-            print(f"   ❌ Expected 200, got {response.status_code}")
-            print(f"   Response: {response.text}")
+            log_test("AI Health Check", "FAIL", f"Status {response.status_code}: {response.text}")
             return False
-        
+            
         data = response.json()
         
         # Validate response structure
-        assert "sheets" in data, "Response missing 'sheets' key"
-        assert "file_summary" in data, "Response missing 'file_summary' key"
-        assert isinstance(data["sheets"], list), "'sheets' should be a list"
-        assert isinstance(data["file_summary"], dict), "'file_summary' should be a dict"
+        required_fields = ["ok", "model", "provider"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Health Check", "FAIL", f"Missing field: {field}")
+                return False
         
-        # Check file summary structure
-        file_summary = data["file_summary"]
-        required_summary_keys = ["sheet_count", "total_rows", "total_defective", "total_downtime", "total_flagged"]
-        for key in required_summary_keys:
-            assert key in file_summary, f"file_summary missing '{key}'"
-        
-        print(f"   📊 File Summary:")
-        print(f"      Sheets: {file_summary['sheet_count']}")
-        print(f"      Total rows: {file_summary['total_rows']}")
-        print(f"      Defective: {file_summary['total_defective']}")
-        print(f"      Downtime: {file_summary['total_downtime']}")
-        print(f"      Flagged: {file_summary['total_flagged']}")
-        
-        # Validate each sheet structure
-        for i, sheet in enumerate(data["sheets"]):
-            required_sheet_keys = ["sheet_name", "suggested_well_name", "rows", "summary", "warnings"]
-            for key in required_sheet_keys:
-                assert key in sheet, f"Sheet {i} missing '{key}'"
+        # Check expected values
+        if data.get("model") != "gpt-5.1":
+            log_test("AI Health Check", "FAIL", f"Expected model 'gpt-5.1', got '{data.get('model')}'")
+            return False
             
-            # Validate rows structure
-            for j, row in enumerate(sheet["rows"][:3]):  # Check first 3 rows
-                required_row_keys = ["date", "initial", "final", "volume", "status", "status_raw", 
-                                   "include_in_totals", "is_downtime", "flags", "warnings", 
-                                   "row_index", "block_index"]
-                for key in required_row_keys:
-                    assert key in row, f"Sheet {i}, row {j} missing '{key}'"
-                
-                # Validate status values
-                valid_statuses = {"valid", "blend", "blend_shutdown", "defective", "shutoff", 
-                                "no_operation", "no_reading", "new_meter", "standby", "tripped", "unknown"}
-                assert row["status"] in valid_statuses, f"Invalid status: {row['status']}"
-                
-                # Validate boolean fields
-                assert isinstance(row["include_in_totals"], bool), "include_in_totals should be boolean"
-                assert isinstance(row["is_downtime"], bool), "is_downtime should be boolean"
-                assert isinstance(row["flags"], list), "flags should be a list"
-                assert isinstance(row["warnings"], list), "warnings should be a list"
+        if data.get("provider") != "openai":
+            log_test("AI Health Check", "FAIL", f"Expected provider 'openai', got '{data.get('provider')}'")
+            return False
         
-        # Check expected values if provided
-        if expected_sheets is not None:
-            assert file_summary["sheet_count"] == expected_sheets, \
-                f"Expected {expected_sheets} sheets, got {file_summary['sheet_count']}"
-        
-        if expected_rows is not None:
-            assert file_summary["total_rows"] == expected_rows, \
-                f"Expected {expected_rows} rows, got {file_summary['total_rows']}"
-        
-        if expected_defective is not None:
-            assert file_summary["total_defective"] >= expected_defective, \
-                f"Expected ≥{expected_defective} defective, got {file_summary['total_defective']}"
-        
-        if expected_downtime is not None:
-            assert file_summary["total_downtime"] >= expected_downtime, \
-                f"Expected ≥{expected_downtime} downtime, got {file_summary['total_downtime']}"
-        
-        print(f"   ✅ {test_name} passed all validations")
+        # Check if EMERGENT_LLM_KEY is configured
+        if not data.get("ok"):
+            log_test("AI Health Check", "FAIL", "EMERGENT_LLM_KEY is not configured (ok=false)")
+            return False
+            
+        log_test("AI Health Check", "PASS", f"Model: {data['model']}, Provider: {data['provider']}")
         return True
         
     except Exception as e:
-        print(f"   ❌ {test_name} failed: {e}")
+        log_test("AI Health Check", "FAIL", f"Exception: {str(e)}")
         return False
 
-def test_edge_cases():
-    """Test various edge cases that should return 400"""
-    print("🧪 Testing edge cases...")
-    
-    # Test 1: No file field
-    print("   Testing empty request...")
+def test_ai_chat_single_turn():
+    """Test POST /api/ai/chat with single message"""
     try:
-        response = requests.post(f"{API_BASE}/import/parse-wellmeter")
-        assert response.status_code == 422, f"Expected 422, got {response.status_code}"
-        print("   ✅ Empty request correctly rejected")
+        payload = {
+            "message": "In one short sentence, what does NRW stand for?"
+        }
+        
+        response = requests.post(f"{BASE_URL}/ai/chat", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("AI Chat Single Turn", "FAIL", f"Status {response.status_code}: {response.text}")
+            return None
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["session_id", "reply", "created_at"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Chat Single Turn", "FAIL", f"Missing field: {field}")
+                return None
+        
+        # Validate content
+        if not data.get("session_id"):
+            log_test("AI Chat Single Turn", "FAIL", "Empty session_id")
+            return None
+            
+        if not data.get("reply") or len(data["reply"].strip()) == 0:
+            log_test("AI Chat Single Turn", "FAIL", "Empty reply")
+            return None
+        
+        log_test("AI Chat Single Turn", "PASS", f"Session: {data['session_id'][:12]}..., Reply length: {len(data['reply'])}")
+        return data["session_id"]
+        
     except Exception as e:
-        print(f"   ❌ Empty request test failed: {e}")
-    
-    # Test 2: Empty file
-    print("   Testing empty file...")
-    try:
-        files = {'file': ('empty.xlsx', b'', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-        response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files)
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
-        print("   ✅ Empty file correctly rejected")
-    except Exception as e:
-        print(f"   ❌ Empty file test failed: {e}")
-    
-    # Test 3: Wrong file extension
-    print("   Testing wrong file extension...")
-    try:
-        files = {'file': ('test.pdf', b'fake pdf content', 'application/pdf')}
-        response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files)
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
-        print("   ✅ Wrong extension correctly rejected")
-    except Exception as e:
-        print(f"   ❌ Wrong extension test failed: {e}")
-    
-    # Test 4: Non-XLSX content with .xlsx extension
-    print("   Testing fake XLSX file...")
-    try:
-        files = {'file': ('fake.xlsx', b'This is not an Excel file', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-        response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files)
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
-        print("   ✅ Fake XLSX correctly rejected")
-    except Exception as e:
-        print(f"   ❌ Fake XLSX test failed: {e}")
-    
-    # Test 5: Large file (simulate >10MB)
-    print("   Testing large file simulation...")
-    try:
-        # Create a large fake file content
-        large_content = b'x' * (11 * 1024 * 1024)  # 11MB
-        files = {'file': ('large.xlsx', large_content, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-        response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files)
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
-        print("   ✅ Large file correctly rejected")
-    except Exception as e:
-        print(f"   ❌ Large file test failed: {e}")
+        log_test("AI Chat Single Turn", "FAIL", f"Exception: {str(e)}")
+        return None
 
-def test_specific_file_requirements():
-    """Test specific requirements for each sample file"""
-    print("🧪 Testing specific file requirements...")
-    
-    # Test SRP file specific requirements
-    print("   Testing SRP file date range and status detection...")
-    srp_url = "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/jwi04ofl_SRP%20Well%20Meter%20Reading%202026_1.xlsx"
-    srp_file = download_test_file(srp_url, "srp_test.xlsx")
-    
-    if srp_file:
-        try:
-            with open(srp_file, 'rb') as f:
-                files = {'file': (srp_file.name, f, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-                response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files, timeout=60)
+def test_ai_chat_multi_turn(session_id: str):
+    """Test POST /api/ai/chat with follow-up message using existing session"""
+    try:
+        payload = {
+            "message": "Is it the same as UFW?",
+            "session_id": session_id
+        }
+        
+        response = requests.post(f"{BASE_URL}/ai/chat", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("AI Chat Multi-turn", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
             
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Check for "Well 2 Meter Reading" sheet
-                well2_sheet = None
-                for sheet in data["sheets"]:
-                    if "Well 2" in sheet["sheet_name"]:
-                        well2_sheet = sheet
-                        break
-                
-                if well2_sheet:
-                    print(f"      Found Well 2 sheet: {well2_sheet['sheet_name']}")
-                    
-                    # Check for defective status with include_in_totals=false
-                    defective_found = False
-                    new_meter_found = False
-                    
-                    for row in well2_sheet["rows"]:
-                        if row["status"] == "defective" and not row["include_in_totals"]:
-                            defective_found = True
-                        if row["status"] == "new_meter" and row["include_in_totals"]:
-                            new_meter_found = True
-                    
-                    if defective_found:
-                        print("      ✅ Found defective status with include_in_totals=false")
-                    else:
-                        print("      ⚠️ No defective status with include_in_totals=false found")
-                    
-                    if new_meter_found:
-                        print("      ✅ Found new_meter status with include_in_totals=true")
-                    else:
-                        print("      ⚠️ No new_meter status with include_in_totals=true found")
-                
-                # Check date range for 2026
-                dates_found = []
-                for sheet in data["sheets"]:
-                    for row in sheet["rows"]:
-                        if row["date"] and row["date"].startswith("2026"):
-                            dates_found.append(row["date"])
-                
-                if dates_found:
-                    dates_found.sort()
-                    print(f"      Date range: {dates_found[0]} to {dates_found[-1]}")
-                    if dates_found[0] >= "2026-01-01" and dates_found[-1] <= "2026-03-31":
-                        print("      ✅ Dates in expected 2026 Q1 range")
-                    else:
-                        print("      ⚠️ Dates outside expected 2026-01-01 to 2026-03-31 range")
-                
-        except Exception as e:
-            print(f"      ❌ SRP specific tests failed: {e}")
-    
-    # Test Umapad file specific requirements
-    print("   Testing Umapad file Collection box 2 requirements...")
-    umapad_url = "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/xa13et84_UMAPAD%20Well%20Meter%20Reading%202026_2.xlsx"
-    umapad_file = download_test_file(umapad_url, "umapad_test.xlsx")
-    
-    if umapad_file:
-        try:
-            with open(umapad_file, 'rb') as f:
-                files = {'file': (umapad_file.name, f, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
-                response = requests.post(f"{API_BASE}/import/parse-wellmeter", files=files, timeout=60)
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["session_id", "reply", "created_at"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Chat Multi-turn", "FAIL", f"Missing field: {field}")
+                return False
+        
+        # Validate session continuity
+        if data.get("session_id") != session_id:
+            log_test("AI Chat Multi-turn", "FAIL", f"Session ID mismatch: expected {session_id}, got {data.get('session_id')}")
+            return False
+        
+        # Check if reply references context (should mention NRW or previous context)
+        reply = data.get("reply", "").lower()
+        if not any(keyword in reply for keyword in ["nrw", "non-revenue", "water", "previous", "earlier", "mentioned"]):
+            log_test("AI Chat Multi-turn", "FAIL", "Reply doesn't seem to reference previous context")
+            return False
+        
+        log_test("AI Chat Multi-turn", "PASS", f"Context-aware reply received, length: {len(data['reply'])}")
+        return True
+        
+    except Exception as e:
+        log_test("AI Chat Multi-turn", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_sessions_list(session_id: str):
+    """Test GET /api/ai/sessions"""
+    try:
+        response = requests.get(f"{BASE_URL}/ai/sessions", timeout=10)
+        
+        if response.status_code != 200:
+            log_test("AI Sessions List", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
             
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Check for Collection box 2 sheet
-                collection_sheet = None
-                for sheet in data["sheets"]:
-                    if "Collection box 2" in sheet["sheet_name"] or "6am cut-off" in sheet["sheet_name"]:
-                        collection_sheet = sheet
-                        break
-                
-                if collection_sheet:
-                    print(f"      Found Collection box 2 sheet: {collection_sheet['sheet_name']}")
-                    
-                    # Check for new_meter status
-                    new_meter_found = False
-                    for row in collection_sheet["rows"]:
-                        if row["status"] == "new_meter":
-                            new_meter_found = True
-                            break
-                    
-                    if new_meter_found:
-                        print("      ✅ Found new_meter status in Collection box 2")
-                    else:
-                        print("      ⚠️ No new_meter status found in Collection box 2")
-                
-        except Exception as e:
-            print(f"      ❌ Umapad specific tests failed: {e}")
+        data = response.json()
+        
+        if not isinstance(data, list):
+            log_test("AI Sessions List", "FAIL", "Response is not an array")
+            return False
+        
+        # Find our test session
+        test_session = None
+        for session in data:
+            if session.get("session_id") == session_id:
+                test_session = session
+                break
+        
+        if not test_session:
+            log_test("AI Sessions List", "FAIL", f"Test session {session_id} not found in list")
+            return False
+        
+        # Validate session structure
+        required_fields = ["session_id", "updated_at", "preview"]
+        for field in required_fields:
+            if field not in test_session:
+                log_test("AI Sessions List", "FAIL", f"Missing field in session: {field}")
+                return False
+        
+        if not test_session.get("preview"):
+            log_test("AI Sessions List", "FAIL", "Empty preview")
+            return False
+        
+        log_test("AI Sessions List", "PASS", f"Found {len(data)} sessions, test session present with preview")
+        return True
+        
+    except Exception as e:
+        log_test("AI Sessions List", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_session_detail(session_id: str):
+    """Test GET /api/ai/sessions/{id}"""
+    try:
+        response = requests.get(f"{BASE_URL}/ai/sessions/{session_id}", timeout=10)
+        
+        if response.status_code != 200:
+            log_test("AI Session Detail", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["session_id", "messages"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Session Detail", "FAIL", f"Missing field: {field}")
+                return False
+        
+        if data.get("session_id") != session_id:
+            log_test("AI Session Detail", "FAIL", f"Session ID mismatch: expected {session_id}, got {data.get('session_id')}")
+            return False
+        
+        messages = data.get("messages", [])
+        if not isinstance(messages, list):
+            log_test("AI Session Detail", "FAIL", "Messages is not an array")
+            return False
+        
+        # Should have at least 4 messages (2 user + 2 assistant from our tests)
+        if len(messages) < 4:
+            log_test("AI Session Detail", "FAIL", f"Expected ≥4 messages, got {len(messages)}")
+            return False
+        
+        # Validate message structure
+        for i, msg in enumerate(messages):
+            if "role" not in msg or "content" not in msg:
+                log_test("AI Session Detail", "FAIL", f"Message {i} missing role or content")
+                return False
+            if msg["role"] not in ["user", "assistant"]:
+                log_test("AI Session Detail", "FAIL", f"Message {i} has invalid role: {msg['role']}")
+                return False
+        
+        log_test("AI Session Detail", "PASS", f"Retrieved {len(messages)} messages with proper structure")
+        return True
+        
+    except Exception as e:
+        log_test("AI Session Detail", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_anomalies_with_data():
+    """Test POST /api/ai/anomalies with sample data"""
+    try:
+        payload = {
+            "readings": [
+                {"well": "Well 2", "date": "2026-01-01", "initial": 117322, "final": 117322, "volume": 0, "status": "defective"},
+                {"well": "Well 2", "date": "2026-01-02", "initial": 117322, "final": 117322, "volume": 0, "status": "defective"},
+                {"well": "Well 2", "date": "2026-01-03", "initial": 117322, "final": 117322, "volume": 0, "status": "defective"},
+                {"well": "Well 2", "date": "2026-01-04", "initial": 117322, "final": 120000, "volume": 2678, "status": "valid"},
+                {"well": "Well 2", "date": "2026-01-07", "initial": 125000, "final": 140000, "volume": 15000, "status": "valid"},
+                {"well": "Well 2", "date": "2026-01-08", "initial": 140000, "final": 140000, "volume": 0, "status": "shutoff"}
+            ]
+        }
+        
+        response = requests.post(f"{BASE_URL}/ai/anomalies", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("AI Anomalies (with data)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["anomalies", "summary"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Anomalies (with data)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        anomalies = data.get("anomalies", [])
+        if not isinstance(anomalies, list):
+            log_test("AI Anomalies (with data)", "FAIL", "Anomalies is not an array")
+            return False
+        
+        # Should detect at least 1 anomaly from the test data
+        if len(anomalies) < 1:
+            log_test("AI Anomalies (with data)", "FAIL", "Expected ≥1 anomaly, got 0")
+            return False
+        
+        # Validate anomaly structure
+        for i, anomaly in enumerate(anomalies):
+            required_anomaly_fields = ["well", "date", "type", "severity", "message", "suggested_action"]
+            for field in required_anomaly_fields:
+                if field not in anomaly:
+                    log_test("AI Anomalies (with data)", "FAIL", f"Anomaly {i} missing field: {field}")
+                    return False
+            
+            # Validate severity values
+            if anomaly.get("severity") not in ["low", "medium", "high"]:
+                log_test("AI Anomalies (with data)", "FAIL", f"Anomaly {i} has invalid severity: {anomaly.get('severity')}")
+                return False
+        
+        summary = data.get("summary", "")
+        if not summary or len(summary.strip()) == 0:
+            log_test("AI Anomalies (with data)", "FAIL", "Empty summary")
+            return False
+        
+        log_test("AI Anomalies (with data)", "PASS", f"Detected {len(anomalies)} anomalies with valid structure")
+        return True
+        
+    except Exception as e:
+        log_test("AI Anomalies (with data)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_anomalies_empty():
+    """Test POST /api/ai/anomalies with empty readings"""
+    try:
+        payload = {"readings": []}
+        
+        response = requests.post(f"{BASE_URL}/ai/anomalies", json=payload, timeout=10)
+        
+        if response.status_code != 200:
+            log_test("AI Anomalies (empty)", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["anomalies", "summary"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Anomalies (empty)", "FAIL", f"Missing field: {field}")
+                return False
+        
+        anomalies = data.get("anomalies", [])
+        if not isinstance(anomalies, list):
+            log_test("AI Anomalies (empty)", "FAIL", "Anomalies is not an array")
+            return False
+        
+        # Should return empty anomalies for empty input
+        if len(anomalies) != 0:
+            log_test("AI Anomalies (empty)", "FAIL", f"Expected 0 anomalies for empty input, got {len(anomalies)}")
+            return False
+        
+        summary = data.get("summary", "")
+        if not summary or len(summary.strip()) == 0:
+            log_test("AI Anomalies (empty)", "FAIL", "Empty summary")
+            return False
+        
+        log_test("AI Anomalies (empty)", "PASS", f"Correctly handled empty input: {summary}")
+        return True
+        
+    except Exception as e:
+        log_test("AI Anomalies (empty)", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_session_delete(session_id: str):
+    """Test DELETE /api/ai/sessions/{id}"""
+    try:
+        response = requests.delete(f"{BASE_URL}/ai/sessions/{session_id}", timeout=10)
+        
+        if response.status_code != 200:
+            log_test("AI Session Delete", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Validate response structure
+        required_fields = ["ok", "session_id"]
+        for field in required_fields:
+            if field not in data:
+                log_test("AI Session Delete", "FAIL", f"Missing field: {field}")
+                return False
+        
+        if not data.get("ok"):
+            log_test("AI Session Delete", "FAIL", "Delete operation not confirmed (ok=false)")
+            return False
+        
+        if data.get("session_id") != session_id:
+            log_test("AI Session Delete", "FAIL", f"Session ID mismatch: expected {session_id}, got {data.get('session_id')}")
+            return False
+        
+        # Verify session is actually deleted by trying to get it
+        time.sleep(1)  # Brief delay to ensure deletion is processed
+        get_response = requests.get(f"{BASE_URL}/ai/sessions/{session_id}", timeout=10)
+        
+        if get_response.status_code == 200:
+            get_data = get_response.json()
+            messages = get_data.get("messages", [])
+            if len(messages) > 0:
+                log_test("AI Session Delete", "FAIL", f"Session still has {len(messages)} messages after deletion")
+                return False
+        
+        log_test("AI Session Delete", "PASS", "Session successfully deleted and verified")
+        return True
+        
+    except Exception as e:
+        log_test("AI Session Delete", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_ai_chat_validation():
+    """Test POST /api/ai/chat with invalid input"""
+    try:
+        payload = {"message": ""}  # Empty message should return 422
+        
+        response = requests.post(f"{BASE_URL}/ai/chat", json=payload, timeout=10)
+        
+        if response.status_code != 422:
+            log_test("AI Chat Validation", "FAIL", f"Expected 422 for empty message, got {response.status_code}")
+            return False
+        
+        log_test("AI Chat Validation", "PASS", "Correctly rejected empty message with 422")
+        return True
+        
+    except Exception as e:
+        log_test("AI Chat Validation", "FAIL", f"Exception: {str(e)}")
+        return False
+
+def test_xlsx_import_regression():
+    """Test POST /api/import/parse-wellmeter to ensure it still works after refactor"""
+    try:
+        # Use the Mambaling sample file URL from test_result.md
+        file_url = "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/cv6d08yp_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx"
+        
+        # Download the file
+        file_response = requests.get(file_url, timeout=30)
+        if file_response.status_code != 200:
+            log_test("XLSX Import Regression", "FAIL", f"Could not download test file: {file_response.status_code}")
+            return False
+        
+        # Upload to the endpoint
+        files = {"file": ("mambaling.xlsx", file_response.content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        response = requests.post(f"{BASE_URL}/import/parse-wellmeter", files=files, timeout=30)
+        
+        if response.status_code != 200:
+            log_test("XLSX Import Regression", "FAIL", f"Status {response.status_code}: {response.text}")
+            return False
+            
+        data = response.json()
+        
+        # Basic validation - should have sheets and file_summary
+        if "sheets" not in data or "file_summary" not in data:
+            log_test("XLSX Import Regression", "FAIL", "Missing sheets or file_summary in response")
+            return False
+        
+        sheets = data.get("sheets", [])
+        if len(sheets) != 1:
+            log_test("XLSX Import Regression", "FAIL", f"Expected 1 sheet for Mambaling file, got {len(sheets)}")
+            return False
+        
+        # Check row count (should be 90 as per test_result.md)
+        sheet = sheets[0]
+        rows = sheet.get("rows", [])
+        if len(rows) != 90:
+            log_test("XLSX Import Regression", "FAIL", f"Expected 90 rows for Mambaling file, got {len(rows)}")
+            return False
+        
+        log_test("XLSX Import Regression", "PASS", f"Mambaling file processed correctly: {len(sheets)} sheet, {len(rows)} rows")
+        return True
+        
+    except Exception as e:
+        log_test("XLSX Import Regression", "FAIL", f"Exception: {str(e)}")
+        return False
 
 def main():
-    """Run all tests"""
-    print("🚀 Starting XLSX Import Endpoint Tests")
+    """Run all AI endpoint tests in the specified sequence"""
+    print("🚀 Starting AI Assistant Backend Testing")
+    print(f"📍 Base URL: {BASE_URL}")
     print("=" * 60)
     
-    # Test 1: Basic API health
-    if not test_basic_api_health():
-        print("❌ Basic API health failed, stopping tests")
-        return
+    results = {}
+    session_id = None
     
-    print()
+    # Test sequence as specified in test_result.md
     
-    # Test 2: Edge cases
-    test_edge_cases()
-    print()
+    # 1. Health check
+    results["health"] = test_ai_health()
     
-    # Test 3: Sample files
-    test_files = [
-        {
-            "url": "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/cv6d08yp_MAMBALING%203%20Well%20Meter%20Reading%202026_2.xlsx",
-            "filename": "mambaling_test.xlsx",
-            "expected_sheets": 1,
-            "expected_rows": 90,
-            "expected_defective": 0,
-            "expected_downtime": 13,
-            "name": "Mambaling file"
-        },
-        {
-            "url": "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/jwi04ofl_SRP%20Well%20Meter%20Reading%202026_1.xlsx",
-            "filename": "srp_test.xlsx",
-            "expected_sheets": 17,
-            "expected_rows": 1533,
-            "expected_defective": 51,
-            "expected_downtime": 789,
-            "name": "SRP file"
-        },
-        {
-            "url": "https://customer-assets.emergentagent.com/job_quality-guard-5/artifacts/xa13et84_UMAPAD%20Well%20Meter%20Reading%202026_2.xlsx",
-            "filename": "umapad_test.xlsx",
-            "expected_sheets": 6,
-            "expected_defective": None,
-            "expected_downtime": None,
-            "name": "Umapad file"
-        }
-    ]
-    
-    success_count = 0
-    for test_file in test_files:
-        file_path = download_test_file(test_file["url"], test_file["filename"])
-        if file_path:
-            if test_xlsx_upload(
-                file_path, 
-                test_file.get("expected_sheets"),
-                test_file.get("expected_rows"),
-                test_file.get("expected_defective"),
-                test_file.get("expected_downtime"),
-                test_file["name"]
-            ):
-                success_count += 1
-        print()
-    
-    # Test 4: Specific requirements
-    test_specific_file_requirements()
-    
-    print("=" * 60)
-    print(f"🏁 Tests completed. {success_count}/{len(test_files)} sample files passed")
-    
-    if success_count == len(test_files):
-        print("✅ All critical tests passed!")
+    # 2. Single turn chat
+    if results["health"]:
+        session_id = test_ai_chat_single_turn()
+        results["chat_single"] = session_id is not None
     else:
-        print("❌ Some tests failed - check output above")
+        results["chat_single"] = False
+        print("⚠️  Skipping chat tests due to health check failure")
+    
+    # 3. Multi-turn chat
+    if session_id:
+        results["chat_multi"] = test_ai_chat_multi_turn(session_id)
+    else:
+        results["chat_multi"] = False
+        print("⚠️  Skipping multi-turn test due to single-turn failure")
+    
+    # 4. Sessions list
+    if session_id:
+        results["sessions_list"] = test_ai_sessions_list(session_id)
+    else:
+        results["sessions_list"] = False
+        print("⚠️  Skipping sessions list test")
+    
+    # 5. Session detail
+    if session_id:
+        results["session_detail"] = test_ai_session_detail(session_id)
+    else:
+        results["session_detail"] = False
+        print("⚠️  Skipping session detail test")
+    
+    # 6. Anomalies with data
+    results["anomalies_data"] = test_ai_anomalies_with_data()
+    
+    # 7. Anomalies empty
+    results["anomalies_empty"] = test_ai_anomalies_empty()
+    
+    # 8. Session delete
+    if session_id:
+        results["session_delete"] = test_ai_session_delete(session_id)
+    else:
+        results["session_delete"] = False
+        print("⚠️  Skipping session delete test")
+    
+    # 9. Validation
+    results["chat_validation"] = test_ai_chat_validation()
+    
+    # 10. XLSX import regression
+    results["xlsx_regression"] = test_xlsx_import_regression()
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print("📊 TEST SUMMARY")
+    print("=" * 60)
+    
+    passed = sum(1 for result in results.values() if result)
+    total = len(results)
+    
+    for test_name, result in results.items():
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{status} {test_name}")
+    
+    print(f"\n🎯 Overall: {passed}/{total} tests passed")
+    
+    if passed == total:
+        print("🎉 All tests passed! AI endpoints are working correctly.")
+        return 0
+    else:
+        print("⚠️  Some tests failed. Check the details above.")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

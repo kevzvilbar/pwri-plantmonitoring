@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Download, Upload,
+  Users, DollarSign, Receipt, Download, Upload, Sparkles,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -12,7 +12,10 @@ import { cn } from '@/lib/utils';
 const groups = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+    items: [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: '/ai', label: 'AI Assistant', icon: Sparkles },
+    ],
   },
   {
     label: 'Operations',

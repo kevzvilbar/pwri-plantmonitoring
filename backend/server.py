@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Header
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,11 +7,15 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
 
 from import_parser import parse_xlsx
+from ai_service import (
+    ChatRequest, AnomalyRequest,
+    chat_turn, list_sessions, get_session, detect_anomalies,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -92,6 +96,57 @@ async def parse_wellmeter(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to parse: {e}")
 
     return JSONResponse(result)
+
+
+# ---- AI assistant --------------------------------------------------------
+
+@api_router.post("/ai/chat")
+async def ai_chat(req: ChatRequest, x_user_id: Optional[str] = Header(None)):
+    try:
+        resp = await chat_turn(db, x_user_id, req)
+        return resp
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logging.exception("ai_chat failed")
+        raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
+
+
+@api_router.get("/ai/sessions")
+async def ai_list_sessions(
+    x_user_id: Optional[str] = Header(None),
+    limit: int = 20,
+):
+    return await list_sessions(db, x_user_id, limit=max(1, min(limit, 100)))
+
+
+@api_router.get("/ai/sessions/{session_id}")
+async def ai_get_session(session_id: str):
+    return await get_session(db, session_id)
+
+
+@api_router.delete("/ai/sessions/{session_id}")
+async def ai_delete_session(session_id: str):
+    await db.ai_conversations.delete_one({"session_id": session_id})
+    return {"ok": True, "session_id": session_id}
+
+
+@api_router.post("/ai/anomalies")
+async def ai_anomalies(req: AnomalyRequest):
+    try:
+        return await detect_anomalies(req)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logging.exception("ai_anomalies failed")
+        raise HTTPException(status_code=500, detail=f"Unexpected: {e}")
+
+
+@api_router.get("/ai/health")
+async def ai_health():
+    """Quick probe to verify EMERGENT_LLM_KEY is configured."""
+    key_set = bool(os.environ.get("EMERGENT_LLM_KEY"))
+    return {"ok": key_set, "model": "gpt-5.1", "provider": "openai"}
 
 
 # Include the router in the main app

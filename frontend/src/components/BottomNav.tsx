@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet, MapPin, Cog, FlaskConical,
-  Wrench, AlertTriangle, DollarSign, Users, Download, Upload,
+  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +23,12 @@ const rightPriority: Priority[] = [
 
 // Items hidden behind the side sheet
 const sideSheetGroups = [
+  {
+    title: 'Overview',
+    items: [
+      { to: '/ai', label: 'AI Assistant', icon: Sparkles },
+    ],
+  },
   {
     title: 'Operations',
     items: [

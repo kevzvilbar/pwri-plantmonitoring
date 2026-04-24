@@ -110,6 +110,58 @@ user_problem_statement: |
   shut-offs, no-operation, blend, new-meter-resets, and inconsistent readings.
 
 backend:
+  - task: "AI Assistant endpoints (/api/ai/*)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend/ai_service.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            New AI endpoints using emergentintegrations + EMERGENT_LLM_KEY:
+              - GET  /api/ai/health        -> {ok, model, provider}
+              - POST /api/ai/chat          -> {session_id, message, provider?, model?, context?}
+                returns {session_id, reply, created_at}; history persisted in Mongo
+                collection `ai_conversations` (keyed by session_id).
+              - GET  /api/ai/sessions      -> list recent sessions (optionally filtered
+                by x-user-id header).
+              - GET  /api/ai/sessions/{id} -> full message history.
+              - DELETE /api/ai/sessions/{id}
+              - POST /api/ai/anomalies     -> {readings[]} returns strict JSON
+                {anomalies[], summary}; uses same model with a JSON-only system prompt.
+            Default model = openai gpt-5.1 (playbook recommended). Smoke-tested the
+            health endpoint and two end-to-end calls manually (chat + anomaly) — both
+            returned sensible output.
+        - working: true
+          agent: "testing"
+          comment: |
+            COMPREHENSIVE AI ENDPOINTS TESTING COMPLETED ✅
+            
+            ✅ ALL ENDPOINTS FULLY FUNCTIONAL:
+            • GET /api/ai/health: Returns correct model (gpt-5.1), provider (openai), EMERGENT_LLM_KEY configured
+            • POST /api/ai/chat: Single-turn conversation working, proper response structure
+            • POST /api/ai/chat: Multi-turn conversation working, maintains context across turns
+            • GET /api/ai/sessions: Lists sessions correctly with preview and metadata
+            • GET /api/ai/sessions/{id}: Retrieves full message history (4+ messages verified)
+            • DELETE /api/ai/sessions/{id}: Successfully deletes sessions and confirms removal
+            • POST /api/ai/anomalies: Detects 6 anomalies from test data with proper JSON structure
+            • POST /api/ai/anomalies: Handles empty readings correctly without errors
+            
+            ✅ VALIDATION & ERROR HANDLING:
+            • Empty message validation: Correctly returns 422 for invalid input
+            • Response structure: All endpoints return expected fields and data types
+            • Session management: Session IDs properly maintained across multi-turn conversations
+            • Anomaly detection: Proper severity levels (low/medium/high) and required fields
+            
+            ✅ REGRESSION TEST PASSED:
+            • POST /api/import/parse-wellmeter: Still working after server.py refactor
+            • Mambaling file: 1 sheet, 90 rows processed correctly
+            
+            ALL 10/10 TESTS PASSED - AI ASSISTANT BACKEND IS PRODUCTION READY
+
   - task: "XLSX Import parser endpoint (/api/import/parse-wellmeter)"
     implemented: true
     working: true
@@ -210,6 +262,89 @@ test_plan:
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        Please test the new AI endpoints in this order (use external
+        REACT_APP_BACKEND_URL from /app/frontend/.env, not localhost):
+
+        1. GET /api/ai/health -> must return {"ok": true, "model": "gpt-5.1",
+           "provider": "openai"}. If ok is false, EMERGENT_LLM_KEY is missing.
+
+        2. POST /api/ai/chat with body
+            {"message": "In one short sentence, what does NRW stand for?"}
+           - Expect 200, response has session_id (string), reply (non-empty string),
+             created_at (ISO datetime).
+           - Capture the session_id for the next test.
+
+        3. POST /api/ai/chat again with the same session_id and a follow-up like
+            {"message": "Is it the same as UFW?", "session_id": "<from step 2>"}
+           - Expect 200, reply references the prior turn (multi-turn context).
+
+        4. GET /api/ai/sessions -> array; the session from step 2 must be in it,
+           with a non-empty preview and updated_at.
+
+        5. GET /api/ai/sessions/<id from step 2> -> {session_id, messages[]};
+           messages length ≥ 4 (2 user + 2 assistant).
+
+        6. POST /api/ai/anomalies with this payload and verify STRICT JSON:
+            {"readings":[
+              {"well":"Well 2","date":"2026-01-01","initial":117322,"final":117322,"volume":0,"status":"defective"},
+              {"well":"Well 2","date":"2026-01-02","initial":117322,"final":117322,"volume":0,"status":"defective"},
+              {"well":"Well 2","date":"2026-01-03","initial":117322,"final":117322,"volume":0,"status":"defective"},
+              {"well":"Well 2","date":"2026-01-04","initial":117322,"final":120000,"volume":2678,"status":"valid"},
+              {"well":"Well 2","date":"2026-01-07","initial":125000,"final":140000,"volume":15000,"status":"valid"},
+              {"well":"Well 2","date":"2026-01-08","initial":140000,"final":140000,"volume":0,"status":"shutoff"}
+            ]}
+           - Expect {anomalies: [...], summary: "..."}.
+           - Expect ≥1 anomaly with fields well, date, type, severity (low|medium|high),
+             message, suggested_action.
+           - Empty readings ({"readings": []}) must return {anomalies: [], summary: "..."}
+             without 500.
+
+        7. DELETE /api/ai/sessions/<id> -> {ok: true, session_id}. Subsequent GET
+           /api/ai/sessions/<id> returns an empty messages array.
+
+        8. Validation: POST /api/ai/chat with {"message": ""} should return 422.
+
+        Also re-verify that the previously tested endpoint /api/import/parse-wellmeter
+        still works after the recent server.py refactor (import path reshuffling).
+        A single happy-path curl with the Mambaling sample file is enough.
+
+        Do NOT test the /ai frontend page; user will do that manually.
+
+    - agent: "testing"
+      message: |
+        XLSX Import parser endpoint: all tests passed (previous run).
+
+    - agent: "testing"
+      message: |
+        AI ENDPOINTS TESTING COMPLETED SUCCESSFULLY ✅
+        
+        Executed comprehensive test suite covering all specified requirements:
+        
+        ✅ CORE FUNCTIONALITY (10/10 tests passed):
+        • Health check: EMERGENT_LLM_KEY configured, correct model/provider
+        • Single-turn chat: Proper response structure and content
+        • Multi-turn chat: Context maintained across conversation turns
+        • Session management: List, detail, and delete operations working
+        • Anomaly detection: Detects 6 anomalies from test data with proper JSON
+        • Empty input handling: Gracefully handles empty readings array
+        • Input validation: Correctly rejects invalid requests with 422
+        
+        ✅ REGRESSION VERIFICATION:
+        • XLSX import endpoint still functional after server.py refactor
+        • Mambaling file processing: 1 sheet, 90 rows (exact match)
+        
+        ✅ TECHNICAL VALIDATION:
+        • All response structures match API specification
+        • Session IDs properly maintained across requests
+        • Anomaly fields include required severity levels and actions
+        • Error handling working correctly for edge cases
+        
+        ALL AI ASSISTANT ENDPOINTS ARE PRODUCTION READY
+        No issues found - ready for user testing of frontend integration.
 
 agent_communication:
     - agent: "main"
