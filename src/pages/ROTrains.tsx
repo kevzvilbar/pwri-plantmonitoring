@@ -633,11 +633,11 @@ function CIPLog() {
               <SelectContent>{trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label>Start</Label><Input type="datetime-local" value={v.start} onChange={e => setV({ ...v, start: e.target.value })} /></div>
-          <div><Label>End</Label><Input type="datetime-local" value={v.end} onChange={e => setV({ ...v, end: e.target.value })} /></div>
+          <div><Label>Start Date &amp; Time</Label><Input type="datetime-local" value={v.start} onChange={e => setV({ ...v, start: e.target.value })} className="w-full min-w-[220px]" /></div>
+          <div><Label>End Date &amp; Time</Label><Input type="datetime-local" value={v.end} onChange={e => setV({ ...v, end: e.target.value })} className="w-full min-w-[220px]" /></div>
           <div><Label>SLS (g)</Label><Input type="number" step="any" value={v.sls} onChange={e => setV({ ...v, sls: e.target.value })} /></div>
           <div><Label>HCl (L)</Label><Input type="number" step="any" value={v.hcl} onChange={e => setV({ ...v, hcl: e.target.value })} /></div>
-          <div className="col-span-2"><Label>Caustic soda (kg)</Label><Input type="number" step="any" value={v.caustic} onChange={e => setV({ ...v, caustic: e.target.value })} /></div>
+          <div className="col-span-2"><Label>Caustic Soda (kg)</Label><Input type="number" step="any" value={v.caustic} onChange={e => setV({ ...v, caustic: e.target.value })} /></div>
           <div className="col-span-2"><Label>Remarks</Label><Input value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })} /></div>
         </div>
         <Button onClick={submit} className="w-full">Save CIP</Button>
