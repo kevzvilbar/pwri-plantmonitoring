@@ -13,6 +13,10 @@ export interface Plant {
   gps_lng: number | null;
   geofence_radius_m: number;
   backwash_mode: 'independent' | 'synchronized';
+  /** added 20260427 — energy meter integration */
+  has_solar?: boolean;
+  has_grid?: boolean;
+  solar_capacity_kw?: number | null;
 }
 
 export function usePlants() {

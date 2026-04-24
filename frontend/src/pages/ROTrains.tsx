@@ -498,8 +498,8 @@ function PretreatmentAndROLog() {
             <Card className="p-3 space-y-2">
               <h4 className="text-xs font-semibold uppercase text-muted-foreground">Booster Pumps ({train.num_booster_pumps})</h4>
               {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => (
-                <div key={u} className="grid grid-cols-3 gap-2 items-end">
-                  <div className="text-xs font-medium pt-2">Pump {u}</div>
+                <div key={u} className="grid grid-cols-3 gap-2 items-center">
+                  <div className="text-xs font-medium self-center">Pump {u}</div>
                   <div>
                     <Label className="text-xs">Target Pressure (psi)</Label>
                     <Input type="number" step="any" value={boosters[u]?.target ?? ''}
@@ -531,8 +531,8 @@ function PretreatmentAndROLog() {
                 const outP = +(housings[u]?.outP ?? '');
                 const housingDp = housings[u]?.inP && housings[u]?.outP ? (inP - outP).toFixed(2) : '';
                 return (
-                  <div key={u} className="grid grid-cols-4 gap-2 items-end">
-                    <div className="text-xs font-medium pt-2">Housing {u}</div>
+                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
+                    <div className="text-xs font-medium self-center">Housing {u}</div>
                     <div>
                       <Label className="text-xs">In (psi)</Label>
                       <Input type="number" step="any" value={housings[u]?.inP ?? ''}

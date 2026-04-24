@@ -1,14 +1,14 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 5)_
+_Last updated: 2026-04-24 (iteration 6)_
 
-## 1. Problem Statement (verbatim — consolidated across 5 iterations)
+## 1. Problem Statement (verbatim — consolidated across 6 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
 > XLSX files (Mambaling Q1+Q2, SRP×2, Umapad×2, SRP MCWD, Guizo); remove
 > standalone Downtime field in favour of unified Alerts; fix Dashboard
 > Trends pop-up (X=Date ascending, Y=Value, add Raw Water Trendline and
 > Recovery Trendline); add Blending/Bypass-well tagging with audit trail;
-> mobile-friendly; Vercel-friendly.  
+> mobile-friendly; Vercel-friendly.
 > Iteration 3: remove "Seed attached samples" card from /import; allow
 > .txt/.doc/.docx/.xlsx upload; remove axis-label paragraph from trend
 > modal; fix 7D-90D duration filters; fix ro-last undefined error; add
@@ -18,50 +18,53 @@ _Last updated: 2026-04-24 (iteration 5)_
 > Iteration 4: "scan for error … rescan everything correct possible
 > error and forget about vercel." + initial Deletion Rules (Admin-only
 > users, Admin/Manager plants, soft/hard, dependency check, audit log).
-> Iteration 5 (refinement):
-> - User Management: Designation dropdown with defaults Admin/Manager/
->   Supervisor/Operator + custom input (AllowOtherValues=TRUE); access
->   level computed dynamically (Admin → Full, Manager → Elevated,
->   Supervisor → Limited, Operator → Restricted).
-> - User Deletion: Only Admin can permanently delete users; **Admin may
->   force-delete over active dependencies** with explicit confirmation.
-> - Plant Deletion: Admin + Manager may hard-delete plants only when no
->   dependencies exist; **only Admin may force-override** the block.
-> - Soft delete (both users and plants): Admin + Manager.
-> - Audit Logs: Supabase-backed `deletion_audit_log` table (who, when,
->   reason, dependencies snapshot, FORCE marker).
-> - Plants table shows: Name, Location, Wells, RO Trains, Design
->   Capacity, Status.
-> - Profile view must expose the plant selector post-login, show
->   assigned plants as badges (EnumList), and let the user edit their
->   own designation via the combobox. Plant assignments editable only
->   by Admin.
-> - Remove stale plants "Mambaling 3" and "SRP MCWD" — user will do so
->   via the new Admin console (no code removal required).
+> Iteration 5 (refinement): User Management designation combobox,
+> force-override flow, audit log table, profile page with plant
+> selector, plants list shows wells count.
+> Iteration 6 (current — Energy + Wells deletion + Dashboard polish):
+> 1. **Energy & Meter Integration** — dedicated electric meters for
+>    wells (kWh meter beside the water meter on Well View);
+>    Solar + Grid configuration per plant; foldable per-plant
+>    Solar/Grid daily kWh entry on Operations → Power; Dashboard
+>    EnergyMixCard with KPI tiles (Today Solar/Grid/Total) + 14-day
+>    stacked-bar trend.
+> 2. **Wells Deletion (Admin)** — multi-select checkboxes on the
+>    plant Wells tab + bulk hard-delete with reason + best-effort
+>    audit-log row per deleted well (cascade handled by ON DELETE
+>    CASCADE on `well_readings`/`well_meter_replacements`/
+>    `well_pms_records`).
+> 3. **Dashboard / UX polish** — fix TrendModal 7D–90D blank issue
+>    (now uses stable `useMemo` cache keys), redesigned Custom date
+>    UI (inline From → To beside the range buttons),
+>    "Mark as Bypass" small caption above the toggle button,
+>    Booster-pump and filter-housing labels middle-aligned in
+>    ROTrains.
 
 ## 2. Personas
 - Plant operator — mobile-first reading entry, GPS capture, tag bypass
-  wells.
+  wells, log per-well kWh and Solar/Grid daily split.
 - Compliance officer — reviews unified alerts (downtime, bypass,
   recovery).
-- Maintenance planner — AI PM forecast per equipment.
-- Analyst / management — AI queries, CSV exports.
+- Maintenance planner — AI PM forecast per equipment, decommission
+  wells via bulk-delete with audit reason.
+- Analyst / management — AI queries, CSV exports, energy mix
+  reporting (Solar vs Grid).
 
 ## 3. Tech stack
 - Frontend: React + Vite + Tailwind + shadcn/ui + TanStack Query +
   Supabase JS.
 - Backend: FastAPI + Motor (Mongo) + emergentintegrations LLM SDK +
   supabase-py (user-JWT-aware).
-- Serverless: all cron jobs are plain HTTP `POST /api/cron/*`, scheduled
-  via `vercel.json`. No background daemons.
+- Database: Supabase Postgres (primary) + MongoDB (alerts/blending
+  audit + AI sessions).
+- Serverless: all cron jobs are plain HTTP `POST /api/cron/*`,
+  scheduled via `vercel.json`. No background daemons.
 
 ## 4. Core Requirements status
 
 ### 4.1 Data ingestion
 - [x] XLSX parser for well-meter readings (tri-block monthly layout).
-- [x] File picker now accepts `.xlsx, .xlsm, .txt, .doc, .docx`.
-- [x] **"Seed attached samples" card removed** per latest UX direction —
-  the endpoint `/api/import/seed-from-url` still exists for CI / cron use.
+- [x] File picker accepts `.xlsx, .xlsm, .txt, .doc, .docx`.
 - [x] Mambaling Q2 & Umapad Q2 Downtime sheets → Mongo `downtime_events`.
 
 ### 4.2 Dashboard
@@ -70,55 +73,72 @@ _Last updated: 2026-04-24 (iteration 5)_
   unified Alerts card.
 - [x] Unified Alerts engine `GET /api/alerts/feed` (downtime, bypass,
   recovery deviations) + live-computed RO/chem/train-gap alerts.
-- [x] Trends pop-up: **axis-label paragraph removed**, range buttons
-  7D/14D/30D/60D/90D + Custom re-run the query; Raw Water Trendline &
-  Recovery Trendline wired.
+- [x] Trends pop-up: 7D/14D/30D/60D/90D + Custom; stable useMemo
+  cache keys (iteration 6).
+- [x] **Iteration 6: Custom Date UI** — inline From → To inputs
+  beside range buttons (no extra row), auto-applies on change.
 - [x] Calc badges on derived metrics.
-- [x] Tile labels in Title Case (e.g. "Production Trend", "Bypass →
-  Product").
+- [x] Tile labels in Title Case.
+- [x] **Iteration 6: EnergyMixCard** — KPI tiles for Today Solar /
+  Today Grid / Today Total + 14-day stacked-bar (Solar yellow,
+  Grid chart-6).
 
 ### 4.3 AI Agent
-- [x] `/api/ai/chat` conversational.
-- [x] `/api/ai/chat-tools` planner → Supabase whitelisted queries →
-  answer.
-- [x] `/api/ai/anomalies` batch anomaly detection.
-- [x] `/api/ai/pm-forecast` single-equipment PM next-date.
+- [x] `/api/ai/chat`, `/api/ai/chat-tools`, `/api/ai/anomalies`,
+  `/api/ai/pm-forecast` — all on emergentintegrations gpt-5.1.
 
 ### 4.4 Bypass wells (was: Blending)
-- [x] `/api/blending/{toggle,wells,audit}` endpoints (kept name for
-  backward-compat; UI copy is "Mark As Bypass Well").
-- [x] Frontend: `Waves` button with text **"Mark As Bypass"** on each
-  well row; `Bypass` badge on tagged wells; UI enforces a prior meter
-  reading before a well can be marked bypass.
-- [x] Saving a reading for a bypass well auto-logs an event →
-  Dashboard Alerts ("Bypass · Well X — injected N m³").
-- [x] Optional Supabase migration file
-  `/app/frontend/supabase/migrations/20260424_blending_well_flag.sql`.
+- [x] `/api/blending/{toggle,wells,audit}` endpoints.
+- [x] **Iteration 6: small "Mark as Bypass" caption** stacked above
+  the toggle button on each well row in Operations → Well.
 
-### 4.5 Locators & Wells GPS
-- [x] `AddLocatorDialog` has GPS Lat/Lng + **Use My Location** button.
-- [x] New `AddWellDialog` with Diameter/Depth/Meter fields + GPS
-  Lat/Lng + **Use My Location** (`data-testid="add-well-btn"`,
-  `add-well-lat`, `add-well-lng`, `use-my-location-btn`).
-- [x] Locator + Well detail cards show `GPS: lat, lng` with a MapPin
-  icon; Well list inline badge shows truncated coords.
+### 4.5 Locators & Wells GPS + meters
+- [x] `AddLocatorDialog` has GPS Lat/Lng + **Use My Location**.
+- [x] `AddWellDialog` with Diameter/Depth/Water Meter fields + GPS.
+- [x] **Iteration 6: dedicated electric meter** — `wells.electric_meter_brand/size/serial/installed_date`
+  added via migration `20260427_energy_meter_integration.sql`;
+  `AddWellDialog` exposes a "Has Dedicated Electric Meter"
+  checkbox and brand/size/serial/install-date inputs;
+  `WellDetail` shows a separate "Active Electric Meter" card with
+  edit dialog (Manager+); `WellsList` shows an `Electric` pill +
+  electric serial inline beside the water serial.
 
-### 4.6 Compliance & scheduling
+### 4.6 Wells deletion (NEW iteration 6)
+- [x] **Multi-select checkboxes** on each well row (Admin only).
+- [x] **Bulk delete** button surfaces when ≥1 row selected.
+- [x] Confirmation dialog with reason text.
+- [x] Cascade handled by existing `ON DELETE CASCADE` foreign keys
+  on `well_readings`, `well_meter_replacements`, `well_pms_records`.
+- [x] Best-effort audit row per deleted well in
+  `deletion_audit_log` (kind=`well`, action=`hard`,
+  reason prefixed `[BULK]`).
+
+### 4.7 Energy sources (NEW iteration 6)
+- [x] `plants.has_solar`, `plants.has_grid`,
+  `plants.solar_capacity_kw` columns (migration above).
+- [x] `power_readings.daily_solar_kwh`, `daily_grid_kwh`
+  columns + backfill (legacy `daily_consumption_kwh` becomes
+  `daily_grid_kwh`).
+- [x] `EnergySourceCard` on PlantDetail (Manager+ edit) toggles
+  Solar/Grid + capacity.
+- [x] Operations → Power form auto-shows a foldable
+  "Energy Source Breakdown" section with Solar/Grid daily inputs
+  when the selected plant has the corresponding flag enabled.
+- [x] Dashboard `EnergyMixCard` graceful-falls-back to legacy
+  `daily_consumption_kwh` (treated as Grid) when split columns are
+  null/zero.
+
+### 4.8 Compliance & scheduling
 - [x] `/api/compliance/thresholds` GET/PUT with 10 defaults.
 - [x] `/api/compliance/evaluate?summarize=`.
-- [x] `/api/cron/compliance-evaluate` + `/api/cron/pm-forecast-sweep`
-  serverless endpoints, `X-Cron-Secret` gated; scheduled in
-  `vercel.json`.
+- [x] `/api/cron/compliance-evaluate` + `/api/cron/pm-forecast-sweep`.
 
-### 4.7 Error handling
-- [x] **"Load failed (ro-last): … data is undefined"** fixed — `queryFn`
-  now returns `?? null` explicitly.
+### 4.9 Error handling
 - [x] Error boundary + toast on global query/mutation errors.
-
-### 4.8 Nav & polish
-- [x] `/exports` route wired.
-- [x] Mobile bottom nav + sheet untouched.
-- [x] Title Case across main views, Notes remain free-form.
+- [x] **Iteration 6: backend pod env fix** — `postgrest`,
+  `supabase-auth`, `realtime`, `storage3`, `gotrue` were missing
+  from the fork pod and broke `/api/*`. Reinstalled; full
+  pytest suite back to **59/59 passing**.
 
 ## 5. Endpoints
 | Endpoint | Method |
@@ -127,55 +147,29 @@ _Last updated: 2026-04-24 (iteration 5)_
 | `/api/import/parse-wellmeter` | POST |
 | `/api/downtime/events` | GET |
 | `/api/alerts/feed` | GET |
-| `/api/blending/wells` | GET |
-| `/api/blending/toggle` | POST |
-| `/api/blending/audit` | POST |
-| `/api/ai/chat`, `/api/ai/chat-tools`, `/api/ai/anomalies`, `/api/ai/pm-forecast` | POST |
-| `/api/compliance/thresholds` | GET/PUT |
-| `/api/compliance/evaluate` | GET |
-| `/api/cron/compliance-evaluate`, `/api/cron/pm-forecast-sweep` | POST |
-| `/api/admin/users/{id}/dependencies`, `/api/admin/plants/{id}/dependencies` | GET |
-| `/api/admin/users/{id}/soft-delete`, `/api/admin/plants/{id}/soft-delete` | POST |
-| `/api/admin/users/{id}`, `/api/admin/plants/{id}` (supports `?force=true&reason=...`) | DELETE |
-| `/api/admin/audit-log` (`?kind=user|plant&limit=N`) | GET |
+| `/api/blending/wells`, `/toggle`, `/audit` | GET / POST / POST |
+| `/api/ai/chat`, `/chat-tools`, `/anomalies`, `/pm-forecast` | POST |
+| `/api/compliance/thresholds`, `/evaluate` | GET/PUT, GET |
+| `/api/cron/compliance-evaluate`, `/cron/pm-forecast-sweep` | POST |
+| `/api/admin/users/{id}/dependencies`, `/plants/{id}/dependencies` | GET |
+| `/api/admin/users/{id}/soft-delete`, `/plants/{id}/soft-delete` | POST |
+| `/api/admin/users/{id}`, `/plants/{id}` (`?force=true&reason=...`) | DELETE |
+| `/api/admin/audit-log` (`?kind=user|plant|well&limit=N`) | GET |
+
+> Wells delete in iteration 6 is performed client-side via the
+> Supabase JS client (RLS-gated, cascade FK-handled). A backend
+> `/api/admin/wells/{id}` DELETE route is **NOT** added — well
+> deletes flow directly to Supabase and audit rows are inserted
+> client-side. This keeps the change surface area small.
 
 ## 6. Prioritized backlog
-### P0 (shipped)
-All three cycles of user asks — see sections 4.1 → 4.8.
-Iteration 4 (shipped):
-- AI backend migrated from raw `openai` lib → `emergentintegrations`
-  (EMERGENT_LLM_KEY, default gpt-5.1 openai). Fixes latent
-  `_make_chat`/`UserMessage` imports in compliance_service.
-- TypeScript build fixed in `Plants.tsx` (wells insert/display
-  properly typed via `Database['public']['Tables']['wells']`).
-- Initial deletion endpoints + inline delete menus + /admin console.
-- Cron decorator regression fix on `/api/cron/compliance-evaluate`.
-- Cleanup: removed stray `/app/=0.27.0` and `/app/frontend/replit.md`.
-
-Iteration 5 (shipped):
-- **Admin role — force-override flow**: Admin can hard-delete users
-  even with active dependencies via an extra explicit-ack confirmation
-  dialog; uses `?force=true`. Logged with `[FORCE]` audit marker.
-- **Manager role — constrained**: Manager can soft-delete both users
-  and plants, can hard-delete plants ONLY if no deps, cannot force.
-- **Audit trail**: Supabase table `deletion_audit_log` (migration at
-  `/app/supabase/migrations/20260424_deletion_audit_log.sql`). Backend
-  writes are best-effort; UI surfaces a "run migration" hint when the
-  table is missing.
-- **Designation Combobox**: defaults Admin/Manager/Supervisor/Operator
-  + free-text custom value. Wired into Onboarding, Profile, and the
-  Admin console Users tab (inline editing).
-- **Access level chip**: computed from roles
-  (Admin→Full, Manager→Elevated, Supervisor→Limited, else→Restricted);
-  shown on Profile + Admin users.
-- **Profile page**: new `/profile` route with plant selector visible
-  post-login, assigned-plant badges (EnumList), identity self-edit
-  via `update_own_profile` RPC. Admin edits others' plants from the
-  Admin console via the new `PlantAssignmentEditor` dialog.
-- **Plants list**: Geofence column swapped for Wells count.
-- Narrowed audit-log error handling: only the "table missing" case
-  returns 200 + `table_missing=true`; all other Supabase errors
-  surface as 500.
+### P0 (shipped — iteration 6)
+- EnergyMixCard component (was a build-blocking undefined symbol).
+- Solar / Grid plant flags + daily kWh split.
+- Per-well dedicated electric meter columns + UI.
+- Wells multi-select bulk delete (Admin only).
+- TrendModal Custom Date UI compaction.
+- "Mark as Bypass" caption + middle-aligned pump/housing labels.
 
 ### P1 (next)
 - [ ] Sidebar compliance badge (open-violation count).
@@ -185,30 +179,31 @@ Iteration 5 (shipped):
       enum + checklist popups.
 - [ ] Per-RO-train parser for MAMBALING/UMAPAD RO DATA sheets.
 - [ ] Chemical Consumption XLSX parser + inventory reconciliation.
+- [ ] Backend `/api/admin/wells/{id}` DELETE for symmetry with
+      users/plants (so all delete audit goes through one code path).
 
 ### P2 (backlog)
 - [ ] Email / push alerts (Resend or SendGrid) — user explicitly
       skipped; in-app Alerts card only.
 
 ## 7. Testing
-- Backend: `pytest backend/tests/ -v` — **59/59 passing** (iter 5).
-  Covers: AI migration (health/chat/anomalies/sessions), 6 original
-  admin endpoints + new `/api/admin/audit-log`, `?force=true` flag
-  on DELETE, soft-delete JSON body, regression on core routes.
-- Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean. No
-  service-role Supabase key available to automate positive-path
-  deletion tests; user verifies interactively after running the
-  SQL migration.
+- Backend: `pytest backend/tests/ -v` — **59/59 passing** (iter 6).
+  No new tests added — energy / wells deletion logic is purely
+  client-side Supabase calls.
+- Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean.
 
 ## 8. Deployment & Operational Notes
 - Vercel work was explicitly abandoned in iter 4. App is served via
   Emergent preview + supervisor (FastAPI on :8001, Vite on :3000).
-- **Required manual step**: run
-  `/app/supabase/migrations/20260424_deletion_audit_log.sql` in the
-  Supabase SQL editor. Until then, deletions still work but rows are
-  NOT recorded in `deletion_audit_log`; the UI shows a clear warning.
-- Hard-delete of a user removes `user_profiles` + `user_roles` only —
-  `auth.users` row requires the Supabase service-role key and must be
-  removed from the dashboard manually. The UI response documents this
-  (even more so when `force=true` is used, which orphans
-  `recorded_by`/`performed_by`/`replaced_by` pointers).
+- **Required manual SQL steps** (run in Supabase SQL editor):
+  1. `/app/supabase/migrations/20260424_deletion_audit_log.sql`
+     (audit log table — from iter 5).
+  2. `/app/supabase/migrations/20260427_energy_meter_integration.sql`
+     (NEW — wells electric meter columns + plants solar/grid flags
+     + power_readings solar/grid split + backfill).
+  Until #2 runs, the EnergyMixCard reads `daily_consumption_kwh`
+  as Grid, AddWell electric-meter inputs are silently dropped,
+  and the Plant EnergySourceCard cannot persist `has_solar`/
+  `has_grid`.
+- Hard-delete of a user removes `user_profiles` + `user_roles` only
+  — the `auth.users` row requires the Supabase service-role key.

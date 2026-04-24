@@ -10,7 +10,6 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   ComposedChart, Bar, BarChart,
@@ -23,6 +22,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
+import { EnergyMixCard } from '@/components/EnergyMixCard';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -501,19 +501,42 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
             <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
+              className="h-8 px-2.5"
               onClick={() => setRange(r)} data-testid={`trend-range-${r}`}>{r}</Button>
           ))}
-          <Button size="sm" variant={range === 'CUSTOM' ? 'default' : 'outline'} onClick={() => setRange('CUSTOM')}>Custom</Button>
+          <Button
+            size="sm"
+            variant={range === 'CUSTOM' ? 'default' : 'outline'}
+            className="h-8 px-2.5"
+            onClick={() => setRange('CUSTOM')}
+            data-testid="trend-range-CUSTOM"
+          >Custom</Button>
+          {range === 'CUSTOM' && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="h-8 w-[140px] text-xs"
+                data-testid="trend-from"
+              />
+              <span className="text-xs text-muted-foreground">→</span>
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="h-8 w-[140px] text-xs"
+                data-testid="trend-to"
+              />
+            </div>
+          )}
+          {isFetching && (
+            <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
+          )}
         </div>
-        {range === 'CUSTOM' && (
-          <div className="flex gap-2 items-end">
-            <div className="flex-1"><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-            <div className="flex-1"><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-          </div>
-        )}
         <div className="h-[420px] w-full" data-testid={`trend-chart-${metric}`}>
           <ResponsiveContainer width="100%" height="100%">
             {metric === 'nrw' ? (

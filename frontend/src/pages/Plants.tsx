@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -10,10 +10,17 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, Plus, MapPin, Gauge, Wrench } from 'lucide-react';
+import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -126,6 +133,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
       </Card>
 
       <BackwashModeCard plant={plant} />
+      <EnergySourceCard plant={plant} />
 
       <div className="grid grid-cols-3 gap-2">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
@@ -169,6 +177,112 @@ function BackwashModeCard({ plant }: { plant: any }) {
           ))}
         </div>
       </div>
+    </Card>
+  );
+}
+
+function EnergySourceCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [hasSolar, setHasSolar] = useState<boolean>(!!plant.has_solar);
+  const [hasGrid, setHasGrid] = useState<boolean>(plant.has_grid !== false);
+  const [solarKw, setSolarKw] = useState<string>(
+    plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '',
+  );
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const payload: any = {
+      has_solar: hasSolar,
+      has_grid: hasGrid,
+      solar_capacity_kw: solarKw ? +solarKw : null,
+    };
+    const { error } = await supabase.from('plants').update(payload).eq('id', plant.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Energy sources updated');
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  return (
+    <Card className="p-3" data-testid="energy-source-card">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold flex items-center gap-2">
+              <Zap className="h-4 w-4 text-chart-6" /> Energy Sources
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              {hasSolar && (
+                <span className="inline-flex items-center gap-1">
+                  <Sun className="h-3 w-3 text-yellow-500" />
+                  Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
+                </span>
+              )}
+              {hasGrid && (
+                <span className="inline-flex items-center gap-1">
+                  <Zap className="h-3 w-3 text-chart-6" /> Grid
+                </span>
+              )}
+              {!hasSolar && !hasGrid && <span className="italic">No source configured</span>}
+            </div>
+          </div>
+        </div>
+        {isManager && !editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="edit-energy-btn">
+            <Wrench className="h-3 w-3 mr-1" />Edit
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasSolar}
+              onCheckedChange={setHasSolar}
+              data-testid="energy-has-solar"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasGrid}
+              onCheckedChange={setHasGrid}
+              data-testid="energy-has-grid"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Zap className="h-3.5 w-3.5 text-chart-6" /> Has grid
+            </span>
+          </label>
+          <div>
+            <Label className="text-xs">Solar capacity (kW)</Label>
+            <Input
+              type="number" step="any" value={solarKw}
+              onChange={(e) => setSolarKw(e.target.value)}
+              disabled={!hasSolar}
+              placeholder="e.g. 50"
+              data-testid="energy-solar-kw"
+            />
+          </div>
+          <div className="sm:col-span-3 flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => {
+              setEditing(false);
+              setHasSolar(!!plant.has_solar);
+              setHasGrid(plant.has_grid !== false);
+              setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+            }} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} data-testid="save-energy-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -390,42 +504,163 @@ export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose 
 
 function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
-  const { isManager } = useAuth();
+  const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
   const { data: wells } = useQuery({
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
   });
   const [detail, setDetail] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+  const toggleAll = () => {
+    if (!wells) return;
+    if (selected.size === wells.length) setSelected(new Set());
+    else setSelected(new Set(wells.map((w: any) => w.id)));
+  };
+
+  const doBulkDelete = async () => {
+    if (!selected.size) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const labels = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => w.name);
+    // Wells have ON DELETE CASCADE on readings/replacements/pms — Supabase
+    // will remove dependent rows automatically.
+    const { error } = await supabase.from('wells').delete().in('id', ids);
+    if (error) {
+      setBulkBusy(false);
+      toast.error(error.message);
+      return;
+    }
+    // Best-effort audit trail (one row per deleted well).
+    try {
+      const rows = ids.map((id, i) => ({
+        kind: 'well',
+        entity_id: id,
+        entity_label: labels[i] ?? null,
+        action: 'hard',
+        reason: bulkReason ? `[BULK] ${bulkReason}` : '[BULK] multi-well delete',
+        performed_by: user?.id ?? null,
+        forced: false,
+      }));
+      await supabase.from('deletion_audit_log' as any).insert(rows as any);
+    } catch { /* table may be missing pre-migration */ }
+    setBulkBusy(false);
+    setBulkDeleteOpen(false);
+    setBulkReason('');
+    setSelected(new Set());
+    toast.success(`${ids.length} well(s) permanently deleted`);
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+  };
+
   if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-sm font-semibold">Wells ({wells?.length ?? 0})</h3>
-        {isManager && (
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
-            <Plus className="h-3 w-3 mr-1" />Add Well
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && wells && wells.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={toggleAll}
+              className="text-xs"
+              data-testid="wells-toggle-all"
+            >
+              {selected.size === wells.length ? 'Clear' : 'Select all'}
+            </Button>
+          )}
+          {isAdmin && selected.size > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-danger text-danger hover:bg-danger/10"
+              onClick={() => setBulkDeleteOpen(true)}
+              data-testid="wells-bulk-delete-btn"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              Delete {selected.size}
+            </Button>
+          )}
+          {isManager && (
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
+              <Plus className="h-3 w-3 mr-1" />Add Well
+            </Button>
+          )}
+        </div>
       </div>
-      {wells?.map((w: any) => (
-        <Card key={w.id} className="p-3 cursor-pointer hover:shadow-elev" onClick={() => setDetail(w.id)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="font-medium text-sm">{w.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {w.diameter ?? '—'} · {w.drilling_depth_m ?? '—'} m
-                {(w.gps_lat != null && w.gps_lng != null) && (
-                  <span className="ml-1.5 inline-flex items-center gap-0.5">
-                    <MapPin className="h-2.5 w-2.5" /> {(+w.gps_lat).toFixed(4)}, {(+w.gps_lng).toFixed(4)}
-                  </span>
-                )}
+      {wells?.map((w: any) => {
+        const checked = selected.has(w.id);
+        return (
+          <Card
+            key={w.id}
+            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''}`}
+            data-testid={`well-card-${w.id}`}
+          >
+            <div className="flex items-start gap-2">
+              {isAdmin && (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggle(w.id)}
+                  className="mt-1"
+                  data-testid={`well-select-${w.id}`}
+                />
+              )}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setDetail(w.id)}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
+                      <span className="truncate">{w.name}</span>
+                      {w.has_power_meter && (
+                        <span
+                          className="text-[9px] uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                          title="Has dedicated electric meter"
+                        >
+                          <Zap className="h-2.5 w-2.5" /> Electric
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                      <span>
+                        {w.diameter ?? '—'} · {w.drilling_depth_m ?? '—'} m
+                      </span>
+                      {w.meter_serial && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Gauge className="h-2.5 w-2.5" /> Water SN {w.meter_serial}
+                        </span>
+                      )}
+                      {w.has_power_meter && w.electric_meter_serial && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Zap className="h-2.5 w-2.5" /> kWh SN {w.electric_meter_serial}
+                        </span>
+                      )}
+                      {(w.gps_lat != null && w.gps_lng != null) && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <MapPin className="h-2.5 w-2.5" /> {(+w.gps_lat).toFixed(4)}, {(+w.gps_lng).toFixed(4)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
+                </div>
               </div>
             </div>
-            <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
       {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Wells Yet</Card>}
       {adding && (
         <AddWellDialog plantId={plantId} onClose={() => {
@@ -433,6 +668,44 @@ function WellsList({ plantId }: { plantId: string }) {
           qc.invalidateQueries({ queryKey: ['wells', plantId] });
         }} />
       )}
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkDeleteOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete {selected.size} well(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings, hydraulic history, and meter-replacement logs
+              attached to the selected wells will be removed via the database
+              cascade rule. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Textarea
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              placeholder="e.g. Wells decommissioned after Q1 2026"
+              maxLength={500}
+              rows={2}
+              data-testid="wells-bulk-reason"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doBulkDelete}
+              disabled={bulkBusy}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-wells-bulk-delete"
+            >
+              {bulkBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -441,6 +714,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
   const [form, setForm] = useState({
     name: '', diameter: '', drilling_depth_m: '', has_power_meter: false,
     meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
+    electric_meter_brand: '', electric_meter_size: '', electric_meter_serial: '', electric_meter_installed_date: '',
     gps_lat: '', gps_lng: '',
   });
   const [locating, setLocating] = useState(false);
@@ -468,6 +742,10 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
     if (!form.name.trim()) { toast.error('Name Required'); return; }
     const payload: Database['public']['Tables']['wells']['Insert'] & {
       gps_lat?: number | null; gps_lng?: number | null;
+      electric_meter_brand?: string | null;
+      electric_meter_size?: string | null;
+      electric_meter_serial?: string | null;
+      electric_meter_installed_date?: string | null;
     } = {
       plant_id: plantId,
       name: form.name.trim(),
@@ -482,6 +760,12 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
       gps_lng: form.gps_lng ? +form.gps_lng : null,
       status: 'Active',
     };
+    if (form.has_power_meter) {
+      payload.electric_meter_brand = form.electric_meter_brand || null;
+      payload.electric_meter_size = form.electric_meter_size || null;
+      payload.electric_meter_serial = form.electric_meter_serial || null;
+      payload.electric_meter_installed_date = form.electric_meter_installed_date || null;
+    }
     const { error } = await supabase.from('wells').insert(payload as never);
     if (error) { toast.error(error.message); return; }
     toast.success('Well Added');
@@ -490,9 +774,9 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Add Well</DialogTitle></DialogHeader>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div><Label>Name *</Label>
             <Input data-testid="add-well-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Well #1" />
           </div>
@@ -500,11 +784,43 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
             <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} placeholder="8 inch" /></div>
             <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
-            <div><Label>Meter Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
-            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+
+          {/* Water meter */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-semibold inline-flex items-center gap-1">
+              <Gauge className="h-3 w-3" /> Water Meter
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-xs">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+              <div><Label className="text-xs">Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+              <div><Label className="text-xs">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+            </div>
           </div>
+
+          {/* Electric meter (optional) */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <Checkbox
+                checked={form.has_power_meter}
+                onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
+                data-testid="add-well-has-power-meter"
+              />
+              <Zap className="h-3 w-3 text-amber-500" />
+              Has Dedicated Electric Meter
+            </label>
+            {form.has_power_meter && (
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} data-testid="add-well-em-brand" /></div>
+                <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
+                <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} data-testid="add-well-em-serial" /></div>
+                <div className="col-span-3">
+                  <Label className="text-xs">Installed</Label>
+                  <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div><Label>GPS Lat</Label>
               <Input data-testid="add-well-lat" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} placeholder="10.295" />
@@ -531,6 +847,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
   const { isManager } = useAuth();
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [editHydraulicOpen, setEditHydraulicOpen] = useState(false);
+  const [editElectricOpen, setEditElectricOpen] = useState(false);
   const { data: well } = useQuery({
     queryKey: ['well', wellId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('id', wellId).single()).data,
@@ -602,7 +919,9 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       </Card>
       <Card className="p-3">
         <div className="flex justify-between items-center">
-          <h4 className="text-sm font-semibold">Active meter</h4>
+          <h4 className="text-sm font-semibold inline-flex items-center gap-1">
+            <Gauge className="h-3.5 w-3.5" /> Active Water Meter
+          </h4>
           <Button size="sm" variant="outline" onClick={() => setReplaceOpen(true)}><Wrench className="h-3 w-3 mr-1" />Replace</Button>
         </div>
         <div className="mt-2 text-xs space-y-1">
@@ -616,6 +935,27 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           </div>
         </div>
       </Card>
+
+      {well.has_power_meter && (
+        <Card className="p-3" data-testid="well-electric-meter-card">
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-semibold inline-flex items-center gap-1">
+              <Zap className="h-3.5 w-3.5 text-amber-500" /> Active Electric Meter
+            </h4>
+            {isManager && (
+              <Button size="sm" variant="outline" onClick={() => setEditElectricOpen(true)}>
+                <Wrench className="h-3 w-3 mr-1" />Edit
+              </Button>
+            )}
+          </div>
+          <div className="mt-2 text-xs space-y-1">
+            <div>Brand: {(well as any).electric_meter_brand ?? '—'}</div>
+            <div>Size: <span className="font-mono-num">{(well as any).electric_meter_size ?? '—'}</span></div>
+            <div>Serial: <span className="font-mono-num">{(well as any).electric_meter_serial ?? '—'}</span></div>
+            <div>Installed: {(well as any).electric_meter_installed_date ?? '—'}</div>
+          </div>
+        </Card>
+      )}
       {replaceOpen && (
         <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
           onClose={() => {
@@ -632,7 +972,75 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           qc.invalidateQueries({ queryKey: ['well', wellId] });
         }} />
       )}
+      {editElectricOpen && (
+        <EditElectricMeterDialog well={well} onClose={() => {
+          setEditElectricOpen(false);
+          qc.invalidateQueries({ queryKey: ['well', wellId] });
+          qc.invalidateQueries({ queryKey: ['wells', well.plant_id] });
+        }} />
+      )}
     </div>
+  );
+}
+
+function EditElectricMeterDialog({ well, onClose }: { well: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    has_power_meter: !!well.has_power_meter,
+    electric_meter_brand: well.electric_meter_brand ?? '',
+    electric_meter_size: well.electric_meter_size ?? '',
+    electric_meter_serial: well.electric_meter_serial ?? '',
+    electric_meter_installed_date: well.electric_meter_installed_date ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const payload: any = {
+      has_power_meter: form.has_power_meter,
+      electric_meter_brand: form.electric_meter_brand || null,
+      electric_meter_size: form.electric_meter_size || null,
+      electric_meter_serial: form.electric_meter_serial || null,
+      electric_meter_installed_date: form.electric_meter_installed_date || null,
+    };
+    const { error } = await supabase.from('wells').update(payload).eq('id', well.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Electric meter updated');
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Electric Meter — {well.name}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={form.has_power_meter}
+              onCheckedChange={(v) => setForm({ ...form, has_power_meter: v })}
+              data-testid="edit-em-has-power"
+            />
+            Has dedicated electric meter
+          </label>
+          {form.has_power_meter && (
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} /></div>
+              <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
+              <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} /></div>
+              <div className="col-span-3">
+                <Label className="text-xs">Installed</Label>
+                <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button onClick={submit} disabled={saving} data-testid="save-electric-meter">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

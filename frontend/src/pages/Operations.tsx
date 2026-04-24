@@ -582,18 +582,26 @@ function WellRow({
       )}
 
       {/* Mark As Bypass Well toggle */}
-      <Button
-        variant={isBlending ? 'default' : 'outline'}
-        size="sm"
-        className={`h-8 shrink-0 ${isBlending ? 'bg-violet-600 hover:bg-violet-600/90' : ''}`}
-        onClick={toggleBlending}
-        disabled={togglingBlend}
-        title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
-        data-testid={`blending-toggle-${well.id}`}
-      >
-        <Waves className="h-3.5 w-3.5 mr-1" />
-        {isBlending ? 'Bypass On' : 'Mark As Bypass'}
-      </Button>
+      <div className="flex flex-col items-center shrink-0">
+        <span
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none mb-0.5"
+          data-testid={`bypass-toggle-label-${well.id}`}
+        >
+          Mark as Bypass
+        </span>
+        <Button
+          variant={isBlending ? 'default' : 'outline'}
+          size="sm"
+          className={`h-8 ${isBlending ? 'bg-violet-600 hover:bg-violet-600/90' : ''}`}
+          onClick={toggleBlending}
+          disabled={togglingBlend}
+          title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
+          data-testid={`blending-toggle-${well.id}`}
+        >
+          <Waves className="h-3.5 w-3.5 mr-1" />
+          {isBlending ? 'Bypass On' : 'Mark As Bypass'}
+        </Button>
+      </div>
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
@@ -609,10 +617,17 @@ function WellRow({
 function PowerForm() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
   const [reading, setReading] = useState('');
+  const [solarKwh, setSolarKwh] = useState('');
+  const [gridKwh, setGridKwh] = useState('');
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
+  const showSolar = !!plant?.has_solar;
+  const showGrid = plant?.has_grid !== false; // default true
 
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
@@ -640,6 +655,10 @@ function PowerForm() {
       plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       meter_reading_kwh: +reading, recorded_by: user?.id,
     };
+    if (showSolar || showGrid) {
+      payload.daily_solar_kwh = solarKwh ? +solarKwh : 0;
+      payload.daily_grid_kwh = gridKwh ? +gridKwh : 0;
+    }
     let error;
     if (editingId) {
       ({ error } = await supabase.from('power_readings').update(payload).eq('id', editingId));
@@ -648,12 +667,14 @@ function PowerForm() {
     }
     if (error) { toast.error(error.message); return; }
     toast.success(editingId ? 'Updated' : 'Power reading saved');
-    setReading(''); setEditingId(null);
+    setReading(''); setSolarKwh(''); setGridKwh(''); setEditingId(null);
     qc.invalidateQueries();
   };
 
   const startEdit = (r: any) => {
     setReading(String(r.meter_reading_kwh));
+    setSolarKwh(r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '');
+    setGridKwh(r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '');
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
@@ -669,12 +690,52 @@ function PowerForm() {
         </div>
         <div>
           <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw kWh meter value" />
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw kWh meter value" data-testid="power-meter-input" />
           {previous != null && <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{fmtNum(previous)}</span> {daily != null && <>· Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}</div>}
         </div>
+
+        {(showSolar || showGrid) && (
+          <details className="rounded-md border bg-muted/30 px-3 py-2" open={showSolar}>
+            <summary className="text-xs font-medium cursor-pointer flex items-center gap-2">
+              Energy Source Breakdown
+              <span className="text-[10px] text-muted-foreground">
+                {showSolar && showGrid ? 'Solar + Grid' : showSolar ? 'Solar only' : 'Grid only'}
+              </span>
+            </summary>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {showSolar && (
+                <div>
+                  <Label className="text-xs">Daily Solar (kWh)</Label>
+                  <Input
+                    type="number" step="any" value={solarKwh}
+                    onChange={e => setSolarKwh(e.target.value)}
+                    placeholder="kWh from solar"
+                    data-testid="power-solar-input"
+                  />
+                </div>
+              )}
+              {showGrid && (
+                <div>
+                  <Label className="text-xs">Daily Grid (kWh)</Label>
+                  <Input
+                    type="number" step="any" value={gridKwh}
+                    onChange={e => setGridKwh(e.target.value)}
+                    placeholder="kWh from grid"
+                    data-testid="power-grid-input"
+                  />
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Optional. Leave blank if you only have a single combined meter — the system
+              treats the daily delta as Grid by default.
+            </p>
+          </details>
+        )}
+
         <div className="flex gap-2">
           <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
-          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); }}>Cancel</Button>}
+          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarKwh(''); setGridKwh(''); }}>Cancel</Button>}
         </div>
       </Card>
       <Card className="p-3">
@@ -683,6 +744,11 @@ function PowerForm() {
           <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
             <span className="flex-1">{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
             <span className="font-mono-num mr-2">{fmtNum(r.daily_consumption_kwh ?? 0)} kWh</span>
+            {(r.daily_solar_kwh > 0 || r.daily_grid_kwh > 0) && (
+              <span className="font-mono-num mr-2 text-[10px] text-muted-foreground">
+                ☀{fmtNum(r.daily_solar_kwh ?? 0)} · ⚡{fmtNum(r.daily_grid_kwh ?? 0)}
+              </span>
+            )}
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
           </div>
         )) : <p className="text-xs text-muted-foreground">No readings</p>}
