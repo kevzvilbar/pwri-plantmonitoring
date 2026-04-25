@@ -833,10 +833,19 @@ interface MigrationProbeColumn {
   column: string;
   exists: boolean;
 }
+interface MigrationOverride {
+  marked_at: string;
+  by_user_id: string | null;
+  by_label: string | null;
+  note: string | null;
+}
 interface MigrationFile {
   filename: string;
   size: number;
   status: 'applied' | 'pending' | 'partial' | 'indeterminate';
+  probed_status?: 'applied' | 'pending' | 'partial' | 'indeterminate';
+  manual_override?: MigrationOverride | null;
+  override_applied?: boolean;
   table_probes: MigrationProbeTable[];
   column_probes: MigrationProbeColumn[];
   added_column_probes?: MigrationProbeColumn[];
@@ -858,6 +867,7 @@ function MigrationsPanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showApplied, setShowApplied] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['admin-migrations-status'],
@@ -885,6 +895,64 @@ function MigrationsPanel() {
       setTimeout(() => setCopied((c) => (c === filename ? null : c)), 2500);
     } catch (e: any) {
       toast.error(`Copy failed: ${e?.message ?? e}`);
+    }
+  };
+
+  const markApplied = async (filename: string) => {
+    const note = window.prompt(
+      `Mark "${filename}" as applied?\n\nUse this for migrations the schema probe can't verify (RPCs, one-shot UPDATEs, pure DML).\n\nOptional note (e.g. "ran in Supabase SQL editor on 2026-04-25"):`,
+      '',
+    );
+    if (note === null) return; // user cancelled
+    try {
+      setBusy(filename);
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error('Sign in required');
+      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const res = await fetch(
+        `${base}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ note: note || null }),
+        },
+      );
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      toast.success(`Marked ${filename} as applied.`);
+      await refetch();
+    } catch (e: any) {
+      toast.error(`Mark failed: ${e?.message ?? e}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const unmarkApplied = async (filename: string) => {
+    if (!window.confirm(`Remove the applied mark for "${filename}"?`)) return;
+    try {
+      setBusy(filename);
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error('Sign in required');
+      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const res = await fetch(
+        `${base}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      toast.success(`Cleared mark for ${filename}.`);
+      await refetch();
+    } catch (e: any) {
+      toast.error(`Unmark failed: ${e?.message ?? e}`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -1010,7 +1078,7 @@ function MigrationsPanel() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {f.status !== 'applied' && (
+                  {f.probed_status !== 'applied' && (
                     <Button
                       size="sm" variant="outline" className="h-7 text-[11px]"
                       onClick={() => copySql(f.filename, f.sql)}
@@ -1020,6 +1088,33 @@ function MigrationsPanel() {
                         ? <><CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Copied</>
                         : <><Copy className="h-3 w-3 mr-1" /> Copy SQL</>}
                     </Button>
+                  )}
+                  {f.override_applied ? (
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      disabled={busy === f.filename}
+                      onClick={() => unmarkApplied(f.filename)}
+                      data-testid={`migration-unmark-${f.filename}`}
+                    >
+                      {busy === f.filename
+                        ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        : <Trash2 className="h-3 w-3 mr-1" />}
+                      Clear mark
+                    </Button>
+                  ) : (
+                    f.probed_status !== 'applied' && (
+                      <Button
+                        size="sm" variant="outline" className="h-7 text-[11px]"
+                        disabled={busy === f.filename}
+                        onClick={() => markApplied(f.filename)}
+                        data-testid={`migration-mark-${f.filename}`}
+                      >
+                        {busy === f.filename
+                          ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                        Mark applied
+                      </Button>
+                    )
                   )}
                   <Button
                     size="sm" variant="ghost" className="h-7 text-[11px]"
@@ -1031,6 +1126,19 @@ function MigrationsPanel() {
                   </Button>
                 </div>
               </div>
+              {f.override_applied && f.manual_override && (
+                <div className="mt-1.5 text-[11px] text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-400/40 text-[10px]">
+                    manual override
+                  </Badge>
+                  Marked applied by <strong className="not-italic">{f.manual_override.by_label ?? 'admin'}</strong>
+                  {' on '}
+                  {format(new Date(f.manual_override.marked_at), 'yyyy-MM-dd HH:mm')}
+                  {f.manual_override.note ? ` — "${f.manual_override.note}"` : ''}
+                  {' · probe says '}
+                  <code>{f.probed_status}</code>
+                </div>
+              )}
 
               {(f.table_probes.length > 0 || f.column_probes.length > 0) && (
                 <div className="mt-2 space-y-1.5">

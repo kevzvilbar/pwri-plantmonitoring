@@ -14,8 +14,11 @@ in Supabase" flow so they retain a clear audit trail of schema changes.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -32,6 +35,36 @@ from admin_service import (
 log = logging.getLogger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "supabase" / "migrations"
+
+# Local override store. We can't add a row to `deletion_audit_log` for these
+# (its check constraint only permits kind in {user, plant}), and we don't want
+# to require a fresh schema migration just to track migration overrides — that
+# would be circular. A small JSON file beside the backend keeps state simple,
+# survives uvicorn reloads, and is trivial to inspect or reset by hand.
+_OVERRIDES_DIR = Path(
+    os.environ.get(
+        "MIGRATIONS_STATE_DIR",
+        str(Path(__file__).resolve().parent / "state"),
+    )
+)
+_OVERRIDES_PATH = _OVERRIDES_DIR / "migration_overrides.json"
+
+
+def _load_overrides() -> dict[str, dict[str, Any]]:
+    try:
+        return json.loads(_OVERRIDES_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("Failed to read migration overrides at %s: %s", _OVERRIDES_PATH, exc)
+        return {}
+
+
+def _save_overrides(data: dict[str, dict[str, Any]]) -> None:
+    _OVERRIDES_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = _OVERRIDES_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(_OVERRIDES_PATH)
 
 # ---------------------------------------------------------------------------
 # Parsers
@@ -312,13 +345,23 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
             all_signals.append(res["exists"])
 
         if not all_signals:
-            status = "indeterminate"
+            probed_status = "indeterminate"
         elif all(all_signals):
-            status = "applied"
+            probed_status = "applied"
         elif not any(all_signals):
-            status = "pending"
+            probed_status = "pending"
         else:
-            status = "partial"
+            probed_status = "partial"
+
+        # Apply manual override (only meaningful for non-applied files —
+        # there's nothing to mark on a file the parser already verified).
+        override = overrides.get(path.name)
+        if override and probed_status != "applied":
+            status = "applied"
+            override_applied = True
+        else:
+            status = probed_status
+            override_applied = False
 
         summary["total"] += 1
         summary[status] += 1
@@ -330,6 +373,9 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
             "filename": path.name,
             "size": path.stat().st_size,
             "status": status,
+            "probed_status": probed_status,
+            "manual_override": override,
+            "override_applied": override_applied,
             "table_probes": table_probes,
             "column_probes": added_column_probes,
             "added_column_probes": added_column_probes,
@@ -341,3 +387,57 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
         "summary": summary,
         "files": out,
     }
+
+
+# ---------------------------------------------------------------------------
+# Manual overrides — for files the schema probe can't verify (RPCs, pure DML
+# like cleanup_bad_imports, one-shot UPDATEs like promote_admin_kevin, etc.).
+# ---------------------------------------------------------------------------
+
+def _validate_filename(filename: str) -> Path:
+    """Reject path traversal / unknown files so the override store can't grow
+    arbitrary keys. Returns the resolved path on success."""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid migration filename")
+    if not filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Migration filenames must end with .sql")
+    p = MIGRATIONS_DIR / filename
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail=f"Migration not found: {filename}")
+    return p
+
+
+def mark_migration_applied(
+    authorization: Optional[str], filename: str, note: Optional[str] = None,
+) -> dict[str, Any]:
+    """Admin-only. Record that the named migration has been run in Supabase."""
+    token = _bearer_token(authorization)
+    caller = _caller_identity(token)
+    _require_roles(caller, {"Admin"})
+    _validate_filename(filename)
+
+    overrides = _load_overrides()
+    overrides[filename] = {
+        "marked_at": datetime.now(timezone.utc).isoformat(),
+        "by_user_id": caller.get("user_id"),
+        "by_label": caller.get("label") or caller.get("user_id"),
+        "note": (note or "").strip()[:500] or None,
+    }
+    _save_overrides(overrides)
+    return {"ok": True, "filename": filename, "manual_override": overrides[filename]}
+
+
+def unmark_migration_applied(
+    authorization: Optional[str], filename: str,
+) -> dict[str, Any]:
+    """Admin-only. Remove a previous mark — restores the probed status."""
+    token = _bearer_token(authorization)
+    caller = _caller_identity(token)
+    _require_roles(caller, {"Admin"})
+    _validate_filename(filename)
+
+    overrides = _load_overrides()
+    removed = overrides.pop(filename, None)
+    if removed is not None:
+        _save_overrides(overrides)
+    return {"ok": True, "filename": filename, "removed": removed is not None}

@@ -711,6 +711,37 @@ async def admin_migrations_status(authorization: Optional[str] = Header(None)):
     return list_migration_status(authorization)
 
 
+class MigrationMarkRequest(BaseModel):
+    note: Optional[str] = None
+
+
+@api_router.post("/admin/migrations/{filename}/mark-applied")
+async def admin_migrations_mark_applied(
+    filename: str,
+    body: Optional[MigrationMarkRequest] = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Admin-only. Mark a migration as applied even when the schema probe
+    can't confirm it (RPC-only files, one-shot UPDATEs, pure DML cleanups).
+    The override is recorded with the actor + timestamp + optional note in a
+    local JSON store so non-applied status can be cleared without altering
+    the audit_log schema.
+    """
+    from migrations_status import mark_migration_applied
+    return mark_migration_applied(authorization, filename,
+                                   note=(body.note if body else None))
+
+
+@api_router.delete("/admin/migrations/{filename}/mark-applied")
+async def admin_migrations_unmark_applied(
+    filename: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Admin-only. Clear a previous mark for the given migration filename."""
+    from migrations_status import unmark_migration_applied
+    return unmark_migration_applied(authorization, filename)
+
+
 # ---- Serverless-friendly cron endpoints ----------------------------------
 @api_router.post("/cron/compliance-evaluate")
 async def cron_compliance_evaluate(x_cron_secret: Optional[str] = Header(None)):
