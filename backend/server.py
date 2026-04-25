@@ -30,12 +30,17 @@ from admin_service import (
     soft_delete_user, hard_delete_user,
     soft_delete_plant, hard_delete_plant,
     get_user_dependencies, get_plant_dependencies,
-    list_audit_log,
+    list_audit_log, cleanup_plants,
 )
 
 
 class DeletionRequest(BaseModel):
     reason: Optional[str] = None
+
+
+class CleanupPlantsRequest(BaseModel):
+    names: List[str] = Field(..., min_length=1, max_length=50)
+    reason: str = Field(..., min_length=5, max_length=500)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -525,6 +530,20 @@ async def admin_plant_hard_delete(plant_id: str,
                                    force: bool = False,
                                    authorization: Optional[str] = Header(None)):
     return hard_delete_plant(authorization, plant_id, reason=reason, force=force)
+
+
+@api_router.post("/admin/plants/cleanup")
+async def admin_plants_cleanup(body: CleanupPlantsRequest,
+                                authorization: Optional[str] = Header(None)):
+    """Admin-only one-click bulk hard-delete of imported-by-mistake plants.
+
+    Accepts a list of plant names + a reason (min 5 chars). For each
+    matched plant: writes a `[CLEANUP]`-prefixed audit row, clears all
+    no-cascade dependent rows (well_*/locator_*/incidents/etc.), strips
+    plant id from user_profiles.plant_assignments arrays, and finally
+    drops the plant row.
+    """
+    return cleanup_plants(authorization, names=body.names, reason=body.reason)
 
 
 @api_router.get("/admin/audit-log")

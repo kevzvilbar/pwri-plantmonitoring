@@ -330,6 +330,58 @@ class TestSoftDeleteJsonBody:
         assert r.status_code != 500
 
 
+# ---------------- Iteration 8: POST /api/admin/plants/cleanup ------------
+
+class TestPlantsCleanupEndpoint:
+    """Admin-only one-click bulk hard-delete for imported-by-mistake plants.
+
+    No valid Supabase JWT is provisioned in the test pod, so the positive
+    happy path can't be exercised here. The contract checks are:
+      1. Route is registered (NOT 404).
+      2. Pydantic validation: empty `names` -> 422; missing `reason` -> 422;
+         reason < 5 chars -> 422.
+      3. With valid body but no bearer -> 401, never 500.
+      4. With valid body but malformed bearer -> 401/403, never 500.
+    """
+
+    PATH = f"{BASE_URL}/api/admin/plants/cleanup"
+
+    def test_route_registered(self, api):
+        r = api.post(self.PATH, json={"names": ["X"], "reason": "12345"}, timeout=30)
+        assert r.status_code != 404, (r.status_code, r.text[:300])
+
+    def test_no_bearer_returns_401(self, api):
+        r = api.post(
+            self.PATH,
+            json={"names": ["Mambaling 3"], "reason": "Smart importation error cleanup"},
+            timeout=30,
+        )
+        assert r.status_code == 401, (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+    def test_malformed_bearer_returns_401_or_403(self, api):
+        r = api.post(
+            self.PATH,
+            json={"names": ["Mambaling 3"], "reason": "cleanup test"},
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+            timeout=30,
+        )
+        assert r.status_code in (401, 403), (r.status_code, r.text[:300])
+        assert r.status_code != 500
+
+    def test_empty_names_returns_422(self, api):
+        r = api.post(self.PATH, json={"names": [], "reason": "valid reason"}, timeout=30)
+        assert r.status_code == 422, (r.status_code, r.text[:300])
+
+    def test_short_reason_returns_422(self, api):
+        r = api.post(self.PATH, json={"names": ["X"], "reason": "no"}, timeout=30)
+        assert r.status_code == 422, (r.status_code, r.text[:300])
+
+    def test_missing_body_returns_422(self, api):
+        r = api.post(self.PATH, timeout=30)
+        assert r.status_code == 422, (r.status_code, r.text[:300])
+
+
 # ---------------- Iteration 5 regression: /api/cron/compliance-evaluate ---
 
 class TestCronComplianceEvaluate:

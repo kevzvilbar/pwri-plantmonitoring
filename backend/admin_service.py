@@ -466,7 +466,7 @@ def list_audit_log(
         q = client.table("deletion_audit_log").select("*").order(
             "created_at", desc=True,
         ).limit(limit)
-        if kind in ("user", "plant"):
+        if kind in ("user", "plant", "well"):
             q = q.eq("kind", kind)
         res = q.execute()
         return {"count": len(res.data or []), "entries": res.data or []}
@@ -489,3 +489,160 @@ def list_audit_log(
             }
         log.exception("audit log read failed")
         raise HTTPException(status_code=500, detail=f"Audit log read failed: {msg}")
+
+
+# --- Plant cleanup (Admin one-click bulk hard-delete) ----------------------
+
+# Tables whose plant_id FK has NO ON DELETE CASCADE — we must delete these
+# rows ourselves before the parent plant can be removed.
+_PLANT_NO_CASCADE_CHILDREN: list[str] = [
+    "well_meter_replacements",
+    "well_pms_records",
+    "well_readings",
+    "locator_meter_replacements",
+    "locator_readings",
+    "ro_train_readings",
+    "ro_train_replacements",
+    "incidents",
+    "checklist_executions",
+]
+
+
+def cleanup_plants(
+    authorization: Optional[str],
+    names: list[str],
+    reason: str,
+) -> dict[str, Any]:
+    """Admin-only. Bulk hard-delete a list of plants by name, clearing all
+    no-cascade dependents and writing one audit-log row per plant.
+
+    Returns:
+        {
+            "ok": True,
+            "processed": [
+                {
+                    "name": "Mambaling 3",
+                    "plant_id": "<uuid>",
+                    "deleted_counts": {"wells": N, ...},
+                },
+                ...
+            ],
+            "not_found": ["..."],
+        }
+    """
+    token = _bearer_token(authorization)
+    caller = _caller_identity(token)
+    _require_roles(caller, {"Admin"})
+
+    if not isinstance(names, list) or not names:
+        raise HTTPException(status_code=400, detail="`names` must be a non-empty list.")
+    cleaned_names = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+    if not cleaned_names:
+        raise HTTPException(status_code=400, detail="`names` must contain non-empty strings.")
+    if not reason or len(reason.strip()) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="`reason` is required and must be at least 5 characters.",
+        )
+
+    client = _user_scoped_client(token)
+    processed: list[dict[str, Any]] = []
+    not_found: list[str] = []
+
+    for name in cleaned_names:
+        # Resolve plant id by name.
+        try:
+            res = (
+                client.table("plants")
+                .select("id,name")
+                .eq("name", name)
+                .maybeSingle()
+                .execute()
+            )
+            row = res.data or None
+        except Exception as e:  # noqa: BLE001
+            log.exception("plant lookup failed for %s", name)
+            raise HTTPException(status_code=500, detail=f"Lookup failed for '{name}': {e}")
+        if not row:
+            not_found.append(name)
+            continue
+        plant_id = row["id"]
+
+        # Snapshot dependency counts before mutation (for audit + response).
+        deps = plant_dependencies(client, plant_id)
+
+        # Audit log FIRST so even if a downstream delete fails midway, the
+        # caller has a paper trail.
+        _write_audit(
+            client, kind="plant", entity_id=plant_id, entity_label=row.get("name"),
+            action="hard", caller=caller,
+            reason=f"[CLEANUP] {reason.strip()}",
+            dependencies=deps,
+        )
+
+        deleted_counts: dict[str, int] = {}
+        try:
+            # Clear no-cascade descendants in dependency-safe order.
+            for table in _PLANT_NO_CASCADE_CHILDREN:
+                try:
+                    res = (
+                        client.table(table)
+                        .delete(count="exact")
+                        .eq("plant_id", plant_id)
+                        .execute()
+                    )
+                    deleted_counts[table] = int(getattr(res, "count", 0) or 0)
+                except Exception as e:  # noqa: BLE001
+                    msg = str(e)
+                    # Tolerate tables that may not exist in older deployments.
+                    if "does not exist" in msg or "relation" in msg.lower():
+                        log.debug("skipping missing table %s", table)
+                        continue
+                    log.exception("cleanup child delete failed: %s", table)
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed clearing {table} for plant '{name}': {e}",
+                    )
+
+            # Detach plant id from any user_profiles.plant_assignments arrays.
+            try:
+                assigned = (
+                    client.table("user_profiles")
+                    .select("id,plant_assignments")
+                    .contains("plant_assignments", [plant_id])
+                    .execute()
+                )
+                for prof in assigned.data or []:
+                    new_arr = [
+                        p for p in (prof.get("plant_assignments") or []) if p != plant_id
+                    ]
+                    client.table("user_profiles").update(
+                        {"plant_assignments": new_arr}
+                    ).eq("id", prof["id"]).execute()
+            except Exception:
+                log.debug("plant_assignments scrub failed", exc_info=True)
+
+            # Finally drop the plant; CASCADE removes wells/locators/ro_trains/etc.
+            client.table("plants").delete().eq("id", plant_id).execute()
+            deleted_counts["plants"] = 1
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.exception("plant cleanup failed for %s", name)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Cleanup failed mid-flight for '{name}': {e}",
+            )
+
+        processed.append({
+            "name": name,
+            "plant_id": plant_id,
+            "deleted_counts": deleted_counts,
+        })
+
+    return {
+        "ok": True,
+        "processed": processed,
+        "not_found": not_found,
+        "actor_label": caller.get("label"),
+    }

@@ -1,6 +1,6 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-24 (iteration 7)_
+_Last updated: 2026-04-25 (iteration 8)_
 
 ## 1. Problem Statement (verbatim — consolidated across 6 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
@@ -164,6 +164,7 @@ _Last updated: 2026-04-24 (iteration 7)_
 | `/api/admin/users/{id}/soft-delete`, `/plants/{id}/soft-delete` | POST |
 | `/api/admin/users/{id}`, `/plants/{id}` (`?force=true&reason=...`) | DELETE |
 | `/api/admin/audit-log` (`?kind=user|plant|well&limit=N`) | GET |
+| `/api/admin/plants/cleanup` (Admin) | POST |
 
 > Wells delete in iteration 6 is performed client-side via the
 > Supabase JS client (RLS-gated, cascade FK-handled). A backend
@@ -196,9 +197,10 @@ _Last updated: 2026-04-24 (iteration 7)_
       skipped; in-app Alerts card only.
 
 ## 7. Testing
-- Backend: `pytest backend/tests/ -v` — **59/59 passing** (iter 6).
-  No new tests added — energy / wells deletion logic is purely
-  client-side Supabase calls.
+- Backend: `pytest backend/tests/ -v` — **65/65 passing** (iter 8).
+  Added `TestPlantsCleanupEndpoint` (6 tests): route registration,
+  401 no-bearer, 401/403 malformed-bearer, 422 empty `names`,
+  422 short reason, 422 missing body.
 - Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean.
 
 ## 8. Deployment & Operational Notes
