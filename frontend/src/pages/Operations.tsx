@@ -532,17 +532,20 @@ function WellRow({
             />
           </div>
         ) : (
-          <Input
-            type="number"
-            step="any"
-            inputMode="decimal"
-            value={reading}
-            onChange={(e) => setReading(e.target.value)}
-            placeholder="Water Meter"
-            className="h-9 flex-1 sm:flex-initial sm:w-32"
-            data-testid={`well-meter-input-${well.id}`}
-            title="Water meter reading (cumulative)"
-          />
+          <div className="relative flex-1 sm:flex-initial sm:w-32">
+            <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
+            <Input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              value={reading}
+              onChange={(e) => setReading(e.target.value)}
+              placeholder="Water Meter"
+              className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+              data-testid={`well-meter-input-${well.id}`}
+              title="Water meter reading (cumulative)"
+            />
+          </div>
         )}
 
         {well.has_power_meter && (
