@@ -417,6 +417,52 @@ def hard_delete_plant(
                 },
             )
     label = _entity_label(client, "plant", plant_id)
+
+    # Several child tables reference plants(id) WITHOUT ON DELETE CASCADE
+    # (well_readings, locator_readings, incidents, etc). We must clear them
+    # ourselves before the parent DELETE — otherwise Postgres raises 23503.
+    # We only do this when force=True; the dependency check above would
+    # otherwise have already blocked the call with 409.
+    deleted_counts: dict[str, int] = {}
+    if force and deps["blocking"]:
+        # Detach plant id from any user_profiles.plant_assignments arrays.
+        try:
+            assigned = (
+                client.table("user_profiles")
+                .select("id,plant_assignments")
+                .contains("plant_assignments", [plant_id])
+                .execute()
+            )
+            for prof in assigned.data or []:
+                new_arr = [
+                    p for p in (prof.get("plant_assignments") or []) if p != plant_id
+                ]
+                client.table("user_profiles").update(
+                    {"plant_assignments": new_arr}
+                ).eq("id", prof["id"]).execute()
+        except Exception:  # noqa: BLE001
+            log.debug("plant_assignments scrub failed", exc_info=True)
+
+        for table in _PLANT_NO_CASCADE_CHILDREN:
+            try:
+                res = (
+                    client.table(table)
+                    .delete(count="exact")
+                    .eq("plant_id", plant_id)
+                    .execute()
+                )
+                deleted_counts[table] = int(getattr(res, "count", 0) or 0)
+            except Exception as e:  # noqa: BLE001
+                msg = str(e)
+                if "does not exist" in msg or "relation" in msg.lower():
+                    log.debug("skipping missing table %s", table)
+                    continue
+                log.exception("force-delete child clear failed: %s", table)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed clearing {table} for plant '{label or plant_id}': {e}",
+                )
+
     try:
         client.table("plants").delete().eq("id", plant_id).execute()
     except Exception as e:  # noqa: BLE001
@@ -433,6 +479,7 @@ def hard_delete_plant(
         "mode": "hard",
         "forced": bool(force and deps["blocking"]),
         "plant_id": plant_id,
+        "deleted_counts": deleted_counts,
     }
 
 
