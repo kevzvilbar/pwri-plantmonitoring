@@ -601,11 +601,22 @@ function BypassForm() {
     [wells, bypassIds],
   );
 
-  // Today's logged bypass volume per well, sourced from /api/blending/volume.
-  const { data: volumeData } = useQuery<{ by_well: { well_id: string; volume_m3: number }[] }>({
+  // Today's logged bypass volume + most-recent prior entry per well.
+  // Wider window (14 days) so a previous entry can be surfaced. Backend
+  // returns today_volume_m3 (today only) separately from volume_m3 (window
+  // total), so the "today" label stays accurate even with a wider span.
+  const { data: volumeData } = useQuery<{
+    by_well: {
+      well_id: string;
+      volume_m3: number;
+      today_volume_m3: number;
+      previous_volume_m3: number | null;
+      previous_event_date: string | null;
+    }[];
+  }>({
     queryKey: ['bypass-today', plantId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/blending/volume?days=1&plant_ids=${encodeURIComponent(plantId)}`);
+      const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
@@ -613,7 +624,17 @@ function BypassForm() {
   });
   const todayByWell = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const w of volumeData?.by_well ?? []) m[w.well_id] = w.volume_m3;
+    for (const w of volumeData?.by_well ?? []) m[w.well_id] = w.today_volume_m3 ?? 0;
+    return m;
+  }, [volumeData]);
+  const prevByWell = useMemo(() => {
+    const m: Record<string, { volume: number | null; date: string | null }> = {};
+    for (const w of volumeData?.by_well ?? []) {
+      m[w.well_id] = {
+        volume: w.previous_volume_m3 ?? null,
+        date: w.previous_event_date ?? null,
+      };
+    }
     return m;
   }, [volumeData]);
 
@@ -639,9 +660,11 @@ function BypassForm() {
                     plantId={plantId}
                     plantName={plantName}
                     todayVolume={todayByWell[w.id] ?? 0}
+                    previousVolume={prevByWell[w.id]?.volume ?? null}
+                    previousDate={prevByWell[w.id]?.date ?? null}
                     onSaved={() => {
                       qc.invalidateQueries({ queryKey: ['bypass-today', plantId] });
-                      qc.invalidateQueries({ queryKey: ['blending-volume'] });
+                      qc.invalidateQueries({ queryKey: ['bypass-volume'] });
                     }}
                   />
                 </li>
@@ -659,10 +682,12 @@ function BypassForm() {
 }
 
 function BypassRow({
-  well, plantId, plantName, todayVolume, onSaved,
+  well, plantId, plantName, todayVolume, previousVolume, previousDate, onSaved,
 }: {
   well: any; plantId: string; plantName?: string;
   todayVolume: number;
+  previousVolume: number | null;
+  previousDate: string | null;
   onSaved: () => void;
 }) {
   const [volume, setVolume] = useState('');
@@ -709,6 +734,14 @@ function BypassRow({
           </Badge>
         </div>
         <div className="text-xs text-muted-foreground truncate">
+          prev:{' '}
+          <span
+            className="font-mono-num"
+            title={previousDate ? `last entry on ${previousDate}` : 'no prior bypass entry'}
+          >
+            {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
+          </span>
+          <span className="mx-1">·</span>
           today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
         </div>
       </div>

@@ -454,8 +454,19 @@ async def blending_volume(plant_ids: Optional[str] = None,
                 "plant_id": ev.get("plant_id"),
                 "plant_name": ev.get("plant_name") or "",
                 "volume_m3": 0.0,
+                "today_volume_m3": 0.0,
+                "previous_volume_m3": None,
+                "previous_event_date": None,
             })
             cur["volume_m3"] += vol
+            if day == today:
+                cur["today_volume_m3"] += vol
+            # Track the most recent prior (non-today) entry for this well.
+            elif day and day < today:
+                prev_d = cur.get("previous_event_date")
+                if prev_d is None or day > prev_d:
+                    cur["previous_event_date"] = day
+                    cur["previous_volume_m3"] = vol
         total += vol
         if day == today:
             today_total += vol
@@ -474,6 +485,9 @@ async def blending_volume(plant_ids: Optional[str] = None,
     )
     for w in by_well_list:
         w["volume_m3"] = round(float(w["volume_m3"]), 2)
+        w["today_volume_m3"] = round(float(w.get("today_volume_m3") or 0.0), 2)
+        if w.get("previous_volume_m3") is not None:
+            w["previous_volume_m3"] = round(float(w["previous_volume_m3"]), 2)
 
     return {
         "days": span,
