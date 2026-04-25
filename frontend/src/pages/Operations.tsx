@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -41,13 +40,15 @@ export default function Operations() {
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
       <Tabs defaultValue="locator">
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="locator">Locator</TabsTrigger>
           <TabsTrigger value="well">Well</TabsTrigger>
+          <TabsTrigger value="bypass">Bypass</TabsTrigger>
           <TabsTrigger value="power">Power</TabsTrigger>
         </TabsList>
         <TabsContent value="locator" className="mt-3"><LocatorReadingForm /></TabsContent>
         <TabsContent value="well" className="mt-3"><WellReadingForm /></TabsContent>
+        <TabsContent value="bypass" className="mt-3"><BypassForm /></TabsContent>
         <TabsContent value="power" className="mt-3"><PowerForm /></TabsContent>
       </Tabs>
     </div>
@@ -297,9 +298,7 @@ function LocatorRow({
 function WellReadingForm() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
-  const plantName = plants?.find((p: any) => p.id === plantId)?.name;
 
   const { data: wells } = useQuery({
     queryKey: ['op-wells', plantId],
@@ -360,7 +359,6 @@ function WellReadingForm() {
                   <WellRow
                     well={w}
                     plantId={plantId}
-                    plantName={plantName}
                     previousMeter={latestByWell[w.id]?.current_reading ?? null}
                     previousPower={latestByWell[w.id]?.power_meter_reading ?? null}
                     todayReadings={todayByWell[w.id] ?? []}
@@ -381,51 +379,20 @@ function WellReadingForm() {
 }
 
 function WellRow({
-  well, plantId, plantName, previousMeter, previousPower, todayReadings, userId,
+  well, plantId, previousMeter, previousPower, todayReadings, userId,
   isBlending, onSaved,
 }: {
-  well: any; plantId: string; plantName?: string;
+  well: any; plantId: string;
   previousMeter: number | null; previousPower: number | null;
   todayReadings: any[];
   userId: string | undefined;
   isBlending: boolean;
   onSaved: () => void;
 }) {
-  const qc = useQueryClient();
   const [reading, setReading] = useState('');
   const [powerReading, setPowerReading] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [togglingBlend, setTogglingBlend] = useState(false);
-
-  const toggleBlending = async () => {
-    // Bypass wells no longer require a prior meter reading — when bypass is
-    // checked, the dedicated bypass-meter input below records the injection
-    // volume on its own (no dependency on standard well readings).
-    setTogglingBlend(true);
-    try {
-      const res = await fetch(`${BASE}/api/blending/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': userId ?? '' },
-        body: JSON.stringify({
-          well_id: well.id,
-          plant_id: plantId,
-          well_name: well.name,
-          plant_name: plantName,
-          is_blending: !isBlending,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(isBlending
-        ? `${well.name}: Bypass Removed`
-        : `${well.name}: Marked As Bypass Well — Injects To Product Water`);
-      qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
-    } catch (e: any) {
-      toast.error(`Bypass Toggle Failed: ${e.message || e}`);
-    } finally {
-      setTogglingBlend(false);
-    }
-  };
 
   const cur = +reading || 0;
   const dailyVol = previousMeter != null && reading ? cur - previousMeter : null;
@@ -463,23 +430,6 @@ function WellRow({
 
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    // Blending audit: if this well is tagged as Blending and volume > 0,
-    // log a blending event so it surfaces under Dashboard → Alerts.
-    const dailyVolAtSave = previousMeter != null ? cur - previousMeter : null;
-    if (isBlending && dailyVolAtSave != null && dailyVolAtSave > 0) {
-      try {
-        await fetch(`${BASE}/api/blending/audit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            well_id: well.id, plant_id: plantId,
-            well_name: well.name, plant_name: plantName,
-            event_date: new Date().toISOString().slice(0, 10),
-            volume_m3: dailyVolAtSave,
-          }),
-        });
-      } catch { /* non-fatal */ }
-    }
     toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
     setReading(''); setPowerReading(''); setEditingId(null);
     onSaved();
@@ -531,16 +481,10 @@ function WellRow({
         inputMode="decimal"
         value={reading}
         onChange={(e) => setReading(e.target.value)}
-        placeholder={isBlending ? 'Bypass meter' : 'Meter'}
-        className={`w-24 sm:w-32 shrink-0 ${
-          isBlending ? 'border-violet-400 focus-visible:ring-violet-400' : ''
-        }`}
+        placeholder="Meter"
+        className="w-24 sm:w-32 shrink-0"
         data-testid={`well-meter-input-${well.id}`}
-        title={
-          isBlending
-            ? 'Bypass meter reading — recorded as injected volume into product line'
-            : 'Standard well meter reading'
-        }
+        title="Standard well meter reading"
       />
 
       {well.has_power_meter && (
@@ -588,35 +532,172 @@ function WellRow({
         </Button>
       )}
 
-      {/* Mark As Bypass Well — compact checkbox.
-          Hidden when this well has a dedicated power meter (per spec, the
-          power-meter reading replaces the bypass toggle in the row). */}
-      {!well.has_power_meter && (
-        <label
-          className={`flex items-center gap-1.5 shrink-0 h-8 px-2 rounded-md border cursor-pointer select-none transition-colors ${
-            isBlending
-              ? 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
-              : 'bg-background hover:bg-muted'
-          } ${togglingBlend ? 'opacity-60 cursor-wait' : ''}`}
-          title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
-          data-testid={`bypass-toggle-label-${well.id}`}
-        >
-          <Checkbox
-            checked={isBlending}
-            disabled={togglingBlend}
-            onCheckedChange={() => toggleBlending()}
-            className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
-            data-testid={`blending-toggle-${well.id}`}
-          />
-          <span className="text-xs font-medium whitespace-nowrap">Bypass</span>
-        </label>
-      )}
-
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
           Meter below previous
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- BYPASS (volume entry for wells tagged as bypass) ----------
+
+function BypassForm() {
+  const qc = useQueryClient();
+  const { data: plants } = usePlants();
+  const [plantId, setPlantId] = useState('');
+  const plantName = plants?.find((p: any) => p.id === plantId)?.name;
+
+  const { data: wells } = useQuery({
+    queryKey: ['op-wells', plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('wells').select('id, name, plant_id, status').eq('plant_id', plantId).eq('status', 'Active').order('name')).data ?? []
+      : [],
+    enabled: !!plantId,
+  });
+
+  const { data: blendingData } = useBlendingWells(plantId);
+  const bypassIds = useMemo(
+    () => new Set((blendingData?.wells ?? []).map((w) => w.well_id)),
+    [blendingData],
+  );
+  const bypassWells = useMemo(
+    () => (wells ?? []).filter((w: any) => bypassIds.has(w.id)),
+    [wells, bypassIds],
+  );
+
+  // Today's logged bypass volume per well, sourced from /api/blending/volume.
+  const { data: volumeData } = useQuery<{ by_well: { well_id: string; volume_m3: number }[] }>({
+    queryKey: ['bypass-today', plantId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/blending/volume?days=1&plant_ids=${encodeURIComponent(plantId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    enabled: !!plantId,
+  });
+  const todayByWell = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const w of volumeData?.by_well ?? []) m[w.well_id] = w.volume_m3;
+    return m;
+  }, [volumeData]);
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3">
+        <Label>Plant</Label>
+        <PlantSelector value={plantId} onChange={setPlantId} />
+      </Card>
+
+      {plantId && (
+        <Card className="p-0 overflow-hidden">
+          <div className="px-3 py-2 border-b bg-muted/40 text-xs font-medium flex items-center justify-between">
+            <span>Bypass wells</span>
+            <span className="text-muted-foreground">{bypassWells.length} tagged</span>
+          </div>
+          {bypassWells.length ? (
+            <ul className="divide-y">
+              {bypassWells.map((w: any) => (
+                <li key={w.id}>
+                  <BypassRow
+                    well={w}
+                    plantId={plantId}
+                    plantName={plantName}
+                    todayVolume={todayByWell[w.id] ?? 0}
+                    onSaved={() => {
+                      qc.invalidateQueries({ queryKey: ['bypass-today', plantId] });
+                      qc.invalidateQueries({ queryKey: ['blending-volume'] });
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-3 text-xs text-muted-foreground">
+              No wells tagged as bypass for this plant. Tag a well as bypass under <span className="font-medium">Plants → Wells</span>.
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function BypassRow({
+  well, plantId, plantName, todayVolume, onSaved,
+}: {
+  well: any; plantId: string; plantName?: string;
+  todayVolume: number;
+  onSaved: () => void;
+}) {
+  const [volume, setVolume] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const v = +volume;
+    if (!volume || !(v > 0)) {
+      toast.error(`${well.name}: enter a positive bypass volume`);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/blending/audit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          well_id: well.id, plant_id: plantId,
+          well_name: well.name, plant_name: plantName,
+          event_date: new Date().toISOString().slice(0, 10),
+          volume_m3: v,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(`${well.name}: bypass volume saved (${fmtNum(v)} m³)`);
+      setVolume('');
+      onSaved();
+    } catch (e: any) {
+      toast.error(`Bypass save failed: ${e.message || e}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`bypass-row-${well.id}`}>
+      <div className="min-w-0 flex-1 basis-[140px]">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="text-sm font-medium truncate">{well.name}</div>
+          <Badge
+            className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
+          >
+            Bypass
+          </Badge>
+        </div>
+        <div className="text-xs text-muted-foreground truncate">
+          today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
+        </div>
+      </div>
+
+      <Input
+        type="number"
+        step="any"
+        inputMode="decimal"
+        value={volume}
+        onChange={(e) => setVolume(e.target.value)}
+        placeholder="Bypass m³"
+        className="w-28 sm:w-32 shrink-0 border-violet-300 focus-visible:ring-violet-300"
+        data-testid={`bypass-input-${well.id}`}
+      />
+
+      <Button
+        onClick={save}
+        disabled={saving || !volume}
+        size="sm"
+        className="shrink-0"
+      >
+        {saving ? '...' : 'Save'}
+      </Button>
     </div>
   );
 }
