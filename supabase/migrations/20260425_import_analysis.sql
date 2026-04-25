@@ -53,15 +53,58 @@ create policy "import_analysis insertable by admin/manager"
   for insert
   with check (public.is_manager_or_admin(auth.uid()));
 
--- Admin / Manager may update only the decision fields (status, decisions, etc.).
--- We don't enforce column-level guards here — server endpoints write the
--- approved fields atomically, and the audit log captures the decision separately.
+-- Updates are Admin-only — and only via the /api/import/ai-sync endpoint
+-- which performs strict validation, audit logging, and status transitions.
+-- Manager can read + create analyses but cannot mutate decisions/status
+-- directly through the Supabase API, matching the server-side
+-- _require_roles({"Admin"}) check on the sync endpoint.
 drop policy if exists "import_analysis updatable by admin/manager"
   on public.import_analysis;
-create policy "import_analysis updatable by admin/manager"
+drop policy if exists "import_analysis updatable by admin"
+  on public.import_analysis;
+create policy "import_analysis updatable by admin"
   on public.import_analysis
   for update
-  using (public.is_manager_or_admin(auth.uid()))
-  with check (public.is_manager_or_admin(auth.uid()));
+  using (public.is_admin(auth.uid()))
+  with check (public.is_admin(auth.uid()));
 
 -- No delete policy — analysis rows are kept for audit history.
+
+-- Recommended (but not strictly required) uniqueness — prevents the
+-- get-or-create race in _ensure_entity from creating duplicate wells /
+-- locators / ro_trains under the same plant when two admins approve
+-- overlapping analyses at the same time. Wrapped in DO blocks so the
+-- migration is idempotent and tolerates pre-existing data with dups.
+do $$
+begin
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and indexname = 'wells_plant_name_uq'
+  ) then
+    begin
+      execute 'create unique index wells_plant_name_uq on public.wells (plant_id, lower(name))';
+    exception when others then
+      raise notice 'wells_plant_name_uq skipped: %', sqlerrm;
+    end;
+  end if;
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and indexname = 'locators_plant_name_uq'
+  ) then
+    begin
+      execute 'create unique index locators_plant_name_uq on public.locators (plant_id, lower(name))';
+    exception when others then
+      raise notice 'locators_plant_name_uq skipped: %', sqlerrm;
+    end;
+  end if;
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and indexname = 'ro_trains_plant_name_uq'
+  ) then
+    begin
+      execute 'create unique index ro_trains_plant_name_uq on public.ro_trains (plant_id, lower(name))';
+    exception when others then
+      raise notice 'ro_trains_plant_name_uq skipped: %', sqlerrm;
+    end;
+  end if;
+end $$;

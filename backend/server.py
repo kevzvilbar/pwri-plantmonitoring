@@ -37,6 +37,12 @@ from admin_service import (
     get_user_dependencies, get_plant_dependencies,
     list_audit_log, cleanup_plants,
 )
+from ai_import_service import (
+    analyze_upload as ai_analyze_upload,
+    sync_analysis as ai_sync_analysis,
+    list_analyses as ai_list_analyses,
+    MAX_FILE_BYTES as AI_MAX_FILE_BYTES,
+)
 
 
 class DeletionRequest(BaseModel):
@@ -636,6 +642,41 @@ async def admin_plant_hard_delete(plant_id: str,
     return hard_delete_plant(
         authorization, plant_id, reason=reason, force=force, archive=archive,
     )
+
+
+@api_router.post("/import/ai-analyze")
+async def import_ai_analyze(file: UploadFile = File(...),
+                             plant_id: Optional[str] = None,
+                             authorization: Optional[str] = Header(None)):
+    """AI Universal Import — analyse a file and propose per-table mappings.
+    Persists the analysis row but does NOT mutate any business tables yet.
+    The Admin must POST /api/import/ai-sync/{analysis_id} to commit.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing file")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > AI_MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (limit 25 MiB)")
+    return ai_analyze_upload(authorization, file, data, plant_id)
+
+
+@api_router.post("/import/ai-sync/{analysis_id}")
+async def import_ai_sync(analysis_id: str,
+                          body: dict,
+                          authorization: Optional[str] = Header(None)):
+    """Commit admin-approved decisions from a prior /import/ai-analyze run.
+    Body: { reason, plant_id, decisions: [{source, action, target, entity_name, column_mapping}] }.
+    Writes one [IMPORT] / [IMPORT-REJECT] audit row per decision.
+    """
+    return ai_sync_analysis(authorization, analysis_id, body)
+
+
+@api_router.get("/import/ai-analyses")
+async def import_ai_list(limit: int = 25,
+                          authorization: Optional[str] = Header(None)):
+    return ai_list_analyses(authorization, limit=limit)
 
 
 @api_router.post("/admin/plants/cleanup")

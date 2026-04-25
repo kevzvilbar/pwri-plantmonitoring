@@ -364,7 +364,8 @@ def looks_like_wellmeter(tables: list[ExtractedTable]) -> bool:
 # Persistence
 # ---------------------------------------------------------------------------
 
-def _table_payload(a: TableAnalysis) -> dict[str, Any]:
+def _public_table_payload(a: TableAnalysis) -> dict[str, Any]:
+    """Wire-format returned to the UI — preview-only, no body_rows."""
     return {
         "source": a.source,
         "headers": a.headers,
@@ -379,11 +380,34 @@ def _table_payload(a: TableAnalysis) -> dict[str, Any]:
     }
 
 
+def _persisted_table_payload(a: TableAnalysis, body_rows: list[list[Any]]) -> dict[str, Any]:
+    """Persisted payload — adds the FULL bounded body (capped at MAX_BODY_ROWS)
+    so /ai-sync can replay against real data, not just the LLM preview."""
+    p = _public_table_payload(a)
+    p["body_rows"] = [
+        [_to_jsonable(c) for c in r] for r in body_rows[:MAX_BODY_ROWS]
+    ]
+    return p
+
+
+def _to_jsonable(v: Any) -> Any:
+    """Coerce numpy / datetime / unknown types to JSON-friendly primitives."""
+    if v is None:
+        return None
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v)
+
+
 def _persist_analysis(client: Client, *, caller: dict[str, Any], filename: str,
                       file_kind: str, file_size: int, plant_id: Optional[str],
+                      extracted: list[ExtractedTable],
                       analyses: list[TableAnalysis], wellmeter_detected: bool,
                       ai_provider: str, ai_model: Optional[str]) -> str:
     aid = str(uuid.uuid4())
+    bodies = {t.source: t.rows for t in extracted}
     payload = {
         "id": aid,
         "actor_user_id": caller.get("user_id"),
@@ -396,14 +420,22 @@ def _persist_analysis(client: Client, *, caller: dict[str, Any], filename: str,
         "ai_model": ai_model,
         "status": "pending",
         "wellmeter_detected": wellmeter_detected,
-        "tables": [_table_payload(a) for a in analyses],
+        "tables": [
+            _persisted_table_payload(a, bodies.get(a.source, [])) for a in analyses
+        ],
     }
     try:
         client.table("import_analysis").insert(payload).execute()
     except Exception as e:
-        log.warning(
-            "import_analysis insert skipped (%s). Did you run "
-            "supabase/migrations/20260425_import_analysis.sql?", e,
+        # Fail loudly — silent persistence failure was masking missing
+        # migrations and producing false-positive analyse responses
+        # whose IDs would later 404 on /ai-sync.
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to persist analysis ({e}). "
+                "Did you run supabase/migrations/20260425_import_analysis.sql?"
+            ),
         )
     return aid
 
@@ -483,29 +515,49 @@ def _coerce_float(v: Any) -> Optional[float]:
         return None
 
 
-def _ensure_entity(client: Client, target: str, plant_id: str, name: str) -> Optional[str]:
+def _ensure_entity(client: Client, target: str, plant_id: str,
+                   name: str) -> tuple[Optional[str], bool]:
     """Get-or-create an entity row of `target` type under `plant_id` by name.
-    Returns the entity id, or None on failure."""
+    Returns (entity_id, created_now). `created_now` is True only when this
+    call inserted a new row — so callers count creations accurately.
+
+    Race protection: if a concurrent caller wins the insert race,
+    `unique (plant_id, name)` (recommended DB constraint) raises and we
+    re-select. Without the constraint, this still narrows the window but
+    cannot eliminate it; document the recommendation in the migration.
+    """
     table = target  # 'wells' | 'locators' | 'ro_trains'
     name = name.strip()
     if not name or not plant_id:
-        return None
+        return None, False
     try:
         existing = (
             client.table(table).select("id,name")
             .eq("plant_id", plant_id).ilike("name", name).limit(1).execute()
         )
         if existing.data:
-            return existing.data[0]["id"]
+            return existing.data[0]["id"], False
         # Minimal insert payload — let downstream forms fill in optional fields.
         base: dict[str, Any] = {"plant_id": plant_id, "name": name, "status": "Active"}
         if target == "wells":
             base["has_power_meter"] = False
-        ins = client.table(table).insert(base).select("id").single().execute()
-        return (ins.data or {}).get("id")
+        try:
+            ins = client.table(table).insert(base).select("id").single().execute()
+            return (ins.data or {}).get("id"), True
+        except Exception as ins_err:
+            # Likely a race winning a unique constraint — re-select.
+            log.info("Insert race on %s '%s' (%s) — re-selecting.",
+                     target, name, ins_err)
+            re = (
+                client.table(table).select("id,name")
+                .eq("plant_id", plant_id).ilike("name", name).limit(1).execute()
+            )
+            if re.data:
+                return re.data[0]["id"], False
+            raise
     except Exception as e:
         log.warning("Failed to upsert %s '%s': %s", target, name, e)
-        return None
+        return None, False
 
 
 def _insert_readings(client: Client, target: str, plant_id: str,
@@ -628,6 +680,7 @@ def analyze_upload(authorization: Optional[str], file: UploadFile, content: byte
     aid = _persist_analysis(
         client, caller=caller, filename=filename, file_kind=file_kind,
         file_size=len(content), plant_id=plant_id,
+        extracted=tables,
         analyses=analyses, wellmeter_detected=wellmeter,
         ai_provider=provider,
         ai_model=OPENAI_MODEL if provider == "openai" else None,
@@ -639,7 +692,7 @@ def analyze_upload(authorization: Optional[str], file: UploadFile, content: byte
         "wellmeter_detected": wellmeter,
         "ai_provider": provider,
         "ai_model": OPENAI_MODEL if provider == "openai" else None,
-        "tables": [_table_payload(a) for a in analyses],
+        "tables": [_public_table_payload(a) for a in analyses],
     }
 
 
@@ -681,6 +734,7 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
 
     summary: dict[str, Any] = {
         "created": {"wells": 0, "locators": 0, "ro_trains": 0},
+        "existing": {"wells": 0, "locators": 0, "ro_trains": 0},
         "inserted": {"well_readings": 0, "locator_readings": 0,
                      "ro_train_readings": 0, "power_readings": 0},
         "skipped": [],
@@ -722,12 +776,16 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                 summary["skipped"].append({"source": source, "reason": "entity_name required"})
                 any_skipped = True
                 continue
-            ent_id = _ensure_entity(client, target, plant_id, entity_name)
+            ent_id, was_created = _ensure_entity(client, target, plant_id, entity_name)
             if ent_id:
-                summary["created"][target] += 1
+                if was_created:
+                    summary["created"][target] += 1
+                else:
+                    summary["existing"][target] += 1
                 any_synced = True
+                tag = "[IMPORT]" if was_created else "[IMPORT-EXISTS]"
                 _audit_decision(client, caller, analysis_id, source, target,
-                                f"[IMPORT] {entity_name}", reason)
+                                f"{tag} {entity_name}", reason)
             else:
                 summary["skipped"].append({"source": source, "reason": f"failed to create {target}"})
                 any_skipped = True
@@ -749,21 +807,29 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                     summary["skipped"].append({"source": source, "reason": "entity_name required for readings"})
                     any_skipped = True
                     continue
-                entity_id = _ensure_entity(client, entity_table, plant_id, entity_name)
+                entity_id, was_created = _ensure_entity(client, entity_table, plant_id, entity_name)
                 if not entity_id:
                     summary["skipped"].append({"source": source, "reason": f"could not resolve {entity_table} '{entity_name}'"})
                     any_skipped = True
                     continue
+                if was_created:
+                    summary["created"][entity_table] += 1
+                else:
+                    summary["existing"][entity_table] += 1
 
-            # Reconstruct rows from the persisted sample (full body isn't kept
-            # in `import_analysis` to bound payload size). For larger imports
-            # the admin should re-upload via the wellmeter parser, which keeps
-            # in-memory state. Document this honestly in the response.
-            sample_rows = tbl.get("sample_rows") or []
+            # Use the FULL persisted body (capped at MAX_BODY_ROWS) — not the
+            # sample rows. This makes /ai-sync actually import the data the
+            # admin reviewed, rather than only the 25-row preview.
+            body_rows = tbl.get("body_rows")
+            if not body_rows:
+                # Backwards-compat for analyses persisted before body_rows
+                # existed: fall back to sample_rows so old `pending` rows
+                # remain consumable.
+                body_rows = tbl.get("sample_rows") or []
             inserted, warns = _insert_readings(
                 client, target=target, plant_id=plant_id,
                 entity_id=entity_id or "", recorded_by=caller.get("user_id"),
-                headers=tbl.get("headers") or [], rows=sample_rows,
+                headers=tbl.get("headers") or [], rows=body_rows,
                 mapping=mapping,
             )
             summary["inserted"][target] += inserted
@@ -771,6 +837,11 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                 any_synced = True
                 _audit_decision(client, caller, analysis_id, source, target,
                                 f"[IMPORT] {entity_name or target} ({inserted} rows)", reason)
+            else:
+                # No rows landed — record this as a partial outcome with a
+                # rejection-style audit row so it's traceable.
+                _audit_decision(client, caller, analysis_id, source, target,
+                                f"[IMPORT-REJECT] no readings imported", reason)
             for w in warns:
                 summary["skipped"].append({"source": source, "reason": w})
                 any_skipped = True
@@ -795,7 +866,19 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
             "sync_summary": summary,
         }).eq("id", analysis_id).execute()
     except Exception as e:
-        log.warning("Failed to update import_analysis status: %s", e)
+        # Surface the failure: a silent update means the analysis stays
+        # `pending` forever and the admin has no way to know their decisions
+        # weren't recorded. The downstream side-effects (entity rows + audit
+        # log) already happened, so we report partial success in the error.
+        log.exception("Failed to update import_analysis status")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Sync side-effects ran but status update failed: {e}. "
+                "Audit log + business rows reflect the actual state — "
+                "but the analysis row is still 'pending'."
+            ),
+        )
 
     return {
         "ok": True,

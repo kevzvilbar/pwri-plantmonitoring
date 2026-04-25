@@ -49,3 +49,20 @@ A red **NRW alert banner** appears above the clusters whenever `nrw > 20`, click
 - `BadImportCleanupCard` (admin-only) — multi-select cleanup of plants imported by mistake. Has 5 `REASON_TEMPLATES` chips (Smart import error, Duplicate entry, Test data, Wrong region, User request) above a compact reason field that toggles between `rows={1}` and `rows={4}` via Expand/Compact button. A live "audit log preview" block shows one row per selected plant in the form `<plant> → reason: [CLEANUP] <reason>`, mirroring the backend contract (`/api/admin/plants/cleanup` writes one audit row per plant with `reason="[CLEANUP] <reason>"` against `entity_label=<plant>`). The same preview renders inside the `AlertDialog` confirm screen.
 - A **sticky search** bar (`sticky top-0 z-20` with `backdrop-blur`) with a "filtered/total" counter when a query is active.
 - Plant cards with **status color coding**: emerald `border-l-4` + subtle gradient for `Active`, muted gray + `bg-muted/20` for `Inactive`. Per-row delete still goes through `DeleteEntityMenu` (soft+hard with audit). Bulk-delete on the entire plants list was intentionally NOT added — destructive multi-select on every plant would be a foot-gun; the cleanup card already covers the smart-import-mistake case.
+
+## Smart Import — AI Universal pipeline
+
+`frontend/src/pages/Import.tsx` now has a top-level mode toggle:
+
+- **AI Universal (default)** — `frontend/src/components/AIImportPanel.tsx` calls `POST /api/import/ai-analyze` with the file, then `POST /api/import/ai-sync/{analysis_id}` with per-table decisions. UI shows confidence bars (high/medium/low), editable target dropdown, editable entity name, sync/reject toggle, and a column-mapping editor (`our_field → source_header`). A `[IMPORT] / [IMPORT-REJECT]` audit-log preview mirrors the rows the backend will write. Reason field has 5 templates (Routine import / Onboarding / Backfill / Correction / Test upload).
+- **Wellmeter Parser (legacy)** — preserves the original `/api/import/parse-wellmeter` flow verbatim. If the AI detects a wellmeter file (`wellmeter_detected: true`) it shows a one-click "Open in Wellmeter Parser" hand-off button.
+
+`backend/ai_import_service.py` (~600 lines) does:
+1. **extract_tables** — handles `.xlsx`/`.xlsm` (openpyxl, scans for blank-line table breaks per sheet), `.docx` (python-docx tables), `.csv`/`.tsv`/`.txt` (csv.Sniffer auto-delimiter). `.doc` (binary Word) is rejected.
+2. **classify_tables** — calls OpenAI `gpt-4o-mini` (`OPENAI_API_KEY` required) with a strict JSON schema: `{ target, entity_name, confidence, column_mapping, anomalies, rationale }`. On failure / no-key, falls back to `_rule_based_classify` heuristics.
+3. **looks_like_wellmeter** — header-text match for the canonical `Date Initial Final Volume Status` columns.
+4. **sync_analysis** — for each `action=='sync'` decision: `_ensure_entity` (get-or-create by name under `plant_id` for `wells`/`locators`/`ro_trains`) then `_insert_readings` against `well_readings`/`locator_readings`/`ro_train_readings`/`power_readings`. Each decision writes one `[IMPORT] <source> → <target>` (or `[IMPORT-REJECT]`) row to `deletion_audit_log` (re-uses the table with `kind='plant'`, `entity_id=analysis_id`).
+
+**Persistence:** `supabase/migrations/20260425_import_analysis.sql` creates the `import_analysis` table (RLS, status `pending|synced|rejected|partial`, jsonb `tables / decisions / sync_summary`). Sample rows are capped at `MAX_SAMPLE_ROWS=25` per table to bound payload. **The user must run this migration before the AI flow works end-to-end.**
+
+**Limits:** `MAX_FILE_BYTES = 25 MiB`. Auth helpers (`_bearer_token`, `_caller_identity`, `_user_scoped_client`, `_require_roles`, `_write_audit`) reused from `admin_service.py`.

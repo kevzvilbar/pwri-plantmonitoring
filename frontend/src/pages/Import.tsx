@@ -2,8 +2,9 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle,
-  Droplet, Activity, Filter, Loader2, Download, RefreshCcw,
+  Droplet, Activity, Filter, Loader2, Download, RefreshCcw, Sparkles,
 } from 'lucide-react';
+import AIImportPanel from '@/components/AIImportPanel';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
@@ -124,6 +125,7 @@ export default function Import() {
   const { user } = useAuth();
   const { data: plants } = usePlants();
 
+  const [mode, setMode] = useState<'ai' | 'wellmeter'>('ai');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -355,12 +357,46 @@ export default function Import() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Smart Import</h1>
         <p className="text-xs text-muted-foreground">
-          Upload plant XLSX files — auto-detects defective meters, shut-offs, blends, new-meter resets & inconsistent readings.
+          Upload plant data — AI Universal handles any layout (xlsx/csv/docx/txt), Wellmeter Parser is the dedicated legacy flow for tri-block well-meter sheets.
         </p>
       </div>
 
+      {/* Mode toggle */}
+      <div
+        className="inline-flex rounded-md border border-border bg-card p-0.5 text-xs"
+        role="tablist"
+        aria-label="Import mode"
+      >
+        <button
+          role="tab"
+          aria-selected={mode === 'ai'}
+          onClick={() => setMode('ai')}
+          className={cn(
+            'px-3 py-1 rounded-sm flex items-center gap-1.5 transition-colors',
+            mode === 'ai' ? 'bg-amber-500/15 text-amber-800 dark:text-amber-200 font-medium' : 'text-muted-foreground hover:text-foreground',
+          )}
+          data-testid="import-mode-ai"
+        >
+          <Sparkles className="h-3 w-3" /> AI Universal
+        </button>
+        <button
+          role="tab"
+          aria-selected={mode === 'wellmeter'}
+          onClick={() => setMode('wellmeter')}
+          className={cn(
+            'px-3 py-1 rounded-sm flex items-center gap-1.5 transition-colors',
+            mode === 'wellmeter' ? 'bg-primary/15 text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
+          )}
+          data-testid="import-mode-wellmeter"
+        >
+          <Droplet className="h-3 w-3" /> Wellmeter Parser <span className="text-[10px] opacity-70">(legacy)</span>
+        </button>
+      </div>
 
-      {/* --- Step 1: Upload --- */}
+      {mode === 'ai' && <AIImportPanel onHandoffWellmeter={() => setMode('wellmeter')} />}
+      {mode === 'wellmeter' && (
+        <>
+          {/* --- Step 1: Upload --- */}
       <Card className="p-4">
         <div
           onDrop={onDrop}
@@ -589,6 +625,8 @@ export default function Import() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }
