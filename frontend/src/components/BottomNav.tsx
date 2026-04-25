@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
-  Building2, Droplet, MapPin, Cog, FlaskConical,
+  Building2, Droplet, Cog, FlaskConical,
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
@@ -11,15 +11,33 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 
-// Priority items for mobile bottom nav (Dashboard centered)
-type Priority = { to: string; label: string; icon: any; match?: string[] };
+// Priority items for mobile bottom nav (Dashboard centered).
+// Wells + Locators are combined into a single entry on mobile so the bottom
+// bar fits a 5-icon layout (Plants · Wells & Locators · Dashboard · RO Trains · More).
+type Priority = {
+  to: string;
+  label: string;
+  icon: any;
+  match?: string[];
+  // Optional precise active check: returns true when the current `tab` query
+  // value (lower-cased) is one of the given values. Preferred over loose
+  // substring matching against the full URL.
+  matchTabValues?: string[];
+};
 
 const leftPriority: Priority[] = [
   { to: '/plants', label: 'Plants', icon: Building2 },
-  { to: '/operations?tab=wells', label: 'Wells', icon: Droplet, match: ['/operations'] },
+  {
+    to: '/operations?tab=wells',
+    label: 'Wells & Locators',
+    icon: Droplet,
+    match: ['/operations'],
+    // Accept both plural deep-link values and the singular values that
+    // Operations writes back when the user manually clicks a tab.
+    matchTabValues: ['well', 'wells', 'locator', 'locators'],
+  },
 ];
 const rightPriority: Priority[] = [
-  { to: '/operations?tab=locators', label: 'Locators', icon: MapPin, match: ['/operations'] },
   { to: '/ro-trains', label: 'RO Trains', icon: Cog },
 ];
 
@@ -72,27 +90,48 @@ export function BottomNav() {
 
   const isPriorityActive = (item: Priority) => {
     const target = item.to.split('?')[0];
-    if (item.match) return item.match.some((p) => pathname.startsWith(p)) && fullPath.includes(item.to.split('?')[1] ?? '');
+    if (item.match) {
+      const pathMatch = item.match.some((p) => pathname.startsWith(p));
+      if (!pathMatch) return false;
+      // Prefer exact `?tab=` value matching when configured; this is robust
+      // against unrelated query params that could otherwise contain the same
+      // substring.
+      const currentTab = (new URLSearchParams(search).get('tab') || '').toLowerCase();
+      if (item.matchTabValues) return item.matchTabValues.includes(currentTab);
+      // Fallback: match the literal query string from the item's `to`.
+      const ownQuery = item.to.split('?')[1] ?? '';
+      return ownQuery ? fullPath.includes(ownQuery) : true;
+    }
     return pathname === target || pathname.startsWith(target + '/');
   };
 
-  const renderPriority = (item: Priority) => (
-    <button
-      key={item.to}
-      onClick={() => navigate(item.to)}
-      className={cn(
-        'flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-[10px] font-medium transition-colors',
-        isPriorityActive(item) ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      <item.icon className="h-[18px] w-[18px]" />
-      <span className="leading-none">{item.label}</span>
-    </button>
-  );
+  const renderPriority = (item: Priority) => {
+    const active = isPriorityActive(item);
+    return (
+      <button
+        key={item.to}
+        onClick={() => navigate(item.to)}
+        className={cn(
+          'flex flex-col items-center justify-center gap-0.5 py-2 px-1 transition-all',
+          active
+            ? 'text-primary text-[11px] font-semibold'
+            : 'text-muted-foreground text-[10px] font-medium hover:text-foreground',
+        )}
+      >
+        <item.icon
+          className={cn(
+            'transition-all',
+            active ? 'h-[22px] w-[22px] drop-shadow-sm' : 'h-[18px] w-[18px]',
+          )}
+        />
+        <span className="leading-none">{item.label}</span>
+      </button>
+    );
+  };
 
   return (
     <nav className="md:hidden sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]">
-      <div className="grid grid-cols-6 max-w-3xl mx-auto items-end">
+      <div className="grid grid-cols-5 max-w-3xl mx-auto items-end">
         {leftPriority.map(renderPriority)}
 
         {/* Centered, prominent Dashboard button */}

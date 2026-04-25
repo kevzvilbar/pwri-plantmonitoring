@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,11 +36,41 @@ function useBlendingWells(plantId: string) {
   });
 }
 
+// Map URL ?tab= values (including plural aliases used by BottomNav) to internal
+// tab values. Anything unknown falls through to the default "locator" tab.
+const TAB_ALIASES: Record<string, string> = {
+  locator: 'locator',
+  locators: 'locator',
+  well: 'well',
+  wells: 'well',
+  bypass: 'bypass',
+  power: 'power',
+};
+const VALID_TABS = new Set(['locator', 'well', 'bypass', 'power']);
+
 export default function Operations() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = TAB_ALIASES[(searchParams.get('tab') || '').toLowerCase()] ?? 'locator';
+  const [tab, setTab] = useState<string>(urlTab);
+
+  // Keep tab state in sync when URL changes (e.g. user taps Wells & Locators).
+  useEffect(() => {
+    if (urlTab !== tab) setTab(urlTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
+
+  const handleTabChange = (next: string) => {
+    if (!VALID_TABS.has(next)) return;
+    setTab(next);
+    const sp = new URLSearchParams(searchParams);
+    sp.set('tab', next);
+    setSearchParams(sp, { replace: true });
+  };
+
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
-      <Tabs defaultValue="locator">
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="locator">Locator</TabsTrigger>
           <TabsTrigger value="well">Well</TabsTrigger>
@@ -849,11 +880,16 @@ function PowerForm() {
         <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setEditingId(null); }} /></div>
         <div>
           <Label>Date &amp; Time</Label>
-          <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
+          <Input
+            type="datetime-local"
+            value={dt}
+            onChange={e => setDt(e.target.value)}
+            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left"
+          />
         </div>
         <div>
           <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Raw kWh meter value" data-testid="power-meter-input" />
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Plant Power Reading" data-testid="power-meter-input" />
           {previous != null && <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{fmtNum(previous)}</span> {daily != null && <>· Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}</div>}
         </div>
 
