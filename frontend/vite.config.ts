@@ -15,6 +15,12 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
       clientPort: 443,
     },
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

@@ -5,6 +5,11 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+
+try:
+    from mongomock_motor import AsyncMongoMockClient  # type: ignore
+except ImportError:  # pragma: no cover
+    AsyncMongoMockClient = None  # type: ignore
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Any, List, Optional
@@ -46,10 +51,28 @@ class CleanupPlantsRequest(BaseModel):
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# MongoDB connection — falls back to an in-memory mongomock client when no
+# MONGO_URL is configured (e.g. local Replit dev). This keeps the FastAPI
+# backend startable so that Supabase-only endpoints (admin, compliance
+# evaluate, etc.) work, while Mongo-backed features (compliance thresholds
+# storage, AI session history, downtime events) operate against the in-memory
+# store and reset on restart.
+mongo_url = os.environ.get('MONGO_URL')
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get('DB_NAME', 'pwri')]
+elif AsyncMongoMockClient is not None:
+    logging.getLogger(__name__).warning(
+        "MONGO_URL not set — using in-memory mongomock store. "
+        "Mongo-backed data will not persist across restarts."
+    )
+    client = AsyncMongoMockClient()
+    db = client[os.environ.get('DB_NAME', 'pwri')]
+else:
+    raise RuntimeError(
+        "MONGO_URL is not set and mongomock_motor is not installed. "
+        "Install mongomock_motor or configure MONGO_URL."
+    )
 
 # Create the main app without a prefix
 app = FastAPI()

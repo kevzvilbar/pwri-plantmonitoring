@@ -18,7 +18,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+try:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+except ImportError:  # pragma: no cover - optional dep, AI endpoints disabled when missing
+    LlmChat = None  # type: ignore
+    class UserMessage:  # type: ignore
+        def __init__(self, text: str) -> None:
+            self.text = text
 from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
