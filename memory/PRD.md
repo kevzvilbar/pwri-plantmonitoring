@@ -264,3 +264,26 @@ console + force-delete tools are reachable from `/auth` end-to-end.
 - Dashboard query references `power_readings.daily_solar_kwh /
   daily_grid_kwh`; iter 6 energy migration not yet run → 400 42703.
   Both resolved by running the migrations listed in §8.
+
+## 10. Iteration 11 — Codebase Audit + Vercel Cleanup (2026-02 fork)
+
+### Goal
+"Forget about Vercel deployment, review code and fix possible errors."
+
+### Changes
+- **Backend dependency conflict resolved** — pinned
+  `supabase==2.15.0`, `postgrest==1.0.2`, `storage3==0.11.3` in
+  `backend/requirements.txt` to fix the `ModuleNotFoundError:
+  No module named 'deprecation'` crash-loop. Backend pytest
+  suite back to 65/65 passing.
+- **Vite base path reverted to `/`** in `frontend/vite.config.ts`
+  (was `/pwri-plantmonitoring/`, which forced a 302 redirect from
+  the root path on Emergent preview/production hosts).
+- **`/app/vercel.json` removed** — Vercel deployment was abandoned
+  in iter 4; the file was obsolete. Existing `cron_service.py`
+  HTTP endpoints (`/api/cron/*`) still work via any HTTP scheduler.
+
+### Verified
+- `curl /` returns HTTP 200 with no redirects.
+- `curl /api/` returns `{"message":"Hello World"}`.
+- Supervisor: backend + frontend RUNNING.
