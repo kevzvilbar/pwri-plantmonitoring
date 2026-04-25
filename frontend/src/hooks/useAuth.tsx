@@ -16,6 +16,8 @@ export interface Profile {
   plant_assignments: string[];
   status: 'Pending' | 'Active' | 'Suspended';
   profile_complete: boolean;
+  /** Admin-approval flag (replaces Supabase email confirmation, iter 9) */
+  confirmed?: boolean;
 }
 
 interface AuthContextValue {

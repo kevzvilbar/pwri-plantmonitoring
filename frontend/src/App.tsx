@@ -9,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
+import PendingApproval from "./pages/PendingApproval";
 import Dashboard from "./pages/Dashboard";
 import Plants from "./pages/Plants";
 import Operations from "./pages/Operations";
@@ -68,6 +69,14 @@ const App = () => (
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/onboarding" element={<Onboarding />} />
+              <Route
+                path="/pending-approval"
+                element={
+                  <ProtectedRoute>
+                    <PendingApproval />
+                  </ProtectedRoute>
+                }
+              />
               <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/plants" element={<Plants />} />

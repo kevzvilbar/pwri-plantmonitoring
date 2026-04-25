@@ -24,7 +24,7 @@ import {
 } from '@/components/DesignationCombobox';
 import { toast } from '@/components/ui/sonner';
 import {
-  ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2,
+  ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2, Hourglass,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -92,6 +92,7 @@ export default function Admin() {
 function UsersPanel() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
+  const [pendingOnly, setPendingOnly] = useState(false);
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () =>
@@ -116,6 +117,17 @@ function UsersPanel() {
     qc.invalidateQueries({ queryKey: ['staff'] });
   };
 
+  const approveUser = async (uid: string, label: string) => {
+    const { error } = await supabase.rpc('approve_user' as any, {
+      _user_id: uid,
+      _approve: true,
+    } as any);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${label || 'User'} approved`);
+    qc.invalidateQueries({ queryKey: ['admin-users'] });
+    qc.invalidateQueries({ queryKey: ['staff'] });
+  };
+
   const existingDesignations = useMemo(
     () =>
       Array.from(
@@ -124,38 +136,69 @@ function UsersPanel() {
     [staff],
   );
 
+  const pendingCount = useMemo(
+    () =>
+      ((staff ?? []) as any[]).filter(
+        (s) => s.confirmed === false || s.status === 'Pending',
+      ).length,
+    [staff],
+  );
+
   const filtered = useMemo(() => {
-    const list = staff ?? [];
+    let list = (staff ?? []) as any[];
+    if (pendingOnly) {
+      list = list.filter((s) => s.confirmed === false || s.status === 'Pending');
+    }
     const q = query.trim().toLowerCase();
     if (!q) return list;
-    return list.filter((s: any) =>
+    return list.filter((s) =>
       [s.first_name, s.last_name, s.username, s.designation]
         .filter(Boolean)
         .some((v: string) => v.toLowerCase().includes(q)),
     );
-  }, [staff, query]);
+  }, [staff, query, pendingOnly]);
 
   return (
     <div className="space-y-2">
-      <div className="relative">
-        <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, username, designation…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-8"
-          data-testid="admin-users-search"
-        />
+      <div className="flex gap-2 items-center">
+        <div className="relative flex-1">
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, username, designation…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-8"
+            data-testid="admin-users-search"
+          />
+        </div>
+        <Button
+          size="sm"
+          variant={pendingOnly ? 'default' : 'outline'}
+          onClick={() => setPendingOnly((v) => !v)}
+          data-testid="admin-users-pending-filter"
+        >
+          <Hourglass className="h-3 w-3 mr-1" />
+          Pending {pendingCount > 0 && `· ${pendingCount}`}
+        </Button>
       </div>
       {filtered.map((s: any) => {
         const userRoles = rolesOf(s.id);
         const access = accessLevelFromRoles(userRoles);
+        const awaiting = s.confirmed === false || s.status === 'Pending';
         return (
           <Card key={s.id} className="p-3 space-y-2" data-testid={`admin-user-card-${s.id}`}>
             <div className="flex justify-between items-start gap-2">
               <div className="min-w-0 space-y-1">
-                <div className="font-medium text-sm truncate">
-                  {s.first_name} {s.last_name} {s.suffix}
+                <div className="font-medium text-sm truncate flex items-center gap-1.5 flex-wrap">
+                  <span>{s.first_name} {s.last_name} {s.suffix}</span>
+                  {awaiting && (
+                    <Badge
+                      className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100"
+                      data-testid={`pending-badge-${s.id}`}
+                    >
+                      <Hourglass className="h-2.5 w-2.5 mr-0.5" /> Awaiting approval
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
                   @{s.username ?? '—'}
@@ -171,6 +214,21 @@ function UsersPanel() {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {awaiting && (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      approveUser(
+                        s.id,
+                        `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() ||
+                          (s.username ?? 'user'),
+                      )
+                    }
+                    data-testid={`approve-user-${s.id}`}
+                  >
+                    Approve
+                  </Button>
+                )}
                 <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>
                   {s.status}
                 </StatusPill>
@@ -210,7 +268,9 @@ function UsersPanel() {
         );
       })}
       {filtered.length === 0 && (
-        <Card className="p-4 text-center text-xs text-muted-foreground">No users</Card>
+        <Card className="p-4 text-center text-xs text-muted-foreground">
+          {pendingOnly ? 'No pending approvals.' : 'No users'}
+        </Card>
       )}
     </div>
   );

@@ -28,9 +28,9 @@ BEGIN
 
   -- Upsert profile
   INSERT INTO public.user_profiles
-    (id, username, first_name, last_name, designation, status, profile_complete)
+    (id, username, first_name, last_name, designation, status, profile_complete, confirmed)
   VALUES
-    (kevin_id, 'Kevz', 'Kevin', 'Vilbar', 'Admin', 'Active', TRUE)
+    (kevin_id, 'Kevz', 'Kevin', 'Vilbar', 'Admin', 'Active', TRUE, TRUE)
   ON CONFLICT (id) DO UPDATE
   SET first_name       = EXCLUDED.first_name,
       last_name        = EXCLUDED.last_name,
@@ -38,6 +38,7 @@ BEGIN
       designation      = EXCLUDED.designation,
       status           = EXCLUDED.status,
       profile_complete = TRUE,
+      confirmed        = TRUE,
       updated_at       = now();
 
   -- Grant Admin role (idempotent thanks to the (user_id, role) unique key)
