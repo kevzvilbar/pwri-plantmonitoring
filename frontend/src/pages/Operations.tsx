@@ -17,7 +17,7 @@ import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calcula
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Waves } from 'lucide-react';
+import { MapPin, Pencil, X } from 'lucide-react';
 
 const MAX_READINGS_PER_DAY = 3;
 const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
@@ -399,12 +399,9 @@ function WellRow({
   const [togglingBlend, setTogglingBlend] = useState(false);
 
   const toggleBlending = async () => {
-    // Bypass wells are required to have a meter reading recorded so the
-    // injected volume can be computed (previous_reading → current_reading).
-    if (!isBlending && previousMeter == null) {
-      toast.error(`${well.name}: Record A Meter Reading First So Injected Volume Can Be Computed.`);
-      return;
-    }
+    // Bypass wells no longer require a prior meter reading — when bypass is
+    // checked, the dedicated bypass-meter input below records the injection
+    // volume on its own (no dependency on standard well readings).
     setTogglingBlend(true);
     try {
       const res = await fetch(`${BASE}/api/blending/toggle`, {
@@ -511,7 +508,7 @@ function WellRow({
               data-testid={`blending-badge-${well.id}`}
               title="Marked As Bypass Well — Injects Directly To Product Water"
             >
-              <Waves className="h-3 w-3 mr-1" /> Bypass
+              Bypass
             </Badge>
           )}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">Editing</span>}
@@ -534,8 +531,16 @@ function WellRow({
         inputMode="decimal"
         value={reading}
         onChange={(e) => setReading(e.target.value)}
-        placeholder="Meter"
-        className="w-24 sm:w-28 shrink-0"
+        placeholder={isBlending ? 'Bypass meter' : 'Meter'}
+        className={`w-24 sm:w-32 shrink-0 ${
+          isBlending ? 'border-violet-400 focus-visible:ring-violet-400' : ''
+        }`}
+        data-testid={`well-meter-input-${well.id}`}
+        title={
+          isBlending
+            ? 'Bypass meter reading — recorded as injected volume into product line'
+            : 'Standard well meter reading'
+        }
       />
 
       {well.has_power_meter && (
@@ -545,9 +550,10 @@ function WellRow({
           inputMode="decimal"
           value={powerReading}
           onChange={(e) => setPowerReading(e.target.value)}
-          placeholder="Power"
-          className="w-24 sm:w-28 shrink-0"
+          placeholder="Power kWh"
+          className="w-24 sm:w-28 shrink-0 border-amber-300 focus-visible:ring-amber-300"
           title={`Previous power: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
+          data-testid={`well-power-input-${well.id}`}
         />
       )}
 
@@ -582,26 +588,29 @@ function WellRow({
         </Button>
       )}
 
-      {/* Mark As Bypass Well — compact checkbox */}
-      <label
-        className={`flex items-center gap-1.5 shrink-0 h-8 px-2 rounded-md border cursor-pointer select-none transition-colors ${
-          isBlending
-            ? 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
-            : 'bg-background hover:bg-muted'
-        } ${togglingBlend ? 'opacity-60 cursor-wait' : ''}`}
-        title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
-        data-testid={`bypass-toggle-label-${well.id}`}
-      >
-        <Checkbox
-          checked={isBlending}
-          disabled={togglingBlend}
-          onCheckedChange={() => toggleBlending()}
-          className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
-          data-testid={`blending-toggle-${well.id}`}
-        />
-        <Waves className="h-3 w-3" />
-        <span className="text-xs font-medium whitespace-nowrap">Bypass</span>
-      </label>
+      {/* Mark As Bypass Well — compact checkbox.
+          Hidden when this well has a dedicated power meter (per spec, the
+          power-meter reading replaces the bypass toggle in the row). */}
+      {!well.has_power_meter && (
+        <label
+          className={`flex items-center gap-1.5 shrink-0 h-8 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+            isBlending
+              ? 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
+              : 'bg-background hover:bg-muted'
+          } ${togglingBlend ? 'opacity-60 cursor-wait' : ''}`}
+          title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
+          data-testid={`bypass-toggle-label-${well.id}`}
+        >
+          <Checkbox
+            checked={isBlending}
+            disabled={togglingBlend}
+            onCheckedChange={() => toggleBlending()}
+            className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+            data-testid={`blending-toggle-${well.id}`}
+          />
+          <span className="text-xs font-medium whitespace-nowrap">Bypass</span>
+        </label>
+      )}
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">

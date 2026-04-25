@@ -1,0 +1,45 @@
+Features:
+
+1. AFM/MMF Backwash Mode – Responsive Layout
+- Desktop View:
+  • Display "Independent" and "Synchronized" side by side in one row.
+  • Highlight selected option with color accent or check indicator.
+- Mobile View:
+  • Display "Independent" and "Synchronized" in separate rows.
+  • Each option has its own row with radio button or toggle.
+- Responsive Design:
+  • Use viewport detection to switch layouts.
+  • Ensure proper stacking and alignment when switching from desktop to mobile.
+- Data Handling:
+  • Store selected mode in `backwash_mode` field (values: independent, synchronized).
+  • Audit log entry when mode is changed (who, when, from → to).
+
+2. Bypass Control – Logic & Simplification
+- Replace large "Mark As Bypass" button with compact checkbox.
+- Remove decorative wave icon/design from bypass toggle.
+- Layout: Active (green), Bypass (checkbox/toggle), Delete (trash icon) aligned horizontally.
+- When bypass is checked:
+  • Do NOT require well reading as a prerequisite.
+  • Instead, generate a new input field for bypass meter reading.
+  • Provide a separate view for bypass readings (distinct from standard well readings).
+- Data Handling:
+  • Store bypass state in `well_status` field (values: active, bypass).
+  • Store bypass meter readings in `bypass_readings` table linked to wells.
+  • Audit log entry when bypass state changes or bypass readings are updated.
+  • If validation fails (e.g., missing linked product meter), display error message instead of silently failing.
+
+3. Dedicated Power Meter Integration
+- Add checkbox in Plant subview: "Has Dedicated Power Meter".
+- If checked:
+  • Replace bypass toggle in Well View with power meter reading field.
+  • Display power meter reading beside water meter reading in Wells View (Raw tab).
+  • Align layout: water meter + power meter side by side.
+- Data Handling:
+  • Store readings in `well_energy` table linked to wells.
+  • Audit log entry for every power meter update.
+
+4. UI/UX Adjustments
+- Minimalist design: no extra icons or decorative elements.
+- Consistent color coding (green = active, red = delete).
+- Responsive layout for desktop and mobile views.
+- Clear error messages when state changes fail.

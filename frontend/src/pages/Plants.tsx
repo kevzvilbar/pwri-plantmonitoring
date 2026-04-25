@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Waves } from 'lucide-react';
+import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -152,31 +152,75 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
 function BackwashModeCard({ plant }: { plant: any }) {
   const qc = useQueryClient();
-  const { isManager } = useAuth();
+  const { isManager, user, profile } = useAuth();
   const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
   const save = async (next: 'independent' | 'synchronized') => {
+    if (next === mode) return;
+    const prev = mode;
     setMode(next);
     const { error } = await supabase.from('plants').update({ backwash_mode: next }).eq('id', plant.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { setMode(prev); toast.error(error.message); return; }
+    // Audit: who, when, from → to. Re-uses deletion_audit_log with kind='plant' /
+    // action='soft' (the closest valid enum values) and stores the structured
+    // change in `dependencies`. Best-effort: table may be missing pre-migration,
+    // and any insert error is logged but never blocks the user.
+    const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
+      || (profile as any)?.email
+      || user?.email
+      || null;
+    try {
+      const { error: auditErr } = await supabase
+        .from('deletion_audit_log' as any)
+        .insert({
+          kind: 'plant',
+          entity_id: plant.id,
+          entity_label: plant.name ?? null,
+          action: 'soft',
+          actor_user_id: user?.id ?? null,
+          actor_label: actorLabel,
+          reason: `Backwash mode: ${prev} → ${next}`,
+          dependencies: { type: 'backwash_mode_change', from: prev, to: next },
+        } as any);
+      if (auditErr) console.warn('[audit] backwash_mode_change insert failed:', auditErr.message);
+    } catch (e: any) {
+      console.warn('[audit] backwash_mode_change threw:', e?.message ?? e);
+    }
     toast.success(`Backwash mode set to ${next}`);
     qc.invalidateQueries({ queryKey: ['plants'] });
   };
   return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between gap-2">
+    <Card className="p-3" data-testid="backwash-mode-card">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <div className="text-sm font-semibold">AFM/MMF backwash mode</div>
           <div className="text-[11px] text-muted-foreground">
             {mode === 'synchronized' ? 'All units on a train backwash together (e.g. Guizo).' : 'Each unit backwashes independently.'}
           </div>
         </div>
-        <div className="flex gap-1">
-          {(['independent', 'synchronized'] as const).map((m) => (
-            <Button key={m} size="sm" variant={mode === m ? 'default' : 'outline'}
-              disabled={!isManager} onClick={() => save(m)} className="capitalize">
-              {m}
-            </Button>
-          ))}
+        {/* Desktop: side-by-side row · Mobile: stacked rows w/ radio indicator */}
+        <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-1 w-full sm:w-auto">
+          {(['independent', 'synchronized'] as const).map((m) => {
+            const active = mode === m;
+            return (
+              <Button
+                key={m}
+                size="sm"
+                variant={active ? 'default' : 'outline'}
+                disabled={!isManager}
+                onClick={() => save(m)}
+                className="capitalize justify-start sm:justify-center w-full sm:w-auto"
+                data-testid={`backwash-mode-${m}`}
+              >
+                <span
+                  aria-hidden
+                  className={`mr-1.5 h-2.5 w-2.5 rounded-full border ${
+                    active ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'
+                  }`}
+                />
+                {m}
+              </Button>
+            );
+          })}
         </div>
       </div>
     </Card>
@@ -754,9 +798,14 @@ function WellsList({ plantId }: { plantId: string }) {
         const res = await fetch(`${BASE}/api/blending/wells?plant_id=${plantId}`);
         if (!res.ok) return [];
         const json = await res.json();
-        return Array.isArray(json)
-          ? json.map((r: any) => r.well_id ?? r.id).filter(Boolean)
-          : [];
+        // Backend shape: { wells: [{ well_id, ... }, ...] }. Tolerate the
+        // legacy plain-array shape too in case callers diverge.
+        const arr: any[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.wells)
+            ? json.wells
+            : [];
+        return arr.map((r: any) => r.well_id ?? r.id).filter(Boolean);
       } catch {
         return [];
       }
@@ -949,10 +998,10 @@ function WellsList({ plantId }: { plantId: string }) {
                       )}
                       {isBypass && (
                         <span
-                          className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                          className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded"
                           title="Bypass: separate water meter feeding product line"
                         >
-                          <Waves className="h-2.5 w-2.5" /> Bypass
+                          Bypass
                         </span>
                       )}
                     </div>
@@ -980,9 +1029,19 @@ function WellsList({ plantId }: { plantId: string }) {
                   <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
                 </div>
               </div>
-              {/* Right-side row controls: bypass checkbox + admin delete */}
+              {/* Right-side row controls: Active dot · Bypass checkbox · Delete */}
               <div className="flex items-center gap-1.5 shrink-0">
-                {isManager && (
+                {/* Active indicator (green when Active) — minimalist, color-only */}
+                {w.status === 'Active' && (
+                  <span
+                    aria-label="Active"
+                    title="Active"
+                    className="hidden sm:inline-block h-2 w-2 rounded-full bg-emerald-500"
+                  />
+                )}
+                {/* Bypass toggle is hidden when the well has its own dedicated power
+                    meter — per spec, the power meter reading replaces bypass UI. */}
+                {isManager && !w.has_power_meter && (
                   <label
                     className={`flex items-center gap-1 h-7 px-1.5 rounded-md border cursor-pointer select-none transition-colors ${
                       isBypass
@@ -1003,7 +1062,6 @@ function WellsList({ plantId }: { plantId: string }) {
                       className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
                       data-testid={`well-bypass-${w.id}`}
                     />
-                    <Waves className="h-3 w-3" />
                     <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
                   </label>
                 )}
@@ -1267,6 +1325,19 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       return (data?.[0] ?? null) as any;
     },
   });
+  // Recent raw meter readings — water + power side by side (Section 3 of spec).
+  const { data: rawReadings = [] } = useQuery<any[]>({
+    queryKey: ['well-raw-readings', wellId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('well_readings')
+        .select('id, reading_datetime, current_reading, previous_reading, power_meter_reading')
+        .eq('well_id', wellId)
+        .order('reading_datetime', { ascending: false })
+        .limit(10);
+      return data ?? [];
+    },
+  });
   if (!well) return <div>Loading…</div>;
   const latest = pms?.[0];
   const replacerName = latestReplacement?.replacer
@@ -1358,6 +1429,74 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           </div>
         </Card>
       )}
+      {/* Raw Readings — water meter + power meter side by side (last 10) */}
+      <Card className="p-3" data-testid="well-raw-readings-card">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+          <h4 className="text-sm font-semibold inline-flex items-center gap-1">
+            <Gauge className="h-3.5 w-3.5" /> Raw Readings
+            {well.has_power_meter && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                <Zap className="h-2.5 w-2.5" /> kWh tracked
+              </span>
+            )}
+          </h4>
+          <span className="text-[10px] text-muted-foreground">last {rawReadings.length} of 10</span>
+        </div>
+        {rawReadings.length === 0 ? (
+          <div className="text-xs text-muted-foreground italic py-2 text-center">
+            No meter readings recorded yet
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase text-muted-foreground">
+                <tr className="border-b">
+                  <th className="text-left px-1 py-1.5 font-medium">When</th>
+                  <th className="text-right px-1 py-1.5 font-medium">
+                    <span className="inline-flex items-center gap-0.5">
+                      <Gauge className="h-2.5 w-2.5" /> Water (m³)
+                    </span>
+                  </th>
+                  <th className="text-right px-1 py-1.5 font-medium">Δ</th>
+                  {well.has_power_meter && (
+                    <th className="text-right px-1 py-1.5 font-medium">
+                      <span className="inline-flex items-center gap-0.5">
+                        <Zap className="h-2.5 w-2.5 text-amber-500" /> Power (kWh)
+                      </span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {rawReadings.map((r: any) => {
+                  const delta = r.previous_reading != null && r.current_reading != null
+                    ? +r.current_reading - +r.previous_reading
+                    : null;
+                  return (
+                    <tr key={r.id} className="border-b last:border-0">
+                      <td className="px-1 py-1.5 text-muted-foreground whitespace-nowrap">
+                        {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d HH:mm') : '—'}
+                      </td>
+                      <td className="px-1 py-1.5 text-right font-mono-num">
+                        {r.current_reading != null ? fmtNum(+r.current_reading) : '—'}
+                      </td>
+                      <td className="px-1 py-1.5 text-right font-mono-num text-muted-foreground">
+                        {delta != null ? fmtNum(delta) : '—'}
+                      </td>
+                      {well.has_power_meter && (
+                        <td className="px-1 py-1.5 text-right font-mono-num text-amber-700 dark:text-amber-300">
+                          {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading) : '—'}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {replaceOpen && (
         <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
           onClose={() => {
