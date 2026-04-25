@@ -713,25 +713,31 @@ function BypassRow({
         </div>
       </div>
 
-      <Input
-        type="number"
-        step="any"
-        inputMode="decimal"
-        value={volume}
-        onChange={(e) => setVolume(e.target.value)}
-        placeholder="Bypass m³"
-        className="w-28 sm:w-32 shrink-0 border-violet-300 focus-visible:ring-violet-300"
-        data-testid={`bypass-input-${well.id}`}
-      />
-
       <Button
         onClick={save}
         disabled={saving || !volume}
         size="sm"
-        className="shrink-0"
+        className="h-9 px-3 text-xs shrink-0 sm:order-last"
       >
         {saving ? '...' : 'Save'}
       </Button>
+
+      <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
+        <div className="relative flex-1 sm:flex-initial sm:w-32">
+          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
+          <Input
+            type="number"
+            step="any"
+            inputMode="decimal"
+            value={volume}
+            onChange={(e) => setVolume(e.target.value)}
+            placeholder="Bypass Reading"
+            className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
+            data-testid={`bypass-input-${well.id}`}
+            title="Bypass volume (m³) for today"
+          />
+        </div>
+      </div>
     </div>
   );
 }
