@@ -898,6 +898,58 @@ function MigrationsPanel() {
     }
   };
 
+  // The probe is the source of truth here — we deliberately skip files marked
+  // applied via manual override (probe=pending but user said "I ran it") so
+  // the bundle only contains SQL that genuinely still needs to run.
+  // Partial files are included on the assumption that all our migrations use
+  // `if not exists` / `drop … if exists` guards, so re-running is idempotent.
+  // Indeterminate files (no probe-able statements at all) are excluded — we
+  // can't know whether they need to run, and the user should mark those by hand.
+  const pendingFiles = useMemo(() => {
+    return (data?.files ?? []).filter(
+      (f) => f.probed_status === 'pending' || f.probed_status === 'partial',
+    );
+  }, [data]);
+
+  const copyAllPending = async () => {
+    if (pendingFiles.length === 0) {
+      toast.info('Nothing to copy — no pending or partial migrations.');
+      return;
+    }
+    const stamp = new Date().toISOString();
+    const header = [
+      '-- ============================================================',
+      `-- PWRI Monitoring · pending Supabase migrations bundle`,
+      `-- Generated: ${stamp}`,
+      `-- Files: ${pendingFiles.length}`,
+      '-- Paste into Supabase Dashboard → SQL editor → Run.',
+      '-- All bundled files use `if not exists` / `drop … if exists` guards,',
+      '-- so re-running an already-applied file is safe.',
+      '-- ============================================================',
+      '',
+    ].join('\n');
+    const body = pendingFiles
+      .map((f) => {
+        const banner =
+          `-- ===== ${f.filename} (${f.probed_status}) ` +
+          '='.repeat(Math.max(0, 60 - f.filename.length - f.probed_status.length));
+        const trailer = `-- ===== end ${f.filename} ` + '='.repeat(40);
+        return `${banner}\n${f.sql.trimEnd()}\n${trailer}\n`;
+      })
+      .join('\n');
+    const blob = `${header}${body}`;
+    try {
+      await navigator.clipboard.writeText(blob);
+      toast.success(
+        `Copied ${pendingFiles.length} pending migration${
+          pendingFiles.length === 1 ? '' : 's'
+        } (${(blob.length / 1024).toFixed(1)} KB).`,
+      );
+    } catch (e: any) {
+      toast.error(`Copy failed: ${e?.message ?? e}`);
+    }
+  };
+
   const markApplied = async (filename: string) => {
     const note = window.prompt(
       `Mark "${filename}" as applied?\n\nUse this for migrations the schema probe can't verify (RPCs, one-shot UPDATEs, pure DML).\n\nOptional note (e.g. "ran in Supabase SQL editor on 2026-04-25"):`,
@@ -1006,7 +1058,7 @@ function MigrationsPanel() {
             <span className="text-[11px] text-muted-foreground">
               · {data.summary.total} total
             </span>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={showApplied}
@@ -1015,6 +1067,20 @@ function MigrationsPanel() {
                 />
                 Show applied
               </label>
+              <Button
+                size="sm" variant="outline" className="h-7"
+                disabled={pendingFiles.length === 0}
+                onClick={copyAllPending}
+                title={
+                  pendingFiles.length === 0
+                    ? 'No pending or partial migrations to bundle'
+                    : `Copy ${pendingFiles.length} file(s) as one paste-able SQL bundle`
+                }
+                data-testid="migrations-copy-all"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy all pending ({pendingFiles.length})
+              </Button>
               <Button
                 size="sm" variant="outline" className="h-7"
                 disabled={isFetching}
