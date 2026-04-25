@@ -700,6 +700,17 @@ async def admin_audit_log(kind: Optional[str] = None,
     return list_audit_log(authorization, kind=kind, limit=limit)
 
 
+@api_router.get("/admin/migrations/status")
+async def admin_migrations_status(authorization: Optional[str] = Header(None)):
+    """Admin-only. Scan supabase/migrations/*.sql, probe the live Supabase
+    schema for each declared table/column, and return per-file status
+    (applied / pending / partial). The response includes the SQL body so the
+    frontend can offer a one-click copy → paste-into-Supabase flow.
+    """
+    from migrations_status import list_migration_status
+    return list_migration_status(authorization)
+
+
 # ---- Serverless-friendly cron endpoints ----------------------------------
 @api_router.post("/cron/compliance-evaluate")
 async def cron_compliance_evaluate(x_cron_secret: Optional[str] = Header(None)):

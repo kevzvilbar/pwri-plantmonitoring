@@ -25,7 +25,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import {
   ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2, Hourglass,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Database, Copy, CheckCircle2, AlertTriangle, RefreshCcw, FileCode,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -63,7 +63,7 @@ export default function Admin() {
         </p>
       </div>
       <Tabs defaultValue={isAdmin ? 'users' : 'plants'}>
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className={isAdmin ? 'grid grid-cols-4 w-full' : 'grid grid-cols-3 w-full'}>
           <TabsTrigger value="users" disabled={!isAdmin} data-testid="admin-tab-users">
             <Users className="h-3 w-3 mr-1" /> Users
           </TabsTrigger>
@@ -73,6 +73,11 @@ export default function Admin() {
           <TabsTrigger value="audit" data-testid="admin-tab-audit">
             <ClipboardList className="h-3 w-3 mr-1" /> Audit log
           </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="migrations" data-testid="admin-tab-migrations">
+              <Database className="h-3 w-3 mr-1" /> Migrations
+            </TabsTrigger>
+          )}
         </TabsList>
         {isAdmin && (
           <TabsContent value="users" className="mt-3">
@@ -85,6 +90,11 @@ export default function Admin() {
         <TabsContent value="audit" className="mt-3">
           <AuditLogPanel />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="migrations" className="mt-3">
+            <MigrationsPanel />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -796,6 +806,261 @@ function AuditLogPanel() {
           No deletion events recorded yet.
         </Card>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Migrations panel — Admin-only. Probes the live Supabase schema against the
+// SQL files in supabase/migrations/ and offers a copy-to-clipboard for any
+// pending file so the Admin can paste it into the Supabase SQL editor.
+// ---------------------------------------------------------------------------
+
+interface MigrationProbeTable {
+  name: string;
+  exists: boolean;
+}
+interface MigrationProbeColumn {
+  table: string;
+  column: string;
+  exists: boolean;
+}
+interface MigrationFile {
+  filename: string;
+  size: number;
+  status: 'applied' | 'pending' | 'partial' | 'indeterminate';
+  table_probes: MigrationProbeTable[];
+  column_probes: MigrationProbeColumn[];
+  sql: string;
+}
+interface MigrationsResponse {
+  migrations_dir: string;
+  summary: {
+    total: number;
+    applied: number;
+    pending: number;
+    partial: number;
+    indeterminate: number;
+  };
+  files: MigrationFile[];
+}
+
+function MigrationsPanel() {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showApplied, setShowApplied] = useState(false);
+
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['admin-migrations-status'],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error('Sign in required');
+      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const res = await fetch(`${base}/api/admin/migrations/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Migrations probe failed: ${res.status} ${body}`);
+      }
+      return (await res.json()) as MigrationsResponse;
+    },
+  });
+
+  const copySql = async (filename: string, sql: string) => {
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(filename);
+      toast.success(`Copied ${filename} — paste into Supabase SQL editor.`);
+      setTimeout(() => setCopied((c) => (c === filename ? null : c)), 2500);
+    } catch (e: any) {
+      toast.error(`Copy failed: ${e?.message ?? e}`);
+    }
+  };
+
+  const visibleFiles = useMemo(() => {
+    if (!data?.files) return [];
+    return showApplied ? data.files : data.files.filter((f) => f.status !== 'applied');
+  }, [data, showApplied]);
+
+  const STATUS_META: Record<MigrationFile['status'], { label: string; className: string; Icon: any }> = {
+    applied:       { label: 'Applied',       className: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/40', Icon: CheckCircle2 },
+    pending:       { label: 'Pending',       className: 'bg-rose-500/15 text-rose-700 border-rose-500/40',          Icon: AlertTriangle },
+    partial:       { label: 'Partial',       className: 'bg-amber-500/15 text-amber-700 border-amber-500/40',       Icon: AlertTriangle },
+    indeterminate: { label: 'Indeterminate', className: 'bg-zinc-500/15 text-zinc-700 border-zinc-500/40',          Icon: FileCode },
+  };
+
+  return (
+    <div className="space-y-3" data-testid="admin-migrations-panel">
+      <Card className="p-3 text-xs space-y-2">
+        <div className="flex items-start gap-2">
+          <Database className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="font-medium">Supabase migrations status</div>
+            <div className="text-muted-foreground">
+              Scans <code>supabase/migrations/*.sql</code> and probes your Supabase
+              project for the tables / columns each file should have created.
+              Pending or partial files include the exact SQL to paste into the
+              Supabase Dashboard → SQL editor.
+            </div>
+          </div>
+        </div>
+        {data && (
+          <div className="flex flex-wrap gap-2 items-center pt-1">
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700">
+              {data.summary.applied} applied
+            </Badge>
+            {data.summary.pending > 0 && (
+              <Badge variant="outline" className="bg-rose-500/10 text-rose-700">
+                {data.summary.pending} pending
+              </Badge>
+            )}
+            {data.summary.partial > 0 && (
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-700">
+                {data.summary.partial} partial
+              </Badge>
+            )}
+            {data.summary.indeterminate > 0 && (
+              <Badge variant="outline" className="bg-zinc-500/10 text-zinc-700">
+                {data.summary.indeterminate} indeterminate
+              </Badge>
+            )}
+            <span className="text-[11px] text-muted-foreground">
+              · {data.summary.total} total
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                <Checkbox
+                  checked={showApplied}
+                  onCheckedChange={(v) => setShowApplied(!!v)}
+                  data-testid="migrations-show-applied"
+                />
+                Show applied
+              </label>
+              <Button
+                size="sm" variant="outline" className="h-7"
+                disabled={isFetching}
+                onClick={() => refetch()}
+                data-testid="migrations-refresh"
+              >
+                {isFetching
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCcw className="h-3 w-3 mr-1" />}
+                Re-check
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {isLoading && (
+        <Card className="p-4 text-center text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 mx-auto animate-spin mb-1" />
+          Probing live Supabase schema…
+        </Card>
+      )}
+
+      {!isLoading && visibleFiles.length === 0 && data && (
+        <Card className="p-4 text-center text-xs text-muted-foreground">
+          {data.summary.pending + data.summary.partial === 0
+            ? 'All migrations already applied. Toggle "Show applied" to see the full history.'
+            : 'No files match the current filter.'}
+        </Card>
+      )}
+
+      <div className="space-y-2">
+        {visibleFiles.map((f) => {
+          const meta = STATUS_META[f.status];
+          const isOpen = !!expanded[f.filename];
+          const wasCopied = copied === f.filename;
+          return (
+            <Card
+              key={f.filename}
+              className={`p-3 border-l-4 ${
+                f.status === 'pending'
+                  ? 'border-l-rose-500/70'
+                  : f.status === 'partial'
+                    ? 'border-l-amber-500/70'
+                    : f.status === 'applied'
+                      ? 'border-l-emerald-500/60 opacity-90'
+                      : 'border-l-zinc-300'
+              }`}
+              data-testid={`migration-${f.filename}`}
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <FileCode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <code className="text-xs font-mono truncate">{f.filename}</code>
+                  <Badge variant="outline" className={`text-[10px] ${meta.className}`}>
+                    <meta.Icon className="h-2.5 w-2.5 mr-1" />
+                    {meta.label}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {(f.size / 1024).toFixed(1)} KB
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {f.status !== 'applied' && (
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      onClick={() => copySql(f.filename, f.sql)}
+                      data-testid={`migration-copy-${f.filename}`}
+                    >
+                      {wasCopied
+                        ? <><CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Copied</>
+                        : <><Copy className="h-3 w-3 mr-1" /> Copy SQL</>}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm" variant="ghost" className="h-7 text-[11px]"
+                    onClick={() => setExpanded((m) => ({ ...m, [f.filename]: !m[f.filename] }))}
+                  >
+                    {isOpen
+                      ? <><ChevronUp className="h-3 w-3 mr-1" /> Hide</>
+                      : <><ChevronDown className="h-3 w-3 mr-1" /> Details</>}
+                  </Button>
+                </div>
+              </div>
+
+              {(f.table_probes.length > 0 || f.column_probes.length > 0) && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {f.table_probes.map((p) => (
+                    <span
+                      key={`t-${p.name}`}
+                      className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                        p.exists
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                      }`}
+                    >
+                      table {p.name} {p.exists ? '✓' : '✗'}
+                    </span>
+                  ))}
+                  {f.column_probes.map((p) => (
+                    <span
+                      key={`c-${p.table}.${p.column}`}
+                      className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                        p.exists
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                      }`}
+                    >
+                      {p.table}.{p.column} {p.exists ? '✓' : '✗'}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {isOpen && (
+                <pre className="mt-2 p-2 rounded-md bg-muted/40 border text-[10px] font-mono overflow-auto max-h-72">
+{f.sql}
+                </pre>
+              )}
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
