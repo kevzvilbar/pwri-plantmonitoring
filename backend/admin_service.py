@@ -50,6 +50,23 @@ USER_REF_TABLES: list[tuple[str, str]] = [
     ("checklist_executions", "performed_by"),
 ]
 
+# Recognises the various ways Postgres / PostgREST tell us a table doesn't
+# exist (raw SQL "does not exist", PostgREST's PGRST205 "schema cache" miss,
+# generic "relation" errors). Used to skip optional/older tables instead of
+# turning their absence into a 500.
+def _is_missing_table_error(msg: str) -> bool:
+    if not msg:
+        return False
+    lower = msg.lower()
+    return (
+        "does not exist" in lower
+        or "schema cache" in lower
+        or "could not find the table" in lower
+        or "pgrst205" in lower
+        or "relation" in lower
+    )
+
+
 # Tables that directly reference a plant_id ----------------------------------
 PLANT_REF_TABLES: list[str] = [
     "wells", "locators", "ro_trains",
@@ -489,7 +506,7 @@ def hard_delete_plant(
                                 msg = str(e)
                                 if (
                                     "archived_plant_data" in msg
-                                    and ("does not exist" in msg or "schema cache" in msg.lower())
+                                    and _is_missing_table_error(msg)
                                 ):
                                     log.warning(
                                         "archived_plant_data table missing — run "
@@ -520,7 +537,7 @@ def hard_delete_plant(
                 raise
             except Exception as e:  # noqa: BLE001
                 msg = str(e)
-                if "does not exist" in msg or "relation" in msg.lower():
+                if _is_missing_table_error(msg):
                     log.debug("skipping missing table %s", table)
                     continue
                 log.exception("force-delete child clear failed: %s", table)
@@ -591,9 +608,7 @@ def list_audit_log(
         msg = str(e)
         # Only swallow the "table/relation does not exist" error (pre-migration state).
         # Any other Supabase error (RLS denial, network, etc) must surface as 500.
-        if "deletion_audit_log" in msg and (
-            "does not exist" in msg or "relation" in msg.lower() or "schema cache" in msg.lower()
-        ):
+        if "deletion_audit_log" in msg and _is_missing_table_error(msg):
             log.warning(
                 "deletion_audit_log table missing — run supabase/migrations/"
                 "20260424_deletion_audit_log.sql in Supabase SQL editor."
@@ -712,7 +727,7 @@ def cleanup_plants(
                 except Exception as e:  # noqa: BLE001
                     msg = str(e)
                     # Tolerate tables that may not exist in older deployments.
-                    if "does not exist" in msg or "relation" in msg.lower():
+                    if _is_missing_table_error(msg):
                         log.debug("skipping missing table %s", table)
                         continue
                     log.exception("cleanup child delete failed: %s", table)
