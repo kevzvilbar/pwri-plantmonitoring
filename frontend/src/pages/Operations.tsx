@@ -449,8 +449,8 @@ function WellRow({
       className="p-3 flex flex-wrap items-center gap-x-3 gap-y-2"
       data-testid={`well-row-${well.id}`}
     >
-      {/* Identity column — full width on mobile, fixed-min on desktop. */}
-      <div className="min-w-0 flex-1 basis-full sm:basis-[160px]">
+      {/* Identity column — grows to fill row 1 next to the action buttons. */}
+      <div className="min-w-0 flex-1 sm:basis-[160px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
           {well.has_power_meter && (
@@ -479,11 +479,43 @@ function WellRow({
         </div>
       </div>
 
-      {/* Inputs + actions group — stays together as a single contained block.
-          On mobile this drops below the identity column and spans full width;
-          inputs grow to share the available space evenly. On desktop the group
-          floats right with fixed-width inputs. */}
-      <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto">
+      {/* Action buttons — sit on the same row as identity (top-right on mobile,
+          end-of-row on desktop via order-last). Keeps inputs free to use the
+          full second row on mobile. */}
+      <div className="flex items-center gap-1.5 shrink-0 sm:order-last">
+        <Button
+          onClick={save}
+          disabled={saving || !reading || atLimit}
+          className="h-9 px-3 text-xs"
+        >
+          {saving ? '...' : editingId ? 'Update' : 'Save'}
+        </Button>
+
+        {lastToday && !editingId && (
+          <Button
+            variant="ghost"
+            className="h-9 w-9 p-0"
+            onClick={editLastToday}
+            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
+        {editingId && (
+          <Button
+            variant="ghost"
+            className="h-9 w-9 p-0"
+            onClick={cancelEdit}
+            title="Cancel edit"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {/* Inputs — full width below identity on mobile, inline on desktop. */}
+      <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         {well.has_power_meter ? (
           <div className="relative flex-1 sm:flex-initial sm:w-32">
             <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
@@ -493,10 +525,10 @@ function WellRow({
               inputMode="decimal"
               value={reading}
               onChange={(e) => setReading(e.target.value)}
-              placeholder="Water m³"
+              placeholder="Water"
               className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
               data-testid={`well-meter-input-${well.id}`}
-              title="Water meter reading (cumulative m³)"
+              title="Water meter reading (cumulative)"
             />
           </div>
         ) : (
@@ -522,42 +554,12 @@ function WellRow({
               inputMode="decimal"
               value={powerReading}
               onChange={(e) => setPowerReading(e.target.value)}
-              placeholder="Power kWh"
+              placeholder="Power"
               className="h-9 pl-7 w-full border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
-              title={`Power meter reading (cumulative kWh) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
+              title={`Power meter reading (cumulative) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
               data-testid={`well-power-input-${well.id}`}
             />
           </div>
-        )}
-
-        <Button
-          onClick={save}
-          disabled={saving || !reading || atLimit}
-          className="h-9 px-3 text-xs shrink-0"
-        >
-          {saving ? '...' : editingId ? 'Update' : 'Save'}
-        </Button>
-
-        {lastToday && !editingId && (
-          <Button
-            variant="ghost"
-            className="h-9 w-9 p-0 shrink-0"
-            onClick={editLastToday}
-            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
-
-        {editingId && (
-          <Button
-            variant="ghost"
-            className="h-9 w-9 p-0 shrink-0"
-            onClick={cancelEdit}
-            title="Cancel edit"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
         )}
       </div>
 
