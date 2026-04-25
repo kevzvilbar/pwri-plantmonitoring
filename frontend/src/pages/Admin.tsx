@@ -26,6 +26,7 @@ import { toast } from '@/components/ui/sonner';
 import {
   ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2, Hourglass,
   ChevronDown, ChevronUp, Database, Copy, CheckCircle2, AlertTriangle, RefreshCcw, FileCode,
+  Download,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -911,11 +912,11 @@ function MigrationsPanel() {
     );
   }, [data]);
 
-  const copyAllPending = async () => {
-    if (pendingFiles.length === 0) {
-      toast.info('Nothing to copy — no pending or partial migrations.');
-      return;
-    }
+  // Build the concatenated SQL bundle for the current pending/partial set.
+  // Returned as { text, sizeKb } so the caller can decide whether to push it
+  // to clipboard (copyAllPending) or download it as a file (downloadAllPending).
+  const buildPendingBundle = (): { text: string; sizeKb: string } | null => {
+    if (pendingFiles.length === 0) return null;
     const stamp = new Date().toISOString();
     const header = [
       '-- ============================================================',
@@ -937,16 +938,58 @@ function MigrationsPanel() {
         return `${banner}\n${f.sql.trimEnd()}\n${trailer}\n`;
       })
       .join('\n');
-    const blob = `${header}${body}`;
+    const text = `${header}${body}`;
+    return { text, sizeKb: (text.length / 1024).toFixed(1) };
+  };
+
+  const copyAllPending = async () => {
+    const bundle = buildPendingBundle();
+    if (!bundle) {
+      toast.info('Nothing to copy — no pending or partial migrations.');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(blob);
+      await navigator.clipboard.writeText(bundle.text);
       toast.success(
         `Copied ${pendingFiles.length} pending migration${
           pendingFiles.length === 1 ? '' : 's'
-        } (${(blob.length / 1024).toFixed(1)} KB).`,
+        } (${bundle.sizeKb} KB).`,
       );
     } catch (e: any) {
       toast.error(`Copy failed: ${e?.message ?? e}`);
+    }
+  };
+
+  // Save the same bundle as a versioned .sql file. Filenames embed an
+  // ISO-style timestamp (no colons — Windows-friendly) so multiple runs
+  // don't overwrite each other and you have a clear audit trail of exactly
+  // what was pasted into Supabase, when, and by which session.
+  const downloadAllPending = () => {
+    const bundle = buildPendingBundle();
+    if (!bundle) {
+      toast.info('Nothing to download — no pending or partial migrations.');
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'Z');
+    const filename = `pwri-pending-migrations-${stamp}.sql`;
+    try {
+      const blob = new Blob([bundle.text], { type: 'application/sql;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Defer revoke so Safari has time to actually start the download.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success(
+        `Downloaded ${filename} (${pendingFiles.length} file${
+          pendingFiles.length === 1 ? '' : 's'
+        }, ${bundle.sizeKb} KB).`,
+      );
+    } catch (e: any) {
+      toast.error(`Download failed: ${e?.message ?? e}`);
     }
   };
 
@@ -1080,6 +1123,20 @@ function MigrationsPanel() {
               >
                 <Copy className="h-3 w-3 mr-1" />
                 Copy all pending ({pendingFiles.length})
+              </Button>
+              <Button
+                size="sm" variant="outline" className="h-7"
+                disabled={pendingFiles.length === 0}
+                onClick={downloadAllPending}
+                title={
+                  pendingFiles.length === 0
+                    ? 'No pending or partial migrations to bundle'
+                    : `Save ${pendingFiles.length} file(s) as a versioned .sql backup`
+                }
+                data-testid="migrations-download-all"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Download .sql
               </Button>
               <Button
                 size="sm" variant="outline" className="h-7"
