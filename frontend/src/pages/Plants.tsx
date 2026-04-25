@@ -747,16 +747,22 @@ function WellsList({ plantId }: { plantId: string }) {
     queryKey: ['plant-name', plantId],
     queryFn: async () => (await supabase.from('plants').select('name').eq('id', plantId).single()).data,
   });
-  const { data: blendingIds = [] } = useQuery<string[]>({
+  const { data: blendingIds } = useQuery<string[]>({
     queryKey: ['blending-wells', plantId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/blending/wells?plant_id=${plantId}`);
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json.map((r: any) => r.well_id ?? r.id).filter(Boolean) : [];
+      try {
+        const res = await fetch(`${BASE}/api/blending/wells?plant_id=${plantId}`);
+        if (!res.ok) return [];
+        const json = await res.json();
+        return Array.isArray(json)
+          ? json.map((r: any) => r.well_id ?? r.id).filter(Boolean)
+          : [];
+      } catch {
+        return [];
+      }
     },
   });
-  const blendingSet = new Set(blendingIds);
+  const blendingSet = new Set(Array.isArray(blendingIds) ? blendingIds : []);
 
   const [detail, setDetail] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
