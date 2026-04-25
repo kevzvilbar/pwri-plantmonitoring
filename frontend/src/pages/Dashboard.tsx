@@ -17,13 +17,16 @@ import {
 import { format, subDays, startOfDay } from 'date-fns';
 import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
-  Waves, Cloud, Receipt, Banknote,
+  Waves, Cloud, Receipt, Banknote, TrendingUp, TrendingDown, Minus, ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
 import { BypassVolumeCard } from '@/components/BypassVolumeCard';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -36,34 +39,97 @@ const TREND_Y_LABEL: Record<string, string> = {
   pv: 'kWh · m³',
 };
 
-function StatCard({ icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold }: any) {
+type StatTone = 'accent' | 'warn' | 'danger' | undefined;
+const TONE_BG: Record<NonNullable<StatTone>, string> = {
+  accent: 'bg-gradient-to-br from-emerald-50/60 to-transparent border-emerald-200/60 dark:from-emerald-950/25 dark:border-emerald-900/40',
+  warn:   'bg-gradient-to-br from-amber-50/70 to-transparent border-amber-200/70 dark:from-amber-950/25 dark:border-amber-900/40',
+  danger: 'bg-gradient-to-br from-rose-50/70 to-transparent border-rose-200/70 dark:from-rose-950/30 dark:border-rose-900/50',
+};
+const TONE_ICON: Record<NonNullable<StatTone>, string> = {
+  accent: 'text-emerald-600 dark:text-emerald-400',
+  warn:   'text-amber-600 dark:text-amber-400',
+  danger: 'text-rose-600 dark:text-rose-400',
+};
+
+function TrendBadge({ delta }: { delta: number | null }) {
+  if (delta === null || !Number.isFinite(delta)) return null;
+  const abs = Math.abs(delta);
+  const Icon = abs < 0.5 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
+  const cls = abs < 0.5
+    ? 'text-muted-foreground'
+    : delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${cls}`} title="vs previous day">
+      <Icon className="h-3 w-3" />
+      {abs < 0.5 ? '0%' : `${abs.toFixed(0)}%`}
+    </span>
+  );
+}
+
+function StatCard({
+  icon: Icon, label, value, unit, tone, onClick, accent, calc, threshold,
+  size = 'default', trend = null, calcTooltip,
+}: {
+  icon: any; label: string; value: any; unit?: string;
+  tone?: StatTone; onClick?: () => void; accent?: string;
+  calc?: boolean; threshold?: string;
+  size?: 'default' | 'lg';
+  trend?: number | null;
+  calcTooltip?: string;
+}) {
+  const lg = size === 'lg';
+  const toneBg = tone ? TONE_BG[tone] : '';
+  const calcBg = !tone && calc
+    ? 'bg-gradient-to-br from-sky-50/50 to-transparent border-sky-200/60 dark:from-sky-950/25 dark:border-sky-900/40'
+    : '';
+  const baseBg = !tone && !calc
+    ? 'bg-gradient-to-br from-card to-card/60'
+    : '';
+  const iconCls = tone ? TONE_ICON[tone] : (accent ?? 'text-muted-foreground');
   return (
     <Card
-      className={`stat-card p-3 min-w-0 hover:border-primary/40 transition-colors ${calc ? 'bg-gradient-to-br from-sky-50/40 to-transparent border-sky-200/50 dark:from-sky-950/20' : ''}`}
+      className={`stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all ${onClick ? 'cursor-pointer' : 'cursor-default'} ${lg ? 'p-3.5' : 'p-3'} ${baseBg} ${toneBg} ${calcBg}`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-2">
-        <Icon className={`h-4 w-4 shrink-0 ${accent ?? 'text-muted-foreground'}`} />
+        <Icon className={`shrink-0 ${lg ? 'h-5 w-5' : 'h-4 w-4'} ${iconCls}`} />
         <div className="flex items-center gap-1">
+          {trend !== null && trend !== undefined && <TrendBadge delta={trend} />}
           {calc && (
             <span
               className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-200"
-              title="Calculated / derived metric"
+              title={calcTooltip ?? 'Calculated / derived metric'}
             >calc</span>
           )}
           {tone && <StatusPill tone={tone}>•</StatusPill>}
         </div>
       </div>
-      <div className="mt-2 font-mono-num text-xl text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis">
+      <div className={`mt-2 font-mono-num text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis ${lg ? 'text-2xl sm:text-3xl' : 'text-xl'}`}>
         {value}
-        {unit && <span className="text-xs font-sans text-muted-foreground ml-1">{unit}</span>}
+        {unit && <span className={`font-sans text-muted-foreground ml-1 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
       </div>
-      <div className="text-[11px] text-muted-foreground mt-1 leading-tight break-words">
+      <div className={`text-muted-foreground mt-1 leading-tight break-words ${lg ? 'text-xs font-medium' : 'text-[11px]'}`}>
         {label}
         {threshold && <span className="ml-1 text-[10px] text-muted-foreground/70">(limit {threshold})</span>}
       </div>
     </Card>
   );
+}
+
+function ClusterHeader({ icon: Icon, title, subtitle, accent }: { icon: any; title: string; subtitle?: string; accent?: string }) {
+  return (
+    <div className="flex items-baseline gap-2 mt-1 mb-1.5 px-0.5">
+      <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+      {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
+    </div>
+  );
+}
+
+function pctDelta(today: number, prev: number): number | null {
+  if (!Number.isFinite(today) || !Number.isFinite(prev)) return null;
+  if (prev === 0) return today === 0 ? 0 : null;
+  return ((today - prev) / prev) * 100;
 }
 
 export default function Dashboard() {
@@ -80,6 +146,7 @@ export default function Dashboard() {
   const plantIds = visiblePlants?.map((p) => p.id) ?? [];
 
   const today = startOfDay(new Date()).toISOString();
+  const yesterday = startOfDay(subDays(new Date(), 1)).toISOString();
 
   // ----- Today aggregates from raw tables -----
   const { data: todayLocators } = useQuery({
@@ -103,6 +170,31 @@ export default function Dashboard() {
     queryFn: async () => plantIds.length
       ? (await supabase.from('power_readings').select('daily_consumption_kwh,plant_id')
           .in('plant_id', plantIds).gte('reading_datetime', today)).data ?? []
+      : [],
+    enabled: plantIds.length > 0,
+  });
+  // ----- Yesterday aggregates (for trend deltas on highlighted KPIs) -----
+  const { data: yLocators } = useQuery({
+    queryKey: ['dash-loc-yest', plantIds],
+    queryFn: async () => plantIds.length
+      ? (await supabase.from('locator_readings').select('daily_volume')
+          .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today)).data ?? []
+      : [],
+    enabled: plantIds.length > 0,
+  });
+  const { data: yWells } = useQuery({
+    queryKey: ['dash-wells-yest', plantIds],
+    queryFn: async () => plantIds.length
+      ? (await supabase.from('well_readings').select('daily_volume')
+          .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today)).data ?? []
+      : [],
+    enabled: plantIds.length > 0,
+  });
+  const { data: yPower } = useQuery({
+    queryKey: ['dash-power-yest', plantIds],
+    queryFn: async () => plantIds.length
+      ? (await supabase.from('power_readings').select('daily_consumption_kwh')
+          .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today)).data ?? []
       : [],
     enabled: plantIds.length > 0,
   });
@@ -139,6 +231,15 @@ export default function Dashboard() {
   const kwh = (todayPower ?? []).reduce((s, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
   const nrw = calc.nrw(production, consumption);
   const pv = calc.pvRatio(kwh, production);
+
+  const yProduction = (yWells ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
+  const yConsumption = (yLocators ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
+  const yKwh = (yPower ?? []).reduce((s, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
+  const dProduction = pctDelta(production, yProduction);
+  const dConsumption = pctDelta(consumption, yConsumption);
+  const dKwh = pctDelta(kwh, yKwh);
+
+  const nrwBreached = nrw != null && nrw > 20;
   const avgPermTds = (latestRO ?? []).length
     ? +((latestRO as any[]).reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / (latestRO as any[]).length).toFixed(0)
     : null;
@@ -213,43 +314,88 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* 8 primary KPI tiles — auto-fits to longest label, slightly narrower */}
-      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
+      {/* NRW threshold alert banner */}
+      {nrwBreached && (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-rose-300/70 bg-gradient-to-r from-rose-50 to-rose-100/40 px-3 py-2 dark:from-rose-950/40 dark:to-rose-900/20 dark:border-rose-900/60 cursor-pointer hover:shadow-sm transition-shadow"
+          onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })}
+          data-testid="nrw-banner"
+          role="button"
+        >
+          <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+              NRW Water Loss above threshold — {nrw}%
+            </div>
+            <div className="text-[11px] text-rose-700/80 dark:text-rose-300/80">
+              Limit is 20%. Tap to open the NRW trend and investigate.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Cluster: Production & Consumption (highlight) ─── */}
+      <ClusterHeader icon={Droplet} title="Production & Consumption" accent="text-primary" />
+      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Droplet} accent="text-primary" label="Production" value={fmtNum(production)} unit="m³"
+          size="lg" trend={dProduction}
           onClick={() => setModal({ metric: 'production', title: 'Production Trend' })} />
-        <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
-          onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
         <StatCard icon={Activity} label="NRW Water Loss" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
-          calc threshold="20%"
+          size="lg" calc threshold="20%"
+          calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
           onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
-        <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
-          calc threshold="1.2"
-          onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
-
-        <StatCard icon={Waves} label="Bypass → Product" value={fmtNum(blending)} unit="m³" />
-        <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
-        <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
-          onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
-        <StatCard icon={Cloud} label="Raw Turbidity" value={avgTurb ?? '—'} unit="NTU" />
-      </div>
-
-      {/* Operations row */}
-      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
+        <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
+          trend={dConsumption}
+          onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
         <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³"
           onClick={() => setModal({ metric: 'rawwater', title: 'Raw Water Trendline' })} />
-        <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
-          onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
-        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh" />
+        <StatCard icon={Waves} label="Bypass → Product" value={fmtNum(blending)} unit="m³" />
       </div>
 
-      {/* Cost row — Production / Power / Chem cost */}
-      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))]">
+      {/* ─── Cluster: Quality (collapsible on mobile) ─── */}
+      <Collapsible defaultOpen className="group">
+        <div className="flex items-center justify-between mt-1 mb-1.5 px-0.5 sm:pointer-events-none">
+          <div className="flex items-baseline gap-2">
+            <FlaskConical className="h-3.5 w-3.5 text-accent" />
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Quality</h2>
+            <span className="text-[10px] text-muted-foreground/70">RO output</span>
+          </div>
+          <CollapsibleTrigger
+            className="sm:hidden text-muted-foreground hover:text-foreground transition"
+            aria-label="Toggle Quality section"
+            data-testid="quality-toggle"
+          >
+            <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent forceMount className="data-[state=closed]:hidden sm:!block">
+          <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+            <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
+            <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
+              onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
+            <StatCard icon={Cloud} label="Raw Turbidity" value={avgTurb ?? '—'} unit="NTU" />
+            <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+              onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* ─── Cluster: Energy & Cost ─── */}
+      <ClusterHeader icon={Zap} title="Energy & Cost" accent="text-chart-6" subtitle="Today" />
+      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
+          size="lg" trend={dKwh} />
+        <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
+          calc threshold="1.2"
+          calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
+          onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
         <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
-          calc value={`₱${fmtNum(productionCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
+          calc calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
+          value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-          value={`₱${fmtNum(powerCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
+          value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chem Cost"
-          value={`₱${fmtNum(chemCost, 0)}`} unit="" onClick={() => navigate('/costs')} />
+          value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
       </div>
 
       <Card className="p-3" data-testid="alerts-card">

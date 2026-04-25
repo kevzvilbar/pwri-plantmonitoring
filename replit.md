@@ -30,3 +30,15 @@ Configured as a static deployment of the frontend only:
 - Public dir: `frontend/dist`
 
 For production, the frontend expects to talk to a hosted FastAPI backend (set `REACT_APP_BACKEND_URL` at build time, or proxy `/api` at the host level).
+
+## Dashboard layout
+
+`frontend/src/pages/Dashboard.tsx` is organized into three KPI clusters with section headers:
+
+1. **Production & Consumption** — Production (lg), NRW Water Loss (lg, calc, tone-tinted by `nrwColor`), Locator Consumption, Raw Water (Wells), Bypass → Product. Trend % vs previous day shown on Production and Consumption.
+2. **Quality** — Feed TDS, Product TDS, Raw Turbidity, Recovery. Collapsible on mobile (`Radix Collapsible` + `forceMount` + `sm:!block`); always visible on `sm+`.
+3. **Energy & Cost** — Power kWh (lg, trend), PV Ratio (calc), Production Cost (calc), Power Cost, Chem Cost.
+
+`StatCard` supports `size: 'default'|'lg'`, `trend: number|null` (% vs yesterday rendered via `TrendBadge`), `tone: 'accent'|'warn'|'danger'` (drives gradient bg + icon color), `calc + calcTooltip` (sky tint + tooltip explaining the formula), `accent` (icon color override), `threshold` (limit hint).
+
+A red **NRW alert banner** appears above the clusters whenever `nrw > 20`, clickable to open the NRW trend modal. Yesterday baselines for trend deltas come from three additional Supabase queries (`yLocators`, `yWells`, `yPower`) bounded by `gte(yesterday) + lt(today)`. KPI pinning/customization was intentionally not implemented (would require user-scoped storage).
