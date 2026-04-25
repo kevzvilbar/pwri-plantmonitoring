@@ -566,40 +566,35 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
 
-  const { data: locReadings, isFetching: fetchingLoc } = useQuery({
+  const supaSelect = async <T,>(table: string, cols: string) => {
+    const { data, error } = await supabase.from(table).select(cols)
+      .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    return (data as T[]) ?? [];
+  };
+  const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('locator_readings').select('daily_volume,reading_datetime')
-          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
-      : [],
+    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,reading_datetime'),
     enabled: open && plantIds.length > 0 && needsLocReadings,
   });
-  const { data: wellReadings, isFetching: fetchingWell } = useQuery({
+  const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('well_readings').select('daily_volume,reading_datetime')
-          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
-      : [],
+    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,reading_datetime'),
     enabled: open && plantIds.length > 0 && needsWellReadings,
   });
-  const { data: roReadings, isFetching: fetchingRo } = useQuery({
+  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('ro_train_readings').select('recovery_pct,permeate_tds,reading_datetime')
-          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
-      : [],
+    queryFn: () => supaSelect<any>('ro_train_readings', 'recovery_pct,permeate_tds,reading_datetime'),
     enabled: open && plantIds.length > 0 && needsRoReadings,
   });
-  const { data: powerReadings, isFetching: fetchingPower } = useQuery({
+  const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('power_readings').select('daily_consumption_kwh,reading_datetime')
-          .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO)).data ?? []
-      : [],
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,reading_datetime'),
     enabled: open && plantIds.length > 0 && needsPowerReadings,
   });
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower;
+  const queryError = (errLoc || errWell || errRo || errPower) as Error | null;
 
   const chartData = useMemo(() => {
     const byDay = new Map<string, any>();
@@ -685,7 +680,25 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
             <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
           )}
         </div>
-        <div className="h-[420px] w-full" data-testid={`trend-chart-${metric}`}>
+        <div className="h-[420px] w-full relative" data-testid={`trend-chart-${metric}`}>
+          {queryError && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="rounded-md border border-rose-300 bg-rose-50/95 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/80 dark:border-rose-900 dark:text-rose-300 shadow-sm pointer-events-auto max-w-md text-center">
+                <div className="font-semibold mb-0.5">Couldn't load trend data</div>
+                <div className="text-[11px] opacity-80">{queryError.message}</div>
+              </div>
+            </div>
+          )}
+          {!queryError && !isFetching && chartData.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
+                <div className="font-medium text-foreground">No data in selected range</div>
+                <div className="text-[11px] mt-0.5">
+                  Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : 'wells'}.
+                </div>
+              </div>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height="100%">
             {metric === 'nrw' ? (
               <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
