@@ -1,6 +1,6 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
-_Last updated: 2026-04-25 (iteration 9)_
+_Last updated: 2026-04-25 (iteration 10)_
 
 ## 1. Problem Statement (verbatim — consolidated across 6 iterations)
 > "Check for possible error and improve pls the app pls" + pre-load 8
@@ -221,3 +221,46 @@ _Last updated: 2026-04-25 (iteration 9)_
      to attach his profile + Admin role.
 - Hard-delete of a user removes `user_profiles` + `user_roles` only —
   the `auth.users` row requires the Supabase service-role key.
+
+
+## 9. Iteration 10 — Admin Login Verification (2026-04-25)
+
+### Goal
+Verify `kevzvilbar@gmail.com` is a confirmed Admin and the Admin
+console + force-delete tools are reachable from `/auth` end-to-end.
+
+### Outcome
+- **Supabase state confirmed (read-only)**: `user_profiles` row has
+  `status='Active'`, `designation='Admin'`, `profile_complete=true`,
+  4 plants assigned. `user_roles` has `role='Admin'`.
+- **Backend dependencies stabilized** (carried over from iter 9):
+  `supabase==2.5.3`, `postgrest==1.1.1` pinned in
+  `backend/requirements.txt`.
+- **Bug found & fixed — `/onboarding` race**: `useAuth` was setting
+  `user` synchronously inside `onAuthStateChange` but loading
+  `profile` via deferred `setTimeout`. `loading` was never re-raised,
+  so `ProtectedRoute` rendered with `user=set, profile=null` and
+  bounced freshly-signed-in admins to `/onboarding`. Fix in
+  `/app/frontend/src/hooks/useAuth.tsx`: set `loading=true` on every
+  auth-state-change with a session and clear it only after
+  `loadProfileAndRoles` resolves.
+- **Verified via Playwright**: sign-in lands on `/` (Dashboard);
+  `/admin` renders with `data-testid='admin-page'`, Users tab
+  enabled, Kevin's row labeled `Admin / Full access`, per-row
+  delete-menu trigger present.
+- **Force-delete UX (clarified, not changed)**: the
+  `data-testid='force-hard-delete'` button is rendered conditionally
+  inside the hard-delete dialog when
+  `deps?.blocking && isAdmin` (DeleteEntityMenu.tsx L301). This is
+  the intended workflow — the override only appears when blocking
+  dependencies exist.
+- **Test credentials file**: `/app/memory/test_credentials.md`
+  created with Kevin's admin login.
+
+### Known cosmetic warnings (non-blocking)
+- Frontend hits `public.login_attempts` (iter 7 SQL not yet run in
+  this Supabase project) → 404 PGRST205 in console; sign-in still
+  works because the insert is wrapped in try/catch.
+- Dashboard query references `power_readings.daily_solar_kwh /
+  daily_grid_kwh`; iter 6 energy migration not yet run → 400 42703.
+  Both resolved by running the migrations listed in §8.

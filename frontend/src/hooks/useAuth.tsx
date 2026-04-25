@@ -56,11 +56,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        // Defer Supabase calls to avoid deadlock
-        setTimeout(() => loadProfileAndRoles(sess.user.id), 0);
+        // Hold "loading" until the profile + roles resolve so ProtectedRoute
+        // doesn't render with user-set/profile-null and bounce a fully
+        // onboarded user to /onboarding (race fixed iter 10).
+        setLoading(true);
+        // Defer Supabase calls to avoid deadlock with the auth listener.
+        setTimeout(() => {
+          loadProfileAndRoles(sess.user.id).finally(() => setLoading(false));
+        }, 0);
       } else {
         setProfile(null);
         setRoles([]);
+        setLoading(false);
       }
     });
 
