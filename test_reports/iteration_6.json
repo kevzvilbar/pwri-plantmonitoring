@@ -9,7 +9,7 @@
   },
   "frontend_issues": {
     "ui_bugs": [
-      {"component": "Auth.tsx post-login redirect / ProtectedRoute profile-completeness check", "issue": "Admin kevzvilbar@gmail.com is forced to /onboarding immediately after successful sign-in even though user_profiles.status='Active', designation='Admin', username/first/last name all populated, and plant_assignments has 4 plants. The 'profile_complete' gate in the post-login routing is mis-evaluating an already-complete admin profile. URL captured: https://auth-user-verify.preview.emergentagent.com/onboarding", "selector": "/auth → /onboarding", "priority": "CRITICAL"},
+      {"component": "Auth.tsx post-login redirect / ProtectedRoute profile-completeness check", "issue": "Admin kevzvilbar@gmail.com is forced to /onboarding immediately after successful sign-in even though user_profiles.status='Active', designation='Admin', username/first/last name all populated, and plant_assignments has 4 plants. The 'profile_complete' gate in the post-login routing is mis-evaluating an already-complete admin profile. URL captured: https://vite-react-deploy.preview.emergentagent.com/onboarding", "selector": "/auth → /onboarding", "priority": "CRITICAL"},
       {"component": "DeleteEntityMenu.tsx (kind=user) AlertDialog", "issue": "After opening row menu (delete-menu-trigger-user-{id}) and clicking hard-delete-user-{id} ('Permanently delete…'), the AlertDialog with data-testid='force-hard-delete' does NOT render — count=0 in DOM. Either the alert dialog is not opening on the menu-item click, OR the force-hard-delete override button is gated behind a prior 409 dependency-conflict response and is not statically rendered as the review-request expects. Visibility-only check therefore fails.", "selector": "[data-testid='force-hard-delete']", "priority": "HIGH"}
     ],
     "integration_issues": [
@@ -32,7 +32,7 @@
   ],
   "updated_files": [],
   "success_rate": {"backend": "not tested (skipped per review_request)", "frontend": "40% — 3/5 review-request checks PASS (admin-page renders on direct nav, admin-access-denied not shown, Users tab enabled). 2/5 FAIL: post-login redirect goes to /onboarding (REGRESSION) and force-hard-delete button not visible after opening hard-delete menu."},
-  "test_credentials": "kevzvilbar@gmail.com / BPWI2025! (Supabase Admin) — sign-in returns 200 with valid JWT (sub=8b2c8272-f7e5-4e7c-9e84-81a0f221b714).",
+  "test_credentials": "kevzvilbar@gmail.com / BPWI2025! (Supabase Admin) — sign-in returns 200 with valid JWT (sub=vite-react-deploy).",
   "seed_data_creation": "None — no test data created or modified. No deletes executed.",
   "retest_needed": true,
   "main_agent_can_self_test": false,
