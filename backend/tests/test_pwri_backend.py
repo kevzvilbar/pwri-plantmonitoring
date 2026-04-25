@@ -18,7 +18,7 @@ import requests
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://admin-data-purge-1.preview.emergentagent.com",
+    "https://auth-user-verify.preview.emergentagent.com",
 ).rstrip("/")
 
 MAMBALING_METER_URL = (
