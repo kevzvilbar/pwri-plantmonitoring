@@ -1157,6 +1157,22 @@ function MigrationsPanel() {
                 {data.summary.indeterminate} indeterminate
               </Badge>
             )}
+            {driftCount > 0 && (
+              <Badge
+                variant="outline"
+                className="bg-amber-500/15 text-amber-700 border-amber-500/40"
+                title={
+                  `${driftCount} migration file${driftCount === 1 ? '' : 's'} ` +
+                  `changed on disk since the last Re-check. ` +
+                  `Re-download the bundle before pasting into Supabase, ` +
+                  `then click Re-check to acknowledge.`
+                }
+                data-testid="migrations-drift-count"
+              >
+                <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                {driftCount} modified since last check
+              </Badge>
+            )}
             <span className="text-[11px] text-muted-foreground">
               · {data.summary.total} total
             </span>
