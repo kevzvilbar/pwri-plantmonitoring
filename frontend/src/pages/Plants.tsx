@@ -824,8 +824,8 @@ function WellsList({ plantId }: { plantId: string }) {
     qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
   };
 
-  // Toggle dedicated power meter on a well (mutually exclusive with Bypass —
-  // the right-side row controls hide each option when the other is active).
+  // Toggle dedicated power meter on a well. Independent of Bypass — a well
+  // may carry both flags (e.g. a bypass well that also has its own kWh meter).
   const togglePowerMeter = async (w: any, on: boolean) => {
     setPowerBusy(prev => { const n = new Set(prev); n.add(w.id); return n; });
     const { error } = await supabase
@@ -981,62 +981,57 @@ function WellsList({ plantId }: { plantId: string }) {
                   )}
                 </div>
               </div>
-              {/* Right-side row controls: mutually exclusive Bypass / Power meter
-                  toggles. Hidden during read-only roles. */}
+              {/* Right-side row controls — Bypass and Power are independent
+                  attributes (a well can be either, both, or neither). Hidden
+                  during read-only roles. */}
               {isManager && (
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Bypass — hidden when this well has a dedicated power meter. */}
-                  {!w.has_power_meter && (
-                    <label
-                      className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
-                        isBypass
-                          ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
-                          : 'bg-background border-border hover:bg-muted'
-                      } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
-                      title={
-                        isBypass
-                          ? 'Bypass on — separate water meter feeds product line. Click to clear.'
-                          : 'Mark as bypass — well injects to product line; meter is tracked separately'
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Checkbox
-                        checked={isBypass}
-                        disabled={bypassPending}
-                        onCheckedChange={(v) => toggleBypass(w, !!v)}
-                        className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
-                        data-testid={`well-bypass-${w.id}`}
-                      />
-                      <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
-                    </label>
-                  )}
-                  {/* Power meter — hidden when bypass is active (mutually exclusive). */}
-                  {!isBypass && (
-                    <label
-                      className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
-                        w.has_power_meter
-                          ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30'
-                          : 'bg-background border-border hover:bg-muted'
-                      } ${powerBusy.has(w.id) ? 'opacity-60 cursor-wait' : ''}`}
-                      title={
-                        w.has_power_meter
-                          ? 'Dedicated power meter on — Operations shows a kWh input. Click to clear.'
-                          : 'Mark this well as having a dedicated power meter'
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Checkbox
-                        checked={!!w.has_power_meter}
-                        disabled={powerBusy.has(w.id)}
-                        onCheckedChange={(v) => togglePowerMeter(w, !!v)}
-                        className={w.has_power_meter ? 'border-amber-500 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600' : ''}
-                        data-testid={`well-power-${w.id}`}
-                      />
-                      <span className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-0.5">
-                        <Zap className="h-2.5 w-2.5" /> Power
-                      </span>
-                    </label>
-                  )}
+                  <label
+                    className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+                      isBypass
+                        ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
+                        : 'bg-background border-border hover:bg-muted'
+                    } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
+                    title={
+                      isBypass
+                        ? 'Bypass on — separate water meter feeds product line. Click to clear.'
+                        : 'Mark as bypass — well injects to product line; meter is tracked separately'
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={isBypass}
+                      disabled={bypassPending}
+                      onCheckedChange={(v) => toggleBypass(w, !!v)}
+                      className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+                      data-testid={`well-bypass-${w.id}`}
+                    />
+                    <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
+                  </label>
+                  <label
+                    className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+                      w.has_power_meter
+                        ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30'
+                        : 'bg-background border-border hover:bg-muted'
+                    } ${powerBusy.has(w.id) ? 'opacity-60 cursor-wait' : ''}`}
+                    title={
+                      w.has_power_meter
+                        ? 'Dedicated power meter on — Operations shows a kWh input. Click to clear.'
+                        : 'Mark this well as having a dedicated power meter'
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={!!w.has_power_meter}
+                      disabled={powerBusy.has(w.id)}
+                      onCheckedChange={(v) => togglePowerMeter(w, !!v)}
+                      className={w.has_power_meter ? 'border-amber-500 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600' : ''}
+                      data-testid={`well-power-${w.id}`}
+                    />
+                    <span className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-0.5">
+                      <Zap className="h-2.5 w-2.5" /> Power
+                    </span>
+                  </label>
                 </div>
               )}
             </div>

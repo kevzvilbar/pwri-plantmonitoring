@@ -445,8 +445,12 @@ function WellRow({
   const cancelEdit = () => { setEditingId(null); setReading(''); setPowerReading(''); };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`well-row-${well.id}`}>
-      <div className="min-w-0 flex-1 basis-[140px]">
+    <div
+      className="p-3 flex flex-wrap items-center gap-x-3 gap-y-2"
+      data-testid={`well-row-${well.id}`}
+    >
+      {/* Identity column — full width on mobile, fixed-min on desktop. */}
+      <div className="min-w-0 flex-1 basis-full sm:basis-[160px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
           {well.has_power_meter && (
@@ -475,84 +479,87 @@ function WellRow({
         </div>
       </div>
 
-      {/* Water meter — when paired with a Power input we add an icon + tint to
-          remove ambiguity. Plain "Meter" input when there's no power meter. */}
-      {well.has_power_meter ? (
-        <div className="relative shrink-0">
-          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
+      {/* Inputs + actions group — stays together as a single contained block.
+          On mobile this drops below the identity column and spans full width;
+          inputs grow to share the available space evenly. On desktop the group
+          floats right with fixed-width inputs. */}
+      <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto">
+        {well.has_power_meter ? (
+          <div className="relative flex-1 sm:flex-initial sm:w-32">
+            <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
+            <Input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              value={reading}
+              onChange={(e) => setReading(e.target.value)}
+              placeholder="Water m³"
+              className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+              data-testid={`well-meter-input-${well.id}`}
+              title="Water meter reading (cumulative m³)"
+            />
+          </div>
+        ) : (
           <Input
             type="number"
             step="any"
             inputMode="decimal"
             value={reading}
             onChange={(e) => setReading(e.target.value)}
-            placeholder="Water m³"
-            className="w-28 sm:w-32 pl-7 border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+            placeholder="Meter"
+            className="h-9 flex-1 sm:flex-initial sm:w-32"
             data-testid={`well-meter-input-${well.id}`}
-            title="Water meter reading (cumulative m³)"
+            title="Standard well meter reading"
           />
-        </div>
-      ) : (
-        <Input
-          type="number"
-          step="any"
-          inputMode="decimal"
-          value={reading}
-          onChange={(e) => setReading(e.target.value)}
-          placeholder="Meter"
-          className="w-24 sm:w-32 shrink-0"
-          data-testid={`well-meter-input-${well.id}`}
-          title="Standard well meter reading"
-        />
-      )}
+        )}
 
-      {well.has_power_meter && (
-        <div className="relative shrink-0">
-          <Zap className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-600 pointer-events-none" />
-          <Input
-            type="number"
-            step="any"
-            inputMode="decimal"
-            value={powerReading}
-            onChange={(e) => setPowerReading(e.target.value)}
-            placeholder="Power kWh"
-            className="w-28 sm:w-32 pl-7 border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
-            title={`Power meter reading (cumulative kWh) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
-            data-testid={`well-power-input-${well.id}`}
-          />
-        </div>
-      )}
+        {well.has_power_meter && (
+          <div className="relative flex-1 sm:flex-initial sm:w-32">
+            <Zap className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-600 pointer-events-none" />
+            <Input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              value={powerReading}
+              onChange={(e) => setPowerReading(e.target.value)}
+              placeholder="Power kWh"
+              className="h-9 pl-7 w-full border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
+              title={`Power meter reading (cumulative kWh) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
+              data-testid={`well-power-input-${well.id}`}
+            />
+          </div>
+        )}
 
-      <Button
-        onClick={save}
-        disabled={saving || !reading || atLimit}
-        size="sm"
-        className="shrink-0"
-      >
-        {saving ? '...' : editingId ? 'Update' : 'Save'}
-      </Button>
-
-      {lastToday && !editingId && (
         <Button
-          variant="ghost" size="sm"
-          className="h-8 w-8 p-0 shrink-0"
-          onClick={editLastToday}
-          title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+          onClick={save}
+          disabled={saving || !reading || atLimit}
+          className="h-9 px-3 text-xs shrink-0"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          {saving ? '...' : editingId ? 'Update' : 'Save'}
         </Button>
-      )}
 
-      {editingId && (
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 w-8 p-0 shrink-0"
-          onClick={cancelEdit}
-          title="Cancel edit"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
+        {lastToday && !editingId && (
+          <Button
+            variant="ghost"
+            className="h-9 w-9 p-0 shrink-0"
+            onClick={editLastToday}
+            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
+        {editingId && (
+          <Button
+            variant="ghost"
+            className="h-9 w-9 p-0 shrink-0"
+            onClick={cancelEdit}
+            title="Cancel edit"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
