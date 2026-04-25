@@ -14,6 +14,7 @@ in Supabase" flow so they retain a clear audit trail of schema changes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -372,6 +373,10 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
         out.append({
             "filename": path.name,
             "size": path.stat().st_size,
+            # SHA-256 of the raw file bytes — the frontend uses this to flag
+            # files that changed on disk since the user's last acknowledged
+            # snapshot, so they don't accidentally re-run a stale download.
+            "sha256": hashlib.sha256(sql.encode("utf-8")).hexdigest(),
             "status": status,
             "probed_status": probed_status,
             "manual_override": override,

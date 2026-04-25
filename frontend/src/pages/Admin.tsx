@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -843,6 +843,7 @@ interface MigrationOverride {
 interface MigrationFile {
   filename: string;
   size: number;
+  sha256?: string;
   status: 'applied' | 'pending' | 'partial' | 'indeterminate';
   probed_status?: 'applied' | 'pending' | 'partial' | 'indeterminate';
   manual_override?: MigrationOverride | null;
@@ -864,11 +865,30 @@ interface MigrationsResponse {
   files: MigrationFile[];
 }
 
+// localStorage key for the per-file SHA snapshot the user has acknowledged.
+// We compare each fresh response against this snapshot to flag files whose
+// on-disk content changed since the user last hit Re-check (i.e. potentially
+// stale relative to a previously-downloaded bundle).
+const MIGRATIONS_SHA_KEY = 'pwri:migration-shas-v1';
+
 function MigrationsPanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showApplied, setShowApplied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [seenShas, setSeenShas] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(MIGRATIONS_SHA_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const persistShas = (next: Record<string, string>) => {
+    setSeenShas(next);
+    try { localStorage.setItem(MIGRATIONS_SHA_KEY, JSON.stringify(next)); } catch {/* ignore */}
+  };
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['admin-migrations-status'],
@@ -911,6 +931,45 @@ function MigrationsPanel() {
       (f) => f.probed_status === 'pending' || f.probed_status === 'partial',
     );
   }, [data]);
+
+  // Map of {filename: sha256} for the files in the most recent fetch.
+  const currentShas = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const f of data?.files ?? []) {
+      if (f.sha256) out[f.filename] = f.sha256;
+    }
+    return out;
+  }, [data]);
+
+  // First-ever load: silently capture the current snapshot so we don't show a
+  // "modified" pill for every file just because the user has never used the
+  // panel before. After this point, drift is only flagged when something
+  // actually changes between Re-checks.
+  useEffect(() => {
+    if (!data) return;
+    if (Object.keys(seenShas).length === 0 && Object.keys(currentShas).length > 0) {
+      persistShas(currentShas);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  const driftCount = useMemo(() => {
+    let n = 0;
+    for (const [name, sha] of Object.entries(currentShas)) {
+      if (seenShas[name] && seenShas[name] !== sha) n += 1;
+    }
+    return n;
+  }, [currentShas, seenShas]);
+
+  const handleRecheck = async () => {
+    const result = await refetch();
+    // Acknowledge the freshly-fetched state so the "modified" pills clear.
+    const fresh: Record<string, string> = {};
+    for (const f of result.data?.files ?? []) {
+      if (f.sha256) fresh[f.filename] = f.sha256;
+    }
+    if (Object.keys(fresh).length > 0) persistShas(fresh);
+  };
 
   // Build the concatenated SQL bundle for the current pending/partial set.
   // Returned as { text, sizeKb } so the caller can decide whether to push it
@@ -1141,7 +1200,7 @@ function MigrationsPanel() {
               <Button
                 size="sm" variant="outline" className="h-7"
                 disabled={isFetching}
-                onClick={() => refetch()}
+                onClick={handleRecheck}
                 data-testid="migrations-refresh"
               >
                 {isFetching
@@ -1196,6 +1255,27 @@ function MigrationsPanel() {
                     <meta.Icon className="h-2.5 w-2.5 mr-1" />
                     {meta.label}
                   </Badge>
+                  {(() => {
+                    const seen = f.sha256 ? seenShas[f.filename] : undefined;
+                    const drifted = !!(seen && f.sha256 && seen !== f.sha256);
+                    if (!drifted) return null;
+                    return (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-amber-500/15 text-amber-700 border-amber-500/40"
+                        title={
+                          `On-disk content changed since last Re-check.\n` +
+                          `was: ${seen?.slice(0, 12)}…\n` +
+                          `now: ${f.sha256?.slice(0, 12)}…\n` +
+                          `Re-download the bundle before pasting into Supabase.`
+                        }
+                        data-testid={`migration-drift-${f.filename}`}
+                      >
+                        <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                        modified since last check
+                      </Badge>
+                    );
+                  })()}
                   <span className="text-[10px] text-muted-foreground">
                     {(f.size / 1024).toFixed(1)} KB
                   </span>
