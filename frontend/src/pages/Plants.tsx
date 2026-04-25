@@ -20,10 +20,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
+import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Waves } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+
+const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
 
 export default function Plants() {
   const { id } = useParams();
@@ -289,7 +291,7 @@ function EnergySourceCard({ plant }: { plant: any }) {
 
 function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
-  const { isManager } = useAuth();
+  const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
 
@@ -301,26 +303,255 @@ function LocatorsList({ plantId }: { plantId: string }) {
     },
   });
 
+  // Admin selection / bulk-delete state.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Single-row delete state.
+  const [singleDelete, setSingleDelete] = useState<{ id: string; name: string } | null>(null);
+  const [singleReason, setSingleReason] = useState('');
+  const [singleBusy, setSingleBusy] = useState(false);
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+  const toggleAll = () => {
+    if (!locators) return;
+    if (selected.size === locators.length) setSelected(new Set());
+    else setSelected(new Set(locators.map((l: any) => l.id)));
+  };
+
+  const auditDelete = async (rows: { id: string; name: string }[], reason: string, bulk: boolean) => {
+    try {
+      const payload = rows.map((r) => ({
+        kind: 'locator',
+        entity_id: r.id,
+        entity_label: r.name ?? null,
+        action: 'hard',
+        reason: bulk ? `[BULK] ${reason}` : reason,
+        performed_by: user?.id ?? null,
+        forced: false,
+      }));
+      await supabase.from('deletion_audit_log' as any).insert(payload as any);
+    } catch { /* table may be missing pre-migration */ }
+  };
+
+  const doBulkDelete = async () => {
+    if (!selected.size) return;
+    if (bulkReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const rows = (locators ?? []).filter((l: any) => ids.includes(l.id)).map((l: any) => ({ id: l.id, name: l.name }));
+    // locators have ON DELETE CASCADE on readings/replacements.
+    const { error } = await supabase.from('locators').delete().in('id', ids);
+    if (error) { setBulkBusy(false); toast.error(error.message); return; }
+    await auditDelete(rows, bulkReason.trim(), true);
+    setBulkBusy(false);
+    setBulkOpen(false);
+    setBulkReason('');
+    setSelected(new Set());
+    toast.success(`${ids.length} locator(s) permanently deleted`);
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+  };
+
+  const doSingleDelete = async () => {
+    if (!singleDelete) return;
+    if (singleReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
+    setSingleBusy(true);
+    const { error } = await supabase.from('locators').delete().eq('id', singleDelete.id);
+    if (error) { setSingleBusy(false); toast.error(error.message); return; }
+    await auditDelete([singleDelete], singleReason.trim(), false);
+    setSingleBusy(false);
+    const name = singleDelete.name;
+    setSingleDelete(null);
+    setSingleReason('');
+    toast.success(`Locator "${name}" deleted`);
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+  };
+
   if (detail) return <LocatorDetail locatorId={detail} onBack={() => setDetail(null)} />;
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-sm font-semibold">Locators ({locators?.length ?? 0})</h3>
-        {isManager && <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus className="h-3 w-3 mr-1" />Add</Button>}
+        <div className="flex items-center gap-2">
+          {isAdmin && locators && locators.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={toggleAll}
+              className="text-xs"
+              data-testid="locators-toggle-all"
+            >
+              {selected.size === locators.length ? 'Clear' : 'Select all'}
+            </Button>
+          )}
+          {isAdmin && selected.size > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-danger text-danger hover:bg-danger/10"
+              onClick={() => setBulkOpen(true)}
+              data-testid="locators-bulk-delete-btn"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              Delete {selected.size}
+            </Button>
+          )}
+          {isManager && (
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
+        </div>
       </div>
-      {locators?.map((l: any) => (
-        <Card key={l.id} className="p-3 cursor-pointer hover:shadow-elev" onClick={() => setDetail(l.id)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="font-medium text-sm">{l.name}</div>
-              <div className="text-xs text-muted-foreground">{l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}</div>
+      {locators?.map((l: any) => {
+        const checked = selected.has(l.id);
+        return (
+          <Card
+            key={l.id}
+            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''}`}
+            data-testid={`locator-card-${l.id}`}
+          >
+            <div className="flex items-start gap-2">
+              {isAdmin && (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggleOne(l.id)}
+                  className="mt-1"
+                  data-testid={`locator-select-${l.id}`}
+                />
+              )}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setDetail(l.id)}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">{l.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
+                    </div>
+                  </div>
+                  <StatusPill tone={l.status === 'Active' ? 'accent' : 'muted'}>{l.status}</StatusPill>
+                </div>
+              </div>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 text-danger hover:bg-danger/10 shrink-0"
+                  onClick={(e) => { e.stopPropagation(); setSingleDelete({ id: l.id, name: l.name }); }}
+                  title="Delete locator"
+                  data-testid={`locator-delete-${l.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
-            <StatusPill tone={l.status === 'Active' ? 'accent' : 'muted'}>{l.status}</StatusPill>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
+      {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+
+      {/* Bulk delete dialog */}
+      <AlertDialog open={bulkOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete {selected.size} locator(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings and meter-replacement logs attached to the
+              selected locators will be removed via the database cascade rule.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={bulkReason} onChange={setBulkReason} testId="locators-bulk-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doBulkDelete}
+              disabled={bulkBusy || bulkReason.trim().length < 5}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-locators-bulk-delete"
+            >
+              {bulkBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Single delete dialog */}
+      <AlertDialog open={!!singleDelete} onOpenChange={(o) => !o && !singleBusy && setSingleDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete "{singleDelete?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings and meter-replacement logs attached to this
+              locator will be removed via the database cascade rule. This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={singleReason} onChange={setSingleReason} testId="locator-single-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={singleBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doSingleDelete}
+              disabled={singleBusy || singleReason.trim().length < 5}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-locator-single-delete"
+            >
+              {singleBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// Shared "reason" textarea with min-5-char hint, used by all admin delete dialogs.
+function ReasonField({
+  value, onChange, testId,
+}: { value: string; onChange: (v: string) => void; testId: string }) {
+  const tooShort = value.length > 0 && value.trim().length < 5;
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">
+        Reason <span className="text-danger">*</span>
+        <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+      </Label>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. Decommissioned after Q1 2026 inspection"
+        maxLength={500}
+        rows={2}
+        data-testid={testId}
+        aria-invalid={tooShort}
+        className={tooShort ? 'border-danger' : ''}
+      />
+      {tooShort && (
+        <p className="text-[10px] text-danger">
+          Reason must be at least 5 characters ({value.trim().length}/5).
+        </p>
+      )}
     </div>
   );
 }
@@ -510,11 +741,34 @@ function WellsList({ plantId }: { plantId: string }) {
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
   });
+  // Plant-level bypass / blending state — used to render the bypass checkbox
+  // per row and to know which wells inject directly into the product line.
+  const { data: plant } = useQuery({
+    queryKey: ['plant-name', plantId],
+    queryFn: async () => (await supabase.from('plants').select('name').eq('id', plantId).single()).data,
+  });
+  const { data: blendingIds = [] } = useQuery<string[]>({
+    queryKey: ['blending-wells', plantId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/blending/wells?plant_id=${plantId}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json.map((r: any) => r.well_id ?? r.id).filter(Boolean) : [];
+    },
+  });
+  const blendingSet = new Set(blendingIds);
+
   const [detail, setDetail] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Single-row delete state.
+  const [singleDelete, setSingleDelete] = useState<{ id: string; name: string } | null>(null);
+  const [singleReason, setSingleReason] = useState('');
+  const [singleBusy, setSingleBusy] = useState(false);
+  // Per-well bypass-toggle in-flight indicator.
+  const [bypassBusy, setBypassBusy] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) => {
     const next = new Set(selected);
@@ -528,6 +782,21 @@ function WellsList({ plantId }: { plantId: string }) {
     else setSelected(new Set(wells.map((w: any) => w.id)));
   };
 
+  const auditWellDelete = async (rows: { id: string; name: string }[], reason: string, bulk: boolean) => {
+    try {
+      const payload = rows.map((r) => ({
+        kind: 'well',
+        entity_id: r.id,
+        entity_label: r.name ?? null,
+        action: 'hard',
+        reason: bulk ? `[BULK] ${reason}` : reason,
+        performed_by: user?.id ?? null,
+        forced: false,
+      }));
+      await supabase.from('deletion_audit_log' as any).insert(payload as any);
+    } catch { /* table may be missing pre-migration */ }
+  };
+
   const doBulkDelete = async () => {
     if (!selected.size) return;
     if (bulkReason.trim().length < 5) {
@@ -536,7 +805,7 @@ function WellsList({ plantId }: { plantId: string }) {
     }
     setBulkBusy(true);
     const ids = Array.from(selected);
-    const labels = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => w.name);
+    const rows = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => ({ id: w.id, name: w.name }));
     // Wells have ON DELETE CASCADE on readings/replacements/pms — Supabase
     // will remove dependent rows automatically.
     const { error } = await supabase.from('wells').delete().in('id', ids);
@@ -545,19 +814,7 @@ function WellsList({ plantId }: { plantId: string }) {
       toast.error(error.message);
       return;
     }
-    // Best-effort audit trail (one row per deleted well).
-    try {
-      const rows = ids.map((id, i) => ({
-        kind: 'well',
-        entity_id: id,
-        entity_label: labels[i] ?? null,
-        action: 'hard',
-        reason: bulkReason ? `[BULK] ${bulkReason}` : '[BULK] multi-well delete',
-        performed_by: user?.id ?? null,
-        forced: false,
-      }));
-      await supabase.from('deletion_audit_log' as any).insert(rows as any);
-    } catch { /* table may be missing pre-migration */ }
+    await auditWellDelete(rows, bulkReason.trim(), true);
     setBulkBusy(false);
     setBulkDeleteOpen(false);
     setBulkReason('');
@@ -565,6 +822,52 @@ function WellsList({ plantId }: { plantId: string }) {
     toast.success(`${ids.length} well(s) permanently deleted`);
     qc.invalidateQueries({ queryKey: ['wells', plantId] });
     qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+  };
+
+  const doSingleDelete = async () => {
+    if (!singleDelete) return;
+    if (singleReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
+    setSingleBusy(true);
+    const { error } = await supabase.from('wells').delete().eq('id', singleDelete.id);
+    if (error) { setSingleBusy(false); toast.error(error.message); return; }
+    await auditWellDelete([singleDelete], singleReason.trim(), false);
+    setSingleBusy(false);
+    const name = singleDelete.name;
+    setSingleDelete(null);
+    setSingleReason('');
+    toast.success(`Well "${name}" permanently deleted`);
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+  };
+
+  const toggleBypass = async (w: any, next: boolean) => {
+    if (!isManager) return;
+    setBypassBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
+    try {
+      const res = await fetch(`${BASE}/api/blending/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': user?.id ?? '' },
+        body: JSON.stringify({
+          well_id: w.id,
+          plant_id: plantId,
+          well_name: w.name,
+          plant_name: plant?.name,
+          is_blending: next,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(next
+        ? `${w.name}: marked as bypass — its meter feeds product line separately`
+        : `${w.name}: bypass cleared`);
+      qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
+    } catch (e: any) {
+      toast.error(`Bypass toggle failed: ${e.message || e}`);
+    } finally {
+      setBypassBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });
+    }
   };
 
   if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
@@ -605,10 +908,12 @@ function WellsList({ plantId }: { plantId: string }) {
       </div>
       {wells?.map((w: any) => {
         const checked = selected.has(w.id);
+        const isBypass = blendingSet.has(w.id);
+        const bypassPending = bypassBusy.has(w.id);
         return (
           <Card
             key={w.id}
-            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''}`}
+            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBypass ? 'border-violet-300' : ''}`}
             data-testid={`well-card-${w.id}`}
           >
             <div className="flex items-start gap-2">
@@ -636,6 +941,14 @@ function WellsList({ plantId }: { plantId: string }) {
                           <Zap className="h-2.5 w-2.5" /> Electric
                         </span>
                       )}
+                      {isBypass && (
+                        <span
+                          className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                          title="Bypass: separate water meter feeding product line"
+                        >
+                          <Waves className="h-2.5 w-2.5" /> Bypass
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                       <span>
@@ -660,6 +973,46 @@ function WellsList({ plantId }: { plantId: string }) {
                   </div>
                   <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
                 </div>
+              </div>
+              {/* Right-side row controls: bypass checkbox + admin delete */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {isManager && (
+                  <label
+                    className={`flex items-center gap-1 h-7 px-1.5 rounded-md border cursor-pointer select-none transition-colors ${
+                      isBypass
+                        ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
+                        : 'bg-background hover:bg-muted'
+                    } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
+                    title={
+                      isBypass
+                        ? 'Bypass on — separate water meter feeds product line. Click to clear.'
+                        : 'Mark as bypass — well injects to product line; meter is tracked separately'
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={isBypass}
+                      disabled={bypassPending}
+                      onCheckedChange={(v) => toggleBypass(w, !!v)}
+                      className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+                      data-testid={`well-bypass-${w.id}`}
+                    />
+                    <Waves className="h-3 w-3" />
+                    <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
+                  </label>
+                )}
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-danger hover:bg-danger/10"
+                    onClick={(e) => { e.stopPropagation(); setSingleDelete({ id: w.id, name: w.name }); }}
+                    title="Delete well"
+                    data-testid={`well-delete-${w.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           </Card>
@@ -715,6 +1068,35 @@ function WellsList({ plantId }: { plantId: string }) {
               data-testid="confirm-wells-bulk-delete"
             >
               {bulkBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Per-row single delete dialog */}
+      <AlertDialog open={!!singleDelete} onOpenChange={(o) => !o && !singleBusy && setSingleDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete "{singleDelete?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings, hydraulic history, and meter-replacement logs
+              attached to this well will be removed via the database cascade
+              rule. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={singleReason} onChange={setSingleReason} testId="well-single-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={singleBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doSingleDelete}
+              disabled={singleBusy || singleReason.trim().length < 5}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-well-single-delete"
+            >
+              {singleBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Delete permanently
             </AlertDialogAction>
           </AlertDialogFooter>
