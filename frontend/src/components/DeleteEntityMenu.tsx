@@ -363,10 +363,10 @@ export function DeleteEntityMenu({
                     type="checkbox"
                     checked={forceAck}
                     onChange={(e) => setForceAck(e.target.checked)}
-                    className="mt-0.5"
+                    className="mt-0.5 shrink-0"
                     data-testid="force-ack"
                   />
-                  <span>
+                  <span className="flex-1 min-w-0 break-words">
                     I understand dependencies will be orphaned and I am the Admin
                     accountable for this action.
                   </span>
@@ -374,7 +374,7 @@ export function DeleteEntityMenu({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="gap-2 sm:flex-wrap">
             <AlertDialogCancel disabled={busy} data-testid="cancel-force-delete">Cancel</AlertDialogCancel>
             {kind === 'plant' && (
               <Button
@@ -382,21 +382,21 @@ export function DeleteEntityMenu({
                 variant="outline"
                 onClick={() => doHard(true, true)}
                 disabled={busy || !forceAck || !reasonValid}
-                className="border-amber-500 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                className="border-amber-500 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300 whitespace-nowrap"
                 data-testid="archive-and-force-delete"
               >
                 {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                Archive readings &amp; delete
+                Archive &amp; delete
               </Button>
             )}
             <AlertDialogAction
               onClick={() => doHard(true)}
               disabled={busy || !forceAck || !reasonValid}
-              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              className="bg-danger text-danger-foreground hover:bg-danger/90 whitespace-nowrap"
               data-testid="confirm-force-delete"
             >
               {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Force delete permanently
+              Force delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
