@@ -25,6 +25,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import {
   ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2, Hourglass,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -280,6 +281,14 @@ function UsersPanel() {
 // Smart Import flow. The Admin can still edit/uncheck before running.
 const SUGGESTED_BAD_IMPORTS = ['Mambaling 3', 'SRP MCWD'] as const;
 
+const REASON_TEMPLATES: { label: string; value: string }[] = [
+  { label: 'Smart import error', value: 'Smart importation error cleanup' },
+  { label: 'Duplicate entry',    value: 'Duplicate plant entry — removing duplicate' },
+  { label: 'Test data',          value: 'Test data created during onboarding' },
+  { label: 'Wrong region',       value: 'Plant assigned to the wrong region — replaced' },
+  { label: 'User request',       value: 'Removed at user request' },
+];
+
 function BadImportCleanupCard() {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
@@ -292,6 +301,7 @@ function BadImportCleanupCard() {
 
   const [selected, setSelected] = useState<Set<string>>(initialSelection);
   const [reason, setReason] = useState('Smart importation error cleanup');
+  const [reasonExpanded, setReasonExpanded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<null | {
@@ -423,24 +433,80 @@ function BadImportCleanupCard() {
             ))}
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">
-              Reason <span className="text-danger">*</span>{' '}
-              <span className="text-[10px]">(min 5 chars — required for audit log)</span>
-            </Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] text-muted-foreground">
+                Reason <span className="text-danger">*</span>{' '}
+                <span className="text-[10px]">(min 5 chars — required for audit log)</span>
+              </Label>
+              <button
+                type="button"
+                onClick={() => setReasonExpanded((v) => !v)}
+                className="text-[10px] text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
+                data-testid="cleanup-reason-expand"
+                aria-expanded={reasonExpanded}
+              >
+                {reasonExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {reasonExpanded ? 'Compact' : 'Expand'}
+              </button>
+            </div>
+
+            {/* Quick-select reason templates */}
+            <div className="flex flex-wrap gap-1" data-testid="cleanup-reason-templates">
+              {REASON_TEMPLATES.map((t) => {
+                const active = reason.trim() === t.value;
+                return (
+                  <button
+                    key={t.label}
+                    type="button"
+                    onClick={() => setReason(t.value)}
+                    className={`text-[10px] rounded-full px-2 py-0.5 border transition-colors ${
+                      active
+                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-800 dark:text-amber-200'
+                        : 'bg-card hover:bg-muted/50 border-border text-muted-foreground'
+                    }`}
+                    data-testid={`cleanup-reason-template-${t.label}`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              rows={2}
+              rows={reasonExpanded ? 4 : 1}
               maxLength={500}
+              placeholder="Pick a template above or type your own…"
               data-testid="cleanup-reason"
               aria-invalid={reason.length > 0 && !reasonValid}
-              className={reason.length > 0 && !reasonValid ? 'border-danger' : ''}
+              className={`text-xs resize-none ${reason.length > 0 && !reasonValid ? 'border-danger' : ''}`}
             />
             {reason.length > 0 && !reasonValid && (
               <p className="text-[10px] text-danger">
                 Reason must be at least 5 characters ({reason.trim().length}/5).
               </p>
+            )}
+
+            {/* Audit preview — mirrors backend, which writes ONE row per plant
+               with reason="[CLEANUP] <reason>" against entity_label=<plant>. */}
+            {selected.size > 0 && reasonValid && (
+              <div
+                className="rounded-md bg-muted/40 border border-border/60 px-2 py-1.5 text-[10px] font-mono text-muted-foreground space-y-0.5"
+                data-testid="cleanup-audit-preview"
+              >
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground/70 not-italic">
+                  audit log preview ({selected.size} {selected.size === 1 ? 'entry' : 'entries'})
+                </div>
+                {Array.from(selected).map((n) => (
+                  <div key={n} className="truncate">
+                    <span className="text-foreground">{n}</span>
+                    {' → reason: '}
+                    <span className="text-foreground">[CLEANUP] {reason.trim()}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -504,6 +570,21 @@ function BadImportCleanupCard() {
                     <li key={n}>{n}</li>
                   ))}
                 </ul>
+                <div
+                  className="rounded-md bg-muted/50 border border-border/60 px-2 py-1.5 text-[11px] font-mono text-muted-foreground space-y-0.5"
+                  data-testid="cleanup-confirm-preview"
+                >
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    audit log — {selected.size} {selected.size === 1 ? 'entry' : 'entries'}
+                  </div>
+                  {Array.from(selected).map((n) => (
+                    <div key={n} className="truncate">
+                      <span className="text-foreground">{n}</span>
+                      {' → reason: '}
+                      <span className="text-foreground">[CLEANUP] {reason.trim()}</span>
+                    </div>
+                  ))}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Every well, locator, RO train, reading, replacement log, and
                   user-plant assignment for these plants will be removed. The
@@ -550,42 +631,61 @@ function PlantsPanel() {
   return (
     <div className="space-y-2">
       {isAdmin && <BadImportCleanupCard />}
-      <div className="relative">
-        <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or address…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-8"
-          data-testid="admin-plants-search"
-        />
+      {/* Sticky search keeps Search-by-name accessible while scrolling the list. */}
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-1 bg-background/85 backdrop-blur-sm border-b border-border/40">
+        <div className="relative">
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by name or address…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-8"
+            data-testid="admin-plants-search"
+          />
+          {query && (
+            <span className="absolute right-2.5 top-2 text-[10px] text-muted-foreground" data-testid="admin-plants-count">
+              {filtered.length} / {plants?.length ?? 0}
+            </span>
+          )}
+        </div>
       </div>
-      {filtered.map((p) => (
-        <Card key={p.id} className="p-3" data-testid={`admin-plant-card-${p.id}`}>
-          <div className="flex justify-between items-start gap-2">
-            <div className="min-w-0">
-              <div className="font-medium text-sm truncate">{p.name}</div>
-              <div className="text-xs text-muted-foreground truncate">{p.address ?? '—'}</div>
-              <div className="text-xs mt-1 flex flex-wrap gap-x-3">
-                <span>RO trains: <strong>{p.num_ro_trains}</strong></span>
-                <span>Capacity: <strong>{p.design_capacity_m3 ?? '—'} m³</strong></span>
+      {filtered.map((p) => {
+        const active = p.status === 'Active';
+        return (
+          <Card
+            key={p.id}
+            className={`p-3 border-l-4 transition-colors ${
+              active
+                ? 'border-l-emerald-500/70 bg-gradient-to-r from-emerald-50/40 to-transparent dark:from-emerald-950/20'
+                : 'border-l-muted-foreground/40 bg-muted/20 opacity-90'
+            }`}
+            data-testid={`admin-plant-card-${p.id}`}
+          >
+            <div className="flex justify-between items-start gap-2">
+              <div className="min-w-0">
+                <div className="font-medium text-sm truncate">{p.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{p.address ?? '—'}</div>
+                <div className="text-xs mt-1 flex flex-wrap gap-x-3">
+                  <span>RO trains: <strong>{p.num_ro_trains}</strong></span>
+                  <span>Capacity: <strong>{p.design_capacity_m3 ?? '—'} m³</strong></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <StatusPill tone={active ? 'accent' : 'muted'}>{p.status}</StatusPill>
+                <DeleteEntityMenu
+                  kind="plant"
+                  id={p.id}
+                  label={p.name}
+                  canSoftDelete={active}
+                  canHardDelete
+                  invalidateKeys={[['plants']]}
+                  compact
+                />
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <StatusPill tone={p.status === 'Active' ? 'accent' : 'muted'}>{p.status}</StatusPill>
-              <DeleteEntityMenu
-                kind="plant"
-                id={p.id}
-                label={p.name}
-                canSoftDelete={p.status === 'Active'}
-                canHardDelete
-                invalidateKeys={[['plants']]}
-                compact
-              />
-            </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
       {filtered.length === 0 && (
         <Card className="p-4 text-center text-xs text-muted-foreground">No plants</Card>
       )}

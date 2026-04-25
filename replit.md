@@ -42,3 +42,10 @@ For production, the frontend expects to talk to a hosted FastAPI backend (set `R
 `StatCard` supports `size: 'default'|'lg'`, `trend: number|null` (% vs yesterday rendered via `TrendBadge`), `tone: 'accent'|'warn'|'danger'` (drives gradient bg + icon color), `calc + calcTooltip` (sky tint + tooltip explaining the formula), `accent` (icon color override), `threshold` (limit hint).
 
 A red **NRW alert banner** appears above the clusters whenever `nrw > 20`, clickable to open the NRW trend modal. Yesterday baselines for trend deltas come from three additional Supabase queries (`yLocators`, `yWells`, `yPower`) bounded by `gte(yesterday) + lt(today)`. KPI pinning/customization was intentionally not implemented (would require user-scoped storage).
+
+## Admin → Plants tab
+
+`PlantsPanel` in `frontend/src/pages/Admin.tsx` renders:
+- `BadImportCleanupCard` (admin-only) — multi-select cleanup of plants imported by mistake. Has 5 `REASON_TEMPLATES` chips (Smart import error, Duplicate entry, Test data, Wrong region, User request) above a compact reason field that toggles between `rows={1}` and `rows={4}` via Expand/Compact button. A live "audit log preview" block shows one row per selected plant in the form `<plant> → reason: [CLEANUP] <reason>`, mirroring the backend contract (`/api/admin/plants/cleanup` writes one audit row per plant with `reason="[CLEANUP] <reason>"` against `entity_label=<plant>`). The same preview renders inside the `AlertDialog` confirm screen.
+- A **sticky search** bar (`sticky top-0 z-20` with `backdrop-blur`) with a "filtered/total" counter when a query is active.
+- Plant cards with **status color coding**: emerald `border-l-4` + subtle gradient for `Active`, muted gray + `bg-muted/20` for `Inactive`. Per-row delete still goes through `DeleteEntityMenu` (soft+hard with audit). Bulk-delete on the entire plants list was intentionally NOT added — destructive multi-select on every plant would be a foot-gun; the cleanup card already covers the smart-import-mistake case.
