@@ -26,7 +26,7 @@ import { toast } from '@/components/ui/sonner';
 import {
   ShieldAlert, Users, Building2, Search, ClipboardList, Sparkles, Loader2, Trash2, Hourglass,
   ChevronDown, ChevronUp, Database, Copy, CheckCircle2, AlertTriangle, RefreshCcw, FileCode,
-  Download,
+  Download, ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -971,6 +971,39 @@ function MigrationsPanel() {
     if (Object.keys(fresh).length > 0) persistShas(fresh);
   };
 
+  // Build a deep link to the Supabase Dashboard SQL editor for this project.
+  // We prefer the explicit VITE_SUPABASE_PROJECT_ID (already in .env), and
+  // fall back to extracting the subdomain from VITE_SUPABASE_URL — handy if
+  // someone forgets to set the project-id var in a new environment.
+  // Returns null when neither is configured (button is then hidden rather
+  // than producing a broken supabase.com/dashboard/project//sql/new link).
+  const supabaseSqlEditorUrl = useMemo<string | null>(() => {
+    const explicit = import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined;
+    let ref = explicit?.trim() || '';
+    if (!ref) {
+      const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
+      const m = url.match(/^https?:\/\/([a-z0-9-]+)\.supabase\.co/i);
+      if (m) ref = m[1];
+    }
+    if (!ref) return null;
+    return `https://supabase.com/dashboard/project/${ref}/sql/new`;
+  }, []);
+
+  // Copy SQL to clipboard, then open the Supabase SQL editor in a new tab.
+  // We do the copy first so the open-in-new-tab user-gesture isn't broken by
+  // a slow clipboard write, and we toast either way so the user knows what
+  // landed in their clipboard before the editor finishes loading.
+  const openInSupabase = async (filename: string, sql: string) => {
+    if (!supabaseSqlEditorUrl) return;
+    try {
+      await navigator.clipboard.writeText(sql);
+      toast.success(`Copied ${filename} — paste into the Supabase SQL editor that just opened`);
+    } catch {
+      toast.message(`Opening Supabase SQL editor — copy ${filename}'s SQL manually from the panel`);
+    }
+    window.open(supabaseSqlEditorUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // Build the concatenated SQL bundle for the current pending/partial set.
   // Returned as { text, sizeKb } so the caller can decide whether to push it
   // to clipboard (copyAllPending) or download it as a file (downloadAllPending).
@@ -1306,6 +1339,17 @@ function MigrationsPanel() {
                       {wasCopied
                         ? <><CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Copied</>
                         : <><Copy className="h-3 w-3 mr-1" /> Copy SQL</>}
+                    </Button>
+                  )}
+                  {f.probed_status !== 'applied' && supabaseSqlEditorUrl && (
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      onClick={() => openInSupabase(f.filename, f.sql)}
+                      title="Copy this file's SQL and open the Supabase SQL editor in a new tab"
+                      data-testid={`migration-open-supabase-${f.filename}`}
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Open in Supabase
                     </Button>
                   )}
                   {f.override_applied ? (
