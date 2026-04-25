@@ -341,7 +341,11 @@ export default function AIImportPanel({
               <Info className="h-3.5 w-3.5 mt-0.5 text-amber-600 shrink-0" />
               <div className="flex-1">
                 Looks like a wellmeter tri-block file — the dedicated{' '}
-                <button onClick={onHandoffWellmeter} className="underline text-amber-700 dark:text-amber-300 font-medium">
+                <button
+                  onClick={() => file && onHandoffWellmeter(file)}
+                  disabled={!file}
+                  className="underline text-amber-700 dark:text-amber-300 font-medium disabled:opacity-50"
+                >
                   Wellmeter Parser
                 </button>{' '}
                 gives better row-level coverage (defective / blend / shutoff detection).
@@ -585,12 +589,14 @@ export default function AIImportPanel({
               <Button
                 size="sm"
                 onClick={runSync}
-                disabled={!canSync || syncCount === 0}
+                disabled={!canSync}
                 data-testid="ai-import-sync-btn"
               >
                 {syncing
                   ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Syncing…</>
-                  : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve & Sync ({syncCount})</>}
+                  : syncCount > 0
+                    ? <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve & Sync ({syncCount})</>
+                    : <><XCircle className="h-3.5 w-3.5 mr-1" /> Record rejections ({rejectCount})</>}
               </Button>
             </div>
             {needsPlant && !plantId && (

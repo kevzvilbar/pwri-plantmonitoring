@@ -393,7 +393,16 @@ export default function Import() {
         </button>
       </div>
 
-      {mode === 'ai' && <AIImportPanel onHandoffWellmeter={() => setMode('wellmeter')} />}
+      {mode === 'ai' && (
+        <AIImportPanel
+          externalFile={file}
+          onFileChange={onChooseFile}
+          onHandoffWellmeter={(f) => {
+            onChooseFile(f);
+            setMode('wellmeter');
+          }}
+        />
+      )}
       {mode === 'wellmeter' && (
         <>
           {/* --- Step 1: Upload --- */}
