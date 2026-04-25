@@ -525,7 +525,7 @@ function WellRow({
               inputMode="decimal"
               value={reading}
               onChange={(e) => setReading(e.target.value)}
-              placeholder="Water"
+              placeholder="Water Meter"
               className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
               data-testid={`well-meter-input-${well.id}`}
               title="Water meter reading (cumulative)"
@@ -538,10 +538,10 @@ function WellRow({
             inputMode="decimal"
             value={reading}
             onChange={(e) => setReading(e.target.value)}
-            placeholder="Meter"
+            placeholder="Water Meter"
             className="h-9 flex-1 sm:flex-initial sm:w-32"
             data-testid={`well-meter-input-${well.id}`}
-            title="Standard well meter reading"
+            title="Water meter reading (cumulative)"
           />
         )}
 
@@ -554,7 +554,7 @@ function WellRow({
               inputMode="decimal"
               value={powerReading}
               onChange={(e) => setPowerReading(e.target.value)}
-              placeholder="Power"
+              placeholder="Power Meter"
               className="h-9 pl-7 w-full border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
               title={`Power meter reading (cumulative) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
               data-testid={`well-power-input-${well.id}`}
