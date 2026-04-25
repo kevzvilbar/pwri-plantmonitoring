@@ -352,11 +352,6 @@ function LocatorsList({ plantId }: { plantId: string }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Single-row delete state.
-  const [singleDelete, setSingleDelete] = useState<{ id: string; name: string } | null>(null);
-  const [singleReason, setSingleReason] = useState('');
-  const [singleBusy, setSingleBusy] = useState(false);
-
   const toggleOne = (id: string) => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -401,24 +396,6 @@ function LocatorsList({ plantId }: { plantId: string }) {
     setBulkReason('');
     setSelected(new Set());
     toast.success(`${ids.length} locator(s) permanently deleted`);
-    qc.invalidateQueries({ queryKey: ['locators', plantId] });
-  };
-
-  const doSingleDelete = async () => {
-    if (!singleDelete) return;
-    if (singleReason.trim().length < 5) {
-      toast.error('Please enter a reason of at least 5 characters.');
-      return;
-    }
-    setSingleBusy(true);
-    const { error } = await supabase.from('locators').delete().eq('id', singleDelete.id);
-    if (error) { setSingleBusy(false); toast.error(error.message); return; }
-    await auditDelete([singleDelete], singleReason.trim(), false);
-    setSingleBusy(false);
-    const name = singleDelete.name;
-    setSingleDelete(null);
-    setSingleReason('');
-    toast.success(`Locator "${name}" deleted`);
     qc.invalidateQueries({ queryKey: ['locators', plantId] });
   };
 
@@ -487,21 +464,19 @@ function LocatorsList({ plantId }: { plantId: string }) {
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
                     </div>
                   </div>
-                  <StatusPill tone={l.status === 'Active' ? 'accent' : 'muted'}>{l.status}</StatusPill>
+                  {l.status === 'Active' ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded-md shrink-0"
+                      title="Active"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Active
+                    </span>
+                  ) : (
+                    <StatusPill tone="muted">{l.status}</StatusPill>
+                  )}
                 </div>
               </div>
-              {isAdmin && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 text-danger hover:bg-danger/10 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); setSingleDelete({ id: l.id, name: l.name }); }}
-                  title="Delete locator"
-                  data-testid={`locator-delete-${l.id}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
             </div>
           </Card>
         );
@@ -538,34 +513,6 @@ function LocatorsList({ plantId }: { plantId: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Single delete dialog */}
-      <AlertDialog open={!!singleDelete} onOpenChange={(o) => !o && !singleBusy && setSingleDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-danger">
-              Permanently delete "{singleDelete?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              All meter readings and meter-replacement logs attached to this
-              locator will be removed via the database cascade rule. This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ReasonField value={singleReason} onChange={setSingleReason} testId="locator-single-reason" />
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={singleBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={doSingleDelete}
-              disabled={singleBusy || singleReason.trim().length < 5}
-              className="bg-danger text-danger-foreground hover:bg-danger/90"
-              data-testid="confirm-locator-single-delete"
-            >
-              {singleBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Delete permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -818,12 +765,10 @@ function WellsList({ plantId }: { plantId: string }) {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Single-row delete state.
-  const [singleDelete, setSingleDelete] = useState<{ id: string; name: string } | null>(null);
-  const [singleReason, setSingleReason] = useState('');
-  const [singleBusy, setSingleBusy] = useState(false);
   // Per-well bypass-toggle in-flight indicator.
   const [bypassBusy, setBypassBusy] = useState<Set<string>>(new Set());
+  // Per-well power-meter toggle in-flight indicator.
+  const [powerBusy, setPowerBusy] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) => {
     const next = new Set(selected);
@@ -879,23 +824,20 @@ function WellsList({ plantId }: { plantId: string }) {
     qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
   };
 
-  const doSingleDelete = async () => {
-    if (!singleDelete) return;
-    if (singleReason.trim().length < 5) {
-      toast.error('Please enter a reason of at least 5 characters.');
-      return;
-    }
-    setSingleBusy(true);
-    const { error } = await supabase.from('wells').delete().eq('id', singleDelete.id);
-    if (error) { setSingleBusy(false); toast.error(error.message); return; }
-    await auditWellDelete([singleDelete], singleReason.trim(), false);
-    setSingleBusy(false);
-    const name = singleDelete.name;
-    setSingleDelete(null);
-    setSingleReason('');
-    toast.success(`Well "${name}" permanently deleted`);
+  // Toggle dedicated power meter on a well (mutually exclusive with Bypass —
+  // the right-side row controls hide each option when the other is active).
+  const togglePowerMeter = async (w: any, on: boolean) => {
+    setPowerBusy(prev => { const n = new Set(prev); n.add(w.id); return n; });
+    const { error } = await supabase
+      .from('wells')
+      .update({ has_power_meter: on })
+      .eq('id', w.id);
+    setPowerBusy(prev => { const n = new Set(prev); n.delete(w.id); return n; });
+    if (error) { toast.error(`Power meter toggle failed: ${error.message}`); return; }
+    toast.success(on
+      ? `${w.name}: power meter enabled — Operations will show a kWh input`
+      : `${w.name}: power meter disabled`);
     qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
   };
 
   const toggleBypass = async (w: any, next: boolean) => {
@@ -1026,58 +968,77 @@ function WellsList({ plantId }: { plantId: string }) {
                       )}
                     </div>
                   </div>
-                  <StatusPill tone={w.status === 'Active' ? 'accent' : 'muted'}>{w.status}</StatusPill>
+                  {w.status === 'Active' ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded-md shrink-0"
+                      title="Active"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Active
+                    </span>
+                  ) : (
+                    <StatusPill tone="muted">{w.status}</StatusPill>
+                  )}
                 </div>
               </div>
-              {/* Right-side row controls: Active dot · Bypass checkbox · Delete */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* Active indicator (green when Active) — minimalist, color-only */}
-                {w.status === 'Active' && (
-                  <span
-                    aria-label="Active"
-                    title="Active"
-                    className="hidden sm:inline-block h-2 w-2 rounded-full bg-emerald-500"
-                  />
-                )}
-                {/* Bypass toggle is hidden when the well has its own dedicated power
-                    meter — per spec, the power meter reading replaces bypass UI. */}
-                {isManager && !w.has_power_meter && (
-                  <label
-                    className={`flex items-center gap-1 h-7 px-1.5 rounded-md border cursor-pointer select-none transition-colors ${
-                      isBypass
-                        ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
-                        : 'bg-background hover:bg-muted'
-                    } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
-                    title={
-                      isBypass
-                        ? 'Bypass on — separate water meter feeds product line. Click to clear.'
-                        : 'Mark as bypass — well injects to product line; meter is tracked separately'
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Checkbox
-                      checked={isBypass}
-                      disabled={bypassPending}
-                      onCheckedChange={(v) => toggleBypass(w, !!v)}
-                      className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
-                      data-testid={`well-bypass-${w.id}`}
-                    />
-                    <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
-                  </label>
-                )}
-                {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0 text-danger hover:bg-danger/10"
-                    onClick={(e) => { e.stopPropagation(); setSingleDelete({ id: w.id, name: w.name }); }}
-                    title="Delete well"
-                    data-testid={`well-delete-${w.id}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
+              {/* Right-side row controls: mutually exclusive Bypass / Power meter
+                  toggles. Hidden during read-only roles. */}
+              {isManager && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Bypass — hidden when this well has a dedicated power meter. */}
+                  {!w.has_power_meter && (
+                    <label
+                      className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+                        isBypass
+                          ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
+                          : 'bg-background border-border hover:bg-muted'
+                      } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
+                      title={
+                        isBypass
+                          ? 'Bypass on — separate water meter feeds product line. Click to clear.'
+                          : 'Mark as bypass — well injects to product line; meter is tracked separately'
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isBypass}
+                        disabled={bypassPending}
+                        onCheckedChange={(v) => toggleBypass(w, !!v)}
+                        className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+                        data-testid={`well-bypass-${w.id}`}
+                      />
+                      <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
+                    </label>
+                  )}
+                  {/* Power meter — hidden when bypass is active (mutually exclusive). */}
+                  {!isBypass && (
+                    <label
+                      className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+                        w.has_power_meter
+                          ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30'
+                          : 'bg-background border-border hover:bg-muted'
+                      } ${powerBusy.has(w.id) ? 'opacity-60 cursor-wait' : ''}`}
+                      title={
+                        w.has_power_meter
+                          ? 'Dedicated power meter on — Operations shows a kWh input. Click to clear.'
+                          : 'Mark this well as having a dedicated power meter'
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={!!w.has_power_meter}
+                        disabled={powerBusy.has(w.id)}
+                        onCheckedChange={(v) => togglePowerMeter(w, !!v)}
+                        className={w.has_power_meter ? 'border-amber-500 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600' : ''}
+                        data-testid={`well-power-${w.id}`}
+                      />
+                      <span className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-0.5">
+                        <Zap className="h-2.5 w-2.5" /> Power
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
         );
@@ -1138,34 +1099,6 @@ function WellsList({ plantId }: { plantId: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Per-row single delete dialog */}
-      <AlertDialog open={!!singleDelete} onOpenChange={(o) => !o && !singleBusy && setSingleDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-danger">
-              Permanently delete "{singleDelete?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              All meter readings, hydraulic history, and meter-replacement logs
-              attached to this well will be removed via the database cascade
-              rule. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ReasonField value={singleReason} onChange={setSingleReason} testId="well-single-reason" />
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={singleBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={doSingleDelete}
-              disabled={singleBusy || singleReason.trim().length < 5}
-              className="bg-danger text-danger-foreground hover:bg-danger/90"
-              data-testid="confirm-well-single-delete"
-            >
-              {singleBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Delete permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

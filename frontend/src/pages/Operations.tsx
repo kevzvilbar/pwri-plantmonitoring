@@ -16,7 +16,7 @@ import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calcula
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap } from 'lucide-react';
 
 const MAX_READINGS_PER_DAY = 3;
 const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
@@ -475,30 +475,52 @@ function WellRow({
         </div>
       </div>
 
-      <Input
-        type="number"
-        step="any"
-        inputMode="decimal"
-        value={reading}
-        onChange={(e) => setReading(e.target.value)}
-        placeholder="Meter"
-        className="w-24 sm:w-32 shrink-0"
-        data-testid={`well-meter-input-${well.id}`}
-        title="Standard well meter reading"
-      />
-
-      {well.has_power_meter && (
+      {/* Water meter — when paired with a Power input we add an icon + tint to
+          remove ambiguity. Plain "Meter" input when there's no power meter. */}
+      {well.has_power_meter ? (
+        <div className="relative shrink-0">
+          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
+          <Input
+            type="number"
+            step="any"
+            inputMode="decimal"
+            value={reading}
+            onChange={(e) => setReading(e.target.value)}
+            placeholder="Water m³"
+            className="w-28 sm:w-32 pl-7 border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+            data-testid={`well-meter-input-${well.id}`}
+            title="Water meter reading (cumulative m³)"
+          />
+        </div>
+      ) : (
         <Input
           type="number"
           step="any"
           inputMode="decimal"
-          value={powerReading}
-          onChange={(e) => setPowerReading(e.target.value)}
-          placeholder="Power kWh"
-          className="w-24 sm:w-28 shrink-0 border-amber-300 focus-visible:ring-amber-300"
-          title={`Previous power: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
-          data-testid={`well-power-input-${well.id}`}
+          value={reading}
+          onChange={(e) => setReading(e.target.value)}
+          placeholder="Meter"
+          className="w-24 sm:w-32 shrink-0"
+          data-testid={`well-meter-input-${well.id}`}
+          title="Standard well meter reading"
         />
+      )}
+
+      {well.has_power_meter && (
+        <div className="relative shrink-0">
+          <Zap className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-600 pointer-events-none" />
+          <Input
+            type="number"
+            step="any"
+            inputMode="decimal"
+            value={powerReading}
+            onChange={(e) => setPowerReading(e.target.value)}
+            placeholder="Power kWh"
+            className="w-28 sm:w-32 pl-7 border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
+            title={`Power meter reading (cumulative kWh) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
+            data-testid={`well-power-input-${well.id}`}
+          />
+        </div>
       )}
 
       <Button
