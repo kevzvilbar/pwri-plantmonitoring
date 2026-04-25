@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
+import { BypassVolumeCard } from '@/components/BypassVolumeCard';
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -331,6 +332,7 @@ export default function Dashboard() {
 
       <PowerChart plantIds={plantIds} />
       <EnergyMixCard plantIds={plantIds} />
+      <BypassVolumeCard plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

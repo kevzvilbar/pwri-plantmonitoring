@@ -418,6 +418,72 @@ async def blending_log_event(body: BlendingAuditRequest):
     return {"ok": True}
 
 
+@api_router.get("/blending/volume")
+async def blending_volume(plant_ids: Optional[str] = None,
+                          days: int = 14):
+    """Daily bypass-injection volume (m³) totals for the given plants.
+
+    Used by the Plant Dashboard "Bypass volume" card to show how much
+    product-line water originates from bypass wells (vs. RO product).
+    `plant_ids` is a comma-separated list; omitted = all plants.
+    """
+    from datetime import timedelta
+    span = max(1, min(int(days or 14), 180))
+    since_date = (datetime.utcnow() - timedelta(days=span - 1)).date().isoformat()
+    today = datetime.utcnow().date().isoformat()
+    q: dict[str, Any] = {"event_date": {"$gte": since_date, "$lte": today}}
+    if plant_ids:
+        ids = [p for p in (s.strip() for s in plant_ids.split(",")) if p]
+        if ids:
+            q["plant_id"] = {"$in": ids}
+
+    by_day: dict[str, float] = {}
+    by_well: dict[str, dict[str, Any]] = {}
+    total = 0.0
+    today_total = 0.0
+
+    async for ev in db.blending_events.find(q, {"_id": 0}):
+        day = str(ev.get("event_date", ""))[:10]
+        vol = float(ev.get("volume_m3") or 0)
+        by_day[day] = by_day.get(day, 0.0) + vol
+        wid = ev.get("well_id") or ""
+        if wid:
+            cur = by_well.setdefault(wid, {
+                "well_id": wid,
+                "well_name": ev.get("well_name") or "",
+                "plant_id": ev.get("plant_id"),
+                "plant_name": ev.get("plant_name") or "",
+                "volume_m3": 0.0,
+            })
+            cur["volume_m3"] += vol
+        total += vol
+        if day == today:
+            today_total += vol
+
+    # Build a continuous daily series so the chart never has gaps.
+    series: list[dict[str, Any]] = []
+    base = datetime.utcnow().date()
+    for i in range(span - 1, -1, -1):
+        d = (base - timedelta(days=i)).isoformat()
+        series.append({"date": d, "volume_m3": round(by_day.get(d, 0.0), 2)})
+
+    by_well_list = sorted(
+        by_well.values(),
+        key=lambda x: x["volume_m3"],
+        reverse=True,
+    )
+    for w in by_well_list:
+        w["volume_m3"] = round(float(w["volume_m3"]), 2)
+
+    return {
+        "days": span,
+        "total_m3": round(total, 2),
+        "today_m3": round(today_total, 2),
+        "series": series,
+        "by_well": by_well_list,
+    }
+
+
 # ---- Unified alerts feed -------------------------------------------------
 
 @api_router.get("/alerts/feed")
