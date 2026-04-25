@@ -1,13 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
-import { format, subDays, startOfDay } from 'date-fns';
+import {
+  format, subDays, startOfDay, startOfWeek, startOfMonth,
+} from 'date-fns';
 import { Sun, Zap } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 type PowerRow = {
   reading_datetime: string;
@@ -16,16 +19,27 @@ type PowerRow = {
   daily_grid_kwh: number | null;
 };
 
+type Timeframe = 'daily' | 'weekly' | 'monthly';
+type Source = 'both' | 'solar' | 'grid';
+type RangeDays = 7 | 14 | 30 | 90;
+
 interface Props {
   plantIds: string[];
 }
 
 export function EnergyMixCard({ plantIds }: Props) {
-  const since = useMemo(() => startOfDay(subDays(new Date(), 14)).toISOString(), []);
+  const [timeframe, setTimeframe] = useState<Timeframe>('daily');
+  const [rangeDays, setRangeDays] = useState<RangeDays>(14);
+  const [source, setSource] = useState<Source>('both');
+
+  const since = useMemo(
+    () => startOfDay(subDays(new Date(), rangeDays)).toISOString(),
+    [rangeDays],
+  );
   const todayStart = useMemo(() => startOfDay(new Date()).toISOString(), []);
 
   const { data } = useQuery({
-    queryKey: ['energy-mix-14d', plantIds, since],
+    queryKey: ['energy-mix', plantIds, since],
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase
@@ -44,13 +58,13 @@ export function EnergyMixCard({ plantIds }: Props) {
 
   const rows = data ?? [];
 
+  // Today's KPIs (always plain daily, regardless of timeframe).
   const todaySolar = rows
     .filter((r) => r.reading_datetime >= todayStart)
     .reduce((s, r) => s + (+(r.daily_solar_kwh ?? 0)), 0);
   const todayGrid = rows
     .filter((r) => r.reading_datetime >= todayStart)
     .reduce((s, r) => {
-      // Pre-migration fallback: split fields are null/0 so use daily_consumption_kwh.
       const splitTotal = (+(r.daily_solar_kwh ?? 0)) + (+(r.daily_grid_kwh ?? 0));
       const grid = +(r.daily_grid_kwh ?? 0);
       const fallback = +(r.daily_consumption_kwh ?? 0);
@@ -59,31 +73,107 @@ export function EnergyMixCard({ plantIds }: Props) {
   const todayTotal = todaySolar + todayGrid;
   const solarShare = todayTotal > 0 ? (todaySolar / todayTotal) * 100 : 0;
 
+  // Group + label rows by selected timeframe.
   const chartData = useMemo(() => {
-    const m = new Map<string, { sortKey: number; solar: number; grid: number }>();
+    const m = new Map<string, { sortKey: number; label: string; solar: number; grid: number }>();
     rows.forEach((r) => {
       const dt = new Date(r.reading_datetime);
-      const key = format(dt, 'MMM d');
+      let bucketStart: Date;
+      let label: string;
+      if (timeframe === 'monthly') {
+        bucketStart = startOfMonth(dt);
+        label = format(bucketStart, 'MMM yyyy');
+      } else if (timeframe === 'weekly') {
+        bucketStart = startOfWeek(dt, { weekStartsOn: 1 });
+        label = `${format(bucketStart, 'MMM d')}`;
+      } else {
+        bucketStart = startOfDay(dt);
+        label = format(bucketStart, 'MMM d');
+      }
+      const key = bucketStart.toISOString();
       const splitTotal = (+(r.daily_solar_kwh ?? 0)) + (+(r.daily_grid_kwh ?? 0));
       const solar = +(r.daily_solar_kwh ?? 0);
       const grid = splitTotal > 0
         ? +(r.daily_grid_kwh ?? 0)
         : +(r.daily_consumption_kwh ?? 0);
-      const cur = m.get(key) ?? { sortKey: dt.getTime(), solar: 0, grid: 0 };
+      const cur = m.get(key) ?? {
+        sortKey: bucketStart.getTime(),
+        label,
+        solar: 0,
+        grid: 0,
+      };
       cur.solar += solar;
       cur.grid += grid;
       m.set(key, cur);
     });
-    return Array.from(m.entries())
-      .sort((a, b) => a[1].sortKey - b[1].sortKey)
-      .map(([date, v]) => ({ date, solar: +v.solar.toFixed(1), grid: +v.grid.toFixed(1) }));
-  }, [rows]);
+    return Array.from(m.values())
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map((v) => ({
+        date: v.label,
+        solar: +v.solar.toFixed(1),
+        grid: +v.grid.toFixed(1),
+      }));
+  }, [rows, timeframe]);
+
+  const showSolar = source !== 'grid';
+  const showGrid = source !== 'solar';
+
+  const rangeLabel =
+    timeframe === 'monthly' ? 'monthly totals'
+    : timeframe === 'weekly' ? 'weekly totals'
+    : 'daily totals';
 
   return (
     <Card className="p-3" data-testid="energy-mix-card">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
-        <h2 className="text-sm font-semibold">Energy Mix · last 14d</h2>
+        <h2 className="text-sm font-semibold">
+          Energy Mix · last {rangeDays}d <span className="text-muted-foreground font-normal">· {rangeLabel}</span>
+        </h2>
         <span className="text-[10px] text-muted-foreground">Solar vs Grid (kWh)</span>
+      </div>
+
+      {/* Filter controls */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <FilterGroup label="View">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={timeframe}
+            onValueChange={(v) => v && setTimeframe(v as Timeframe)}
+            data-testid="energy-timeframe"
+          >
+            <ToggleGroupItem value="daily" className="h-7 px-2 text-[11px]">Daily</ToggleGroupItem>
+            <ToggleGroupItem value="weekly" className="h-7 px-2 text-[11px]">Weekly</ToggleGroupItem>
+            <ToggleGroupItem value="monthly" className="h-7 px-2 text-[11px]">Monthly</ToggleGroupItem>
+          </ToggleGroup>
+        </FilterGroup>
+        <FilterGroup label="Range">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={String(rangeDays)}
+            onValueChange={(v) => v && setRangeDays(Number(v) as RangeDays)}
+            data-testid="energy-range"
+          >
+            <ToggleGroupItem value="7" className="h-7 px-2 text-[11px]">7d</ToggleGroupItem>
+            <ToggleGroupItem value="14" className="h-7 px-2 text-[11px]">14d</ToggleGroupItem>
+            <ToggleGroupItem value="30" className="h-7 px-2 text-[11px]">30d</ToggleGroupItem>
+            <ToggleGroupItem value="90" className="h-7 px-2 text-[11px]">90d</ToggleGroupItem>
+          </ToggleGroup>
+        </FilterGroup>
+        <FilterGroup label="Source">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={source}
+            onValueChange={(v) => v && setSource(v as Source)}
+            data-testid="energy-source"
+          >
+            <ToggleGroupItem value="both" className="h-7 px-2 text-[11px]">Both</ToggleGroupItem>
+            <ToggleGroupItem value="solar" className="h-7 px-2 text-[11px]">Solar</ToggleGroupItem>
+            <ToggleGroupItem value="grid" className="h-7 px-2 text-[11px]">Grid</ToggleGroupItem>
+          </ToggleGroup>
+        </FilterGroup>
       </div>
 
       {/* Today KPI tiles */}
@@ -114,7 +204,7 @@ export function EnergyMixCard({ plantIds }: Props) {
       <div className="h-44">
         {chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-            No power readings in the last 14 days
+            No power readings in the last {rangeDays} days
           </div>
         ) : (
           <ResponsiveContainer>
@@ -131,13 +221,26 @@ export function EnergyMixCard({ plantIds }: Props) {
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="solar" stackId="energy" fill="#facc15" name="Solar (kWh)" />
-              <Bar dataKey="grid" stackId="energy" fill="hsl(var(--chart-6))" name="Grid (kWh)" />
+              {showSolar && (
+                <Bar dataKey="solar" stackId="energy" fill="#facc15" name="Solar (kWh)" />
+              )}
+              {showGrid && (
+                <Bar dataKey="grid" stackId="energy" fill="hsl(var(--chart-6))" name="Grid (kWh)" />
+              )}
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
     </Card>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      {children}
+    </div>
   );
 }
 

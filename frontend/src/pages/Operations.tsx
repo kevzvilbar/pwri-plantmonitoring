@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -581,27 +582,26 @@ function WellRow({
         </Button>
       )}
 
-      {/* Mark As Bypass Well toggle */}
-      <div className="flex flex-col items-center shrink-0">
-        <span
-          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none mb-0.5"
-          data-testid={`bypass-toggle-label-${well.id}`}
-        >
-          Mark as Bypass
-        </span>
-        <Button
-          variant={isBlending ? 'default' : 'outline'}
-          size="sm"
-          className={`h-8 ${isBlending ? 'bg-violet-600 hover:bg-violet-600/90' : ''}`}
-          onClick={toggleBlending}
+      {/* Mark As Bypass Well — compact checkbox */}
+      <label
+        className={`flex items-center gap-1.5 shrink-0 h-8 px-2 rounded-md border cursor-pointer select-none transition-colors ${
+          isBlending
+            ? 'bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100'
+            : 'bg-background hover:bg-muted'
+        } ${togglingBlend ? 'opacity-60 cursor-wait' : ''}`}
+        title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
+        data-testid={`bypass-toggle-label-${well.id}`}
+      >
+        <Checkbox
+          checked={isBlending}
           disabled={togglingBlend}
-          title={isBlending ? 'Remove Bypass Tag' : 'Mark As Bypass Well (Injects To Product Water)'}
+          onCheckedChange={() => toggleBlending()}
+          className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
           data-testid={`blending-toggle-${well.id}`}
-        >
-          <Waves className="h-3.5 w-3.5 mr-1" />
-          {isBlending ? 'Bypass On' : 'Mark As Bypass'}
-        </Button>
-      </div>
+        />
+        <Waves className="h-3 w-3" />
+        <span className="text-xs font-medium whitespace-nowrap">Bypass</span>
+      </label>
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
