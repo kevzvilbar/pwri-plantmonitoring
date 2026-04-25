@@ -58,34 +58,120 @@ _RE_ADD_COLUMN = re.compile(
 _RE_NOISE = re.compile(r"^\s*(--|/\*|\*)", re.MULTILINE)
 
 
-def _parse_migration(sql: str) -> dict[str, Any]:
-    """Return {tables: [...], columns: [(table, column), ...]} for a SQL file.
+# Tokens that start a table-level constraint (NOT a column definition) inside
+# a CREATE TABLE block. We skip any segment whose first token matches one of
+# these so e.g. `primary key (id, plant_id)` doesn't get probed as a column.
+_CONSTRAINT_HEADS = {
+    "primary", "foreign", "unique", "check", "constraint",
+    "exclude", "like",
+}
 
-    We strip line comments first so commented-out statements don't get probed.
+
+def _split_top_level_commas(body: str) -> list[str]:
+    """Split a CREATE TABLE body at commas that are NOT inside parens.
+
+    Needed because `numeric(10,2)` and `check (a in (1, 2))` contain commas
+    that must not split column definitions.
     """
-    # Strip simple line comments to reduce false positives. We don't fully
-    # parse SQL — just enough to find the canonical CREATE TABLE / ADD COLUMN
-    # statements that an applied migration must have produced.
+    out: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in body:
+        if ch == "(":
+            depth += 1
+            buf.append(ch)
+        elif ch == ")":
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            out.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+def _extract_table_columns(create_block: str) -> list[str]:
+    """Given the parenthesised body of a CREATE TABLE, return column names."""
+    cols: list[str] = []
+    seen: set[str] = set()
+    for segment in _split_top_level_commas(create_block):
+        if not segment:
+            continue
+        # First identifier token of the segment.
+        m = re.match(r'\s*"?([a-z_][a-z0-9_]*)"?\b', segment, re.IGNORECASE)
+        if not m:
+            continue
+        first = m.group(1).lower()
+        if first in _CONSTRAINT_HEADS:
+            continue
+        if first in seen:
+            continue
+        seen.add(first)
+        cols.append(first)
+    return cols
+
+
+def _find_create_table_blocks(cleaned_sql: str) -> list[tuple[str, str]]:
+    """Return [(table_name, paren_body), ...] for each CREATE TABLE in the SQL.
+
+    Uses paren-matching so we capture the full block even when it spans many
+    lines and contains nested parens (e.g. CHECK constraints, numeric(10,2)).
+    """
+    out: list[tuple[str, str]] = []
+    for m in _RE_CREATE_TABLE.finditer(cleaned_sql):
+        name = m.group(1).lower()
+        # Find the opening paren after the table name.
+        open_idx = cleaned_sql.find("(", m.end())
+        if open_idx < 0:
+            continue
+        depth = 1
+        i = open_idx + 1
+        while i < len(cleaned_sql) and depth > 0:
+            ch = cleaned_sql[i]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+        if depth != 0:
+            continue
+        body = cleaned_sql[open_idx + 1 : i - 1]
+        out.append((name, body))
+    return out
+
+
+def _parse_migration(sql: str) -> dict[str, Any]:
+    """Parse the SQL file into the structures we'll probe.
+
+    Returns:
+        tables_with_cols: [(table, [col, col, ...]), ...]
+            Tables created by this file plus the columns each one declares.
+        added_columns: [(table, column), ...]
+            Columns added by ALTER TABLE … ADD COLUMN statements.
+    """
+    # Strip line comments so commented-out statements don't get probed.
     cleaned_lines = []
     for line in sql.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("--"):
+        if line.strip().startswith("--"):
             continue
         cleaned_lines.append(line)
     cleaned = "\n".join(cleaned_lines)
 
-    tables: list[str] = []
-    seen: set[str] = set()
-    for m in _RE_CREATE_TABLE.finditer(cleaned):
-        name = m.group(1).lower()
-        if name in seen:
+    tables_with_cols: list[tuple[str, list[str]]] = []
+    seen_tables: set[str] = set()
+    for table_name, body in _find_create_table_blocks(cleaned):
+        if table_name in seen_tables:
             continue
-        seen.add(name)
-        tables.append(name)
+        seen_tables.add(table_name)
+        tables_with_cols.append((table_name, _extract_table_columns(body)))
 
     # Walk each ALTER TABLE … ADD COLUMN … chunk independently so we attribute
     # the column to the right table when a file has multiple ALTERs.
-    columns: list[tuple[str, str]] = []
+    added_columns: list[tuple[str, str]] = []
     column_seen: set[tuple[str, str]] = set()
     for alter in re.finditer(
         r"alter\s+table\s+(?:public\.)?([a-z_][a-z0-9_]*)(.*?)(?=alter\s+table|$)",
@@ -100,9 +186,9 @@ def _parse_migration(sql: str) -> dict[str, Any]:
             if key in column_seen:
                 continue
             column_seen.add(key)
-            columns.append(key)
+            added_columns.append(key)
 
-    return {"tables": tables, "columns": columns}
+    return {"tables_with_cols": tables_with_cols, "added_columns": added_columns}
 
 
 # ---------------------------------------------------------------------------
@@ -174,25 +260,62 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
         sql = path.read_text(encoding="utf-8", errors="replace")
         parsed = _parse_migration(sql)
 
+        # ---- CREATE TABLE diffs (table + per-column existence) -----------
         table_probes: list[dict[str, Any]] = []
-        for t in parsed["tables"]:
-            res = _probe_table(client, t)
-            table_probes.append({"name": t, "exists": res["exists"]})
+        all_signals: list[bool] = []  # everything we use to compute status
+        for table_name, expected_cols in parsed["tables_with_cols"]:
+            t_res = _probe_table(client, table_name)
+            table_exists = t_res["exists"]
+            all_signals.append(table_exists)
 
-        column_probes: list[dict[str, Any]] = []
-        for table, col in parsed["columns"]:
+            col_diffs: list[dict[str, Any]] = []
+            missing_cols: list[str] = []
+            present_cols: list[str] = []
+            if table_exists:
+                # Only worth probing columns when the table is there — otherwise
+                # PostgREST will just say "missing table" for every column and
+                # we waste round-trips.
+                for col in expected_cols:
+                    c_res = _probe_column(client, table_name, col)
+                    col_diffs.append({"column": col, "exists": c_res["exists"]})
+                    if c_res["exists"]:
+                        present_cols.append(col)
+                    else:
+                        missing_cols.append(col)
+                    all_signals.append(c_res["exists"])
+            else:
+                # Table missing → every declared column is implicitly missing.
+                # We don't add these to all_signals (the table=False already
+                # contributes), but we still report them so the UI can show
+                # "this file would create N columns".
+                col_diffs = [
+                    {"column": col, "exists": False} for col in expected_cols
+                ]
+                missing_cols = list(expected_cols)
+
+            table_probes.append({
+                "name": table_name,
+                "exists": table_exists,
+                "expected_columns": col_diffs,
+                "missing_columns": missing_cols,
+                "present_columns": present_cols,
+                "expected_count": len(expected_cols),
+            })
+
+        # ---- ALTER TABLE … ADD COLUMN diffs ------------------------------
+        added_column_probes: list[dict[str, Any]] = []
+        for table, col in parsed["added_columns"]:
             res = _probe_column(client, table, col)
-            column_probes.append({"table": table, "column": col, "exists": res["exists"]})
+            added_column_probes.append({
+                "table": table, "column": col, "exists": res["exists"],
+            })
+            all_signals.append(res["exists"])
 
-        all_probes = [p["exists"] for p in table_probes] + [
-            p["exists"] for p in column_probes
-        ]
-
-        if not all_probes:
+        if not all_signals:
             status = "indeterminate"
-        elif all(all_probes):
+        elif all(all_signals):
             status = "applied"
-        elif not any(all_probes):
+        elif not any(all_signals):
             status = "pending"
         else:
             status = "partial"
@@ -200,12 +323,16 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
         summary["total"] += 1
         summary[status] += 1
 
+        # Backwards-compatible flat `column_probes` (added-columns only) is
+        # kept so older clients don't break; tables[].expected_columns carries
+        # the new per-table column diff.
         out.append({
             "filename": path.name,
             "size": path.stat().st_size,
             "status": status,
             "table_probes": table_probes,
-            "column_probes": column_probes,
+            "column_probes": added_column_probes,
+            "added_column_probes": added_column_probes,
             "sql": sql,
         })
 

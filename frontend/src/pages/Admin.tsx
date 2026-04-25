@@ -816,9 +816,17 @@ function AuditLogPanel() {
 // pending file so the Admin can paste it into the Supabase SQL editor.
 // ---------------------------------------------------------------------------
 
+interface MigrationExpectedColumn {
+  column: string;
+  exists: boolean;
+}
 interface MigrationProbeTable {
   name: string;
   exists: boolean;
+  expected_columns?: MigrationExpectedColumn[];
+  missing_columns?: string[];
+  present_columns?: string[];
+  expected_count?: number;
 }
 interface MigrationProbeColumn {
   table: string;
@@ -831,6 +839,7 @@ interface MigrationFile {
   status: 'applied' | 'pending' | 'partial' | 'indeterminate';
   table_probes: MigrationProbeTable[];
   column_probes: MigrationProbeColumn[];
+  added_column_probes?: MigrationProbeColumn[];
   sql: string;
 }
 interface MigrationsResponse {
@@ -1024,31 +1033,78 @@ function MigrationsPanel() {
               </div>
 
               {(f.table_probes.length > 0 || f.column_probes.length > 0) && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {f.table_probes.map((p) => (
-                    <span
-                      key={`t-${p.name}`}
-                      className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
-                        p.exists
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
-                      }`}
-                    >
-                      table {p.name} {p.exists ? '✓' : '✗'}
-                    </span>
-                  ))}
-                  {f.column_probes.map((p) => (
-                    <span
-                      key={`c-${p.table}.${p.column}`}
-                      className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
-                        p.exists
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
-                      }`}
-                    >
-                      {p.table}.{p.column} {p.exists ? '✓' : '✗'}
-                    </span>
-                  ))}
+                <div className="mt-2 space-y-1.5">
+                  {f.table_probes.map((p) => {
+                    const expected = p.expected_columns ?? [];
+                    const present = (p.present_columns ?? []).length;
+                    const missing = (p.missing_columns ?? []).length;
+                    const hasDrift = p.exists && missing > 0;
+                    return (
+                      <div
+                        key={`t-${p.name}`}
+                        className={`rounded-md border px-2 py-1.5 text-[11px] ${
+                          !p.exists
+                            ? 'bg-rose-500/5 border-rose-500/30'
+                            : hasDrift
+                              ? 'bg-amber-500/5 border-amber-500/30'
+                              : 'bg-emerald-500/5 border-emerald-500/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                              p.exists
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                            }`}
+                          >
+                            table {p.name} {p.exists ? '✓ present' : '✗ missing'}
+                          </span>
+                          {expected.length > 0 && (
+                            <span className="text-muted-foreground">
+                              {p.exists
+                                ? hasDrift
+                                  ? `${present}/${expected.length} columns present · ${missing} missing`
+                                  : `all ${expected.length} columns present`
+                                : `would create ${expected.length} columns`}
+                            </span>
+                          )}
+                        </div>
+                        {hasDrift && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(p.missing_columns ?? []).map((c) => (
+                              <span
+                                key={`m-${p.name}.${c}`}
+                                className="text-[10px] rounded-full px-1.5 py-0.5 border bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200"
+                                title={`Column ${p.name}.${c} declared in this migration is not present in the live table`}
+                              >
+                                {p.name}.{c} ✗
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {f.column_probes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground self-center mr-1">
+                        Added columns:
+                      </span>
+                      {f.column_probes.map((p) => (
+                        <span
+                          key={`c-${p.table}.${p.column}`}
+                          className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                            p.exists
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                          }`}
+                        >
+                          {p.table}.{p.column} {p.exists ? '✓' : '✗'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
