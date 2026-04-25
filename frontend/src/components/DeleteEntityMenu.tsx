@@ -138,7 +138,7 @@ export function DeleteEntityMenu({
     }
   };
 
-  const doHard = async (force = false) => {
+  const doHard = async (force = false, archive = false) => {
     if (!reasonValid) {
       toast.error('Please enter a reason of at least 5 characters.');
       return;
@@ -148,13 +148,22 @@ export function DeleteEntityMenu({
       const params = new URLSearchParams();
       if (reason) params.set('reason', reason);
       if (force) params.set('force', 'true');
+      if (archive) params.set('archive', 'true');
       const qs = params.toString() ? `?${params.toString()}` : '';
-      await api('DELETE', `/api/admin/${entityPath}/${id}${qs}`);
-      toast.success(
-        force
-          ? `${copy.label[0].toUpperCase() + copy.label.slice(1)} force-deleted (dependencies orphaned)`
-          : `${copy.label[0].toUpperCase() + copy.label.slice(1)} permanently deleted`
+      const result = await api<{ archived?: boolean; archived_counts?: Record<string, number> }>(
+        'DELETE', `/api/admin/${entityPath}/${id}${qs}`,
       );
+      const cap = copy.label[0].toUpperCase() + copy.label.slice(1);
+      if (archive && result?.archived) {
+        const total = Object.values(result.archived_counts ?? {}).reduce(
+          (a, b) => a + (Number(b) || 0), 0,
+        );
+        toast.success(`${cap} deleted — ${total} dependent row(s) archived`);
+      } else if (force) {
+        toast.success(`${cap} force-deleted (dependencies orphaned)`);
+      } else {
+        toast.success(`${cap} permanently deleted`);
+      }
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
       resetAndClose();
@@ -367,6 +376,19 @@ export function DeleteEntityMenu({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-force-delete">Cancel</AlertDialogCancel>
+            {kind === 'plant' && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => doHard(true, true)}
+                disabled={busy || !forceAck || !reasonValid}
+                className="border-amber-500 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                data-testid="archive-and-force-delete"
+              >
+                {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                Archive readings &amp; delete
+              </Button>
+            )}
             <AlertDialogAction
               onClick={() => doHard(true)}
               disabled={busy || !forceAck || !reasonValid}

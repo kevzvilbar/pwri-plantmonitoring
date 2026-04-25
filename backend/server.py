@@ -551,8 +551,11 @@ async def admin_plant_soft_delete(plant_id: str,
 async def admin_plant_hard_delete(plant_id: str,
                                    reason: Optional[str] = None,
                                    force: bool = False,
+                                   archive: bool = False,
                                    authorization: Optional[str] = Header(None)):
-    return hard_delete_plant(authorization, plant_id, reason=reason, force=force)
+    return hard_delete_plant(
+        authorization, plant_id, reason=reason, force=force, archive=archive,
+    )
 
 
 @api_router.post("/admin/plants/cleanup")

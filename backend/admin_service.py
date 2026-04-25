@@ -392,8 +392,15 @@ def soft_delete_plant(
 def hard_delete_plant(
     authorization: Optional[str], plant_id: str,
     reason: Optional[str] = None, force: bool = False,
+    archive: bool = False,
 ) -> dict[str, Any]:
-    """Admin + Manager. Only Admin may `force=True` over a dependency block."""
+    """Admin + Manager. Only Admin may `force=True` over a dependency block.
+
+    When `archive=True` (Admin + force only), every row in the no-cascade
+    child tables is snapshotted into `archived_plant_data` as JSONB before
+    being deleted, so historical readings/incidents/PMs survive the hard
+    delete for compliance review.
+    """
     token = _bearer_token(authorization)
     caller = _caller_identity(token)
     _require_roles(caller, {"Admin", "Manager"})
@@ -443,8 +450,65 @@ def hard_delete_plant(
         except Exception:  # noqa: BLE001
             log.debug("plant_assignments scrub failed", exc_info=True)
 
+        archived_counts: dict[str, int] = {}
         for table in _PLANT_NO_CASCADE_CHILDREN:
             try:
+                # Optionally snapshot rows into archived_plant_data BEFORE
+                # we wipe them. Best-effort: if the archive table is missing
+                # (migration not yet applied), the user told us not to
+                # archive, or the snapshot fails, we still proceed with the
+                # delete so the original force-delete contract holds.
+                if archive and is_admin:
+                    try:
+                        snap = (
+                            client.table(table)
+                            .select("*")
+                            .eq("plant_id", plant_id)
+                            .execute()
+                        )
+                        rows = snap.data or []
+                        if rows:
+                            payload = [
+                                {
+                                    "plant_id": plant_id,
+                                    "plant_name": label,
+                                    "source_table": table,
+                                    "source_row_id": (
+                                        r.get("id") if isinstance(r.get("id"), str) else None
+                                    ),
+                                    "payload": r,
+                                    "archived_by": caller.get("user_id"),
+                                    "reason": (reason or "").strip()[:500] or None,
+                                }
+                                for r in rows
+                            ]
+                            try:
+                                client.table("archived_plant_data").insert(payload).execute()
+                                archived_counts[table] = len(payload)
+                            except Exception as e:  # noqa: BLE001
+                                msg = str(e)
+                                if (
+                                    "archived_plant_data" in msg
+                                    and ("does not exist" in msg or "schema cache" in msg.lower())
+                                ):
+                                    log.warning(
+                                        "archived_plant_data table missing — run "
+                                        "supabase/migrations/20260425_archived_plant_data.sql"
+                                    )
+                                else:
+                                    log.exception("archive insert failed for %s", table)
+                                    raise HTTPException(
+                                        status_code=500,
+                                        detail=(
+                                            f"Failed archiving {table} for plant "
+                                            f"'{label or plant_id}': {e}"
+                                        ),
+                                    )
+                    except HTTPException:
+                        raise
+                    except Exception:  # noqa: BLE001
+                        log.exception("archive snapshot read failed for %s", table)
+
                 res = (
                     client.table(table)
                     .delete(count="exact")
@@ -452,6 +516,8 @@ def hard_delete_plant(
                     .execute()
                 )
                 deleted_counts[table] = int(getattr(res, "count", 0) or 0)
+            except HTTPException:
+                raise
             except Exception as e:  # noqa: BLE001
                 msg = str(e)
                 if "does not exist" in msg or "relation" in msg.lower():
@@ -478,8 +544,12 @@ def hard_delete_plant(
         "ok": True,
         "mode": "hard",
         "forced": bool(force and deps["blocking"]),
+        "archived": bool(archive and is_admin and force and deps["blocking"]),
         "plant_id": plant_id,
         "deleted_counts": deleted_counts,
+        "archived_counts": (
+            archived_counts if archive and is_admin and force and deps["blocking"] else {}
+        ),
     }
 
 
