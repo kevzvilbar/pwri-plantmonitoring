@@ -1080,6 +1080,60 @@ function MigrationsPanel() {
     }
   };
 
+  // Export the apply-history audit trail as a JSON file. Useful for
+  // archiving "this migration ran in this environment at this time" without
+  // granting Supabase Dashboard access, and for diff-ing two environments
+  // (e.g. staging vs prod) to spot which migrations one ran but the other
+  // hasn't. Only entries with a recorded apply event are included — files
+  // applied via psql / dashboard without going through Mark-applied won't
+  // appear, mirroring backend honesty about what we actually know.
+  const downloadHistory = () => {
+    const entries: Record<string, MigrationApplyHistory> = {};
+    for (const f of data?.files ?? []) {
+      if (f.apply_history?.applied_at) {
+        entries[f.filename] = f.apply_history;
+      }
+    }
+    const count = Object.keys(entries).length;
+    if (count === 0) {
+      toast.info('No apply-history entries to export yet.');
+      return;
+    }
+    const payload = {
+      exported_at: new Date().toISOString(),
+      migrations_dir: data?.migrations_dir ?? null,
+      history: entries,
+    };
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'Z');
+    const filename = `pwri-migration-apply-history-${stamp}.json`;
+    try {
+      const text = JSON.stringify(payload, null, 2);
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Defer revoke so Safari has time to actually start the download.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success(
+        `Exported ${count} apply-history entr${count === 1 ? 'y' : 'ies'} → ${filename}`,
+      );
+    } catch (e: any) {
+      toast.error(`Export failed: ${e?.message ?? e}`);
+    }
+  };
+
+  // True iff at least one file has a recorded apply event — used to gate
+  // visibility of the Export-history button so we don't offer a download
+  // that would just produce {history: {}}.
+  const hasAnyHistory = useMemo(
+    () => (data?.files ?? []).some((f) => !!f.apply_history?.applied_at),
+    [data],
+  );
+
   // Save the same bundle as a versioned .sql file. Filenames embed an
   // ISO-style timestamp (no colons — Windows-friendly) so multiple runs
   // don't overwrite each other and you have a clear audit trail of exactly
@@ -1274,6 +1328,17 @@ function MigrationsPanel() {
                 <Download className="h-3 w-3 mr-1" />
                 Download .sql
               </Button>
+              {hasAnyHistory && (
+                <Button
+                  size="sm" variant="outline" className="h-7"
+                  onClick={downloadHistory}
+                  title="Export the apply-history audit trail as a JSON file (one entry per migration that has been marked applied locally)"
+                  data-testid="migrations-export-history"
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  Export history
+                </Button>
+              )}
               <Button
                 size="sm" variant="outline" className="h-7"
                 disabled={isFetching}
