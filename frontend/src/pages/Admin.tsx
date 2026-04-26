@@ -28,7 +28,7 @@ import {
   ChevronDown, ChevronUp, Database, Copy, CheckCircle2, AlertTriangle, RefreshCcw, FileCode,
   Download, ExternalLink,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 export default function Admin() {
   const { isAdmin, isManager, loading } = useAuth();
@@ -1389,19 +1389,41 @@ function MigrationsPanel() {
                   </Button>
                 </div>
               </div>
-              {f.override_applied && f.manual_override && (
-                <div className="mt-1.5 text-[11px] text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-400/40 text-[10px]">
-                    manual override
-                  </Badge>
-                  Marked applied by <strong className="not-italic">{f.manual_override.by_label ?? 'admin'}</strong>
-                  {' on '}
-                  {format(new Date(f.manual_override.marked_at), 'yyyy-MM-dd HH:mm')}
-                  {f.manual_override.note ? ` — "${f.manual_override.note}"` : ''}
-                  {' · probe says '}
-                  <code>{f.probed_status}</code>
-                </div>
-              )}
+              {f.override_applied && f.manual_override && (() => {
+                // Defensive parse — older overrides without marked_at would
+                // otherwise crash formatDistanceToNow with "Invalid time value".
+                const marked = new Date(f.manual_override.marked_at);
+                const validMarked = !Number.isNaN(marked.getTime());
+                const absolute = validMarked
+                  ? format(marked, 'yyyy-MM-dd HH:mm')
+                  : 'unknown time';
+                const relative = validMarked
+                  ? formatDistanceToNow(marked, { addSuffix: true })
+                  : '';
+                return (
+                  <div className="mt-1.5 text-[11px] text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-400/40 text-[10px]">
+                      manual override
+                    </Badge>
+                    {validMarked && (
+                      <Badge
+                        variant="outline"
+                        className="bg-sky-500/5 text-sky-700 border-sky-400/30 text-[10px] not-italic font-mono"
+                        title={`Marked applied at ${absolute} (local time)`}
+                        data-testid={`migration-override-age-${f.filename}`}
+                      >
+                        {relative}
+                      </Badge>
+                    )}
+                    Marked applied by <strong className="not-italic">{f.manual_override.by_label ?? 'admin'}</strong>
+                    {' on '}
+                    <span title={validMarked ? marked.toISOString() : undefined}>{absolute}</span>
+                    {f.manual_override.note ? ` — "${f.manual_override.note}"` : ''}
+                    {' · probe says '}
+                    <code>{f.probed_status}</code>
+                  </div>
+                );
+              })()}
 
               {(f.table_probes.length > 0 || f.column_probes.length > 0) && (
                 <div className="mt-2 space-y-1.5">
