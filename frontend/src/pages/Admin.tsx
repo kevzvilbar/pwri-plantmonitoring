@@ -863,6 +863,10 @@ interface MigrationsResponse {
     indeterminate: number;
   };
   files: MigrationFile[];
+  // Filenames whose manual override was auto-removed this fetch because the
+  // probe now confirms the migration is applied for real. The frontend uses
+  // this to surface a one-time confirmation toast on explicit Re-check.
+  purged_overrides?: string[];
 }
 
 // localStorage key for the per-file SHA snapshot the user has acknowledged.
@@ -969,6 +973,20 @@ function MigrationsPanel() {
       if (f.sha256) fresh[f.filename] = f.sha256;
     }
     if (Object.keys(fresh).length > 0) persistShas(fresh);
+
+    // Surface auto-cleanup so the user knows the override store was tidied
+    // up (otherwise the override silently disappears and they'd wonder
+    // whether their earlier Mark-applied click actually registered).
+    const purged = result.data?.purged_overrides ?? [];
+    if (purged.length > 0) {
+      const list = purged.length <= 3
+        ? purged.join(', ')
+        : `${purged.slice(0, 3).join(', ')} +${purged.length - 3} more`;
+      toast.success(
+        `Cleaned up ${purged.length} stale override${purged.length === 1 ? '' : 's'} ` +
+        `(probe now confirms applied): ${list}`,
+      );
+    }
   };
 
   // Build a deep link to the Supabase Dashboard SQL editor for this project.

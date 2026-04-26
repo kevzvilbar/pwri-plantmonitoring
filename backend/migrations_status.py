@@ -289,6 +289,10 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
     files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     out: list[dict[str, Any]] = []
     summary = {"total": 0, "applied": 0, "pending": 0, "partial": 0, "indeterminate": 0}
+    # Filenames whose override entry we auto-purged this call because the
+    # live probe now confirms the migration is applied for real. Returned
+    # to the client so the UI can surface a one-time confirmation toast.
+    purged_overrides: list[str] = []
 
     for path in files:
         sql = path.read_text(encoding="utf-8", errors="replace")
@@ -356,8 +360,18 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
 
         # Apply manual override (only meaningful for non-applied files —
         # there's nothing to mark on a file the parser already verified).
+        # If the live probe now says applied AND we still have an override
+        # entry, the override has done its job and is just clutter — drop it
+        # so the override store doesn't accumulate stale assertions for
+        # migrations that were eventually run for real.
         override = overrides.get(path.name)
-        if override and probed_status != "applied":
+        if override and probed_status == "applied":
+            overrides.pop(path.name, None)
+            purged_overrides.append(path.name)
+            override = None
+            override_applied = False
+            status = "applied"
+        elif override and probed_status != "applied":
             status = "applied"
             override_applied = True
         else:
@@ -387,10 +401,17 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
             "sql": sql,
         })
 
+    # Persist override store only if we actually removed anything — keeps the
+    # mtime stable on the file (and sidesteps a redundant fsync) when no
+    # cleanup happened, which is the overwhelmingly common case.
+    if purged_overrides:
+        _save_overrides(overrides)
+
     return {
         "migrations_dir": str(MIGRATIONS_DIR),
         "summary": summary,
         "files": out,
+        "purged_overrides": purged_overrides,
     }
 
 
