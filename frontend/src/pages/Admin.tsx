@@ -840,6 +840,12 @@ interface MigrationOverride {
   by_label: string | null;
   note: string | null;
 }
+interface MigrationApplyHistory {
+  applied_at: string | null;
+  by_label: string | null;
+  note: string | null;
+  source: string | null;
+}
 interface MigrationFile {
   filename: string;
   size: number;
@@ -848,6 +854,10 @@ interface MigrationFile {
   probed_status?: 'applied' | 'pending' | 'partial' | 'indeterminate';
   manual_override?: MigrationOverride | null;
   override_applied?: boolean;
+  // Permanent record of when this file was first marked applied locally,
+  // preserved across override-purge cleanups. Null for files never run
+  // through the override flow (we don't fabricate a timestamp we don't know).
+  apply_history?: MigrationApplyHistory | null;
   table_probes: MigrationProbeTable[];
   column_probes: MigrationProbeColumn[];
   added_column_probes?: MigrationProbeColumn[];
@@ -1340,6 +1350,37 @@ function MigrationsPanel() {
                       >
                         <AlertTriangle className="h-2.5 w-2.5 mr-1" />
                         modified since last check
+                      </Badge>
+                    );
+                  })()}
+                  {(() => {
+                    // Show "applied locally <relative>" on probe-confirmed
+                    // applied files when we have a recorded apply event in
+                    // history. Hidden when an override is currently active
+                    // (the override line below already shows that timestamp,
+                    // and we don't want two timestamp pills competing).
+                    const h = f.apply_history;
+                    if (!h?.applied_at) return null;
+                    if (f.override_applied) return null;
+                    if (f.probed_status !== 'applied') return null;
+                    const when = new Date(h.applied_at);
+                    if (Number.isNaN(when.getTime())) return null;
+                    const rel = formatDistanceToNow(when, { addSuffix: true });
+                    const abs = format(when, 'yyyy-MM-dd HH:mm');
+                    return (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-emerald-500/5 text-emerald-700 border-emerald-500/30 font-mono"
+                        title={
+                          `First marked applied locally at ${abs} (local time)` +
+                          (h.by_label ? ` by ${h.by_label}` : '') +
+                          (h.note ? `\nNote: "${h.note}"` : '') +
+                          `\nOriginal manual override has since been auto-purged ` +
+                          `because the live probe now confirms the migration.`
+                        }
+                        data-testid={`migration-applied-locally-${f.filename}`}
+                      >
+                        applied {rel}
                       </Badge>
                     );
                   })()}

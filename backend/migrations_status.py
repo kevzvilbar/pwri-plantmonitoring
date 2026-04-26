@@ -50,6 +50,16 @@ _OVERRIDES_DIR = Path(
 )
 _OVERRIDES_PATH = _OVERRIDES_DIR / "migration_overrides.json"
 
+# Apply history is a permanent audit trail (overrides get auto-purged once
+# the probe confirms applied; we copy their metadata here just before the
+# purge so the UI keeps a "first applied locally on …" timestamp even after
+# the override entry itself is gone). One record per filename — we only keep
+# the first known apply event, since that's the historically-meaningful one.
+# Files applied directly via psql / Supabase Dashboard without ever going
+# through Mark-applied won't have a history entry, which is honest: we
+# genuinely don't know when they were run.
+_HISTORY_PATH = _OVERRIDES_DIR / "migration_apply_history.json"
+
 
 def _load_overrides() -> dict[str, dict[str, Any]]:
     try:
@@ -66,6 +76,23 @@ def _save_overrides(data: dict[str, dict[str, Any]]) -> None:
     tmp = _OVERRIDES_PATH.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
     tmp.replace(_OVERRIDES_PATH)
+
+
+def _load_history() -> dict[str, dict[str, Any]]:
+    try:
+        return json.loads(_HISTORY_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("Failed to read migration apply history at %s: %s", _HISTORY_PATH, exc)
+        return {}
+
+
+def _save_history(data: dict[str, dict[str, Any]]) -> None:
+    _OVERRIDES_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = _HISTORY_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(_HISTORY_PATH)
 
 # ---------------------------------------------------------------------------
 # Parsers
@@ -293,6 +320,8 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
     # live probe now confirms the migration is applied for real. Returned
     # to the client so the UI can surface a one-time confirmation toast.
     purged_overrides: list[str] = []
+    history = _load_history()
+    history_dirty = False
 
     for path in files:
         sql = path.read_text(encoding="utf-8", errors="replace")
@@ -363,9 +392,23 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
         # If the live probe now says applied AND we still have an override
         # entry, the override has done its job and is just clutter — drop it
         # so the override store doesn't accumulate stale assertions for
-        # migrations that were eventually run for real.
+        # migrations that were eventually run for real. Before purging, we
+        # snapshot the override metadata into the apply-history store so
+        # the "applied locally on …" timestamp survives the cleanup.
         override = overrides.get(path.name)
         if override and probed_status == "applied":
+            if path.name not in history:
+                # First-known apply event for this file — record it.
+                # Subsequent purges (e.g. after a teammate re-marks it
+                # applied for some reason) won't overwrite this, so the
+                # timestamp stays the historically-meaningful one.
+                history[path.name] = {
+                    "applied_at": override.get("marked_at"),
+                    "by_label": override.get("by_label"),
+                    "note": override.get("note"),
+                    "source": "override-purge",
+                }
+                history_dirty = True
             overrides.pop(path.name, None)
             purged_overrides.append(path.name)
             override = None
@@ -395,6 +438,11 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
             "probed_status": probed_status,
             "manual_override": override,
             "override_applied": override_applied,
+            # Permanent record of when this file was first marked applied
+            # locally (preserved across override purges). None for files
+            # never run through the override flow — we don't fabricate a
+            # timestamp we don't actually know.
+            "apply_history": history.get(path.name),
             "table_probes": table_probes,
             "column_probes": added_column_probes,
             "added_column_probes": added_column_probes,
@@ -406,6 +454,8 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
     # cleanup happened, which is the overwhelmingly common case.
     if purged_overrides:
         _save_overrides(overrides)
+    if history_dirty:
+        _save_history(history)
 
     return {
         "migrations_dir": str(MIGRATIONS_DIR),
