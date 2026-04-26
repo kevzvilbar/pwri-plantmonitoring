@@ -517,3 +517,102 @@ def unmark_migration_applied(
     if removed is not None:
         _save_overrides(overrides)
     return {"ok": True, "filename": filename, "removed": removed is not None}
+
+
+def import_apply_history(
+    authorization: Optional[str],
+    payload: dict[str, Any],
+    mode: str = "fill_gaps",
+) -> dict[str, Any]:
+    """Admin-only. Merge an exported apply-history JSON into the local store.
+
+    Modes:
+      - "fill_gaps" (default, non-destructive): only add filenames that don't
+        already have a local history entry. The local truth always wins on
+        conflict — useful when seeding a fresh environment from a staging
+        export without risking overwriting events already recorded here.
+      - "overwrite": replace local entries on conflict. Use only when you
+        know the imported file is more authoritative (e.g. restoring from
+        a backup of this same environment).
+
+    Filenames are validated against the on-disk migrations directory: any
+    entry whose filename doesn't correspond to a real migration file is
+    skipped and reported, so a typo or a stale export can't grow the
+    history store with fictitious filenames.
+    """
+    token = _bearer_token(authorization)
+    caller = _caller_identity(token)
+    _require_roles(caller, {"Admin"})
+
+    if mode not in ("fill_gaps", "overwrite"):
+        raise HTTPException(status_code=400, detail=f"Unknown import mode: {mode}")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload must be a JSON object")
+    incoming = payload.get("history")
+    if not isinstance(incoming, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Payload must contain a 'history' object keyed by filename",
+        )
+
+    # Build the set of legitimate filenames once — cheaper than stat-ing
+    # each file individually inside the loop.
+    known = {p.name for p in MIGRATIONS_DIR.glob("*.sql")}
+
+    history = _load_history()
+    added: list[str] = []
+    overwritten: list[str] = []
+    skipped_existing: list[str] = []
+    skipped_unknown: list[str] = []
+    skipped_invalid: list[str] = []
+
+    for filename, entry in incoming.items():
+        # Reject path traversal / unknown shapes early.
+        if (not isinstance(filename, str)
+                or "/" in filename or "\\" in filename or ".." in filename
+                or not filename.endswith(".sql")):
+            skipped_invalid.append(str(filename))
+            continue
+        if not isinstance(entry, dict):
+            skipped_invalid.append(filename)
+            continue
+        if filename not in known:
+            skipped_unknown.append(filename)
+            continue
+
+        # Normalise the entry to our canonical shape — drop unknown keys so
+        # an attacker-crafted import can't inject extra fields the UI then
+        # blindly renders.
+        normalised = {
+            "applied_at": entry.get("applied_at"),
+            "by_label": entry.get("by_label"),
+            "note": entry.get("note"),
+            "source": entry.get("source") or "import",
+        }
+        if not normalised["applied_at"]:
+            skipped_invalid.append(filename)
+            continue
+
+        if filename in history:
+            if mode == "overwrite":
+                history[filename] = normalised
+                overwritten.append(filename)
+            else:
+                skipped_existing.append(filename)
+        else:
+            history[filename] = normalised
+            added.append(filename)
+
+    if added or overwritten:
+        _save_history(history)
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "added": sorted(added),
+        "overwritten": sorted(overwritten),
+        "skipped_existing": sorted(skipped_existing),
+        "skipped_unknown": sorted(skipped_unknown),
+        "skipped_invalid": sorted(skipped_invalid),
+        "imported_by": caller.get("label") or caller.get("user_id"),
+    }

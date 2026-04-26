@@ -1134,6 +1134,73 @@ function MigrationsPanel() {
     [data],
   );
 
+  // Hidden <input type="file"> the Import-history button programmatically
+  // clicks. Lives in state so we can keep the input mounted (and reset
+  // .value after each pick so picking the same file twice in a row still
+  // fires onChange).
+  const [importing, setImporting] = useState(false);
+
+  const handleImportHistoryFile = async (file: File) => {
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        toast.error('Selected file is not valid JSON.');
+        return;
+      }
+      // Accept both the export format ({history: {...}}) and a bare history
+      // map ({...}) so users who copy-paste fragments still succeed.
+      const historyObj = parsed?.history ?? parsed;
+      if (!historyObj || typeof historyObj !== 'object' || Array.isArray(historyObj)) {
+        toast.error('Imported file must contain a "history" object keyed by filename.');
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Not signed in.');
+        return;
+      }
+      const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const res = await fetch(`${BASE}/api/admin/migrations/apply-history/import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ history: historyObj, mode: 'fill_gaps' }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        toast.error(`Import failed (${res.status}): ${detail.slice(0, 200)}`);
+        return;
+      }
+      const out = await res.json();
+      const added = (out.added ?? []).length;
+      const skipExist = (out.skipped_existing ?? []).length;
+      const skipUnk = (out.skipped_unknown ?? []).length;
+      const skipBad = (out.skipped_invalid ?? []).length;
+      const parts = [
+        `${added} added`,
+        skipExist > 0 ? `${skipExist} skipped (already recorded)` : null,
+        skipUnk > 0 ? `${skipUnk} skipped (unknown filename)` : null,
+        skipBad > 0 ? `${skipBad} skipped (invalid)` : null,
+      ].filter(Boolean).join(' · ');
+      if (added > 0) toast.success(`Imported apply-history: ${parts}`);
+      else toast.info(`Nothing new imported: ${parts || 'all entries were already present'}`);
+      // Refetch so the new "applied locally" pills appear immediately.
+      await refetch();
+    } catch (e: any) {
+      toast.error(`Import failed: ${e?.message ?? e}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // Save the same bundle as a versioned .sql file. Filenames embed an
   // ISO-style timestamp (no colons — Windows-friendly) so multiple runs
   // don't overwrite each other and you have a clear audit trail of exactly
@@ -1339,6 +1406,31 @@ function MigrationsPanel() {
                   Export history
                 </Button>
               )}
+              <label
+                className={`inline-flex items-center h-7 px-3 text-[12px] rounded-md border bg-background hover:bg-muted cursor-pointer ${
+                  importing ? 'opacity-60 pointer-events-none' : ''
+                }`}
+                title="Import a previously-exported apply-history JSON. Non-destructive: local entries always win on conflict."
+                data-testid="migrations-import-history-label"
+              >
+                {importing
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <Database className="h-3 w-3 mr-1" />}
+                Import history
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  data-testid="migrations-import-history-input"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Reset .value so picking the same file twice still
+                    // triggers onChange (browsers dedupe identical paths).
+                    e.target.value = '';
+                    if (file) handleImportHistoryFile(file);
+                  }}
+                />
+              </label>
               <Button
                 size="sm" variant="outline" className="h-7"
                 disabled={isFetching}

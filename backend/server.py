@@ -742,6 +742,28 @@ async def admin_migrations_unmark_applied(
     return unmark_migration_applied(authorization, filename)
 
 
+class MigrationHistoryImportRequest(BaseModel):
+    history: dict[str, dict[str, Any]]
+    mode: Optional[str] = "fill_gaps"
+
+
+@api_router.post("/admin/migrations/apply-history/import")
+async def admin_migrations_import_history(
+    body: MigrationHistoryImportRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Admin-only. Merge an exported apply-history JSON into the local store.
+    Default mode is non-destructive (fill_gaps): local entries always win on
+    conflict. Pass mode='overwrite' only when the import is more authoritative.
+    """
+    from migrations_status import import_apply_history
+    return import_apply_history(
+        authorization,
+        body.model_dump(exclude_none=True),
+        mode=body.mode or "fill_gaps",
+    )
+
+
 # ---- Serverless-friendly cron endpoints ----------------------------------
 @api_router.post("/cron/compliance-evaluate")
 async def cron_compliance_evaluate(x_cron_secret: Optional[str] = Header(None)):
