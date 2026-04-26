@@ -1292,9 +1292,27 @@ function MigrationsPanel() {
     }
   };
 
+  // Free-text filename filter — case-insensitive substring match against
+  // the bare filename (no path). Persists nothing; resets whenever the
+  // panel unmounts. Use sparingly: small migration sets don't need it,
+  // but it pays off once the directory grows past a screenful.
+  const [nameFilter, setNameFilter] = useState('');
+
   const visibleFiles = useMemo(() => {
     if (!data?.files) return [];
-    return showApplied ? data.files : data.files.filter((f) => f.status !== 'applied');
+    let rows = showApplied ? data.files : data.files.filter((f) => f.status !== 'applied');
+    const q = nameFilter.trim().toLowerCase();
+    if (q) rows = rows.filter((f) => f.filename.toLowerCase().includes(q));
+    return rows;
+  }, [data, showApplied, nameFilter]);
+
+  // Total visible BEFORE the name filter — so we can render
+  // "showing N of M" without confusing "M" with "all files in repo".
+  const visibleBeforeFilter = useMemo(() => {
+    if (!data?.files) return 0;
+    return showApplied
+      ? data.files.length
+      : data.files.filter((f) => f.status !== 'applied').length;
   }, [data, showApplied]);
 
   const STATUS_META: Record<MigrationFile['status'], { label: string; className: string; Icon: any }> = {
@@ -1359,6 +1377,29 @@ function MigrationsPanel() {
               · {data.summary.total} total
             </span>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="h-3 w-3 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="search"
+                  placeholder="Filter filenames…"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  className="h-7 pl-6 pr-2 text-[11px] rounded-md border bg-background w-44 focus:outline-none focus:ring-1 focus:ring-ring"
+                  title="Case-insensitive substring match against filename"
+                  data-testid="migrations-name-filter"
+                />
+                {nameFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setNameFilter('')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-[14px] leading-none px-1"
+                    title="Clear filter"
+                    data-testid="migrations-name-filter-clear"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={showApplied}
@@ -1456,10 +1497,30 @@ function MigrationsPanel() {
 
       {!isLoading && visibleFiles.length === 0 && data && (
         <Card className="p-4 text-center text-xs text-muted-foreground">
-          {data.summary.pending + data.summary.partial === 0
-            ? 'All migrations already applied. Toggle "Show applied" to see the full history.'
-            : 'No files match the current filter.'}
+          {nameFilter
+            ? <>No files match <code className="font-mono">{nameFilter}</code>.{' '}
+                <button
+                  type="button"
+                  className="underline hover:text-foreground"
+                  onClick={() => setNameFilter('')}
+                >
+                  Clear filter
+                </button></>
+            : data.summary.pending + data.summary.partial === 0
+              ? 'All migrations already applied. Toggle "Show applied" to see the full history.'
+              : 'No files match the current filter.'}
         </Card>
+      )}
+
+      {nameFilter && visibleFiles.length > 0 && data && (
+        <div className="text-[11px] text-muted-foreground px-1">
+          Showing <strong className="text-foreground">{visibleFiles.length}</strong> of{' '}
+          <strong className="text-foreground">{visibleBeforeFilter}</strong>
+          {visibleBeforeFilter !== data.summary.total && (
+            <> visible ({data.summary.total} total in repo)</>
+          )}
+          {' '}— filtered by <code className="font-mono">{nameFilter}</code>
+        </div>
       )}
 
       <div className="space-y-2">
