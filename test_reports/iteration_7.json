@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 7 - Frontend-only verification of the new 3-mode dashboard view toggle (Inline / Sections / Popup) for trend graphs. Login at /auth with kevzvilbar@gmail.com/BPWI2025! now succeeds AND lands on '/' (the dashboard root) without the previous /onboarding regression — the dashboard-view-mode toggle is immediately visible. ALL 17 review-request checks PASS: (1) toggle has 3 options Inline/Sections/Popup; (2) Inline mode renders all 6 inline-trend charts (production, nrw, rawwater under Overview; tds, recovery under Quality; pv under Production Cost) plus the 3 cluster-inline-charts-{overview|quality|cost} containers; (3) Clicking a chart-bearing KPI in Inline mode is a no-op (no dialog opens); (4) Sections mode shows zero charts by default; (5) Clicking NRW opens cluster-section-chart-nrw, clicking again collapses it; (6) Single-open behaviour confirmed — opening NRW then clicking 'Locators Consumption' auto-collapses NRW and opens cluster-section-chart-production; (7) Clicking 'Product TDS' opens cluster-section-chart-tds and closes the previously-open production chart; (8) trend-range-tds-7D is rendered and clickable inside the section-expanded chart; (9) Popup mode hides all inline/section charts; (10) Clicking NRW opens a Dialog containing data-testid='trend-chart-nrw'; Escape closes it; (11) NO cluster-toggle-* or cluster-popup-* testids exist in DOM (legacy gone); (12) Overview / Quality / Production Cost cluster headers are always visible across all 3 modes; (13) localStorage 'pwri:dashboard-view-mode' = 'sections' after switching, persists across page reload (Sections button data-state='on' after reload); (14) Production Cost card click navigates to /costs in Sections mode (non-chart KPI behaviour preserved). Login redirect regression from iteration_6 is RESOLVED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "TrendModal (Popup mode)", "issues": ["A11y warning in console: 'Missing Description or aria-describedby={undefined} for {DialogContent}'. Add a <DialogDescription> inside the popup TrendModal to silence the warning and improve screen-reader UX."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: add a DialogDescription to TrendModal in /app/frontend/src/pages/Dashboard.tsx (~line 836) to silence the Radix Dialog a11y console warning.",
+    "Optional: NRW threshold banner could not be exercised because the live data did not produce NRW > 20% during this run (banner element absent). Consider seeding a test plant with NRW > 20% to make this assertion deterministic in future runs."
+  ],
+  "critical_code_review_comments": [
+    "Dashboard.tsx is now ~1064 lines — over the 700-line guideline. Consider splitting TrendChart, TrendModal, ClusterCharts, InlineTrendChart, PerWellSourceCard, StatCard, PowerChart and ClusterHeader into their own files under /app/frontend/src/components/dashboard/. Same logic, smaller focused modules, easier to test in isolation.",
+    "handleMetricClick correctly returns undefined in inline mode — but several StatCards still pass `onClick={handleMetricClick(...)}` which means the resulting `onClick={undefined}` is forwarded to the Card. The card's `cursor-pointer` class is gated on `onClick ?` ternary, so cursor will correctly read 'cursor-default'. Behaviour OK; just noting it for clarity.",
+    "ClusterCharts skips render when viewMode==='popup' (returns null) — good. In sections mode, when expandedMetric belongs to another cluster, it correctly returns null (the `metrics.find` short-circuit). Logic is sound and matches the spec.",
+    "View-mode persistence is wrapped in try/catch around localStorage.setItem — good defensive coding for Safari private mode quota errors."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped per review_request", "frontend": "100% (17/17 review-request checks passed; 1 minor a11y warning observed)"},
+  "test_credentials": "kevzvilbar@gmail.com / BPWI2025! (Supabase Admin) — sign-in returns 200 and lands on '/' (Dashboard) directly. The /onboarding regression from iteration_6 is no longer reproducible.",
+  "seed_data_creation": "None — read-only verification, no data created or modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The 3-mode dashboard view toggle is implemented correctly and all data-testid contracts in the review request are honoured: dashboard-view-mode, inline-trend-{metric}, cluster-inline-charts-{clusterId}, cluster-section-chart-{metric}, trend-chart-{metric}, trend-range-{metric}-{range}, nrw-banner. localStorage key 'pwri:dashboard-view-mode' persists correctly. Login also lands on '/' successfully (the iteration_6 onboarding redirect bug is gone). NRW banner click-to-modal could not be tested since live data did not breach the 20% threshold during this run; the code path looks correct (setModal({metric:'nrw'}) is called regardless of viewMode in line 595). If retesting NRW banner behaviour is needed, seed a plant where production - consumption > 20% of production.",
+  "rca of the issue": "N/A — no defects identified in this iteration."
+}

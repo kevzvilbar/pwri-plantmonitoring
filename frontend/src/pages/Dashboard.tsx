@@ -17,26 +17,26 @@ import {
 import { format, subDays, startOfDay } from 'date-fns';
 import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
-  Waves, Cloud, Receipt, Banknote, TrendingUp, TrendingDown, Minus, ChevronDown,
+  Waves, Cloud, Receipt, Banknote, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
 import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LayoutGrid, ListCollapse, ExternalLink } from 'lucide-react';
 
-// View-mode preference for the dashboard cluster layout. Persists to
-// localStorage so a user's "I prefer the popup view" choice survives a
-// page reload. Three modes:
-//   • inline   — every cluster is fully expanded in flow (default).
-//   • sections — every cluster is wrapped in a Collapsible (retractable).
-//   • popup    — clusters render only their headers; clicking opens a
-//                modal Dialog with that cluster's cards full-width.
+// View-mode preference for how trend graphs surface on the dashboard.
+// Persists to localStorage so a user's "I prefer the popup view" choice
+// survives a page reload. Three modes:
+//   • inline   — every trend chart is rendered directly below its
+//                cluster (no clicks needed; just scroll). Default.
+//   • sections — clicking a chart-bearing KPI card folds its trend
+//                chart open inline below the cluster. Single-open:
+//                clicking another KPI auto-collapses the previous.
+//   • popup    — clicking a chart-bearing KPI card opens its trend
+//                chart inside a modal Dialog (legacy behaviour).
 type DashboardViewMode = 'inline' | 'sections' | 'popup';
 const VIEW_MODE_KEY = 'pwri:dashboard-view-mode';
 function readSavedViewMode(): DashboardViewMode {
@@ -215,84 +215,84 @@ function ClusterHeader({ icon: Icon, title, subtitle, accent }: { icon: any; tit
   );
 }
 
-// Wrapper that adapts a metric cluster to the user-selected view mode.
-// `inline` is the default flowing layout; `sections` wraps the body in
-// a Collapsible (header acts as trigger); `popup` collapses the body
-// off-screen and replaces the header with a button that opens the body
-// inside a Dialog. Defining at module scope (not inside Dashboard) so
-// React doesn't remount children on every parent re-render.
-function ClusterShell({
-  id, mode, title, icon: Icon, accent, subtitle,
-  popupOpen, onPopupOpen, onPopupClose, children,
+// Trend metrics that have an associated chart. Used by ClusterCharts
+// to render the inline / collapsed-section views, and to drive the
+// click handler on each chart-bearing StatCard. Keys here must match
+// the `metric` strings handled inside <TrendChart>.
+type ChartMetric = { metric: string; title: string };
+const OVERVIEW_CHART_METRICS: ChartMetric[] = [
+  { metric: 'production', title: 'Production vs Consumption' },
+  { metric: 'nrw',        title: 'NRW Trend' },
+  { metric: 'rawwater',   title: 'Raw Water (m³)' },
+];
+const QUALITY_CHART_METRICS: ChartMetric[] = [
+  { metric: 'tds',      title: 'Permeate TDS Trend' },
+  { metric: 'recovery', title: 'Recovery Trendline' },
+];
+const COST_CHART_METRICS: ChartMetric[] = [
+  { metric: 'pv', title: 'PV Ratio Trend' },
+];
+
+// Renders the per-cluster trend chart slot beneath a cluster's StatCards.
+//   • inline   — every chart in the cluster is rendered directly below
+//                the cards (full-width, compact height) so the user can
+//                just scroll to see all trends.
+//   • sections — at most one chart (matching `expandedMetric`) is
+//                rendered below the cards. Single-open behaviour: the
+//                user clicks a KPI card to fold its chart open here;
+//                clicking another KPI auto-closes the previous.
+//   • popup    — nothing is rendered here; charts surface only inside
+//                the TrendModal opened from the StatCards above.
+function ClusterCharts({
+  metrics, viewMode, expandedMetric, plantIds, clusterId,
 }: {
-  id: string;
-  mode: DashboardViewMode;
-  title: string;
-  icon: any;
-  accent?: string;
-  subtitle?: string;
-  popupOpen: boolean;
-  onPopupOpen: () => void;
-  onPopupClose: () => void;
-  children: React.ReactNode;
+  metrics: ChartMetric[];
+  viewMode: DashboardViewMode;
+  expandedMetric: string | null;
+  plantIds: string[];
+  clusterId: string;
 }) {
-  if (mode === 'inline') {
+  if (viewMode === 'popup') return null;
+  if (viewMode === 'inline') {
     return (
-      <>
-        <ClusterHeader icon={Icon} title={title} accent={accent} subtitle={subtitle} />
-        {children}
-      </>
+      <div className="space-y-2 mt-2" data-testid={`cluster-inline-charts-${clusterId}`}>
+        {metrics.map((m) => (
+          <InlineTrendChart key={m.metric} metric={m.metric} title={m.title} plantIds={plantIds} compact />
+        ))}
+      </div>
     );
   }
-  if (mode === 'sections') {
+  // sections — render the expanded chart only if it belongs to this cluster
+  if (viewMode === 'sections' && expandedMetric) {
+    const m = metrics.find((x) => x.metric === expandedMetric);
+    if (!m) return null;
     return (
-      <Collapsible defaultOpen className="group">
-        <CollapsibleTrigger
-          className="w-full flex items-center justify-between mt-1 mb-1.5 px-1 py-1 -mx-1 hover:bg-muted/30 rounded transition-colors"
-          data-testid={`cluster-toggle-${id}`}
-        >
-          <div className="flex items-baseline gap-2">
-            <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
-            {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
-          </div>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=closed]:rotate-[-90deg]" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>{children}</CollapsibleContent>
-      </Collapsible>
+      <div className="mt-2" data-testid={`cluster-section-chart-${m.metric}`}>
+        <InlineTrendChart metric={m.metric} title={m.title} plantIds={plantIds} />
+      </div>
     );
   }
-  // popup mode
+  return null;
+}
+
+// Card-wrapped trend chart used both for `inline` (compact height,
+// stacked beneath each cluster) and `sections` (regular height,
+// single open at a time). The TrendChart component itself owns the
+// range buttons and supabase queries, so this wrapper is purely
+// presentational.
+function InlineTrendChart({
+  metric, title, plantIds, compact = false,
+}: {
+  metric: string;
+  title: string;
+  plantIds: string[];
+  compact?: boolean;
+}) {
   return (
-    <>
-      <button
-        type="button"
-        onClick={onPopupOpen}
-        className="w-full flex items-center justify-between mt-1 mb-1.5 px-2 py-2 rounded-md border border-dashed bg-card hover:bg-muted/30 transition-colors text-left"
-        data-testid={`cluster-popup-${id}`}
-      >
-        <div className="flex items-baseline gap-2">
-          <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
-          <h2 className="text-xs font-semibold">{title}</h2>
-          {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
-        </div>
-        <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-          Open <ExternalLink className="h-3 w-3" />
-        </span>
-      </button>
-      <Dialog open={popupOpen} onOpenChange={(v) => !v && onPopupClose()}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Icon className={`h-4 w-4 ${accent ?? 'text-muted-foreground'}`} />
-              {title}
-              {subtitle && <span className="text-[11px] font-normal text-muted-foreground">· {subtitle}</span>}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="pt-2">{children}</div>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Card className="p-3" data-testid={`inline-trend-${metric}`}>
+      <h2 className="text-sm font-semibold mb-2">{title}</h2>
+      <TrendChart metric={metric} plantIds={plantIds} compact={compact} />
+    </Card>
   );
 }
 
@@ -308,18 +308,35 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
-  // View mode controls how the metric clusters are laid out — see the
-  // top-of-file definition for the three modes. Lazy-init from localStorage
-  // so the user's preference survives reload without a flash of "inline".
+  // View mode controls how trend graphs surface on the dashboard.
+  // See top-of-file for definitions. Lazy-init from localStorage so
+  // the user's preference survives reload without a flash of "inline".
   const [viewMode, setViewMode] = useState<DashboardViewMode>(readSavedViewMode);
-  // When in `popup` mode, this holds the id of the cluster currently
-  // shown in the modal Dialog (null = none open). Cluster ids are stable
-  // strings: 'overview' | 'quality' | 'cost'.
-  const [popupCluster, setPopupCluster] = useState<null | 'overview' | 'quality' | 'cost'>(null);
+  // In `sections` mode, this holds the metric key whose chart is
+  // currently fold-open. Single-open behaviour — clicking another KPI
+  // auto-collapses the previous. `inline` mode shows everything;
+  // `popup` mode never sets this (it routes through `modal` instead).
+  const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
   const persistViewMode = (m: DashboardViewMode) => {
     setViewMode(m);
-    setPopupCluster(null);
+    setExpandedMetric(null);
+    setModal(null);
     try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch { /* ignore quota errors */ }
+  };
+  // Returns the click handler for chart-bearing KPI cards. Behaviour
+  // depends on the current view mode:
+  //   • inline   → no click action (chart is already on screen below)
+  //   • sections → toggle this metric's collapsible chart (single-open)
+  //   • popup    → open the TrendModal (existing behaviour)
+  const handleMetricClick = (metric: string, title: string): (() => void) | undefined => {
+    if (viewMode === 'inline') return undefined;
+    return () => {
+      if (viewMode === 'sections') {
+        setExpandedMetric((prev) => (prev === metric ? null : metric));
+      } else {
+        setModal({ metric, title });
+      }
+    };
   };
 
   const visiblePlants = useMemo(
@@ -547,7 +564,7 @@ export default function Dashboard() {
           <ToggleGroupItem
             value="inline"
             className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            title="Inline — every section expanded in normal flow"
+            title="Inline — all trend graphs visible directly on the dashboard, just scroll"
             aria-label="Inline view"
           >
             <LayoutGrid className="h-3 w-3 mr-1" /> Inline
@@ -555,7 +572,7 @@ export default function Dashboard() {
           <ToggleGroupItem
             value="sections"
             className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            title="Sections — each cluster header is a retractable toggle"
+            title="Sections — click a KPI card to fold/unfold its trend chart"
             aria-label="Sections view"
           >
             <ListCollapse className="h-3 w-3 mr-1" /> Sections
@@ -563,7 +580,7 @@ export default function Dashboard() {
           <ToggleGroupItem
             value="popup"
             className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            title="Popup — clusters collapse to header buttons; click to open in a dialog"
+            title="Popup — click a KPI card to open its trend chart in a dialog"
             aria-label="Popup view"
           >
             <ExternalLink className="h-3 w-3 mr-1" /> Popup
@@ -598,35 +615,26 @@ export default function Dashboard() {
           single card) per user request. Production volume (m³) is
           surfaced in the page subheader so the underlying NRW math
           stays visible without spending a card on it. */}
-      <ClusterShell
-        id="overview"
-        mode={viewMode}
-        title="Overview"
-        icon={Droplet}
-        accent="text-primary"
-        popupOpen={popupCluster === 'overview'}
-        onPopupOpen={() => setPopupCluster('overview')}
-        onPopupClose={() => setPopupCluster(null)}
-      >
-        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-          <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
-            size="lg" calc
-            calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
-            value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
-          <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
-            trend={dConsumption}
-            onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
-          <StatCard icon={Activity} label="NRW" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
-            size="lg" calc threshold="20%"
-            calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
-            onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
-          <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
-            value={fmtNum(rawWater)} unit="m³"
-            onClick={() => setModal({ metric: 'rawwater', title: 'Raw Water (m³)' })} />
-          <StatCard icon={Waves} accent="text-violet-600" label="Blending"
-            value={fmtNum(blending)} unit="m³" />
-        </div>
-      </ClusterShell>
+      <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
+      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
+          size="lg" calc
+          calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
+          value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
+        <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
+          trend={dConsumption}
+          onClick={handleMetricClick('production', 'Production vs Consumption')} />
+        <StatCard icon={Activity} label="NRW" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
+          size="lg" calc threshold="20%"
+          calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
+          onClick={handleMetricClick('nrw', 'NRW Trend')} />
+        <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
+          value={fmtNum(rawWater)} unit="m³"
+          onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
+        <StatCard icon={Waves} accent="text-violet-600" label="Blending"
+          value={fmtNum(blending)} unit="m³" />
+      </div>
+      <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
 
       {/* ─── Cluster 2: Quality ─── */}
       {/* Spec order: Feed TDS · Product TDS · Raw TDS (per well source) ·
@@ -635,75 +643,55 @@ export default function Dashboard() {
           source" — see PerWellSourceCard for the schema caveat (these
           are physically measured at the RO feed manifold which BLENDS
           multiple well sources, so each row represents one source line). */}
-      <ClusterShell
-        id="quality"
-        mode={viewMode}
-        title="Quality"
-        icon={FlaskConical}
-        accent="text-accent"
-        subtitle="RO output"
-        popupOpen={popupCluster === 'quality'}
-        onPopupOpen={() => setPopupCluster('quality')}
-        onPopupClose={() => setPopupCluster(null)}
-      >
-        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-          <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
-          <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
-            onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
-          {/* Raw TDS · per well source — aggregate value above, list below */}
-          <PerWellSourceCard
-            icon={Gauge}
-            label="Raw TDS"
-            unit="ppm"
-            aggregate={avgFeedTds}
-            rows={roByTrain}
-            field="feed_tds"
-            plantCodeById={plantCodeById}
-            testId="raw-tds-per-well-source"
-          />
-          <PerWellSourceCard
-            icon={Cloud}
-            label="Raw NTU"
-            unit="NTU"
-            aggregate={avgTurb}
-            rows={roByTrain}
-            field="turbidity_ntu"
-            plantCodeById={plantCodeById}
-            testId="raw-ntu-per-well-source"
-            decimals={2}
-          />
-          <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
-            onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
-        </div>
-      </ClusterShell>
+      <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
+      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
+        <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
+          onClick={handleMetricClick('tds', 'Permeate TDS Trend')} />
+        {/* Raw TDS · per well source — aggregate value above, list below */}
+        <PerWellSourceCard
+          icon={Gauge}
+          label="Raw TDS"
+          unit="ppm"
+          aggregate={avgFeedTds}
+          rows={roByTrain}
+          field="feed_tds"
+          plantCodeById={plantCodeById}
+          testId="raw-tds-per-well-source"
+        />
+        <PerWellSourceCard
+          icon={Cloud}
+          label="Raw NTU"
+          unit="NTU"
+          aggregate={avgTurb}
+          rows={roByTrain}
+          field="turbidity_ntu"
+          plantCodeById={plantCodeById}
+          testId="raw-ntu-per-well-source"
+          decimals={2}
+        />
+        <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+          onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
+      </div>
+      <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
 
       {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
       {/* Spec order: Power Cost · Chemical Cost · Power kWh · PV Ratio.
           The header doubles as the section title called out in the spec. */}
-      <ClusterShell
-        id="cost"
-        mode={viewMode}
-        title="Production Cost (Power + Chemical)"
-        icon={Zap}
-        accent="text-chart-6"
-        subtitle="Today"
-        popupOpen={popupCluster === 'cost'}
-        onPopupOpen={() => setPopupCluster('cost')}
-        onPopupClose={() => setPopupCluster(null)}
-      >
-        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-          <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-            value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
-          <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
-            value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
-          <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
-            trend={dKwh} />
-          <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
-            calc threshold="1.2"
-            calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
-            onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
-        </div>
-      </ClusterShell>
+      <ClusterHeader icon={Zap} title="Production Cost (Power + Chemical)" accent="text-chart-6" subtitle="Today" />
+      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
+          value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
+        <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
+          value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
+        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
+          trend={dKwh} />
+        <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
+          calc threshold="1.2"
+          calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
+          onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
+      </div>
+      <ClusterCharts metrics={COST_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="cost" />
 
       <Card className="p-3" data-testid="alerts-card">
         <div className="flex items-center gap-2 mb-2">
@@ -843,6 +831,23 @@ function PowerChart({ plantIds }: { plantIds: string[] }) {
 }
 
 function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean; onClose: () => void; metric: string; title: string; plantIds: string[] }) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <TrendChart metric={metric} plantIds={plantIds} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Reusable trend chart used both inside the popup TrendModal and as
+// an inline/section panel embedded directly on the dashboard. Owns
+// its own range state, supabase queries, and chart rendering. The
+// `compact` prop swaps in a shorter chart height for the inline view
+// where multiple charts stack vertically and we want to keep the
+// page from getting absurdly tall.
+function TrendChart({ metric, plantIds, compact = false }: { metric: string; plantIds: string[]; compact?: boolean }) {
   const [range, setRange] = useState<RangeKey>('7D');
   const [from, setFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -889,22 +894,22 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,reading_datetime'),
-    enabled: open && plantIds.length > 0 && needsLocReadings,
+    enabled: plantIds.length > 0 && needsLocReadings,
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('well_readings', 'daily_volume,reading_datetime'),
-    enabled: open && plantIds.length > 0 && needsWellReadings,
+    enabled: plantIds.length > 0 && needsWellReadings,
   });
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('ro_train_readings', 'recovery_pct,permeate_tds,reading_datetime'),
-    enabled: open && plantIds.length > 0 && needsRoReadings,
+    enabled: plantIds.length > 0 && needsRoReadings,
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,reading_datetime'),
-    enabled: open && plantIds.length > 0 && needsPowerReadings,
+    enabled: plantIds.length > 0 && needsPowerReadings,
   });
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower;
@@ -954,107 +959,106 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
       }));
   }, [locReadings, wellReadings, roReadings, powerReadings]);
 
+  const chartHeight = compact ? 'h-[260px]' : 'h-[420px]';
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
-            <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
-              className="h-8 px-2.5"
-              onClick={() => setRange(r)} data-testid={`trend-range-${r}`}>{r}</Button>
-          ))}
-          <Button
-            size="sm"
-            variant={range === 'CUSTOM' ? 'default' : 'outline'}
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
+          <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
             className="h-8 px-2.5"
-            onClick={() => setRange('CUSTOM')}
-            data-testid="trend-range-CUSTOM"
-          >Custom</Button>
-          {range === 'CUSTOM' && (
-            <div className="flex items-center gap-1.5 ml-1">
-              <Input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="h-8 w-[140px] text-xs"
-                data-testid="trend-from"
-              />
-              <span className="text-xs text-muted-foreground">→</span>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="h-8 w-[140px] text-xs"
-                data-testid="trend-to"
-              />
+            onClick={() => setRange(r)} data-testid={`trend-range-${metric}-${r}`}>{r}</Button>
+        ))}
+        <Button
+          size="sm"
+          variant={range === 'CUSTOM' ? 'default' : 'outline'}
+          className="h-8 px-2.5"
+          onClick={() => setRange('CUSTOM')}
+          data-testid={`trend-range-${metric}-CUSTOM`}
+        >Custom</Button>
+        {range === 'CUSTOM' && (
+          <div className="flex items-center gap-1.5 ml-1">
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="h-8 w-[140px] text-xs"
+              data-testid={`trend-from-${metric}`}
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="h-8 w-[140px] text-xs"
+              data-testid={`trend-to-${metric}`}
+            />
+          </div>
+        )}
+        {isFetching && (
+          <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
+        )}
+      </div>
+      <div className={`${chartHeight} w-full relative mt-2`} data-testid={`trend-chart-${metric}`}>
+        {queryError && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="rounded-md border border-rose-300 bg-rose-50/95 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/80 dark:border-rose-900 dark:text-rose-300 shadow-sm pointer-events-auto max-w-md text-center">
+              <div className="font-semibold mb-0.5">Couldn't load trend data</div>
+              <div className="text-[11px] opacity-80">{queryError.message}</div>
             </div>
-          )}
-          {isFetching && (
-            <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
-          )}
-        </div>
-        <div className="h-[420px] w-full relative" data-testid={`trend-chart-${metric}`}>
-          {queryError && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="rounded-md border border-rose-300 bg-rose-50/95 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/80 dark:border-rose-900 dark:text-rose-300 shadow-sm pointer-events-auto max-w-md text-center">
-                <div className="font-semibold mb-0.5">Couldn't load trend data</div>
-                <div className="text-[11px] opacity-80">{queryError.message}</div>
+          </div>
+        )}
+        {!queryError && !isFetching && chartData.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
+              <div className="font-medium text-foreground">No data in selected range</div>
+              <div className="text-[11px] mt-0.5">
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : 'wells'}.
               </div>
             </div>
+          </div>
+        )}
+        <ResponsiveContainer width="100%" height="100%">
+          {metric === 'nrw' ? (
+            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+              <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" label={{ value: 'Volume (m³)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: 'NRW (%)', angle: 90, position: 'insideRight', fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
+              <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
+            </ComposedChart>
+          ) : (
+            <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: TREND_Y_LABEL[metric] ?? 'Value', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {metric === 'production' && (<>
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+              </>)}
+              {metric === 'rawwater' && (
+                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
+              )}
+              {metric === 'recovery' && (
+                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
+              )}
+              {metric === 'tds' && (
+                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
+              )}
+              {metric === 'pv' && (<>
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
+              </>)}
+            </LineChart>
           )}
-          {!queryError && !isFetching && chartData.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
-                <div className="font-medium text-foreground">No data in selected range</div>
-                <div className="text-[11px] mt-0.5">
-                  Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : 'wells'}.
-                </div>
-              </div>
-            </div>
-          )}
-          <ResponsiveContainer width="100%" height="100%">
-            {metric === 'nrw' ? (
-              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
-                <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" label={{ value: 'Volume (m³)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: 'NRW (%)', angle: 90, position: 'insideRight', fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
-                <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
-                <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
-              </ComposedChart>
-            ) : (
-              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: TREND_Y_LABEL[metric] ?? 'Value', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {metric === 'production' && (<>
-                  <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                  <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
-                </>)}
-                {metric === 'rawwater' && (
-                  <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
-                )}
-                {metric === 'recovery' && (
-                  <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
-                )}
-                {metric === 'tds' && (
-                  <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
-                )}
-                {metric === 'pv' && (<>
-                  <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                  <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
-                </>)}
-              </LineChart>
-            )}
-          </ResponsiveContainer>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveContainer>
+      </div>
+    </>
   );
 }
