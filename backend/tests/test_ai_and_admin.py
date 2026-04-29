@@ -17,7 +17,7 @@ import requests
 
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://vite-react-deploy.preview.emergentagent.com",
+    "https://bypass-to-blending.preview.emergentagent.com",
 ).rstrip("/")
 
 
