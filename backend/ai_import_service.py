@@ -28,7 +28,7 @@ import logging
 import os
 import re
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -36,10 +36,23 @@ from fastapi import HTTPException, UploadFile
 from openpyxl import load_workbook
 from supabase import Client
 
-# Reuse helpers from admin_service so auth + audit paths stay consistent.
-from admin_service import (
-    _bearer_token, _caller_identity, _user_scoped_client, _require_roles,
-    _write_audit,
+# Auth + audit helpers (public names live in admin_helpers; admin_service
+# re-exports them for legacy callers).
+from admin_helpers import (
+    AuditEntry,
+    bearer_token,
+    caller_identity,
+    require_roles,
+    user_scoped_client,
+    write_audit,
+)
+from ai_import_helpers import (
+    AnalysisPersistPayload,
+    AuditDecision,
+    ReadingsInsertContext,
+    build_reading_rows,
+    ensure_entity,
+    to_jsonable,
 )
 
 log = logging.getLogger(__name__)
@@ -385,47 +398,35 @@ def _persisted_table_payload(a: TableAnalysis, body_rows: list[list[Any]]) -> di
     so /ai-sync can replay against real data, not just the LLM preview."""
     p = _public_table_payload(a)
     p["body_rows"] = [
-        [_to_jsonable(c) for c in r] for r in body_rows[:MAX_BODY_ROWS]
+        [to_jsonable(c) for c in r] for r in body_rows[:MAX_BODY_ROWS]
     ]
     return p
 
 
-def _to_jsonable(v: Any) -> Any:
-    """Coerce numpy / datetime / unknown types to JSON-friendly primitives."""
-    if v is None:
-        return None
-    if isinstance(v, (str, int, float, bool)):
-        return v
-    if isinstance(v, datetime):
-        return v.isoformat()
-    return str(v)
-
-
-def _persist_analysis(client: Client, *, caller: dict[str, Any], filename: str,
-                      file_kind: str, file_size: int, plant_id: Optional[str],
-                      extracted: list[ExtractedTable],
-                      analyses: list[TableAnalysis], wellmeter_detected: bool,
-                      ai_provider: str, ai_model: Optional[str]) -> str:
+def _persist_analysis(
+    client: Client, payload: AnalysisPersistPayload,
+) -> str:
     aid = str(uuid.uuid4())
-    bodies = {t.source: t.rows for t in extracted}
-    payload = {
+    bodies = {t.source: t.rows for t in payload.extracted}
+    insert_payload = {
         "id": aid,
-        "actor_user_id": caller.get("user_id"),
-        "actor_label": caller.get("label"),
-        "plant_id": plant_id,
-        "filename": filename[:200],
-        "file_kind": file_kind[:16],
-        "file_size": file_size,
-        "ai_provider": ai_provider,
-        "ai_model": ai_model,
+        "actor_user_id": payload.caller.get("user_id"),
+        "actor_label": payload.caller.get("label"),
+        "plant_id": payload.plant_id,
+        "filename": payload.filename[:200],
+        "file_kind": payload.file_kind[:16],
+        "file_size": payload.file_size,
+        "ai_provider": payload.ai_provider,
+        "ai_model": payload.ai_model,
         "status": "pending",
-        "wellmeter_detected": wellmeter_detected,
+        "wellmeter_detected": payload.wellmeter_detected,
         "tables": [
-            _persisted_table_payload(a, bodies.get(a.source, [])) for a in analyses
+            _persisted_table_payload(a, bodies.get(a.source, []))
+            for a in payload.analyses
         ],
     }
     try:
-        client.table("import_analysis").insert(payload).execute()
+        client.table("import_analysis").insert(insert_payload).execute()
     except Exception as e:
         # Fail loudly — silent persistence failure was masking missing
         # migrations and producing false-positive analyse responses
@@ -456,193 +457,16 @@ def _load_analysis(client: Client, analysis_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Sync — entity creation + reading inserts
 # ---------------------------------------------------------------------------
-
-# Map of canonical field aliases -> logical field name. Used to recognise
-# admin-edited column_mapping even when sources name things differently.
-_DATE_KEYS = {"date", "reading_date", "day", "datetime", "reading_datetime"}
-_VOLUME_KEYS = {"volume", "value", "kwh", "production", "permeate", "delivered", "current_reading"}
-_INITIAL_KEYS = {"initial", "previous", "previous_reading", "start"}
-_FINAL_KEYS = {"final", "current", "end"}
-_NAME_KEYS = {"name", "well", "well_name", "locator", "locator_name", "train", "train_name"}
+#
+# The per-target row builders, column-resolver, date/float coercions, and
+# the get-or-create entity helper all live in `ai_import_helpers.py` so
+# this module can stay focused on Supabase orchestration + audit logging.
 
 
-def _resolve_col(headers: list[str], mapping: dict[str, str], aliases: set[str]) -> Optional[int]:
-    """Return the column index in `headers` for the first mapping key that
-    matches one of `aliases` (case-insensitive). Falls back to direct
-    header-name match."""
-    lowered_headers = [h.lower().strip() for h in headers]
-
-    # 1. user-provided mapping {our_field: source_header}
-    for our, source in mapping.items():
-        if our.lower().strip() in aliases:
-            try:
-                return lowered_headers.index(str(source).lower().strip())
-            except ValueError:
-                continue
-
-    # 2. direct header alias match
-    for alias in aliases:
-        for i, h in enumerate(lowered_headers):
-            if alias in h:
-                return i
-    return None
-
-
-def _coerce_date(v: Any) -> Optional[str]:
-    if v in (None, ""):
-        return None
-    if isinstance(v, datetime):
-        return v.date().isoformat()
-    s = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%m-%d-%Y"):
-        try:
-            return datetime.strptime(s, fmt).date().isoformat()
-        except ValueError:
-            pass
-    # Excel may serialise dates as floats too; openpyxl handles that, but be defensive.
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
-    except ValueError:
-        return None
-
-
-def _coerce_float(v: Any) -> Optional[float]:
-    if v in (None, ""):
-        return None
-    try:
-        return float(str(v).replace(",", ""))
-    except (TypeError, ValueError):
-        return None
-
-
-def _ensure_entity(client: Client, target: str, plant_id: str,
-                   name: str) -> tuple[Optional[str], bool]:
-    """Get-or-create an entity row of `target` type under `plant_id` by name.
-    Returns (entity_id, created_now). `created_now` is True only when this
-    call inserted a new row — so callers count creations accurately.
-
-    Race protection: if a concurrent caller wins the insert race,
-    `unique (plant_id, name)` (recommended DB constraint) raises and we
-    re-select. Without the constraint, this still narrows the window but
-    cannot eliminate it; document the recommendation in the migration.
-    """
-    table = target  # 'wells' | 'locators' | 'ro_trains'
-    name = name.strip()
-    if not name or not plant_id:
-        return None, False
-    try:
-        existing = (
-            client.table(table).select("id,name")
-            .eq("plant_id", plant_id).ilike("name", name).limit(1).execute()
-        )
-        if existing.data:
-            return existing.data[0]["id"], False
-        # Minimal insert payload — let downstream forms fill in optional fields.
-        base: dict[str, Any] = {"plant_id": plant_id, "name": name, "status": "Active"}
-        if target == "wells":
-            base["has_power_meter"] = False
-        try:
-            ins = client.table(table).insert(base).select("id").single().execute()
-            return (ins.data or {}).get("id"), True
-        except Exception as ins_err:
-            # Likely a race winning a unique constraint — re-select.
-            log.info("Insert race on %s '%s' (%s) — re-selecting.",
-                     target, name, ins_err)
-            re = (
-                client.table(table).select("id,name")
-                .eq("plant_id", plant_id).ilike("name", name).limit(1).execute()
-            )
-            if re.data:
-                return re.data[0]["id"], False
-            raise
-    except Exception as e:
-        log.warning("Failed to upsert %s '%s': %s", target, name, e)
-        return None, False
-
-
-def _insert_readings(client: Client, target: str, plant_id: str,
-                     entity_id: str, recorded_by: Optional[str],
-                     headers: list[str], rows: list[list[Any]],
-                     mapping: dict[str, str]) -> tuple[int, list[str]]:
-    """Insert reading rows for the given target table. Returns (count, warnings)."""
-    date_idx = _resolve_col(headers, mapping, _DATE_KEYS)
-    if date_idx is None:
-        return 0, ["No date column resolved — provide a 'date' column mapping."]
-
-    warnings: list[str] = []
-    payload: list[dict[str, Any]] = []
-    seen_dates: set[str] = set()
-
-    if target == "well_readings":
-        init_idx = _resolve_col(headers, mapping, _INITIAL_KEYS)
-        final_idx = _resolve_col(headers, mapping, _FINAL_KEYS)
-        vol_idx = _resolve_col(headers, mapping, _VOLUME_KEYS)
-        for r in rows:
-            d = _coerce_date(r[date_idx] if date_idx < len(r) else None)
-            if not d or d in seen_dates:
-                continue
-            seen_dates.add(d)
-            row: dict[str, Any] = {
-                "plant_id": plant_id,
-                "well_id": entity_id,
-                "reading_datetime": f"{d}T00:00:00Z",
-                "previous_reading": _coerce_float(r[init_idx]) if init_idx is not None and init_idx < len(r) else None,
-                "current_reading":  _coerce_float(r[final_idx]) if final_idx is not None and final_idx < len(r) else None,
-                "daily_volume":     _coerce_float(r[vol_idx]) if vol_idx is not None and vol_idx < len(r) else None,
-                "off_location_flag": False,
-                "recorded_by": recorded_by,
-            }
-            payload.append(row)
-    elif target == "locator_readings":
-        vol_idx = _resolve_col(headers, mapping, _VOLUME_KEYS)
-        if vol_idx is None:
-            return 0, ["No volume column resolved for locator_readings."]
-        for r in rows:
-            d = _coerce_date(r[date_idx] if date_idx < len(r) else None)
-            if not d or d in seen_dates:
-                continue
-            seen_dates.add(d)
-            payload.append({
-                "plant_id": plant_id,
-                "locator_id": entity_id,
-                "reading_datetime": f"{d}T00:00:00Z",
-                "daily_volume": _coerce_float(r[vol_idx]) if vol_idx < len(r) else None,
-                "recorded_by": recorded_by,
-            })
-    elif target == "ro_train_readings":
-        vol_idx = _resolve_col(headers, mapping, _VOLUME_KEYS)
-        for r in rows:
-            d = _coerce_date(r[date_idx] if date_idx < len(r) else None)
-            if not d or d in seen_dates:
-                continue
-            seen_dates.add(d)
-            payload.append({
-                "plant_id": plant_id,
-                "ro_train_id": entity_id,
-                "reading_datetime": f"{d}T00:00:00Z",
-                "permeate_volume_m3": _coerce_float(r[vol_idx]) if vol_idx is not None and vol_idx < len(r) else None,
-                "recorded_by": recorded_by,
-            })
-    elif target == "power_readings":
-        vol_idx = _resolve_col(headers, mapping, _VOLUME_KEYS)
-        if vol_idx is None:
-            return 0, ["No kWh column resolved for power_readings."]
-        for r in rows:
-            d = _coerce_date(r[date_idx] if date_idx < len(r) else None)
-            if not d or d in seen_dates:
-                continue
-            seen_dates.add(d)
-            payload.append({
-                "plant_id": plant_id,
-                "reading_datetime": f"{d}T00:00:00Z",
-                "kwh": _coerce_float(r[vol_idx]) if vol_idx < len(r) else None,
-                "recorded_by": recorded_by,
-            })
-    else:
-        return 0, [f"Unsupported reading target: {target}"]
-
+def _insert_readings(client: Client, ctx: ReadingsInsertContext) -> tuple[int, list[str]]:
+    """Insert reading rows for `ctx.target`. Returns (count, warnings)."""
+    payload, warnings = build_reading_rows(ctx)
     if not payload:
-        warnings.append("No date-coercible rows found.")
         return 0, warnings
 
     inserted = 0
@@ -650,9 +474,9 @@ def _insert_readings(client: Client, target: str, plant_id: str,
     for i in range(0, len(payload), BATCH):
         chunk = payload[i:i + BATCH]
         try:
-            client.table(target).insert(chunk).execute()
+            client.table(ctx.target).insert(chunk).execute()
             inserted += len(chunk)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             warnings.append(f"Batch {i // BATCH + 1} failed: {e}")
             break
     return inserted, warnings
@@ -664,10 +488,10 @@ def _insert_readings(client: Client, target: str, plant_id: str,
 
 def analyze_upload(authorization: Optional[str], file: UploadFile, content: bytes,
                    plant_id: Optional[str]) -> dict[str, Any]:
-    token = _bearer_token(authorization)
-    caller = _caller_identity(token)
-    _require_roles(caller, {"Admin", "Manager"})
-    client = _user_scoped_client(token)
+    token = bearer_token(authorization)
+    caller = caller_identity(token)
+    require_roles(caller, {"Admin", "Manager"})
+    client = user_scoped_client(token)
 
     filename = file.filename or "upload"
     tables = extract_tables(filename, content)
@@ -678,12 +502,19 @@ def analyze_upload(authorization: Optional[str], file: UploadFile, content: byte
     wellmeter = looks_like_wellmeter(tables)
     file_kind = (filename.rsplit(".", 1)[-1] if "." in filename else "")[:16].lower()
     aid = _persist_analysis(
-        client, caller=caller, filename=filename, file_kind=file_kind,
-        file_size=len(content), plant_id=plant_id,
-        extracted=tables,
-        analyses=analyses, wellmeter_detected=wellmeter,
-        ai_provider=provider,
-        ai_model=OPENAI_MODEL if provider == "openai" else None,
+        client,
+        AnalysisPersistPayload(
+            caller=caller,
+            filename=filename,
+            file_kind=file_kind,
+            file_size=len(content),
+            plant_id=plant_id,
+            extracted=tables,
+            analyses=analyses,
+            wellmeter_detected=wellmeter,
+            ai_provider=provider,
+            ai_model=OPENAI_MODEL if provider == "openai" else None,
+        ),
     )
 
     return {
@@ -714,10 +545,10 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
           ]
         }
     """
-    token = _bearer_token(authorization)
-    caller = _caller_identity(token)
-    _require_roles(caller, {"Admin"})
-    client = _user_scoped_client(token)
+    token = bearer_token(authorization)
+    caller = caller_identity(token)
+    require_roles(caller, {"Admin"})
+    client = user_scoped_client(token)
 
     reason = (body.get("reason") or "").strip()
     if len(reason) < 5:
@@ -758,8 +589,10 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
 
         if action == "reject" or target in ("skip", "unknown"):
             summary["rejected"].append({"source": source, "target": target})
-            _audit_decision(client, caller, analysis_id, source, target,
-                            "[IMPORT-REJECT]", reason)
+            _audit_decision(client, caller, AuditDecision(
+                analysis_id=analysis_id, source=source, target=target,
+                label="[IMPORT-REJECT]", reason=reason,
+            ))
             continue
 
         if action != "sync":
@@ -776,7 +609,7 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                 summary["skipped"].append({"source": source, "reason": "entity_name required"})
                 any_skipped = True
                 continue
-            ent_id, was_created = _ensure_entity(client, target, plant_id, entity_name)
+            ent_id, was_created = ensure_entity(client, target, plant_id, entity_name)
             if ent_id:
                 if was_created:
                     summary["created"][target] += 1
@@ -784,8 +617,10 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                     summary["existing"][target] += 1
                 any_synced = True
                 tag = "[IMPORT]" if was_created else "[IMPORT-EXISTS]"
-                _audit_decision(client, caller, analysis_id, source, target,
-                                f"{tag} {entity_name}", reason)
+                _audit_decision(client, caller, AuditDecision(
+                    analysis_id=analysis_id, source=source, target=target,
+                    label=f"{tag} {entity_name}", reason=reason,
+                ))
             else:
                 summary["skipped"].append({"source": source, "reason": f"failed to create {target}"})
                 any_skipped = True
@@ -807,7 +642,7 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                     summary["skipped"].append({"source": source, "reason": "entity_name required for readings"})
                     any_skipped = True
                     continue
-                entity_id, was_created = _ensure_entity(client, entity_table, plant_id, entity_name)
+                entity_id, was_created = ensure_entity(client, entity_table, plant_id, entity_name)
                 if not entity_id:
                     summary["skipped"].append({"source": source, "reason": f"could not resolve {entity_table} '{entity_name}'"})
                     any_skipped = True
@@ -827,21 +662,32 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                 # remain consumable.
                 body_rows = tbl.get("sample_rows") or []
             inserted, warns = _insert_readings(
-                client, target=target, plant_id=plant_id,
-                entity_id=entity_id or "", recorded_by=caller.get("user_id"),
-                headers=tbl.get("headers") or [], rows=body_rows,
-                mapping=mapping,
+                client,
+                ReadingsInsertContext(
+                    target=target,
+                    plant_id=plant_id,
+                    entity_id=entity_id or "",
+                    recorded_by=caller.get("user_id"),
+                    headers=tbl.get("headers") or [],
+                    rows=body_rows,
+                    mapping=mapping,
+                ),
             )
             summary["inserted"][target] += inserted
             if inserted:
                 any_synced = True
-                _audit_decision(client, caller, analysis_id, source, target,
-                                f"[IMPORT] {entity_name or target} ({inserted} rows)", reason)
+                _audit_decision(client, caller, AuditDecision(
+                    analysis_id=analysis_id, source=source, target=target,
+                    label=f"[IMPORT] {entity_name or target} ({inserted} rows)",
+                    reason=reason,
+                ))
             else:
                 # No rows landed — record this as a partial outcome with a
                 # rejection-style audit row so it's traceable.
-                _audit_decision(client, caller, analysis_id, source, target,
-                                "[IMPORT-REJECT] no readings imported", reason)
+                _audit_decision(client, caller, AuditDecision(
+                    analysis_id=analysis_id, source=source, target=target,
+                    label="[IMPORT-REJECT] no readings imported", reason=reason,
+                ))
             for w in warns:
                 summary["skipped"].append({"source": source, "reason": w})
                 any_skipped = True
@@ -888,30 +734,30 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
     }
 
 
-def _audit_decision(client: Client, caller: dict[str, Any], analysis_id: str,
-                    source: str, target: str, label: str, reason: str) -> None:
+def _audit_decision(
+    client: Client, caller: dict[str, Any], decision: AuditDecision,
+) -> None:
     """Write one row in deletion_audit_log so import decisions show up in the
     same admin Audit Log UI as deletions. We deliberately reuse the existing
     audit table (with kind='plant') and embed the [IMPORT] / [IMPORT-REJECT]
     tag in `reason` so existing filters (and the AuditLogPanel UI) keep
     working without a schema change."""
-    _write_audit(
-        client,
+    write_audit(client, AuditEntry(
         kind="plant",
-        entity_id=analysis_id,
-        entity_label=f"{source} → {target}",
+        entity_id=decision.analysis_id,
+        entity_label=f"{decision.source} → {decision.target}",
         action="hard",
         caller=caller,
-        reason=f"{label} | {reason}",
-        dependencies={"source": source, "target": target},
-    )
+        reason=f"{decision.label} | {decision.reason}",
+        dependencies={"source": decision.source, "target": decision.target},
+    ))
 
 
 def list_analyses(authorization: Optional[str], limit: int = 25) -> dict[str, Any]:
-    token = _bearer_token(authorization)
-    caller = _caller_identity(token)
-    _require_roles(caller, {"Admin", "Manager"})
-    client = _user_scoped_client(token)
+    token = bearer_token(authorization)
+    caller = caller_identity(token)
+    require_roles(caller, {"Admin", "Manager"})
+    client = user_scoped_client(token)
     try:
         res = (
             client.table("import_analysis")
