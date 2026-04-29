@@ -287,3 +287,52 @@ console + force-delete tools are reachable from `/auth` end-to-end.
 - `curl /` returns HTTP 200 with no redirects.
 - `curl /api/` returns `{"message":"Hello World"}`.
 - Supervisor: backend + frontend RUNNING.
+
+
+---
+
+## Iteration 11 — Dashboard 3-Mode Trend Graph View (2026-04-29)
+
+### What landed
+- Dashboard view-mode toggle (Inline / Sections / Popup) **now drives trend
+  graphs**, not cluster headers. Cluster headers (Overview, Quality,
+  Production Cost) stay always visible regardless of mode.
+- **Inline mode** — every chart-bearing KPI's trend chart renders in flow
+  beneath its cluster (compact 260px height). Just scroll to see them.
+  KPI card click is a no-op (chart already on screen).
+- **Sections mode** — clicking a chart-bearing KPI card folds its trend
+  chart open below the cluster (full 420px height). Single-open: clicking
+  another KPI auto-collapses the previous.
+- **Popup mode** — click KPI card → modal Dialog with the trend chart
+  (legacy behaviour preserved).
+- View-mode preference persists to `localStorage['pwri:dashboard-view-mode']`.
+
+### Code changes (file: `/app/frontend/src/pages/Dashboard.tsx`)
+- Removed `ClusterShell` (and `popupCluster` state). Added simpler
+  `ClusterCharts` + `InlineTrendChart` components driven by mode.
+- Extracted `<TrendChart>` from `<TrendModal>` so the chart renderer is
+  reusable inline, in section-collapsibles, and in the modal.
+- Added `expandedMetric` state and `handleMetricClick(metric, title)` that
+  swaps click behaviour based on the active view mode.
+- Added `OVERVIEW_CHART_METRICS` / `QUALITY_CHART_METRICS` /
+  `COST_CHART_METRICS` constant registries.
+- Added `<DialogDescription>` (sr-only) inside `TrendModal` to silence
+  the Radix a11y warning.
+- Removed unused `Collapsible` / `ChevronDown` imports.
+
+### Verified
+- `npx tsc --noEmit` clean.
+- Frontend testing agent (iteration_7.json): **17/17 review-request
+  checks passed (100%)**. Login → dashboard → toggle each mode →
+  chart visibility / fold-unfold / single-open / modal / persistence
+  all confirmed.
+- Iteration_6 onboarding regression (login redirect to /onboarding) is
+  RESOLVED — login lands on `/` directly.
+
+### Known minor / not-blocking
+- 10 backend tests in `test_ai_and_admin.py` still failing
+  (httpx[http2] dep + Supabase JWT mock quirks) — pre-existing, queued
+  as P1 backlog.
+- `Dashboard.tsx` is now ~1064 lines — flagged for splitting into
+  `/app/frontend/src/components/dashboard/*` modules in a future
+  refactor pass.

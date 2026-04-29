@@ -7,7 +7,7 @@ import { calc, fmtNum, nrwColor } from '@/lib/calculations';
 import { StatusPill } from '@/components/StatusPill';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -834,7 +834,12 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Pick a date range to inspect the {title.toLowerCase()} time series for the selected plants.
+          </DialogDescription>
+        </DialogHeader>
         <TrendChart metric={metric} plantIds={plantIds} />
       </DialogContent>
     </Dialog>
