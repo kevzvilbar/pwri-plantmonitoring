@@ -424,3 +424,41 @@ The handoff summary's claim that the failures were "Supabase JWT mock
 quirks" was wrong. The single fix (h2 dep) resolved all 10 failures —
 no mocking changes required.
 
+
+---
+
+## Iteration 14 — React Hook-Deps Audit (Option B) (2026-04-29)
+
+### Reality check
+Code review report claimed "87 missing hook deps". Actual count from
+`yarn lint`: **6 warnings**, all in 4 files. The 87 was likely
+miscounting — most of the rest were `@typescript-eslint/no-explicit-any`
+errors, not hook-deps warnings.
+
+### What was fixed
+| File | Line | Fix |
+|---|---|---|
+| `EnergyMixCard.tsx` | 59 | `rows = data ?? []` → `useMemo(() => data ?? [], [data])` (real perf fix — stops `chartData` from re-running every render) |
+| `Chemicals.tsx` | 61 | One-shot plant-seed effect — eslint-disable with comment |
+| `Operations.tsx` | 95 | Same one-shot plant-seed pattern — eslint-disable with comment |
+| `ROTrains.tsx` | 49 | Same one-shot plant-seed pattern — eslint-disable with comment |
+| `ROTrains.tsx` | 144 | One-shot `setPlantId` seeding — eslint-disable with comment |
+| `ROTrains.tsx` | 202 | Prefill `syncMeterStart` from previous reading — eslint-disable with comment (adding the dep would clobber user input) |
+
+The 5 eslint-disables are intentional: each effect is a one-shot seed
+that explicitly should NOT re-run when its missing dep changes (would
+cause data loss / infinite loops / overwriting user input). All carry
+explanatory comments per Rules of Hooks best-practices guidance.
+
+### Verified
+- `yarn lint` — 0 hook-deps warnings remaining (was 6).
+- `npx tsc --noEmit` — clean.
+- Backend tests — 65/65 passing.
+- Frontend smoke screenshot — app boots cleanly to login.
+
+### Now done
+✅ Iteration 11 — Dashboard 3-mode trend graph view
+✅ Iteration 12 — Code-review Option A safe quick wins (XSS, keys, logging)
+✅ Iteration 13 — Backend tests green (h2 dependency)
+✅ Iteration 14 — Code-review Option B hook-deps audit
+

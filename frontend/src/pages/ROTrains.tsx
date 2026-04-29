@@ -46,6 +46,8 @@ export default function ROTrains() {
 function PlantPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
+  // One-shot seed: see PlantPick in Chemicals.tsx for the same pattern.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
   return (
     <Select value={value} onValueChange={onChange}>
@@ -141,6 +143,11 @@ function PretreatmentAndROLog() {
     turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
   });
 
+  // One-shot seed: when the global selectedPlantId resolves and this
+  // page hasn't picked a plant yet, default to it. Re-seeding on
+  // plantId change is undesirable (would clobber the user's choice),
+  // so plantId is intentionally omitted from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
 
   const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
@@ -191,14 +198,17 @@ function PretreatmentAndROLog() {
     });
   }, [trainId]);
 
-  // Once we know the previous backwash end value, prefill the synchronized
-  // shared meter start (still editable). For independent mode the prefill
-  // happens lazily inside each row.
+  // Prefill the synchronized shared meter start when we discover the
+  // previous backwash end value. Intentionally NOT depending on
+  // `syncMeterStart` — re-running when the user types into the field
+  // would overwrite their input. The `syncMeterStart === ''` guard
+  // already prevents over-writes for the initial seed case.
   useEffect(() => {
     if (!isSynchronized) return;
     const firstUnit = Object.keys(prevMeterEndByUnit)[0];
     const v = firstUnit != null ? prevMeterEndByUnit[+firstUnit] : null;
     if (v != null && syncMeterStart === '') setSyncMeterStart(String(v));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prevMeterEndByUnit, isSynchronized]);
 
   const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => ({

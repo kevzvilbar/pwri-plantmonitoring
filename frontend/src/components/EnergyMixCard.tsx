@@ -56,7 +56,10 @@ export function EnergyMixCard({ plantIds }: Props) {
     enabled: plantIds.length > 0,
   });
 
-  const rows = data ?? [];
+  // Wrap in useMemo so the array reference is stable when `data` is
+  // unchanged — otherwise the `chartData` useMemo (line 116) re-runs on
+  // every render, defeating its memoisation.
+  const rows = useMemo<PowerRow[]>(() => data ?? [], [data]);
 
   // Today's KPIs (always plain daily, regardless of timeframe).
   const todaySolar = rows

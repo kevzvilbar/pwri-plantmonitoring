@@ -58,6 +58,12 @@ export default function Chemicals() {
 function PlantPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
+  // One-shot seed: when the global selectedPlantId resolves and this
+  // picker is still empty, populate it. Intentionally NOT depending on
+  // `value` or `onChange` — adding `value` would re-seed when the user
+  // explicitly clears the field, and `onChange` is typically an inline
+  // arrow whose identity changes every parent render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
   return (
     <Select value={value} onValueChange={onChange}>

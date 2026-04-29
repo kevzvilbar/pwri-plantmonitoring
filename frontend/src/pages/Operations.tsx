@@ -92,6 +92,8 @@ export default function Operations() {
 function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
+  // One-shot seed: see PlantPick in Chemicals.tsx for the same pattern.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
   return (
     <Select value={value} onValueChange={onChange}>
