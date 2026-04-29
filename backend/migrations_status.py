@@ -320,6 +320,7 @@ def list_migration_status(authorization: Optional[str]) -> dict[str, Any]:
     # live probe now confirms the migration is applied for real. Returned
     # to the client so the UI can surface a one-time confirmation toast.
     purged_overrides: list[str] = []
+    overrides = _load_overrides()
     history = _load_history()
     history_dirty = False
 

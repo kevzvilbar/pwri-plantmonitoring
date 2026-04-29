@@ -841,7 +841,7 @@ def sync_analysis(authorization: Optional[str], analysis_id: str,
                 # No rows landed — record this as a partial outcome with a
                 # rejection-style audit row so it's traceable.
                 _audit_decision(client, caller, analysis_id, source, target,
-                                f"[IMPORT-REJECT] no readings imported", reason)
+                                "[IMPORT-REJECT] no readings imported", reason)
             for w in warns:
                 summary["skipped"].append({"source": source, "reason": w})
                 any_skipped = True
