@@ -470,7 +470,7 @@ export default function AIImportPanel({
                     <div className="mt-2 flex flex-wrap gap-1">
                       {t.anomalies.map((a, i) => (
                         <span
-                          key={i}
+                          key={`${t.source}-anomaly-${i}-${a.slice(0, 20)}`}
                           className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-200"
                         >
                           <AlertTriangle className="h-2.5 w-2.5" /> {a}
@@ -501,15 +501,15 @@ export default function AIImportPanel({
                             <thead className="bg-muted/50">
                               <tr>
                                 {t.headers.map((h, i) => (
-                                  <th key={i} className="px-1.5 py-1 text-left font-medium whitespace-nowrap">{h || `col${i + 1}`}</th>
+                                  <th key={`${t.source}-h-${i}-${h || 'col'}`} className="px-1.5 py-1 text-left font-medium whitespace-nowrap">{h || `col${i + 1}`}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {t.sample_rows.slice(0, 5).map((r, ri) => (
-                                <tr key={ri} className="border-t">
+                                <tr key={`${t.source}-row-${ri}`} className="border-t">
                                   {r.map((c, ci) => (
-                                    <td key={ci} className="px-1.5 py-0.5 whitespace-nowrap text-muted-foreground">
+                                    <td key={`${t.source}-r${ri}-c${ci}`} className="px-1.5 py-0.5 whitespace-nowrap text-muted-foreground">
                                       {c || '—'}
                                     </td>
                                   ))}
@@ -628,7 +628,7 @@ export default function AIImportPanel({
               <Label className="text-[10px] text-muted-foreground">Skipped ({syncResult.summary.skipped.length})</Label>
               <ul className="mt-0.5 text-[11px] space-y-0.5 list-disc ml-5 text-amber-700 dark:text-amber-300">
                 {syncResult.summary.skipped.map((s, i) => (
-                  <li key={i}><strong>{s.source || '—'}:</strong> {s.reason}</li>
+                  <li key={`skipped-${s.source ?? 'unknown'}-${i}`}><strong>{s.source || '—'}:</strong> {s.reason}</li>
                 ))}
               </ul>
             </div>
@@ -705,7 +705,7 @@ function ColumnMappingEditor({
             <SelectContent>
               <SelectItem value="__none__" className="text-[11px] text-muted-foreground">— none —</SelectItem>
               {headers.map((h, i) => (
-                <SelectItem key={i} value={h || `col${i + 1}`} className="text-[11px]">
+                <SelectItem key={`mapping-opt-${i}-${h || 'col'}`} value={h || `col${i + 1}`} className="text-[11px]">
                   {h || `col${i + 1}`}
                 </SelectItem>
               ))}

@@ -321,7 +321,11 @@ export default function Dashboard() {
     setViewMode(m);
     setExpandedMetric(null);
     setModal(null);
-    try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch { /* ignore quota errors */ }
+    try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch (err) {
+      // Safari private mode / quota errors — view-mode just won't persist.
+      // eslint-disable-next-line no-console
+      console.warn('[Dashboard] could not persist view mode preference:', err);
+    }
   };
   // Returns the click handler for chart-bearing KPI cards. Behaviour
   // depends on the current view mode:
@@ -739,7 +743,7 @@ export default function Dashboard() {
         {localAlerts.length > 0 && (
           <div className="space-y-1.5 pt-1 border-t">
             {localAlerts.slice(0, 5).map((a, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
+              <div key={`${a.tone}-${a.text}-${i}`} className="flex items-center gap-2 text-sm">
                 <StatusPill tone={a.tone}>{a.tone}</StatusPill>
                 <span className="text-xs">{a.text}</span>
               </div>

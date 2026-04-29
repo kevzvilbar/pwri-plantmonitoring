@@ -621,7 +621,7 @@ export default function Import() {
               <div>
                 <Progress value={commitProgress} className="h-2 mt-2" />
                 <div className="mt-2 max-h-32 overflow-auto text-[11px] font-mono-num">
-                  {commitLog.map((l, i) => <div key={i}>{l}</div>)}
+                  {commitLog.map((l, i) => <div key={`log-${i}-${l.slice(0, 16)}`}>{l}</div>)}
                 </div>
               </div>
             )}
@@ -673,7 +673,7 @@ function PreviewTable({ rows }: { rows: ParsedRow[] }) {
             )}
             {rows.map((r, i) => (
               <tr
-                key={i}
+                key={`${r.date ?? 'row'}-${i}`}
                 className={cn(
                   'border-t',
                   !r.include_in_totals && 'bg-rose-50/40',

@@ -227,7 +227,11 @@ function LocatorRow({
       if (locator.gps_lat && locator.gps_lng) {
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      // GPS access denied or unavailable — proceed without coords.
+       
+      console.warn('[Operations] geolocation unavailable; submitting without GPS:', err);
+    }
 
     const payload: any = {
       locator_id: locator.id, plant_id: plantId,
@@ -448,7 +452,11 @@ function WellRow({
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
-    } catch { /* ignore */ }
+    } catch (err) {
+      // GPS access denied or unavailable — proceed without coords.
+       
+      console.warn('[Operations] geolocation unavailable; submitting without GPS:', err);
+    }
 
     const payload: any = {
       well_id: well.id, plant_id: plantId,

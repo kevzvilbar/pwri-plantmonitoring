@@ -375,7 +375,12 @@ function LocatorsList({ plantId }: { plantId: string }) {
         forced: false,
       }));
       await supabase.from('deletion_audit_log' as any).insert(payload as any);
-    } catch { /* table may be missing pre-migration */ }
+    } catch (err) {
+      // Log non-fatal: deletion_audit_log table may be missing pre-migration.
+      // Surfacing keeps debugging easy without crashing the delete flow.
+      // eslint-disable-next-line no-console
+      console.warn('[Plants] deletion_audit_log insert failed (non-fatal):', err);
+    }
   };
 
   const doBulkDelete = async () => {
@@ -794,7 +799,12 @@ function WellsList({ plantId }: { plantId: string }) {
         forced: false,
       }));
       await supabase.from('deletion_audit_log' as any).insert(payload as any);
-    } catch { /* table may be missing pre-migration */ }
+    } catch (err) {
+      // Log non-fatal: deletion_audit_log table may be missing pre-migration.
+      // Surfacing keeps debugging easy without crashing the delete flow.
+      // eslint-disable-next-line no-console
+      console.warn('[Plants] deletion_audit_log insert failed (non-fatal):', err);
+    }
   };
 
   const doBulkDelete = async () => {
