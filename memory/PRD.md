@@ -395,3 +395,32 @@ subset (Option A) — large refactors deferred to follow-up sessions.
 - 3 Supabase HTTP 404/400 errors during /auth handshake (pre-existing
   from iter_6 onward) — worth a separate investigation pass
 
+
+---
+
+## Iteration 13 — Backend Test Suite Green (2026-04-29)
+
+### Problem
+10 of 65 tests in `backend/tests/test_ai_and_admin.py` were failing. Every
+failure had the same root cause: when a malformed bearer token reached an
+admin endpoint (or the cron evaluate endpoint), the Supabase Python
+client tried to make an HTTP/2 call but crashed with
+`Using http2=True, but the 'h2' package is not installed`. That
+returned a 500, which the contract tests asserted should be 401/403.
+
+### Fix
+- Installed `h2>=4.0,<5` (pulled in by `pip install`) and added it to
+  `backend/requirements.txt` next to the existing `httpx>=0.27.0` line.
+- No code changes were needed — once h2 was available, Supabase 2.15.0
+  could complete its handshake and reject malformed JWTs with 401
+  cleanly, matching the test contract.
+
+### Verified
+- `python -m pytest tests/` — **65/65 passed (up from 55/65)**.
+- Both `test_ai_and_admin.py` (42) and `test_pwri_backend.py` (23) green.
+
+### Note
+The handoff summary's claim that the failures were "Supabase JWT mock
+quirks" was wrong. The single fix (h2 dep) resolved all 10 failures —
+no mocking changes required.
+
