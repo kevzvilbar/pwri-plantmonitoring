@@ -13,8 +13,10 @@ import { toast } from 'sonner';
 export default function Onboarding() {
   const { user, profile, refreshProfile, loading } = useAuth();
   const navigate = useNavigate();
-  const { data: plants } = usePlants();
+  const { data: plants, refetch: refetchPlants } = usePlants();
   const [busy, setBusy] = useState(false);
+  const [creatingPlant, setCreatingPlant] = useState(false);
+  const [newPlantName, setNewPlantName] = useState('');
 
   const [form, setForm] = useState({
     username: '', first_name: '', middle_name: '', last_name: '', suffix: '',
@@ -32,6 +34,24 @@ export default function Onboarding() {
         ? f.plant_assignments.filter((x) => x !== id)
         : [...f.plant_assignments, id],
     }));
+  };
+
+  const handleCreatePlant = async () => {
+    if (!newPlantName.trim()) { toast.error('Enter a plant name'); return; }
+    setCreatingPlant(true);
+    const { data, error } = await supabase
+      .from('plants')
+      .insert({ name: newPlantName.trim(), status: 'Active', num_ro_trains: 0, geofence_radius_m: 100, backwash_mode: 'independent' })
+      .select('id')
+      .single();
+    setCreatingPlant(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Plant "${newPlantName.trim()}" created`);
+    setNewPlantName('');
+    await refetchPlants();
+    if (data?.id) {
+      setForm((f) => ({ ...f, plant_assignments: [...f.plant_assignments, data.id] }));
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -55,6 +75,8 @@ export default function Onboarding() {
     navigate('/');
   };
 
+  const noPlants = !plants || plants.length === 0;
+
   return (
     <div className="min-h-screen bg-background p-4 flex justify-center">
       <form onSubmit={submit} className="w-full max-w-lg bg-card rounded-2xl shadow-card p-5 space-y-4 my-6">
@@ -65,13 +87,30 @@ export default function Onboarding() {
 
         <div>
           <Label className="mb-2 block">Plant assignments *</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {plants?.map((p) => (
-              <label key={p.id} className="flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-secondary">
-                <Checkbox checked={form.plant_assignments.includes(p.id)} onCheckedChange={() => togglePlant(p.id)} />
-                <span className="text-sm">{p.name}</span>
-              </label>
-            ))}
+
+          {noPlants ? (
+            <p className="text-sm text-muted-foreground mb-2">No plants found. Create one to continue.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {plants.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-secondary">
+                  <Checkbox checked={form.plant_assignments.includes(p.id)} onCheckedChange={() => togglePlant(p.id)} />
+                  <span className="text-sm">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-1">
+            <Input
+              placeholder="New plant name…"
+              value={newPlantName}
+              onChange={(e) => setNewPlantName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreatePlant(); } }}
+            />
+            <Button type="button" variant="outline" onClick={handleCreatePlant} disabled={creatingPlant}>
+              {creatingPlant ? 'Adding…' : '+ Add plant'}
+            </Button>
           </div>
         </div>
 
