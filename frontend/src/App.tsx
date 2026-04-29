@@ -35,8 +35,6 @@ const RouteFallback = () => (
   </div>
 );
 
-// Global QueryClient with sensible defaults + toast on query/mutation errors.
-// Prevents white-screen cascades when Supabase is unreachable.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -50,10 +48,8 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error, query) => {
-      // Only surface explicit fetch errors, not auth-404s etc.
       const msg = error instanceof Error ? error.message : String(error);
       if (!msg || /abort/i.test(msg)) return;
-      // Use the query key tail as context
       const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       toast.error(`Load failed (${key}): ${msg}`);
     },
@@ -71,7 +67,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner position="top-center" />
-      <BrowserRouter>
+      <BrowserRouter basename="/pwri-plantmonitoring">
         <AuthProvider>
           <ErrorBoundary>
             <Suspense fallback={<RouteFallback />}>
