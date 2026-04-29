@@ -22,9 +22,9 @@ interface Props {
   days?: number;
 }
 
-export function BypassVolumeCard({ plantIds, days = 14 }: Props) {
+export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
   const { data } = useQuery<ApiResponse>({
-    queryKey: ['bypass-volume', plantIds, days],
+    queryKey: ['blending-volume', plantIds, days],
     queryFn: async () => {
       if (!plantIds.length) {
         return { days, total_m3: 0, today_m3: 0, series: [], by_well: [] };
@@ -52,27 +52,27 @@ export function BypassVolumeCard({ plantIds, days = 14 }: Props) {
   }));
 
   return (
-    <Card className="p-3" data-testid="bypass-volume-card">
+    <Card className="p-3" data-testid="blending-volume-card">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <h2 className="text-sm font-semibold flex items-center gap-1.5">
           <Waves className="h-4 w-4 text-violet-600" />
-          Bypass Volume · last {days}d
+          Blending Volume · last {days}d
         </h2>
         <span className="text-[10px] text-muted-foreground">
-          Product-line water from bypass wells (m³)
+          Product-line water from blending wells (m³)
         </span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
-        <KpiTile label="Today" value={fmtNum(today, 0)} testId="bypass-today" />
-        <KpiTile label={`Total ${days}d`} value={fmtNum(total, 0)} testId="bypass-total" />
-        <KpiTile label="Daily avg" value={fmtNum(dailyAvg, 0)} testId="bypass-avg" />
+        <KpiTile label="Today" value={fmtNum(today, 0)} testId="blending-today" />
+        <KpiTile label={`Total ${days}d`} value={fmtNum(total, 0)} testId="blending-total" />
+        <KpiTile label="Daily avg" value={fmtNum(dailyAvg, 0)} testId="blending-avg" />
       </div>
 
       <div className="h-36">
         {total === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-2">
-            No bypass injections recorded in the last {days} days
+            No blending injections recorded in the last {days} days
           </div>
         ) : (
           <ResponsiveContainer>
@@ -87,9 +87,9 @@ export function BypassVolumeCard({ plantIds, days = 14 }: Props) {
                   borderRadius: 8,
                   fontSize: 11,
                 }}
-                formatter={(v: any) => [`${fmtNum(+v, 1)} m³`, 'Bypass volume']}
+                formatter={(v: any) => [`${fmtNum(+v, 1)} m³`, 'Blending volume']}
               />
-              <Bar dataKey="volume" fill="#a78bfa" name="Bypass (m³)" />
+              <Bar dataKey="volume" fill="#a78bfa" name="Blending (m³)" />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -105,7 +105,7 @@ export function BypassVolumeCard({ plantIds, days = 14 }: Props) {
               <div
                 key={w.well_id}
                 className="flex justify-between items-center text-xs"
-                data-testid={`bypass-well-${w.well_id}`}
+                data-testid={`blending-well-${w.well_id}`}
               >
                 <div className="min-w-0 truncate">
                   <span className="font-medium">{w.well_name || 'Unnamed'}</span>

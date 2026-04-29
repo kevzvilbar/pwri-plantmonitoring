@@ -23,10 +23,27 @@ import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
-import { BypassVolumeCard } from '@/components/BypassVolumeCard';
+import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { LayoutGrid, ListCollapse, ExternalLink } from 'lucide-react';
+
+// View-mode preference for the dashboard cluster layout. Persists to
+// localStorage so a user's "I prefer the popup view" choice survives a
+// page reload. Three modes:
+//   • inline   — every cluster is fully expanded in flow (default).
+//   • sections — every cluster is wrapped in a Collapsible (retractable).
+//   • popup    — clusters render only their headers; clicking opens a
+//                modal Dialog with that cluster's cards full-width.
+type DashboardViewMode = 'inline' | 'sections' | 'popup';
+const VIEW_MODE_KEY = 'pwri:dashboard-view-mode';
+function readSavedViewMode(): DashboardViewMode {
+  if (typeof window === 'undefined') return 'inline';
+  const raw = window.localStorage.getItem(VIEW_MODE_KEY);
+  return raw === 'sections' || raw === 'popup' ? raw : 'inline';
+}
 
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = { '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90 };
@@ -116,6 +133,67 @@ function StatCard({
   );
 }
 
+// Quality-cluster card that surfaces an aggregate value at the top and
+// renders a compact "per-train" breakdown beneath. Used for Raw TDS and
+// Raw NTU, which live at the RO-train level in this schema (no per-well
+// equivalent exists). Each row shows "{plantCode} · T{train_number}"
+// alongside the train's most recent reading. When fewer than 2 trains
+// have data, the breakdown collapses to just the aggregate value so we
+// don't render a near-empty list.
+function PerTrainCard({
+  icon: Icon, label, unit, aggregate, rows, field, plantCodeById,
+  testId, decimals = 0,
+}: {
+  icon: any;
+  label: string;
+  unit: string;
+  aggregate: number | null | undefined;
+  rows: any[];
+  field: 'feed_tds' | 'turbidity_ntu' | 'permeate_tds';
+  plantCodeById: Map<string, string>;
+  testId: string;
+  decimals?: number;
+}) {
+  // Filter out rows with no reading for this metric — they'd render as
+  // "—" and add noise to a list whose whole purpose is to show numbers.
+  const liveRows = rows.filter((r) => r[field] != null);
+  return (
+    <Card
+      className="stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all p-3 bg-gradient-to-br from-card to-card/60"
+      data-testid={testId}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <Icon className="shrink-0 h-4 w-4 text-muted-foreground" />
+        <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted/60 text-muted-foreground">
+          per train
+        </span>
+      </div>
+      <div className="mt-2 font-mono-num text-foreground leading-none whitespace-nowrap text-xl">
+        {aggregate ?? '—'}
+        {unit && <span className="font-sans text-muted-foreground ml-1 text-xs">{unit}</span>}
+      </div>
+      <div className="text-muted-foreground mt-1 leading-tight text-[11px]">{label}</div>
+      {liveRows.length >= 2 && (
+        <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
+          {liveRows.map((r) => (
+            <div
+              key={`${r.plant_id}-${r.train_number}`}
+              className="flex items-center justify-between text-[10px]"
+            >
+              <span className="text-muted-foreground truncate">
+                {plantCodeById.get(r.plant_id) ?? '—'} · T{r.train_number ?? '?'}
+              </span>
+              <span className="font-mono-num text-foreground/90 tabular-nums shrink-0 ml-2">
+                {decimals === 0 ? Math.round(r[field]) : (+r[field]).toFixed(decimals)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ClusterHeader({ icon: Icon, title, subtitle, accent }: { icon: any; title: string; subtitle?: string; accent?: string }) {
   return (
     <div className="flex items-baseline gap-2 mt-1 mb-1.5 px-0.5">
@@ -123,6 +201,87 @@ function ClusterHeader({ icon: Icon, title, subtitle, accent }: { icon: any; tit
       <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
       {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
     </div>
+  );
+}
+
+// Wrapper that adapts a metric cluster to the user-selected view mode.
+// `inline` is the default flowing layout; `sections` wraps the body in
+// a Collapsible (header acts as trigger); `popup` collapses the body
+// off-screen and replaces the header with a button that opens the body
+// inside a Dialog. Defining at module scope (not inside Dashboard) so
+// React doesn't remount children on every parent re-render.
+function ClusterShell({
+  id, mode, title, icon: Icon, accent, subtitle,
+  popupOpen, onPopupOpen, onPopupClose, children,
+}: {
+  id: string;
+  mode: DashboardViewMode;
+  title: string;
+  icon: any;
+  accent?: string;
+  subtitle?: string;
+  popupOpen: boolean;
+  onPopupOpen: () => void;
+  onPopupClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (mode === 'inline') {
+    return (
+      <>
+        <ClusterHeader icon={Icon} title={title} accent={accent} subtitle={subtitle} />
+        {children}
+      </>
+    );
+  }
+  if (mode === 'sections') {
+    return (
+      <Collapsible defaultOpen className="group">
+        <CollapsibleTrigger
+          className="w-full flex items-center justify-between mt-1 mb-1.5 px-1 py-1 -mx-1 hover:bg-muted/30 rounded transition-colors"
+          data-testid={`cluster-toggle-${id}`}
+        >
+          <div className="flex items-baseline gap-2">
+            <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+            {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
+          </div>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=closed]:rotate-[-90deg]" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>{children}</CollapsibleContent>
+      </Collapsible>
+    );
+  }
+  // popup mode
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onPopupOpen}
+        className="w-full flex items-center justify-between mt-1 mb-1.5 px-2 py-2 rounded-md border border-dashed bg-card hover:bg-muted/30 transition-colors text-left"
+        data-testid={`cluster-popup-${id}`}
+      >
+        <div className="flex items-baseline gap-2">
+          <Icon className={`h-3.5 w-3.5 ${accent ?? 'text-muted-foreground'}`} />
+          <h2 className="text-xs font-semibold">{title}</h2>
+          {subtitle && <span className="text-[10px] text-muted-foreground/70">{subtitle}</span>}
+        </div>
+        <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+          Open <ExternalLink className="h-3 w-3" />
+        </span>
+      </button>
+      <Dialog open={popupOpen} onOpenChange={(v) => !v && onPopupClose()}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Icon className={`h-4 w-4 ${accent ?? 'text-muted-foreground'}`} />
+              {title}
+              {subtitle && <span className="text-[11px] font-normal text-muted-foreground">· {subtitle}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="pt-2">{children}</div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -138,6 +297,19 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
+  // View mode controls how the metric clusters are laid out — see the
+  // top-of-file definition for the three modes. Lazy-init from localStorage
+  // so the user's preference survives reload without a flash of "inline".
+  const [viewMode, setViewMode] = useState<DashboardViewMode>(readSavedViewMode);
+  // When in `popup` mode, this holds the id of the cluster currently
+  // shown in the modal Dialog (null = none open). Cluster ids are stable
+  // strings: 'overview' | 'quality' | 'cost'.
+  const [popupCluster, setPopupCluster] = useState<null | 'overview' | 'quality' | 'cost'>(null);
+  const persistViewMode = (m: DashboardViewMode) => {
+    setViewMode(m);
+    setPopupCluster(null);
+    try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch { /* ignore quota errors */ }
+  };
 
   const visiblePlants = useMemo(
     () => (selectedPlantId ? plants?.filter((p) => p.id === selectedPlantId) : plants),
@@ -202,8 +374,9 @@ export default function Dashboard() {
     queryKey: ['dash-ro-recent', plantIds],
     queryFn: async () => plantIds.length
       ? (await supabase.from('ro_train_readings')
-          .select('permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,plant_id')
-          .in('plant_id', plantIds).gte('reading_datetime', subDays(new Date(), 1).toISOString())).data ?? []
+          .select('permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,plant_id,train_number,reading_datetime')
+          .in('plant_id', plantIds).gte('reading_datetime', subDays(new Date(), 1).toISOString())
+          .order('reading_datetime', { ascending: false })).data ?? []
       : [],
     enabled: plantIds.length > 0,
   });
@@ -252,6 +425,38 @@ export default function Dashboard() {
   const avgTurb = (latestRO ?? []).length
     ? +((latestRO as any[]).reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / (latestRO as any[]).length).toFixed(2)
     : null;
+
+  // Per-train latest snapshot — group `latestRO` by (plant_id, train_number)
+  // and keep the most recent row per train (the query is already ordered
+  // reading_datetime DESC, so the first row we encounter per key wins).
+  // Used by the "Raw TDS / Raw NTU per train" breakdown lists in Quality.
+  // Note: TDS and NTU are recorded at the RO-train level in this schema,
+  // not the well level — we surface them here labelled as "Train N" with
+  // the plant code so the user knows what they're looking at.
+  const roByTrain = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    (latestRO as any[] | undefined ?? []).forEach((r) => {
+      const key = `${r.plant_id}__${r.train_number ?? '?'}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push(r);
+    });
+    rows.sort((a, b) => {
+      // Sort by plant_id then train_number for stable rendering across re-renders.
+      if (a.plant_id !== b.plant_id) return String(a.plant_id).localeCompare(String(b.plant_id));
+      return (a.train_number ?? 0) - (b.train_number ?? 0);
+    });
+    return rows;
+  }, [latestRO]);
+  // Lookup helper for plant codes inside per-train rows. Falls back to the
+  // raw plant_id when the plant list hasn't loaded yet so we never render
+  // a blank label.
+  const plantCodeById = useMemo(() => {
+    const m = new Map<string, string>();
+    (plants ?? []).forEach((p: any) => m.set(p.id, p.code ?? p.name ?? p.id));
+    return m;
+  }, [plants]);
 
   // Costs aggregate (today). Fallback to most recent daily_plant_summary row per plant for missing fields.
   const chemCost = (todayCosts ?? []).reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
@@ -307,11 +512,52 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-xs text-muted-foreground">
-          {selectedPlantId ? visiblePlants?.[0]?.name : `All plants (${plants?.length ?? 0})`} · Today
-        </p>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-xs text-muted-foreground">
+            {selectedPlantId ? visiblePlants?.[0]?.name : `All plants (${plants?.length ?? 0})`} · Today
+            {' · Production '}
+            <span className="font-mono-num text-foreground">{fmtNum(production)}</span>
+            <span className="ml-0.5">m³</span>
+          </p>
+        </div>
+        {/* View-mode toggle. Three layouts; choice persists to localStorage.
+            Tooltip on each option spells out what it does so the icons aren't
+            cryptic. The control is intentionally compact — sits in the page
+            header, not the cluster headers, so switching modes never moves it. */}
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(v) => v && persistViewMode(v as DashboardViewMode)}
+          className="h-8 shrink-0"
+          data-testid="dashboard-view-mode"
+        >
+          <ToggleGroupItem
+            value="inline"
+            className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+            title="Inline — every section expanded in normal flow"
+            aria-label="Inline view"
+          >
+            <LayoutGrid className="h-3 w-3 mr-1" /> Inline
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="sections"
+            className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+            title="Sections — each cluster header is a retractable toggle"
+            aria-label="Sections view"
+          >
+            <ListCollapse className="h-3 w-3 mr-1" /> Sections
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="popup"
+            className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+            title="Popup — clusters collapse to header buttons; click to open in a dialog"
+            aria-label="Popup view"
+          >
+            <ExternalLink className="h-3 w-3 mr-1" /> Popup
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* NRW threshold alert banner */}
@@ -334,69 +580,138 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ─── Cluster: Production & Consumption (highlight) ─── */}
-      <ClusterHeader icon={Droplet} title="Production & Consumption" accent="text-primary" />
-      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Droplet} accent="text-primary" label="Production" value={fmtNum(production)} unit="m³"
-          size="lg" trend={dProduction}
-          onClick={() => setModal({ metric: 'production', title: 'Production Trend' })} />
-        <StatCard icon={Activity} label="NRW Water Loss" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
-          size="lg" calc threshold="20%"
-          calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
-          onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
-        <StatCard icon={Receipt} accent="text-highlight" label="Locator Consumption" value={fmtNum(consumption)} unit="m³"
-          trend={dConsumption}
-          onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
-        <StatCard icon={Droplet} label="Raw Water (Wells)" value={fmtNum(rawWater)} unit="m³"
-          onClick={() => setModal({ metric: 'rawwater', title: 'Raw Water Trendline' })} />
-        <StatCard icon={Waves} label="Bypass → Product" value={fmtNum(blending)} unit="m³" />
-      </div>
-
-      {/* ─── Cluster: Quality (collapsible on mobile) ─── */}
-      <Collapsible defaultOpen className="group">
-        <div className="flex items-center justify-between mt-1 mb-1.5 px-0.5 sm:pointer-events-none">
-          <div className="flex items-baseline gap-2">
-            <FlaskConical className="h-3.5 w-3.5 text-accent" />
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Quality</h2>
-            <span className="text-[10px] text-muted-foreground/70">RO output</span>
-          </div>
-          <CollapsibleTrigger
-            className="sm:hidden text-muted-foreground hover:text-foreground transition"
-            aria-label="Toggle Quality section"
-            data-testid="quality-toggle"
-          >
-            <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
-          </CollapsibleTrigger>
+      {/* ─── Cluster 1: Overview ─── */}
+      {/* Order matches the spec: Production Cost · Locators Consumption ·
+          NRW · Raw Water and Blending (combined). Production volume (m³)
+          is surfaced in the page subheader so the underlying NRW math
+          stays visible without spending a card on it. */}
+      <ClusterShell
+        id="overview"
+        mode={viewMode}
+        title="Overview"
+        icon={Droplet}
+        accent="text-primary"
+        popupOpen={popupCluster === 'overview'}
+        onPopupOpen={() => setPopupCluster('overview')}
+        onPopupClose={() => setPopupCluster(null)}
+      >
+        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+          <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
+            size="lg" calc
+            calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
+            value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
+          <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
+            trend={dConsumption}
+            onClick={() => setModal({ metric: 'production', title: 'Production Vs Consumption' })} />
+          <StatCard icon={Activity} label="NRW" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
+            size="lg" calc threshold="20%"
+            calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
+            onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
+          {/* Combined "Raw Water and Blending" card — two adjacent metrics
+              under one roof so the spec's "#4: Raw Water and Blending"
+              renders as a single tile rather than two competing cards. */}
+          <Card className="stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all p-3 bg-gradient-to-br from-card to-card/60">
+            <div className="flex items-start justify-between gap-2">
+              <Droplet className="shrink-0 h-4 w-4 text-muted-foreground" />
+              <Waves className="shrink-0 h-4 w-4 text-violet-600" />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div>
+                <div className="font-mono-num text-foreground leading-none whitespace-nowrap text-lg">
+                  {fmtNum(rawWater)}
+                  <span className="font-sans text-muted-foreground ml-1 text-xs">m³</span>
+                </div>
+                <div className="text-muted-foreground mt-1 leading-tight text-[11px]">Raw Water</div>
+              </div>
+              <div>
+                <div className="font-mono-num text-foreground leading-none whitespace-nowrap text-lg">
+                  {fmtNum(blending)}
+                  <span className="font-sans text-muted-foreground ml-1 text-xs">m³</span>
+                </div>
+                <div className="text-muted-foreground mt-1 leading-tight text-[11px]">Blending</div>
+              </div>
+            </div>
+            <div className="text-muted-foreground mt-2 leading-tight text-[11px] font-medium border-t pt-1.5">
+              Raw Water and Blending
+            </div>
+          </Card>
         </div>
-        <CollapsibleContent forceMount className="data-[state=closed]:hidden sm:!block">
-          <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-            <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
-            <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
-              onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
-            <StatCard icon={Cloud} label="Raw Turbidity" value={avgTurb ?? '—'} unit="NTU" />
-            <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
-              onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      </ClusterShell>
 
-      {/* ─── Cluster: Energy & Cost ─── */}
-      <ClusterHeader icon={Zap} title="Energy & Cost" accent="text-chart-6" subtitle="Today" />
-      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
-          size="lg" trend={dKwh} />
-        <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
-          calc threshold="1.2"
-          calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
-          onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
-        <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
-          calc calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
-          value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
-        <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-          value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
-        <StatCard icon={FlaskConical} accent="text-highlight" label="Chem Cost"
-          value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
-      </div>
+      {/* ─── Cluster 2: Quality ─── */}
+      {/* Spec order: Feed TDS · Product TDS · Raw TDS (per train) ·
+          Raw NTU (per train). TDS/NTU live at the RO-train level in this
+          schema, not the well level — so each card surfaces the aggregate
+          headline plus a small per-train breakdown list beneath it. */}
+      <ClusterShell
+        id="quality"
+        mode={viewMode}
+        title="Quality"
+        icon={FlaskConical}
+        accent="text-accent"
+        subtitle="RO output"
+        popupOpen={popupCluster === 'quality'}
+        onPopupOpen={() => setPopupCluster('quality')}
+        onPopupClose={() => setPopupCluster(null)}
+      >
+        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+          <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
+          <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
+            onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
+          {/* Raw TDS · per train — aggregate value above, small list below */}
+          <PerTrainCard
+            icon={Gauge}
+            label="Raw TDS"
+            unit="ppm"
+            aggregate={avgFeedTds}
+            rows={roByTrain}
+            field="feed_tds"
+            plantCodeById={plantCodeById}
+            testId="raw-tds-per-train"
+          />
+          <PerTrainCard
+            icon={Cloud}
+            label="Raw NTU"
+            unit="NTU"
+            aggregate={avgTurb}
+            rows={roByTrain}
+            field="turbidity_ntu"
+            plantCodeById={plantCodeById}
+            testId="raw-ntu-per-train"
+            decimals={2}
+          />
+          <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+            onClick={() => setModal({ metric: 'recovery', title: 'Recovery Trendline' })} />
+        </div>
+      </ClusterShell>
+
+      {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
+      {/* Spec order: Power Cost · Chemical Cost · Power kWh · PV Ratio.
+          The header doubles as the section title called out in the spec. */}
+      <ClusterShell
+        id="cost"
+        mode={viewMode}
+        title="Production Cost (Power + Chemical)"
+        icon={Zap}
+        accent="text-chart-6"
+        subtitle="Today"
+        popupOpen={popupCluster === 'cost'}
+        onPopupOpen={() => setPopupCluster('cost')}
+        onPopupClose={() => setPopupCluster(null)}
+      >
+        <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+          <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
+            value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
+          <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
+            value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
+          <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
+            trend={dKwh} />
+          <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
+            calc threshold="1.2"
+            calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
+            onClick={() => setModal({ metric: 'pv', title: 'PV ratio trend' })} />
+        </div>
+      </ClusterShell>
 
       <Card className="p-3" data-testid="alerts-card">
         <div className="flex items-center gap-2 mb-2">
@@ -417,7 +732,7 @@ export default function Dashboard() {
                 : a.severity === 'low' ? 'accent'
                 : 'info' as const;
               const kindLabel = a.kind === 'downtime' ? 'Downtime'
-                : a.kind === 'blending' ? 'Bypass'
+                : a.kind === 'blending' ? 'Blending'
                 : 'Recovery';
               return (
                 <button
@@ -478,7 +793,7 @@ export default function Dashboard() {
 
       <PowerChart plantIds={plantIds} />
       <EnergyMixCard plantIds={plantIds} />
-      <BypassVolumeCard plantIds={plantIds} />
+      <BlendingVolumeCard plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
       <DowntimeEventsModal

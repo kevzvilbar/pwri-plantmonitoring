@@ -33,15 +33,25 @@ For production, the frontend expects to talk to a hosted FastAPI backend (set `R
 
 ## Dashboard layout
 
-`frontend/src/pages/Dashboard.tsx` is organized into three KPI clusters with section headers:
+`frontend/src/pages/Dashboard.tsx` is organized into three KPI clusters wrapped in `ClusterShell`, which renders each cluster according to the page-level **view-mode toggle** in the header (`pwri:dashboard-view-mode` localStorage key):
 
-1. **Production & Consumption** — Production (lg), NRW Water Loss (lg, calc, tone-tinted by `nrwColor`), Locator Consumption, Raw Water (Wells), Bypass → Product. Trend % vs previous day shown on Production and Consumption.
-2. **Quality** — Feed TDS, Product TDS, Raw Turbidity, Recovery. Collapsible on mobile (`Radix Collapsible` + `forceMount` + `sm:!block`); always visible on `sm+`.
-3. **Energy & Cost** — Power kWh (lg, trend), PV Ratio (calc), Production Cost (calc), Power Cost, Chem Cost.
+- **Inline** — every section expanded in normal flow (default).
+- **Sections** — each cluster header is a retractable Radix `Collapsible` (open by default).
+- **Popup** — clusters collapse to header buttons; clicking opens the cluster's grid in a centered Radix `Dialog`.
+
+Production (m³) is shown in the page subheader (not as a card). Cluster ordering (top to bottom):
+
+1. **Overview** — Production Cost (lg), Locators Consumption, NRW (lg, calc, tone-tinted by `nrwColor`), combined "Raw Water + Blending" card (raw wells m³ above blending wells m³ in one card).
+2. **Quality** — Feed TDS, Product TDS, Raw TDS (`PerTrainCard`), Raw NTU (`PerTrainCard`), Recovery. The two `PerTrainCard`s render an aggregate value plus a per-train breakdown (`{plantCode} · T{train_number}`) when ≥2 trains have data — Raw TDS/NTU live at the RO-train level only, no per-well equivalent exists in this schema.
+3. **Production Cost (Power + Chemical)** — Power Cost, Chemical Cost, Power kWh, PV Ratio.
 
 `StatCard` supports `size: 'default'|'lg'`, `trend: number|null` (% vs yesterday rendered via `TrendBadge`), `tone: 'accent'|'warn'|'danger'` (drives gradient bg + icon color), `calc + calcTooltip` (sky tint + tooltip explaining the formula), `accent` (icon color override), `threshold` (limit hint).
 
 A red **NRW alert banner** appears above the clusters whenever `nrw > 20`, clickable to open the NRW trend modal. Yesterday baselines for trend deltas come from three additional Supabase queries (`yLocators`, `yWells`, `yPower`) bounded by `gte(yesterday) + lt(today)`. KPI pinning/customization was intentionally not implemented (would require user-scoped storage).
+
+## Blending terminology
+
+Wells that inject directly into the product line are called **Blending wells** across the UI (Dashboard alert label, Operations tab + form, Plants per-well checkbox + badge, dedicated `BlendingVolumeCard`). The backend column (`is_blending_well`), table (`blending_wells`), routes (`/api/blending/*`), and aggregate (`blending_m3`) already use this term. The legacy URL `?tab=bypass` on the Operations page still resolves (back-compat alias in `TAB_ALIASES`) so old bookmarks land on the renamed Blending tab silently.
 
 ## Admin → Plants tab
 

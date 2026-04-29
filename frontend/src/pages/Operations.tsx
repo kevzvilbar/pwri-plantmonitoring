@@ -43,10 +43,13 @@ const TAB_ALIASES: Record<string, string> = {
   locators: 'locator',
   well: 'well',
   wells: 'well',
-  bypass: 'bypass',
+  blending: 'blending',
+  // Back-compat: any old bookmark or hard-coded link that still uses
+  // ?tab=bypass keeps working and silently lands on the renamed tab.
+  bypass: 'blending',
   power: 'power',
 };
-const VALID_TABS = new Set(['locator', 'well', 'bypass', 'power']);
+const VALID_TABS = new Set(['locator', 'well', 'blending', 'power']);
 
 export default function Operations() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,12 +77,12 @@ export default function Operations() {
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="locator">Locator</TabsTrigger>
           <TabsTrigger value="well">Well</TabsTrigger>
-          <TabsTrigger value="bypass">Bypass</TabsTrigger>
+          <TabsTrigger value="blending">Blending</TabsTrigger>
           <TabsTrigger value="power">Power</TabsTrigger>
         </TabsList>
         <TabsContent value="locator" className="mt-3"><LocatorReadingForm /></TabsContent>
         <TabsContent value="well" className="mt-3"><WellReadingForm /></TabsContent>
-        <TabsContent value="bypass" className="mt-3"><BypassForm /></TabsContent>
+        <TabsContent value="blending" className="mt-3"><BlendingForm /></TabsContent>
         <TabsContent value="power" className="mt-3"><PowerForm /></TabsContent>
       </Tabs>
     </div>
@@ -491,9 +494,9 @@ function WellRow({
             <Badge
               className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
               data-testid={`blending-badge-${well.id}`}
-              title="Marked As Bypass Well — Injects Directly To Product Water"
+              title="Marked as Blending Well — injects directly to product water"
             >
-              Bypass
+              Blending
             </Badge>
           )}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">Editing</span>}
@@ -606,9 +609,9 @@ function WellRow({
   );
 }
 
-// ---------- BYPASS (volume entry for wells tagged as bypass) ----------
+// ---------- BLENDING (volume entry for wells tagged as blending) ----------
 
-function BypassForm() {
+function BlendingForm() {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
@@ -623,16 +626,16 @@ function BypassForm() {
   });
 
   const { data: blendingData } = useBlendingWells(plantId);
-  const bypassIds = useMemo(
+  const blendingIds = useMemo(
     () => new Set((blendingData?.wells ?? []).map((w) => w.well_id)),
     [blendingData],
   );
-  const bypassWells = useMemo(
-    () => (wells ?? []).filter((w: any) => bypassIds.has(w.id)),
-    [wells, bypassIds],
+  const blendingWells = useMemo(
+    () => (wells ?? []).filter((w: any) => blendingIds.has(w.id)),
+    [wells, blendingIds],
   );
 
-  // Today's logged bypass volume + most-recent prior entry per well.
+  // Today's logged blending volume + most-recent prior entry per well.
   // Wider window (14 days) so a previous entry can be surfaced. Backend
   // returns today_volume_m3 (today only) separately from volume_m3 (window
   // total), so the "today" label stays accurate even with a wider span.
@@ -645,7 +648,7 @@ function BypassForm() {
       previous_event_date: string | null;
     }[];
   }>({
-    queryKey: ['bypass-today', plantId],
+    queryKey: ['blending-today', plantId],
     queryFn: async () => {
       const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -679,14 +682,14 @@ function BypassForm() {
       {plantId && (
         <Card className="p-0 overflow-hidden">
           <div className="px-3 py-2 border-b bg-muted/40 text-xs font-medium flex items-center justify-between">
-            <span>Bypass wells</span>
-            <span className="text-muted-foreground">{bypassWells.length} tagged</span>
+            <span>Blending wells</span>
+            <span className="text-muted-foreground">{blendingWells.length} tagged</span>
           </div>
-          {bypassWells.length ? (
+          {blendingWells.length ? (
             <ul className="divide-y">
-              {bypassWells.map((w: any) => (
+              {blendingWells.map((w: any) => (
                 <li key={w.id}>
-                  <BypassRow
+                  <BlendingRow
                     well={w}
                     plantId={plantId}
                     plantName={plantName}
@@ -694,8 +697,8 @@ function BypassForm() {
                     previousVolume={prevByWell[w.id]?.volume ?? null}
                     previousDate={prevByWell[w.id]?.date ?? null}
                     onSaved={() => {
-                      qc.invalidateQueries({ queryKey: ['bypass-today', plantId] });
-                      qc.invalidateQueries({ queryKey: ['bypass-volume'] });
+                      qc.invalidateQueries({ queryKey: ['blending-today', plantId] });
+                      qc.invalidateQueries({ queryKey: ['blending-volume'] });
                     }}
                   />
                 </li>
@@ -703,7 +706,7 @@ function BypassForm() {
             </ul>
           ) : (
             <div className="p-3 text-xs text-muted-foreground">
-              No wells tagged as bypass for this plant. Tag a well as bypass under <span className="font-medium">Plants → Wells</span>.
+              No wells tagged as blending for this plant. Tag a well as blending under <span className="font-medium">Plants → Wells</span>.
             </div>
           )}
         </Card>
@@ -712,7 +715,7 @@ function BypassForm() {
   );
 }
 
-function BypassRow({
+function BlendingRow({
   well, plantId, plantName, todayVolume, previousVolume, previousDate, onSaved,
 }: {
   well: any; plantId: string; plantName?: string;
@@ -727,7 +730,7 @@ function BypassRow({
   const save = async () => {
     const v = +volume;
     if (!volume || !(v > 0)) {
-      toast.error(`${well.name}: enter a positive bypass volume`);
+      toast.error(`${well.name}: enter a positive blending volume`);
       return;
     }
     setSaving(true);
@@ -743,32 +746,32 @@ function BypassRow({
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(`${well.name}: bypass volume saved (${fmtNum(v)} m³)`);
+      toast.success(`${well.name}: blending volume saved (${fmtNum(v)} m³)`);
       setVolume('');
       onSaved();
     } catch (e: any) {
-      toast.error(`Bypass save failed: ${e.message || e}`);
+      toast.error(`Blending save failed: ${e.message || e}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`bypass-row-${well.id}`}>
+    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`blending-row-${well.id}`}>
       <div className="min-w-0 flex-1 basis-[140px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
           <Badge
             className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
           >
-            Bypass
+            Blending
           </Badge>
         </div>
         <div className="text-xs text-muted-foreground truncate">
           prev:{' '}
           <span
             className="font-mono-num"
-            title={previousDate ? `last entry on ${previousDate}` : 'no prior bypass entry'}
+            title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}
           >
             {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
           </span>
@@ -795,10 +798,10 @@ function BypassRow({
             inputMode="decimal"
             value={volume}
             onChange={(e) => setVolume(e.target.value)}
-            placeholder="Bypass Reading"
+            placeholder="Blending Reading"
             className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
-            data-testid={`bypass-input-${well.id}`}
-            title="Bypass volume (m³) for today"
+            data-testid={`blending-input-${well.id}`}
+            title="Blending volume (m³) for today"
           />
         </div>
       </div>

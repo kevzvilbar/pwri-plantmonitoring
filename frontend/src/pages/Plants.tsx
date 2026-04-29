@@ -732,7 +732,7 @@ function WellsList({ plantId }: { plantId: string }) {
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
   });
-  // Plant-level bypass / blending state — used to render the bypass checkbox
+  // Plant-level blending state — used to render the blending checkbox
   // per row and to know which wells inject directly into the product line.
   const { data: plant } = useQuery({
     queryKey: ['plant-name', plantId],
@@ -765,8 +765,8 @@ function WellsList({ plantId }: { plantId: string }) {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Per-well bypass-toggle in-flight indicator.
-  const [bypassBusy, setBypassBusy] = useState<Set<string>>(new Set());
+  // Per-well blending-toggle in-flight indicator.
+  const [blendingBusy, setBlendingBusy] = useState<Set<string>>(new Set());
   // Per-well power-meter toggle in-flight indicator.
   const [powerBusy, setPowerBusy] = useState<Set<string>>(new Set());
 
@@ -824,8 +824,8 @@ function WellsList({ plantId }: { plantId: string }) {
     qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
   };
 
-  // Toggle dedicated power meter on a well. Independent of Bypass — a well
-  // may carry both flags (e.g. a bypass well that also has its own kWh meter).
+  // Toggle dedicated power meter on a well. Independent of Blending — a well
+  // may carry both flags (e.g. a blending well that also has its own kWh meter).
   const togglePowerMeter = async (w: any, on: boolean) => {
     setPowerBusy(prev => { const n = new Set(prev); n.add(w.id); return n; });
     const { error } = await supabase
@@ -840,9 +840,9 @@ function WellsList({ plantId }: { plantId: string }) {
     qc.invalidateQueries({ queryKey: ['wells', plantId] });
   };
 
-  const toggleBypass = async (w: any, next: boolean) => {
+  const toggleBlending = async (w: any, next: boolean) => {
     if (!isManager) return;
-    setBypassBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
+    setBlendingBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
     try {
       const res = await fetch(`${BASE}/api/blending/toggle`, {
         method: 'POST',
@@ -857,13 +857,13 @@ function WellsList({ plantId }: { plantId: string }) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success(next
-        ? `${w.name}: marked as bypass — its meter feeds product line separately`
-        : `${w.name}: bypass cleared`);
+        ? `${w.name}: marked as blending — its meter feeds product line separately`
+        : `${w.name}: blending cleared`);
       qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
     } catch (e: any) {
-      toast.error(`Bypass toggle failed: ${e.message || e}`);
+      toast.error(`Blending toggle failed: ${e.message || e}`);
     } finally {
-      setBypassBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });
+      setBlendingBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });
     }
   };
 
@@ -905,12 +905,12 @@ function WellsList({ plantId }: { plantId: string }) {
       </div>
       {wells?.map((w: any) => {
         const checked = selected.has(w.id);
-        const isBypass = blendingSet.has(w.id);
-        const bypassPending = bypassBusy.has(w.id);
+        const isBlending = blendingSet.has(w.id);
+        const blendingPending = blendingBusy.has(w.id);
         return (
           <Card
             key={w.id}
-            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBypass ? 'border-violet-300' : ''}`}
+            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBlending ? 'border-violet-300' : ''}`}
             data-testid={`well-card-${w.id}`}
           >
             <div className="flex items-start gap-2">
@@ -938,12 +938,12 @@ function WellsList({ plantId }: { plantId: string }) {
                           <Zap className="h-2.5 w-2.5" /> Electric
                         </span>
                       )}
-                      {isBypass && (
+                      {isBlending && (
                         <span
                           className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded"
-                          title="Bypass: separate water meter feeding product line"
+                          title="Blending: separate water meter feeding product line"
                         >
-                          Bypass
+                          Blending
                         </span>
                       )}
                     </div>
@@ -981,32 +981,32 @@ function WellsList({ plantId }: { plantId: string }) {
                   )}
                 </div>
               </div>
-              {/* Right-side row controls — Bypass and Power are independent
+              {/* Right-side row controls — Blending and Power are independent
                   attributes (a well can be either, both, or neither). Hidden
                   during read-only roles. */}
               {isManager && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <label
                     className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
-                      isBypass
+                      isBlending
                         ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
                         : 'bg-background border-border hover:bg-muted'
-                    } ${bypassPending ? 'opacity-60 cursor-wait' : ''}`}
+                    } ${blendingPending ? 'opacity-60 cursor-wait' : ''}`}
                     title={
-                      isBypass
-                        ? 'Bypass on — separate water meter feeds product line. Click to clear.'
-                        : 'Mark as bypass — well injects to product line; meter is tracked separately'
+                      isBlending
+                        ? 'Blending on — separate water meter feeds product line. Click to clear.'
+                        : 'Mark as blending — well injects to product line; meter is tracked separately'
                     }
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Checkbox
-                      checked={isBypass}
-                      disabled={bypassPending}
-                      onCheckedChange={(v) => toggleBypass(w, !!v)}
-                      className={isBypass ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
-                      data-testid={`well-bypass-${w.id}`}
+                      checked={isBlending}
+                      disabled={blendingPending}
+                      onCheckedChange={(v) => toggleBlending(w, !!v)}
+                      className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+                      data-testid={`well-blending-${w.id}`}
                     />
-                    <span className="text-[11px] font-medium whitespace-nowrap">Bypass</span>
+                    <span className="text-[11px] font-medium whitespace-nowrap">Blending</span>
                   </label>
                   <label
                     className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
