@@ -5,7 +5,7 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: '/',
+  base: '/pwri-plantmonitoring/',   // ← fixed: matches GitHub Pages repo sub-path
   envPrefix: ["VITE_", "REACT_APP_"],
   server: {
     host: "0.0.0.0",
