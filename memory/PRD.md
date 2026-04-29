@@ -336,3 +336,62 @@ console + force-delete tools are reachable from `/auth` end-to-end.
 - `Dashboard.tsx` is now ~1064 lines — flagged for splitting into
   `/app/frontend/src/components/dashboard/*` modules in a future
   refactor pass.
+
+---
+
+## Iteration 12 — Code Review (Option A: Safe Quick Wins) (2026-04-29)
+
+User reviewed an external code-review report covering 13 findings across XSS,
+React hook deps, Python complexity, component decomposition, etc. Many items
+were false alarms (e.g., `is None`/`is True`/`is False` are PEP-8 correct,
+`empty catch blocks` already had explanatory comments for intentional
+swallowing). User explicitly asked us to apply only the safe quick-win
+subset (Option A) — large refactors deferred to follow-up sessions.
+
+### What landed
+- **`main.tsx`** — replaced `innerHTML` template-string rendering in
+  `renderFatal()` with safe DOM APIs (`textContent`, `createElement`,
+  `setAttribute`). Satisfies the static-analysis XSS rule even though the
+  inputs are always internal config errors.
+- **Composite React keys** — replaced array-index keys with composite
+  identifiers in:
+  - `Dashboard.tsx` (`localAlerts` list — `${tone}-${text}-${i}`)
+  - `Import.tsx` (commit log lines, preview-table rows)
+  - `AIImportPanel.tsx` (anomaly badges, sample-row table headers/cells,
+    skipped-list bullets, column-mapping select options)
+- **Informational `console.warn`** in previously silent-catch blocks:
+  - `Plants.tsx` (×2) — `deletion_audit_log insert failed (non-fatal)`
+  - `Operations.tsx` (×2) — `[Operations] geolocation unavailable;
+    submitting without GPS:`
+  - `Dashboard.tsx` — `[Dashboard] could not persist view mode preference:`
+
+### Items rejected as false alarms / out-of-scope
+- 61 `is` constant comparisons — all are `is None` / `is True` / `is False`
+  which is the correct Python idiom (PEP-8 explicitly prefers `is None`).
+- "Empty catch blocks" — every flagged occurrence already had an
+  explanatory comment for intentional fallback (pre-migration tables
+  missing, GPS access denied). Now also log-tagged for visibility.
+- Eslint `--fix` produced no auto-fixable hook-deps changes; remaining
+  87 hook-deps warnings need manual inspection (deferred to Option B
+  in a future session).
+
+### Verified
+- `npx tsc --noEmit` clean.
+- Frontend testing agent (iteration_8.json): **100% pass** — no
+  regressions introduced. App boots cleanly, login redirects to `/`,
+  Dashboard 3-mode toggle still works, `/import` page shows ZERO
+  React `unique key` warnings.
+
+### Backlog (deferred)
+- Option B (manual hook-deps audit, ~90 min, medium risk)
+- Option C — large refactors:
+  - Backend: split `hard_delete_plant` (161 LOC), `sync_analysis`
+    (189 LOC), `_insert_readings` (95 LOC), `cleanup_plants` (137 LOC)
+  - Frontend: decompose `AIImportPanel` (521 LOC), `DeleteEntityMenu`
+    (325 LOC); move `Dashboard`, `Import`, `ROTrains`, `Plants` into
+    smaller files
+- Pre-existing failing backend tests in `test_ai_and_admin.py` (10
+  failures from `httpx[http2]` dep + Supabase JWT mocks)
+- 3 Supabase HTTP 404/400 errors during /auth handshake (pre-existing
+  from iter_6 onward) — worth a separate investigation pass
+
