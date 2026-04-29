@@ -186,11 +186,14 @@ export function TrendChart({
   // Production-cost rows use a date column (`cost_date`) rather than a
   // datetime, so the generic `supaSelect` helper (which filters on
   // `reading_datetime`) doesn't fit. Inline this single query instead.
+  // `production_m3` is pulled so we can compute weighted ₱/m³ across
+  // multi-plant selections (a simple average of per-plant `cost_per_m3`
+  // would mis-weight a plant that produced 10× the volume).
   const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
     queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       const { data, error } = await supabase.from('production_costs')
-        .select('cost_date,power_cost,chem_cost,total_cost')
+        .select('cost_date,power_cost,chem_cost,total_cost,production_m3')
         .in('plant_id', plantIds)
         .gte('cost_date', startKey)
         .lte('cost_date', endKey);
@@ -211,6 +214,7 @@ export function TrendChart({
         rawwater: 0, recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0,
         powerCost: 0, chemCost: 0, totalCost: 0,
+        costProduction: 0,
       }).get(d);
 
     (wellReadings ?? []).forEach((r: any) => {
@@ -241,6 +245,10 @@ export function TrendChart({
     // a date string (YYYY-MM-DD) — anchor it at local midnight for a
     // stable sortKey. `total_cost` is a generated column in some rows
     // and null in others, so fall back to the power+chem sum.
+    // `costProduction` accumulates `production_m3` from the same row
+    // so we can compute a volume-weighted ₱/m³ at the end (don't reuse
+    // the well-readings `production` field — RO output ≠ billable
+    // production_m3 in some plants).
     (costReadings ?? []).forEach((r: any) => {
       const dt = new Date(`${r.cost_date}T00:00:00`);
       const key = format(dt, 'MMM d');
@@ -250,15 +258,19 @@ export function TrendChart({
       row.powerCost += power;
       row.chemCost += chem;
       row.totalCost += r.total_cost != null ? +r.total_cost : power + chem;
+      row.costProduction += +(r.production_m3 ?? 0);
     });
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, ...d }) => ({
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => ({
         ...d,
         recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
         nrw: calc.nrw(d.production, d.consumption),
+        // Volume-weighted ₱/m³ — null when no production was recorded so
+        // Recharts skips the point cleanly instead of plotting Infinity.
+        unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
       }));
   }, [locReadings, wellReadings, roReadings, powerReadings, costReadings]);
 
@@ -334,6 +346,24 @@ export function TrendChart({
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
             </ComposedChart>
+          ) : metric === 'productionCost' ? (
+            // Two-axis composed chart: absolute ₱ amounts on the left,
+            // ₱/m³ unit cost on the right. Unit cost lives in a different
+            // magnitude bucket (single-digit ₱/m³ vs thousands of ₱) so
+            // sharing one axis would either flatten the unit-cost line or
+            // crush the totals. Dashed stroke flags it as a derived ratio.
+            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+              <YAxis yAxisId="amt" tick={{ fontSize: 11 }} stroke="hsl(var(--accent))" label={{ value: 'Cost (₱)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: '₱/m³', angle: 90, position: 'insideRight', fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
+              <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
+              <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
+              <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
+            </ComposedChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -357,11 +387,6 @@ export function TrendChart({
               {metric === 'pv' && (<>
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
                 <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
-              </>)}
-              {metric === 'productionCost' && (<>
-                <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
-                <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
-                <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
               </>)}
             </LineChart>
           )}

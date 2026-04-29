@@ -505,6 +505,19 @@ explanatory comments per Rules of Hooks best-practices guidance.
      blocked by stale admin credentials — see test_credentials.md for
      unblock path.
 
+✅ Iteration 17 — ₱/m³ unit-cost overlay on the cost chart (2026-02-29)
+   • Production Cost trend chart now switches to a `ComposedChart`
+     with two Y-axes: left axis carries the absolute ₱ lines (Total /
+     Power / Chemical), right axis carries a dashed ₱/m³ line so a
+     finance-minded operator can read both magnitudes at a glance.
+   • ₱/m³ is volume-weighted across the multi-plant selection
+     (Σtotal_cost ÷ Σproduction_m3 per day), preventing a low-volume
+     plant from skewing the average. Renders as `null` (skipped) on
+     days with no production_m3 to avoid `Infinity` plot points.
+   • `production_m3` added to the supabase query select.
+   • Verified: `yarn build` clean (12.9s), bundle size delta tiny
+     (Dashboard 44.7→47.1 KB), no new lint errors.
+
 ### Backlog (P2/P3 — deferred per user "stop after P0+P1")
 - **Stale admin credential** — `kevzvilbar@gmail.com / @Kevz` is no
   longer accepted by Supabase. Either reset the password (≥8 chars)
