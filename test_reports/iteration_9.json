@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 9 - Frontend regression-only verification of the Dashboard.tsx file-split refactor (Option C, file 1/N). Dashboard.tsx is now 520 lines (was 1074) and helpers are split across /app/frontend/src/components/dashboard/{types.ts (81), StatCard.tsx (165), TrendChart.tsx (335), PowerChart.tsx (56)} — total 1157 LOC across the bundle, file-split is clean. ALL review-request regression checks PASS (matches iter_7 / iter_8 100% baseline): (1) App boots cleanly at https://bypass-to-blending.preview.emergentagent.com/ with HTTP 200 and no JS pageerrors; (2) Login at /auth with kevzvilbar@gmail.com / BPWI2025! lands on '/' (dashboard root); (3) data-testid='dashboard-view-mode' visible with exactly 3 toggle options Inline/Sections/Popup, all data-state values correct ('on'/'off'); (4) INLINE: all 6 inline-trend-* charts render (production, nrw, rawwater, tds, recovery, pv) AND all 3 cluster-inline-charts-{overview,quality,cost} containers present; clicking NRW StatCard while in Inline mode is a no-op (dialog count=0); (5) SECTIONS default: 0 cluster-section-chart-* and 0 inline-trend-* visible; clicking NRW expands cluster-section-chart-nrw, clicking again collapses; single-open behaviour confirmed — NRW open + clicking Locators Consumption auto-collapses NRW and opens cluster-section-chart-production; trend-range-production-7D and trend-range-production-CUSTOM render and clicking CUSTOM reveals trend-from-production / trend-to-production date inputs; (6) POPUP: 0 inline/section charts; clicking NRW opens role=dialog containing data-testid='trend-chart-nrw'; Escape closes; (7) Production Cost card click navigates to /costs in popup mode; Power Cost and Chemical Cost cards both navigate to /costs as well; (8) View-mode persistence: switching to Sections writes localStorage 'pwri:dashboard-view-mode' === 'sections'; reload restores Sections toggle to data-state='on'; (9) PerWellSourceCards 'raw-tds-per-well-source' and 'raw-ntu-per-well-source' present in Quality cluster; (10) Cluster headers Overview / Quality / Production Cost always visible; (11) NO legacy data-testids 'cluster-toggle-*' or 'cluster-popup-*' in DOM (count=0); (12) PowerChart 'Power consumption · last 14d' card renders below Active Alerts. Total console errors: 9, ALL of which are the pre-existing Supabase 404/400 handshake noise documented in iter_6/7/8 — ZERO new errors introduced by the refactor. Zero React unique-key warnings. Zero pageerrors. Refactor is a perfect behaviour-preserving file-split.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Carried over from iter_7) Optional: TrendModal Radix Dialog still missing a <DialogDescription> — minor a11y warning. Now lives in /app/frontend/src/components/dashboard/TrendChart.tsx (TrendModal component).",
+    "(Carried over from iter_8) Optional cleanup: the 9 pre-existing Supabase 404/400 errors observed during /auth login handshake remain — unchanged from iter_6/7/8."
+  ],
+  "critical_code_review_comments": [
+    "File split is clean and well-bounded: types.ts holds all metric registries / range constants / readSavedViewMode helper; StatCard.tsx holds TrendBadge + StatCard + PerWellSourceCard + ClusterHeader (UI primitives only, no chart logic); TrendChart.tsx holds ClusterCharts + InlineTrendChart + TrendModal + TrendChart (all chart-rendering logic); PowerChart.tsx isolates the legacy 14-day bar chart. Dashboard.tsx (520 LOC) is now a slim page-level orchestrator that just fetches data and composes children — within the 700-line guideline.",
+    "All data-testid contracts preserved exactly: dashboard-view-mode, inline-trend-{metric}, cluster-inline-charts-{clusterId}, cluster-section-chart-{metric}, trend-chart-{metric}, trend-range-{metric}-{range}, trend-range-{metric}-CUSTOM, trend-from-{metric}, trend-to-{metric}, raw-tds-per-well-source, raw-ntu-per-well-source, alerts-card, alerts-feed-list, alert-row-{kind}-{i}, nrw-banner. Zero legacy testids leaked through.",
+    "StatCard does NOT expose a generic testId prop today — KPI cards are clicked by visible label text rather than a stable testid. This is consistent with iter_7/iter_8 (those iterations also did not assert kpi-* testids). Optional future improvement: add an optional testId prop to StatCard so each KPI card (kpi-nrw, kpi-production, kpi-cost, etc.) has a stable selector for downstream automation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped per review_request", "frontend": "100% (all review-request regression checks pass; 0 new errors, 0 new warnings vs iter_8 baseline)"},
+  "test_credentials": "kevzvilbar@gmail.com / BPWI2025! (Supabase) — sign-in returns 200 and lands on '/'.",
+  "seed_data_creation": "None — read-only regression verification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 9 confirms the Dashboard.tsx → 5-file split refactor introduced ZERO behavioural regressions. All data-testid contracts preserved. The 3-mode view toggle (Inline/Sections/Popup), single-open expansion logic, range buttons, custom date pickers, view-mode persistence, cluster headers, PerWellSourceCards, /costs navigation from cost cards, and PowerChart all behave identically to iter_7/iter_8. Pre-existing Supabase 404/400 handshake errors during /auth still appear (unchanged from iter_6/7/8). NRW threshold banner could not be exercised because live data did not breach 20% NRW (same as iter_7). To click KPI StatCards in Playwright, use selector `.stat-card:has-text('<Label>')` since StatCards do not emit per-KPI data-testids — this is the same approach iter_7/iter_8 used.",
+  "rca of the issue": "N/A — no defects identified. Pure file-split refactor verified clean."
+}
