@@ -25,7 +25,14 @@ export default function Onboarding() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
   if (!user) return <Navigate to="/auth" replace />;
-  if (profile?.profile_complete) return <Navigate to="/" replace />;
+  // If profile is complete, redirect appropriately:
+  // - confirmed users go to the app
+  // - unconfirmed users go to the pending-approval page
+  if (profile?.profile_complete) {
+    return profile.confirmed === false
+      ? <Navigate to="/pending-approval" replace />
+      : <Navigate to="/" replace />;
+  }
 
   const togglePlant = (id: string) => {
     setForm((f) => ({
@@ -72,7 +79,9 @@ export default function Onboarding() {
     if (error) { toast.error(error.message); return; }
     await refreshProfile();
     toast.success('Profile saved');
-    navigate('/');
+    // New users have confirmed=false by default and need admin approval
+    // before accessing the app. Send them to the pending-approval page.
+    navigate('/pending-approval');
   };
 
   const noPlants = !plants || plants.length === 0;
