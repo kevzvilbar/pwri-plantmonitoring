@@ -443,13 +443,15 @@ class TestAlertsFeed:
         assert b.get("plant_id") == plant_id
         assert "42.0" in b.get("detail", "") or "42" in b.get("detail", "")
         assert b.get("severity") == "info"
-        # Iteration 3: Blending title must be rebranded to "Bypass · …"
+        # Terminology revert (2026-07): "Bypass" was rebranded BACK to
+        # "Blending" per user request — feeds the Dashboard "Active Alerts"
+        # card and any consumer of /api/alerts/feed.
         title = b.get("title", "")
-        assert title.startswith("Bypass ·"), (
-            f"expected title to start with 'Bypass ·', got {title!r}"
+        assert title.startswith("Blending ·"), (
+            f"expected title to start with 'Blending ·', got {title!r}"
         )
-        assert "Blending" not in title, (
-            f"old label 'Blending' should no longer appear in title: {title!r}"
+        assert "Bypass" not in title, (
+            f"old label 'Bypass' should no longer appear in title: {title!r}"
         )
 
     def test_alerts_feed_sort_order(self, api_client):

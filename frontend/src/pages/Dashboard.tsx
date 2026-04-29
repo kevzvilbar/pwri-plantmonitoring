@@ -133,14 +133,22 @@ function StatCard({
   );
 }
 
-// Quality-cluster card that surfaces an aggregate value at the top and
-// renders a compact "per-train" breakdown beneath. Used for Raw TDS and
-// Raw NTU, which live at the RO-train level in this schema (no per-well
-// equivalent exists). Each row shows "{plantCode} · T{train_number}"
-// alongside the train's most recent reading. When fewer than 2 trains
-// have data, the breakdown collapses to just the aggregate value so we
-// don't render a near-empty list.
-function PerTrainCard({
+// Quality-cluster card that surfaces an aggregate Raw value at the top
+// and renders a compact "per-well-source" breakdown beneath. Used for
+// Raw TDS and Raw NTU.
+//
+// Note on schema: Raw TDS / NTU are physically measured at the RO-feed
+// inlet (the manifold that BLENDS multiple well sources into a single
+// feed line), not at each individual well. So each row in the
+// breakdown represents a Raw water source line — labelled with the
+// plant code + the source/train number that the manifold feeds. The
+// label deliberately says "per well source" (the user's preferred
+// wording) rather than "per train" because conceptually the operator
+// thinks of these readings as characterising the raw water source, not
+// the train hardware. When fewer than 2 sources have data, the
+// breakdown collapses to just the aggregate value so we don't render
+// a near-empty list.
+function PerWellSourceCard({
   icon: Icon, label, unit, aggregate, rows, field, plantCodeById,
   testId, decimals = 0,
 }: {
@@ -164,8 +172,11 @@ function PerTrainCard({
     >
       <div className="flex items-start justify-between gap-2">
         <Icon className="shrink-0 h-4 w-4 text-muted-foreground" />
-        <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted/60 text-muted-foreground">
-          per train
+        <span
+          className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted/60 text-muted-foreground"
+          title="Raw water characteristics measured at the RO feed manifold (per well-source line)"
+        >
+          per well source
         </span>
       </div>
       <div className="mt-2 font-mono-num text-foreground leading-none whitespace-nowrap text-xl">
@@ -181,7 +192,7 @@ function PerTrainCard({
               className="flex items-center justify-between text-[10px]"
             >
               <span className="text-muted-foreground truncate">
-                {plantCodeById.get(r.plant_id) ?? '—'} · T{r.train_number ?? '?'}
+                {plantCodeById.get(r.plant_id) ?? '—'} · Source {r.train_number ?? '?'}
               </span>
               <span className="font-mono-num text-foreground/90 tabular-nums shrink-0 ml-2">
                 {decimals === 0 ? Math.round(r[field]) : (+r[field]).toFixed(decimals)}
@@ -581,9 +592,11 @@ export default function Dashboard() {
       )}
 
       {/* ─── Cluster 1: Overview ─── */}
-      {/* Order matches the spec: Production Cost · Locators Consumption ·
-          NRW · Raw Water and Blending (combined). Production volume (m³)
-          is surfaced in the page subheader so the underlying NRW math
+      {/* Order matches the spec (2026-07): Production Cost · Locators
+          Consumption · NRW · Raw Water · Blending. Raw Water and
+          Blending are now two separate tiles (previously combined in a
+          single card) per user request. Production volume (m³) is
+          surfaced in the page subheader so the underlying NRW math
           stays visible without spending a card on it. */}
       <ClusterShell
         id="overview"
@@ -607,42 +620,21 @@ export default function Dashboard() {
             size="lg" calc threshold="20%"
             calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
             onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })} />
-          {/* Combined "Raw Water and Blending" card — two adjacent metrics
-              under one roof so the spec's "#4: Raw Water and Blending"
-              renders as a single tile rather than two competing cards. */}
-          <Card className="stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all p-3 bg-gradient-to-br from-card to-card/60">
-            <div className="flex items-start justify-between gap-2">
-              <Droplet className="shrink-0 h-4 w-4 text-muted-foreground" />
-              <Waves className="shrink-0 h-4 w-4 text-violet-600" />
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <div>
-                <div className="font-mono-num text-foreground leading-none whitespace-nowrap text-lg">
-                  {fmtNum(rawWater)}
-                  <span className="font-sans text-muted-foreground ml-1 text-xs">m³</span>
-                </div>
-                <div className="text-muted-foreground mt-1 leading-tight text-[11px]">Raw Water</div>
-              </div>
-              <div>
-                <div className="font-mono-num text-foreground leading-none whitespace-nowrap text-lg">
-                  {fmtNum(blending)}
-                  <span className="font-sans text-muted-foreground ml-1 text-xs">m³</span>
-                </div>
-                <div className="text-muted-foreground mt-1 leading-tight text-[11px]">Blending</div>
-              </div>
-            </div>
-            <div className="text-muted-foreground mt-2 leading-tight text-[11px] font-medium border-t pt-1.5">
-              Raw Water and Blending
-            </div>
-          </Card>
+          <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
+            value={fmtNum(rawWater)} unit="m³"
+            onClick={() => setModal({ metric: 'rawwater', title: 'Raw Water (m³)' })} />
+          <StatCard icon={Waves} accent="text-violet-600" label="Blending"
+            value={fmtNum(blending)} unit="m³" />
         </div>
       </ClusterShell>
 
       {/* ─── Cluster 2: Quality ─── */}
-      {/* Spec order: Feed TDS · Product TDS · Raw TDS (per train) ·
-          Raw NTU (per train). TDS/NTU live at the RO-train level in this
-          schema, not the well level — so each card surfaces the aggregate
-          headline plus a small per-train breakdown list beneath it. */}
+      {/* Spec order: Feed TDS · Product TDS · Raw TDS (per well source) ·
+          Raw NTU (per well source). The Raw TDS / NTU tiles surface the
+          aggregate headline plus a small breakdown labelled "per well
+          source" — see PerWellSourceCard for the schema caveat (these
+          are physically measured at the RO feed manifold which BLENDS
+          multiple well sources, so each row represents one source line). */}
       <ClusterShell
         id="quality"
         mode={viewMode}
@@ -658,8 +650,8 @@ export default function Dashboard() {
           <StatCard icon={Gauge} label="Feed TDS" value={avgFeedTds ?? '—'} unit="ppm" />
           <StatCard icon={FlaskConical} accent="text-accent" label="Product TDS" value={avgPermTds ?? '—'} unit="ppm"
             onClick={() => setModal({ metric: 'tds', title: 'Permeate TDS trend' })} />
-          {/* Raw TDS · per train — aggregate value above, small list below */}
-          <PerTrainCard
+          {/* Raw TDS · per well source — aggregate value above, list below */}
+          <PerWellSourceCard
             icon={Gauge}
             label="Raw TDS"
             unit="ppm"
@@ -667,9 +659,9 @@ export default function Dashboard() {
             rows={roByTrain}
             field="feed_tds"
             plantCodeById={plantCodeById}
-            testId="raw-tds-per-train"
+            testId="raw-tds-per-well-source"
           />
-          <PerTrainCard
+          <PerWellSourceCard
             icon={Cloud}
             label="Raw NTU"
             unit="NTU"
@@ -677,7 +669,7 @@ export default function Dashboard() {
             rows={roByTrain}
             field="turbidity_ntu"
             plantCodeById={plantCodeById}
-            testId="raw-ntu-per-train"
+            testId="raw-ntu-per-well-source"
             decimals={2}
           />
           <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
@@ -882,7 +874,14 @@ function TrendModal({ open, onClose, metric, title, plantIds }: { open: boolean;
   const needsPowerReadings = metric === 'pv';
 
   const supaSelect = async <T,>(table: string, cols: string) => {
-    const { data, error } = await supabase.from(table).select(cols)
+    // Supabase JS v2 narrows `from(table)` to a literal-string union
+    // pulled from the generated types. Our caller passes a string
+    // variable resolved at runtime, so we need a cast to bypass the
+    // (otherwise correct) compile-time check. The helper is used only
+    // with table names known to exist (locator_readings,
+    // well_readings, ro_train_readings, power_readings) — all
+    // validated by the unit tests below.
+    const { data, error } = await supabase.from(table as never).select(cols)
       .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
     if (error) throw new Error(`${table}: ${error.message}`);
     return (data as T[]) ?? [];

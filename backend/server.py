@@ -427,10 +427,10 @@ async def blending_log_event(body: BlendingAuditRequest):
 @api_router.get("/blending/volume")
 async def blending_volume(plant_ids: Optional[str] = None,
                           days: int = 14):
-    """Daily bypass-injection volume (m³) totals for the given plants.
+    """Daily blending-injection volume (m³) totals for the given plants.
 
-    Used by the Plant Dashboard "Bypass volume" card to show how much
-    product-line water originates from bypass wells (vs. RO product).
+    Used by the Plant Dashboard "Blending volume" card to show how much
+    product-line water originates from blending wells (vs. RO product).
     `plant_ids` is a comma-separated list; omitted = all plants.
     """
     from datetime import timedelta
@@ -560,7 +560,7 @@ async def alerts_feed(plant_id: Optional[str] = None,
             "date": str(d.get("event_date", ""))[:10],
             "plant_id": d.get("plant_id"),
             "plant_name": d.get("plant_name"),
-            "title": f"Bypass · {d.get('well_name')}",
+            "title": f"Blending · {d.get('well_name')}",
             "detail": f"Injected {d.get('volume_m3')} m³ Directly Into Product Water (Audit).",
         })
 

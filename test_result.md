@@ -646,6 +646,28 @@ agent_communication:
 
     - agent: "main"
       message: |
+        NEW BATCH 2026-07 (Bypass → Blending revert + Dashboard split):
+        BACKEND
+         - server.py /api/alerts/feed: alert title flipped from
+           "Bypass · …" back to "Blending · …" (user request).
+         - server.py /api/blending/volume: docstring updated.
+         - tests/test_pwri_backend.py: assertion flipped accordingly.
+        FRONTEND
+         - Dashboard.tsx: Overview cluster — Raw Water + Blending split
+           into TWO separate StatCards (was one combined card).
+         - Dashboard.tsx: PerTrainCard renamed → PerWellSourceCard;
+           pill says "per well source"; row label says "Source N".
+         - Dashboard.tsx: fixed pre-existing TS2589 by casting `table`
+           arg in supaSelect helper.
+        VERIFIED LOCAL
+         - yarn tsc --noEmit -p tsconfig.app.json → clean.
+         - ruff /app/backend/server.py → clean.
+         - pytest tests/test_pwri_backend.py → 23/23 passing.
+         - test_ai_and_admin failures are pre-existing
+           (httpx[http2] + JWT 500-vs-401), not introduced by this batch.
+
+    - agent: "main"
+      message: |
         NEW BATCH 2026-04-24 (#3) — please test these FRONTEND + BACKEND
         changes. Use external REACT_APP_BACKEND_URL. Frontend test can
         use Auth → Sign up with throwaway email if no test creds.
