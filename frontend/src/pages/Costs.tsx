@@ -260,7 +260,7 @@ function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; fr
       </div>
       <div className="space-y-1.5">
         {insights.map((i, idx) => (
-          <div key={idx} className="flex items-start gap-2 text-xs">
+          <div key={`${i.tone ?? 'none'}-${i.label}-${idx}`} className="flex items-start gap-2 text-xs">
             <StatusPill tone={i.tone}>{i.label}</StatusPill>
             <span className="flex-1 pt-0.5">{i.text}</span>
           </div>

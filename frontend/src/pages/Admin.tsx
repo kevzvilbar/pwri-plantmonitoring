@@ -891,17 +891,28 @@ function MigrationsPanel() {
   const [showApplied, setShowApplied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [seenShas, setSeenShas] = useState<Record<string, string>>(() => {
+    // Stored data is non-sensitive: SHA-256 hashes of public migration
+    // files the admin has acknowledged downloading. localStorage is
+    // appropriate (no auth/PII here) and the catch swallows quota /
+    // private-mode errors silently because the worst case is the user
+    // sees the "new since last visit" badge once more.
     try {
       const raw = localStorage.getItem(MIGRATIONS_SHA_KEY);
       return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
+    } catch (readErr) {
+      console.warn('[Admin] failed to read seen migration SHAs:', readErr);
       return {};
     }
   });
 
   const persistShas = (next: Record<string, string>) => {
     setSeenShas(next);
-    try { localStorage.setItem(MIGRATIONS_SHA_KEY, JSON.stringify(next)); } catch {/* ignore */}
+    try {
+      localStorage.setItem(MIGRATIONS_SHA_KEY, JSON.stringify(next));
+    } catch (writeErr) {
+      // Quota / private-mode — non-fatal, the dot indicator just won't persist.
+      console.warn('[Admin] failed to persist seen migration SHAs:', writeErr);
+    }
   };
 
   const { data, isLoading, refetch, isFetching } = useQuery({

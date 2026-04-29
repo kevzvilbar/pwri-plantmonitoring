@@ -141,7 +141,7 @@ export function DowntimeEventsModal({
             {filtered.map((ev, i) => {
               const sev = ev.duration_hrs >= 12 ? 'high' : ev.duration_hrs >= 3 ? 'med' : 'low';
               return (
-                <div key={i}
+                <div key={`${ev.event_date}-${ev.subsystem}-${i}`}
                   className={cn(
                     'grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-2 border-t text-xs',
                     sev === 'high' && 'bg-rose-50/50',

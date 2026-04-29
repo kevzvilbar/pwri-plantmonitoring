@@ -390,7 +390,7 @@ function ChecklistDialog({ item, onClose }: { item: DueItem; onClose: () => void
               const s = stepState[i] ?? { completed: false, value: '', notes: '' };
               const isMeasurement = /\(.*\)$/.test(text) && !text.includes('—') && !text.includes('/');
               return (
-                <div key={i}
+                <div key={`${i}-${text.slice(0, 24)}`}
                   className={`rounded-md border p-2 transition-colors ${s.completed ? 'bg-accent-soft/50 border-accent/40' : 'bg-card'}`}>
                   <label className="flex items-start gap-2 cursor-pointer">
                     <Checkbox checked={s.completed} className="mt-0.5"

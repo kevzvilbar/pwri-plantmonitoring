@@ -301,7 +301,10 @@ export default function AIAssistant() {
                   </div>
                 ) : (
                   messages.map((m, i) => (
-                    <div key={i} className={cn('flex gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                    <div
+                      key={`${m.created_at ?? 'live'}-${i}-${m.role}`}
+                      className={cn('flex gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}
+                    >
                       {m.role === 'assistant' && (
                         <div className="h-7 w-7 rounded-md bg-gradient-to-br from-sky-500 to-violet-600 text-white flex items-center justify-center shrink-0 mt-0.5">
                           <Sparkles className="h-3.5 w-3.5" />
@@ -418,7 +421,7 @@ export default function AIAssistant() {
                       </thead>
                       <tbody>
                         {sortedAnomalies.map((a, i) => (
-                          <tr key={i} className="border-t">
+                          <tr key={`${a.well}-${a.date}-${a.type}-${i}`} className="border-t">
                             <td className="px-2 py-1">
                               <SeverityBadge sev={a.severity} />
                             </td>

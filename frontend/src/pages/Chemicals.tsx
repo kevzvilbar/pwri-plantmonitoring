@@ -82,14 +82,26 @@ function DosingForm() {
     chlorine_kg: '', smbs_kg: '', anti_scalant_l: '', soda_ash_kg: '',
     free_chlorine_reagent_pcs: '0',
   });
-  const [samples, setSamples] = useState<Array<{ point: string; ppm: string }>>([]);
+  const [samples, setSamples] = useState<Array<{ id: string; point: string; ppm: string }>>([]);
 
   // Sync sample rows with reagent count
   useEffect(() => {
     const n = Math.max(0, Math.min(20, +v.free_chlorine_reagent_pcs || 0));
     setSamples((prev) => {
       const next = [...prev];
-      while (next.length < n) next.push({ point: '', ppm: '' });
+      while (next.length < n) {
+        // Stable per-row id so React reconciles by row, not by index.
+        // Important: rows hold editable state (point/ppm); index keys
+        // would corrupt input focus when the count shrinks/grows.
+        next.push({
+          id:
+            (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+              ? crypto.randomUUID()
+              : `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          point: '',
+          ppm: '',
+        });
+      }
       while (next.length > n) next.pop();
       return next;
     });
@@ -166,17 +178,17 @@ function DosingForm() {
         <div className="space-y-2 pt-2 border-t">
           <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual samples</h4>
           {samples.map((s, i) => (
-            <div key={i} className="grid grid-cols-[24px_1fr_100px] gap-2 items-end">
+            <div key={s.id} className="grid grid-cols-[24px_1fr_100px] gap-2 items-end">
               <div className="text-xs font-mono-num pt-2">#{i + 1}</div>
               <div>
                 <Label className="text-xs">Sampling point</Label>
                 <Input value={s.point} placeholder="e.g. Tank outlet"
-                  onChange={(e) => setSamples(samples.map((x, j) => j === i ? { ...x, point: e.target.value } : x))} />
+                  onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
               </div>
               <div>
                 <Label className="text-xs">ppm</Label>
                 <Input type="number" step="any" value={s.ppm}
-                  onChange={(e) => setSamples(samples.map((x, j) => j === i ? { ...x, ppm: e.target.value } : x))} />
+                  onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
               </div>
             </div>
           ))}

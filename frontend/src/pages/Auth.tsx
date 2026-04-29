@@ -37,8 +37,11 @@ export default function Auth() {
         error_reason: params.errorReason ?? null,
         user_agent: navigator.userAgent.slice(0, 500),
       } as any);
-    } catch {
-      // Best-effort — never block the user if the audit table isn't ready
+    } catch (auditErr) {
+      // Best-effort — never block the user if the audit table isn't ready.
+      // Surface the failure in dev tools so a misconfigured login_attempts
+      // table doesn't go completely unnoticed during debugging.
+      console.warn('[Auth] failed to record login attempt:', auditErr);
     }
   };
 

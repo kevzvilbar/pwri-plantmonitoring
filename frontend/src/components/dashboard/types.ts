@@ -18,6 +18,9 @@ export type DashboardViewMode = 'inline' | 'sections' | 'popup';
 
 export const VIEW_MODE_KEY = 'pwri:dashboard-view-mode';
 
+// Stored value is a non-sensitive UI preference enum
+// ('inline' | 'sections' | 'popup') — no auth/PII goes through this key,
+// so localStorage is appropriate. Audit tools may flag this; it's safe.
 export function readSavedViewMode(): DashboardViewMode {
   if (typeof window === 'undefined') return 'inline';
   const raw = window.localStorage.getItem(VIEW_MODE_KEY);

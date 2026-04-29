@@ -65,7 +65,15 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { msg = (await res.json()).detail ?? msg; } catch { /* ignore */ }
+    // Body may not be JSON (e.g. proxy 502 returns HTML). The status-code
+    // fallback above is good enough for the user-facing error toast, but
+    // we still surface the parse failure in dev so unexpected formats
+    // don't go fully silent.
+    try {
+      msg = (await res.json()).detail ?? msg;
+    } catch (parseErr) {
+      console.warn('[Compliance.api] non-JSON error body:', parseErr);
+    }
     throw new Error(msg);
   }
   return res.json();

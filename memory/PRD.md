@@ -461,4 +461,42 @@ explanatory comments per Rules of Hooks best-practices guidance.
 ✅ Iteration 12 — Code-review Option A safe quick wins (XSS, keys, logging)
 ✅ Iteration 13 — Backend tests green (h2 dependency)
 ✅ Iteration 14 — Code-review Option B hook-deps audit
+✅ Iteration 15 — Code-review P0 critical bugs + P1 stability (2026-02-29)
+   • Backend: Fixed `F821 Undefined name 'overrides'` in `migrations_status.py`
+     by loading `overrides = _load_overrides()` at the top of
+     `list_migration_status` (lines 398/412 would have crashed at runtime).
+   • Backend: Removed bogus f-string prefix at `ai_import_service.py:844`.
+   • Frontend: Replaced array-index keys with stable composites in
+     `Costs.tsx` (insights), `AIAssistant.tsx` (messages + anomalies),
+     `PmsCalendar.tsx` (steps), `PmForecastTab.tsx` (risk factors),
+     `DowntimeEventsModal.tsx` (events). For `Chemicals.tsx` samples,
+     introduced `id: string` (crypto.randomUUID) since rows hold
+     editable state — index keys would corrupt input focus on resize.
+   • Frontend: Empty catch blocks in `Compliance.tsx:68` and
+     `Auth.tsx:40` now surface `console.warn` for debuggability while
+     remaining best-effort (no UX disruption).
+   • Frontend: Documented localStorage usage in `Dashboard.tsx`,
+     `Admin.tsx`, `dashboard/types.ts` — Code Quality Report flagged
+     these as "sensitive data" but they only store benign UI prefs
+     (view-mode, ack'd migration SHAs). Added clarifying comments.
+     **Skipped moving Supabase auth tokens to sessionStorage** — would
+     force daily re-login with no actual XSS protection benefit.
+   • Verified: `yarn build` clean (12s), 64/65 backend tests pass
+     (1 unrelated h2/hpack failure), 4 fewer ESLint warnings overall.
+
+### Backlog (P2/P3 — deferred per user "stop after P0+P1")
+- **P2 — Backend complexity refactor**: extract helpers from
+  `admin_service.hard_delete_plant` / `cleanup_plants` and
+  `ai_import_service.sync_analysis` / `_insert_readings` /
+  `classify_tables` / `_heuristic_classify`.
+- **P2 — Param dataclasses**: group args in `admin_service.py:239` and
+  `ai_import_service.py:404, 563`.
+- **P3 — Component split**: `AIImportPanel.tsx` (521 LOC),
+  `Admin.tsx` (1793 LOC), `Dashboard.tsx`, `Import.tsx`,
+  `ROTrains.tsx`, `Plants.tsx`, `AIAssistant.tsx`.
+- **P3 — useMemo polish**: `AIImportPanel.tsx`, `Chemicals.tsx`, `Costs.tsx`.
+- **P3 — Strip `console.log`**: 13 stray statements (per linter).
+- **P3 — Replace 243 `@typescript-eslint/no-explicit-any`** (cosmetic).
+- **Tracked auth-storage upgrade**: migrate Supabase auth from
+  `localStorage` to httpOnly cookie via FastAPI (proper, separate task).
 

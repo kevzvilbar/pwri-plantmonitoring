@@ -213,7 +213,7 @@ export function PmForecastTab() {
                     <AlertTriangle className="h-3 w-3" /> Risk factors
                   </div>
                   <ul className="text-xs text-muted-foreground list-disc pl-5 space-y-0.5">
-                    {result.risk_factors.map((r, i) => <li key={i}>{r}</li>)}
+                    {result.risk_factors.map((r, i) => <li key={`${i}-${r.slice(0, 32)}`}>{r}</li>)}
                   </ul>
                 </div>
               )}
