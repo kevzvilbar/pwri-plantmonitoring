@@ -38,6 +38,7 @@ export const TREND_Y_LABEL: Record<string, string> = {
   recovery: 'Recovery (%)',
   tds: 'Permeate TDS (ppm)',
   pv: 'kWh · m³',
+  productionCost: 'Cost (₱)',
 };
 
 export type StatTone = 'accent' | 'warn' | 'danger' | undefined;
@@ -72,6 +73,7 @@ export const QUALITY_CHART_METRICS: ChartMetric[] = [
 ];
 
 export const COST_CHART_METRICS: ChartMetric[] = [
+  { metric: 'productionCost', title: 'Production Cost (Power + Chemical)' },
   { metric: 'pv', title: 'PV Ratio Trend' },
 ];
 

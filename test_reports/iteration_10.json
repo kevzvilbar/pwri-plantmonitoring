@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only review of the Production-Cost StatCard rewire. UI Playwright drive was BLOCKED by auth: the credentials in /app/memory/test_credentials.md (kevzvilbar@gmail.com / @Kevz) are rejected by Supabase with invalid_credentials, and brand-new Sign-Up accounts require email confirmation (email_not_confirmed). Performed an exhaustive static code review against the spec — implementation is correct.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "URGENT — fix admin test credential. /app/memory/test_credentials.md says kevzvilbar@gmail.com / @Kevz, but Supabase responds invalid_credentials. Either the password was rotated or never matched. Update the file with the actual current password OR provision a confirmed test user (Supabase project lreqxclzoxmswglvdstv has email-confirmation ON, so anon Sign-Up alone is not enough — user must be confirmed via the dashboard or a service-role key).",
+    "(Once auth is unblocked) Re-run Playwright: inline mode shows both productionCost+pv inline charts; popup mode opens TrendModal titled 'Production Cost (Power + Chemical)' for all three KPIs (Production Cost, Power Cost, Chemical Cost); sections mode toggles productionCost chart on those three KPI clicks, swaps to pv chart on PV Ratio click; verify range buttons 7D/14D/30D/60D/90D/CUSTOM all present (testids `trend-range-productionCost-{R}`); verify three Recharts Line series labelled 'Total (₱)', 'Power (₱)', 'Chemical (₱)' render."
+  ],
+  "critical_code_review_comments": [
+    "PASS — Dashboard.tsx:351-355 Production Cost StatCard onClick uses handleMetricClick('productionCost', 'Production Cost (Power + Chemical)'). No /costs navigation anywhere in Dashboard.tsx or src/components/dashboard/ (grep confirmed empty).",
+    "PASS — Dashboard.tsx:415-420 Power Cost and Chemical Cost StatCards both wire to the same handleMetricClick('productionCost', ...) — exactly as spec'd.",
+    "PASS — types.ts:75-78 COST_CHART_METRICS = [productionCost, pv] in correct order; types.ts:41 TREND_Y_LABEL.productionCost = 'Cost (₱)'.",
+    "PASS — TrendChart.tsx:151 needsCostReadings = metric === 'productionCost'. TrendChart.tsx:189-201 cost useQuery correctly uses .gte('cost_date', startKey).lte('cost_date', endKey) (date filter, not reading_datetime). TrendChart.tsx:207-214 ensure() seeds powerCost/chemCost/totalCost. TrendChart.tsx:244-253 falls back to power+chem when total_cost is null. TrendChart.tsx:361-365 renders three <Line> series 'Total (₱)' (accent), 'Power (₱)' (chart-6), 'Chemical (₱)' (highlight).",
+    "PASS — Empty-state hint on TrendChart.tsx:319 includes 'production_costs rollup' branch for productionCost metric — graceful no-data render, no crash.",
+    "PASS — handleMetricClick (Dashboard.tsx:63-72) returns undefined in inline mode (no nav, chart already inline), toggles expandedMetric in sections mode (single-open behaviour preserved), opens TrendModal in popup mode. ClusterCharts (TrendChart.tsx:30-60) renders both metrics inline / shows expanded one in sections / nothing in popup.",
+    "INFO — Three cost StatCards share the same metric+title pair, so in sections mode all three already collapse/expand the same single panel as expected.",
+    "MINOR / pre-existing — passSchema.min(8) in Auth.tsx:14 will reject the documented admin password '@Kevz' (5 chars). This is the same blocker iteration-7 noted; PRD says password is '@Kevz' but UI form refuses it. Even bypassing the form, Supabase itself returned invalid_credentials. Fix the credential."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "static-review-only (UI run blocked by auth)"},
+  "test_credentials": "DOCUMENTED: kevzvilbar@gmail.com / @Kevz — REJECTED by Supabase as invalid_credentials. Sign-Up creates an unconfirmed user (email_not_confirmed on subsequent sign-in). Not testable until a confirmed test account is provisioned.",
+  "seed_data_creation": "None. Did NOT create persistent users. The single signup attempt qa_iter10_1777442940@example.test went through (status 200) but is unconfirmed and unusable; no further data was inserted.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Once a confirmed Supabase test user is available (or admin password is corrected in /app/memory/test_credentials.md), drive these Playwright assertions: (1) localStorage.setItem('pwri:dashboard-view-mode','inline') then GET / → expect both [data-testid=trend-chart-productionCost] AND [data-testid=trend-chart-pv] to be in the DOM under the cost cluster. (2) Switch to popup via [data-testid=dashboard-view-mode] button[value=popup] → click each of 'Production Cost', 'Power Cost', 'Chemical Cost' → expect a [role=dialog] containing the title text 'Production Cost (Power + Chemical)' and a [data-testid=trend-chart-productionCost] inside, and URL must NOT change to /costs. (3) Switch to sections → clicking any of those three cost KPIs reveals [data-testid=cluster-section-chart-productionCost]; clicking 'PV Ratio' swaps to [data-testid=cluster-section-chart-pv]. (4) Range buttons exist with testids trend-range-productionCost-{7D|14D|30D|60D|90D|CUSTOM}. (5) Three Recharts Line series with names 'Total (₱)','Power (₱)','Chemical (₱)'. Static review of the diff is already PASS.",
+  "rca of the issue": "Auth blocker — passSchema.min(8) rejects the 5-char @Kevz; bypassing the form via direct Supabase /auth/v1/token also returns invalid_credentials, indicating the password documented in /app/memory/test_credentials.md is stale. Sign-Up at /auth produces email_not_confirmed because the project has email confirmation enabled. Fix path: main agent should either (a) reset the kevzvilbar@gmail.com password via the Supabase dashboard and update test_credentials.md with a value ≥8 chars, or (b) provision a confirmed seed user (e.g. via SQL migration similar to 20260428_promote_admin_kevin.sql) and document credentials."
+}

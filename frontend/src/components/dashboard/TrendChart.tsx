@@ -148,6 +148,7 @@ export function TrendChart({
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
+  const needsCostReadings = metric === 'productionCost';
 
   const supaSelect = async <T,>(table: string, cols: string) => {
     // Supabase JS v2 narrows `from(table)` to a literal-string union
@@ -182,9 +183,25 @@ export function TrendChart({
     queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,reading_datetime'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
+  // Production-cost rows use a date column (`cost_date`) rather than a
+  // datetime, so the generic `supaSelect` helper (which filters on
+  // `reading_datetime`) doesn't fit. Inline this single query instead.
+  const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
+    queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('production_costs')
+        .select('cost_date,power_cost,chem_cost,total_cost')
+        .in('plant_id', plantIds)
+        .gte('cost_date', startKey)
+        .lte('cost_date', endKey);
+      if (error) throw new Error(`production_costs: ${error.message}`);
+      return (data as any[]) ?? [];
+    },
+    enabled: plantIds.length > 0 && needsCostReadings,
+  });
 
-  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower;
-  const queryError = (errLoc || errWell || errRo || errPower) as Error | null;
+  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost;
+  const queryError = (errLoc || errWell || errRo || errPower || errCost) as Error | null;
 
   const chartData = useMemo(() => {
     const byDay = new Map<string, any>();
@@ -193,6 +210,7 @@ export function TrendChart({
         date: d, sortKey, production: 0, consumption: 0,
         rawwater: 0, recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0,
+        powerCost: 0, chemCost: 0, totalCost: 0,
       }).get(d);
 
     (wellReadings ?? []).forEach((r: any) => {
@@ -219,6 +237,20 @@ export function TrendChart({
       const key = format(dt, 'MMM d');
       ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
     });
+    // Roll up daily ₱ totals across the selected plants. `cost_date` is
+    // a date string (YYYY-MM-DD) — anchor it at local midnight for a
+    // stable sortKey. `total_cost` is a generated column in some rows
+    // and null in others, so fall back to the power+chem sum.
+    (costReadings ?? []).forEach((r: any) => {
+      const dt = new Date(`${r.cost_date}T00:00:00`);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      const power = +(r.power_cost ?? 0);
+      const chem = +(r.chem_cost ?? 0);
+      row.powerCost += power;
+      row.chemCost += chem;
+      row.totalCost += r.total_cost != null ? +r.total_cost : power + chem;
+    });
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
@@ -228,7 +260,7 @@ export function TrendChart({
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
         nrw: calc.nrw(d.production, d.consumption),
       }));
-  }, [locReadings, wellReadings, roReadings, powerReadings]);
+  }, [locReadings, wellReadings, roReadings, powerReadings, costReadings]);
 
   const chartHeight = compact ? 'h-[260px]' : 'h-[420px]';
 
@@ -284,7 +316,7 @@ export function TrendChart({
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
               <div className="text-[11px] mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : 'wells'}.
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power + chemicals (production_costs rollup)' : 'wells'}.
               </div>
             </div>
           </div>
@@ -325,6 +357,11 @@ export function TrendChart({
               {metric === 'pv' && (<>
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
                 <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
+              </>)}
+              {metric === 'productionCost' && (<>
+                <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
+                <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
+                <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
               </>)}
             </LineChart>
           )}

@@ -12,7 +12,6 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
@@ -34,7 +33,6 @@ import {
 export default function Dashboard() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const navigate = useNavigate();
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
   // View mode controls how trend graphs surface on the dashboard.
@@ -353,7 +351,8 @@ export default function Dashboard() {
         <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
           size="lg" calc
           calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
-          value={`₱${fmtNum(productionCost, 0)}`} onClick={() => navigate('/costs')} />
+          value={`₱${fmtNum(productionCost, 0)}`}
+          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
           trend={dConsumption}
           onClick={handleMetricClick('production', 'Production vs Consumption')} />
@@ -414,9 +413,11 @@ export default function Dashboard() {
       <ClusterHeader icon={Zap} title="Production Cost (Power + Chemical)" accent="text-chart-6" subtitle="Today" />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-          value={`₱${fmtNum(powerCost, 0)}`} onClick={() => navigate('/costs')} />
+          value={`₱${fmtNum(powerCost, 0)}`}
+          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
-          value={`₱${fmtNum(chemCost, 0)}`} onClick={() => navigate('/costs')} />
+          value={`₱${fmtNum(chemCost, 0)}`}
+          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
           trend={dKwh} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
