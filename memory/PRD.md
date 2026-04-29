@@ -484,7 +484,33 @@ explanatory comments per Rules of Hooks best-practices guidance.
    • Verified: `yarn build` clean (12s), 64/65 backend tests pass
      (1 unrelated h2/hpack failure), 4 fewer ESLint warnings overall.
 
+✅ Iteration 16 — Production Cost trend chart on Dashboard (2026-02-29)
+   • Production Cost / Power Cost / Chemical Cost StatCards no longer
+     navigate to `/costs` — they now open the same trend chart inline,
+     in the section panel, or in the popup modal depending on the
+     user's view-mode preference (consistent with NRW, TDS, PV Ratio,
+     etc).
+   • New `productionCost` chart metric in `dashboard/types.ts` (added
+     to `COST_CHART_METRICS`, label `Cost (₱)`).
+   • New supabase query in `TrendChart.tsx` against `production_costs`
+     filtered by `cost_date` (date column, distinct from the
+     `reading_datetime` filter used elsewhere). Renders three Recharts
+     `<Line>` series: Total (accent), Power (chart-6), Chemical
+     (highlight). Falls back to `power_cost + chem_cost` when the
+     `total_cost` generated column is null.
+   • Removed the now-unused `useNavigate` import from `Dashboard.tsx`.
+   • Verified: `yarn build` clean (12s); independent testing-agent
+     static review confirmed all 7 implementation checkpoints PASS
+     (`/app/test_reports/iteration_10.json`). UI Playwright drive was
+     blocked by stale admin credentials — see test_credentials.md for
+     unblock path.
+
 ### Backlog (P2/P3 — deferred per user "stop after P0+P1")
+- **Stale admin credential** — `kevzvilbar@gmail.com / @Kevz` is no
+  longer accepted by Supabase. Either reset the password (≥8 chars)
+  via the Supabase dashboard, or provision a fresh confirmed seed
+  user, then update `/app/memory/test_credentials.md`. Blocks any
+  future end-to-end UI testing.
 - **P2 — Backend complexity refactor**: extract helpers from
   `admin_service.hard_delete_plant` / `cleanup_plants` and
   `ai_import_service.sync_analysis` / `_insert_readings` /
