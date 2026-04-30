@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -365,6 +365,26 @@ function LocatorsList({ plantId }: { plantId: string }) {
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const doDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'locator', entity_id: deleteTarget.id, entity_label: deleteTarget.name, action: 'hard', reason: deleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('locators').delete().eq('id', deleteTarget.id);
+    setDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Locator deleted');
+    setDeleteTarget(null);
+    setDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+  };
 
   const { data: locators } = useQuery({
     queryKey: ['locators', plantId],
@@ -509,12 +529,40 @@ function LocatorsList({ plantId }: { plantId: string }) {
                   )}
                 </div>
               </div>
+              {isManager && (
+                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit" onClick={() => setEditing(l)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => { setDeleteTarget(l); setDeleteReason(''); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
             </div>
           </Card>
         );
       })}
       {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+      {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+
+      {/* Single delete confirm */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleteBusy && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>All meter readings and replacement logs will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={deleteReason} onChange={setDeleteReason} testId="locator-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} disabled={deleteBusy || deleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Bulk delete dialog */}
       <AlertDialog open={bulkOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkOpen(false)}>
@@ -576,6 +624,46 @@ function ReasonField({
         </p>
       )}
     </div>
+  );
+}
+
+function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: locator.name ?? '', location_desc: locator.location_desc ?? '', address: locator.address ?? '',
+    meter_brand: locator.meter_brand ?? '', meter_size: locator.meter_size ?? '', meter_serial: locator.meter_serial ?? '',
+    meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
+  });
+  const submit = async () => {
+    if (!form.name) { toast.error('Name Required'); return; }
+    const { error } = await supabase.from('locators').update({
+      name: form.name, location_desc: form.location_desc || null, address: form.address || null,
+      meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+    }).eq('id', locator.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Locator updated'); onClose();
+  };
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Locator</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div><Label>Location</Label><Input value={form.location_desc} onChange={e => setForm({ ...form, location_desc: e.target.value })} /></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label>Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
+            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+          </div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -760,6 +848,27 @@ function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
+  const [editingWell, setEditingWell] = useState<any | null>(null);
+  const [wellDeleteTarget, setWellDeleteTarget] = useState<any | null>(null);
+  const [wellDeleteReason, setWellDeleteReason] = useState('');
+  const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
+
+  const doWellDelete = async () => {
+    if (!wellDeleteTarget) return;
+    if (wellDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setWellDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'well', entity_id: wellDeleteTarget.id, entity_label: wellDeleteTarget.name, action: 'hard', reason: wellDeleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('wells').delete().eq('id', wellDeleteTarget.id);
+    setWellDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Well deleted');
+    setWellDeleteTarget(null);
+    setWellDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+  };
   const { data: wells } = useQuery({
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
@@ -1023,6 +1132,12 @@ function WellsList({ plantId }: { plantId: string }) {
                   during read-only roles. */}
               {isManager && (
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit well" onClick={e => { e.stopPropagation(); setEditingWell(w); }}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete well" onClick={e => { e.stopPropagation(); setWellDeleteTarget(w); setWellDeleteReason(''); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                   <label
                     className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
                       isBlending
@@ -1082,6 +1197,24 @@ function WellsList({ plantId }: { plantId: string }) {
           qc.invalidateQueries({ queryKey: ['wells', plantId] });
         }} />
       )}
+      {editingWell && <EditWellDialog well={editingWell} onClose={() => { setEditingWell(null); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }} />}
+
+      {/* Single well delete confirm */}
+      <AlertDialog open={!!wellDeleteTarget} onOpenChange={(o) => !o && !wellDeleteBusy && setWellDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete "{wellDeleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>All meter readings, hydraulic history, and replacement logs will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={wellDeleteReason} onChange={setWellDeleteReason} testId="well-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={wellDeleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doWellDelete} disabled={wellDeleteBusy || wellDeleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {wellDeleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkDeleteOpen(false)}>
         <AlertDialogContent>
@@ -1132,6 +1265,49 @@ function WellsList({ plantId }: { plantId: string }) {
       </AlertDialog>
 
     </div>
+  );
+}
+
+function EditWellDialog({ well, onClose }: { well: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: well.name ?? '', diameter: well.diameter ?? '', drilling_depth_m: well.drilling_depth_m?.toString() ?? '',
+    meter_brand: well.meter_brand ?? '', meter_size: well.meter_size ?? '', meter_serial: well.meter_serial ?? '',
+    gps_lat: well.gps_lat?.toString() ?? '', gps_lng: well.gps_lng?.toString() ?? '',
+  });
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    const { error } = await supabase.from('wells').update({
+      name: form.name.trim(), diameter: form.diameter || null,
+      drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
+      meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+    }).eq('id', well.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Well updated'); onClose();
+  };
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Well</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} /></div>
+            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label>Meter Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+            <div><Label>Meter Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
+            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+          </div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2131,6 +2307,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const plant = plants?.find((p) => p.id === plantId);
 
   const qc = useQueryClient();
+  const { isManager, user } = useAuth();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
     queryFn: async () =>
@@ -2138,6 +2315,25 @@ function TrainsList({ plantId }: { plantId: string }) {
   });
 
   const [editTrain, setEditTrain] = useState<any | null>(null);
+  const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
+  const [trainDeleteReason, setTrainDeleteReason] = useState('');
+  const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
+
+  const doTrainDelete = async () => {
+    if (!trainDeleteTarget) return;
+    if (trainDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setTrainDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'ro_train', entity_id: trainDeleteTarget.id, entity_label: `Train ${trainDeleteTarget.train_number}`, action: 'hard', reason: trainDeleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('ro_trains').delete().eq('id', trainDeleteTarget.id);
+    setTrainDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Train deleted');
+    setTrainDeleteTarget(null);
+    setTrainDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+  };
 
   // Resolve the effective media/filter type for a given train:
   // Train-level override wins; falls back to plant default; then hardcoded default.
@@ -2191,6 +2387,18 @@ function TrainsList({ plantId }: { plantId: string }) {
                 >
                   <Wrench className="h-3 w-3 mr-1" />Edit Components
                 </Button>
+                {isManager && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    title="Delete train"
+                    onClick={() => { setTrainDeleteTarget(t); setTrainDeleteReason(''); }}
+                    data-testid={`delete-train-${t.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
             <Button size="sm" variant="link" className="px-0 mt-1 h-auto text-xs" onClick={() => navigate('/ro-trains')}>
@@ -2211,6 +2419,22 @@ function TrainsList({ plantId }: { plantId: string }) {
           }}
         />
       )}
+
+      <AlertDialog open={!!trainDeleteTarget} onOpenChange={(o) => !o && !trainDeleteBusy && setTrainDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete Train {trainDeleteTarget?.train_number}?</AlertDialogTitle>
+            <AlertDialogDescription>All logs associated with this train will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={trainDeleteReason} onChange={setTrainDeleteReason} testId="train-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={trainDeleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doTrainDelete} disabled={trainDeleteBusy || trainDeleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {trainDeleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
