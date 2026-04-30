@@ -27,12 +27,17 @@ function useBlendingWells(plantId: string) {
   return useQuery<{ wells: { well_id: string }[] }>({
     queryKey: ['blending-wells', plantId],
     queryFn: async () => {
-      const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
-      const res = await fetch(`${BASE}/api/blending/wells${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      try {
+        const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
+        const res = await fetch(`${BASE}/api/blending/wells${qs}`);
+        if (!res.ok) return { wells: [] };
+        return res.json();
+      } catch {
+        return { wells: [] };
+      }
     },
     enabled: !!plantId,
+    retry: false,
   });
 }
 
@@ -660,11 +665,16 @@ function BlendingForm() {
   }>({
     queryKey: ['blending-today', plantId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      try {
+        const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
+        if (!res.ok) return { by_well: [] };
+        return res.json();
+      } catch {
+        return { by_well: [] };
+      }
     },
     enabled: !!plantId,
+    retry: false,
   });
   const todayByWell = useMemo(() => {
     const m: Record<string, number> = {};

@@ -259,13 +259,18 @@ export default function Dashboard() {
   const { data: feed } = useQuery<{ count: number; alerts: any[] }>({
     queryKey: ['alerts-feed', selectedPlantId],
     queryFn: async () => {
-      const qs = new URLSearchParams({ days: '30' });
-      if (selectedPlantId) qs.set('plant_id', selectedPlantId);
-      const res = await fetch(`${BASE}/api/alerts/feed?${qs.toString()}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      try {
+        const qs = new URLSearchParams({ days: '30' });
+        if (selectedPlantId) qs.set('plant_id', selectedPlantId);
+        const res = await fetch(`${BASE}/api/alerts/feed?${qs.toString()}`);
+        if (!res.ok) return { count: 0, alerts: [] };
+        return res.json();
+      } catch {
+        return { count: 0, alerts: [] };
+      }
     },
     refetchInterval: 60_000,
+    retry: false,
   });
   const feedAlerts = feed?.alerts ?? [];
 
