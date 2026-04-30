@@ -50,6 +50,8 @@ const queryClient = new QueryClient({
     onError: (error, query) => {
       const msg = error instanceof Error ? error.message : String(error);
       if (!msg || /abort/i.test(msg)) return;
+      // Queries with meta.silent = true silently fail (backend unavailable in static deploy)
+      if (query.meta?.silent) return;
       const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : 'query';
       toast.error(`Load failed (${key}): ${msg}`);
     },
