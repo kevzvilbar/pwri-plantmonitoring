@@ -172,6 +172,10 @@ export default function AIImportPanel({
   // --------------------------- Analyze ------------------------------------
   const runAnalyze = useCallback(async () => {
     if (!file) return;
+    if (!backendUrl) {
+      toast.error('Backend URL not configured. Set REACT_APP_BACKEND_URL in your GitHub Secrets and redeploy.');
+      return;
+    }
     setAnalyzing(true);
     setSyncResult(null);
     try {
@@ -341,7 +345,7 @@ export default function AIImportPanel({
             <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()} data-testid="ai-import-browse-btn">
               <Upload className="h-3.5 w-3.5 mr-1" /> Browse
             </Button>
-            <Button size="sm" onClick={runAnalyze} disabled={!file || analyzing || !backendConfigured} data-testid="ai-import-analyze-btn">
+            <Button size="sm" onClick={runAnalyze} disabled={!file || analyzing} data-testid="ai-import-analyze-btn">
               {analyzing
                 ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Analyzing…</>
                 : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Analyze with AI</>}
