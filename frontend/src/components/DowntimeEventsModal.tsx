@@ -48,12 +48,17 @@ export function DowntimeEventsModal({
     queryKey: ['downtime-events', plantId, from, to],
     enabled: open,
     queryFn: async () => {
-      const qs = new URLSearchParams({ date_from: from, date_to: to, limit: '2000' });
-      if (plantId) qs.set('plant_id', plantId);
-      const res = await fetch(`${BASE}/api/downtime/events?${qs.toString()}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      try {
+        const qs = new URLSearchParams({ date_from: from, date_to: to, limit: '2000' });
+        if (plantId) qs.set('plant_id', plantId);
+        const res = await fetch(`${BASE}/api/downtime/events?${qs.toString()}`);
+        if (!res.ok) return { events: [] };
+        return res.json();
+      } catch {
+        return { events: [] };
+      }
     },
+    retry: false,
   });
 
   const filtered = useMemo(() => {

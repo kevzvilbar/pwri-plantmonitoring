@@ -23,21 +23,24 @@ interface Props {
 }
 
 export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
+  const empty: ApiResponse = { days, total_m3: 0, today_m3: 0, series: [], by_well: [] };
   const { data } = useQuery<ApiResponse>({
     queryKey: ['blending-volume', plantIds, days],
     queryFn: async () => {
-      if (!plantIds.length) {
-        return { days, total_m3: 0, today_m3: 0, series: [], by_well: [] };
+      if (!plantIds.length) return empty;
+      try {
+        const qs = new URLSearchParams({
+          plant_ids: plantIds.join(','),
+          days: String(days),
+        });
+        const res = await fetch(`${BASE}/api/blending/volume?${qs}`);
+        if (!res.ok) return empty;
+        return res.json();
+      } catch {
+        return empty;
       }
-      const qs = new URLSearchParams({
-        plant_ids: plantIds.join(','),
-        days: String(days),
-      });
-      const res = await fetch(`${BASE}/api/blending/volume?${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
     },
-    enabled: plantIds.length > 0,
+    retry: false,
   });
 
   const series = data?.series ?? [];
