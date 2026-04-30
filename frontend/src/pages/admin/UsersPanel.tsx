@@ -5,19 +5,196 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { PlantAssignmentEditor } from '@/components/PlantAssignmentEditor';
 import {
   DesignationCombobox, accessLevelFromRoles,
 } from '@/components/DesignationCombobox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { toast } from '@/components/ui/sonner';
-import { Search, Hourglass } from 'lucide-react';
+import { Search, Hourglass, UserPlus } from 'lucide-react';
+
+// ── Create-user dialog ────────────────────────────────────────────────────────
+
+function CreateUserDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    middle_name: '',
+    suffix: '',
+    username: '',
+    designation: '',
+  });
+
+  const field = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const reset = () => {
+    setForm({ email: '', password: '', first_name: '', last_name: '', middle_name: '', suffix: '', username: '', designation: '' });
+    setBusy(false);
+  };
+
+  const handleClose = () => { reset(); onClose(); };
+
+  const handleSubmit = async () => {
+    if (!form.email || !form.password || !form.first_name || !form.last_name || !form.username) {
+      toast.error('Email, password, username, first name and last name are required.');
+      return;
+    }
+    if (form.password.length < 6) {
+      toast.error('Password must be at least 6 characters.');
+      return;
+    }
+    setBusy(true);
+
+    // 1. Create the auth user. handle_new_user() trigger auto-creates a
+    //    user_profiles row (status=Pending, profile_complete=false, confirmed=false).
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+    });
+
+    if (signUpError) {
+      toast.error(signUpError.message);
+      setBusy(false);
+      return;
+    }
+
+    const uid = signUpData.user?.id;
+    if (!uid) {
+      toast.error('Sign-up succeeded but no user ID was returned.');
+      setBusy(false);
+      return;
+    }
+
+    // 2. Patch the auto-created profile row with the supplied details.
+    //    The "user_profiles admin full update" RLS policy allows Admins to do this.
+    //    confirmed stays false — Admin must click Approve to let them in.
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .update({
+        username: form.username,
+        first_name: form.first_name,
+        middle_name: form.middle_name || null,
+        last_name: form.last_name,
+        suffix: form.suffix || null,
+        designation: form.designation || null,
+        profile_complete: true,
+      })
+      .eq('id', uid);
+
+    if (profileError) {
+      toast.error(`User created but profile update failed: ${profileError.message}`);
+      setBusy(false);
+      onCreated();
+      handleClose();
+      return;
+    }
+
+    toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
+    setBusy(false);
+    onCreated();
+    handleClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create new user</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-1">
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Login credentials</p>
+            <div>
+              <Label>Email *</Label>
+              <Input type="email" value={form.email} onChange={field('email')} placeholder="user@example.com" />
+            </div>
+            <div>
+              <Label>Password *</Label>
+              <Input type="password" value={form.password} onChange={field('password')} placeholder="Min. 6 characters" />
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1 border-t">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profile</p>
+            <div>
+              <Label>Username *</Label>
+              <Input value={form.username} onChange={field('username')} placeholder="e.g. jdelacruz" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>First name *</Label>
+                <Input value={form.first_name} onChange={field('first_name')} />
+              </div>
+              <div>
+                <Label>Last name *</Label>
+                <Input value={form.last_name} onChange={field('last_name')} />
+              </div>
+              <div>
+                <Label>Middle name</Label>
+                <Input value={form.middle_name} onChange={field('middle_name')} />
+              </div>
+              <div>
+                <Label>Suffix</Label>
+                <Input value={form.suffix} onChange={field('suffix')} placeholder="Jr., Sr., III…" />
+              </div>
+            </div>
+            <div>
+              <Label>Designation</Label>
+              <DesignationCombobox
+                value={form.designation}
+                onChange={(v) => setForm((f) => ({ ...f, designation: v }))}
+                placeholder="Select or type a designation…"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Created with <strong>Operator</strong> role, placed in the approval queue.
+            Share the email &amp; password with them — they can change it after logging in.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={busy}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={busy}>
+            {busy ? 'Creating…' : 'Create user'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────
 
 export function UsersPanel() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () =>
@@ -105,7 +282,16 @@ export function UsersPanel() {
           <Hourglass className="h-3 w-3 mr-1" />
           Pending {pendingCount > 0 && `· ${pendingCount}`}
         </Button>
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          data-testid="admin-create-user-btn"
+        >
+          <UserPlus className="h-3 w-3 mr-1" />
+          Add user
+        </Button>
       </div>
+
       {filtered.map((s: any) => {
         const userRoles = rolesOf(s.id);
         const access = accessLevelFromRoles(userRoles);
@@ -192,11 +378,22 @@ export function UsersPanel() {
           </Card>
         );
       })}
+
       {filtered.length === 0 && (
         <Card className="p-4 text-center text-xs text-muted-foreground">
-          {pendingOnly ? 'No pending approvals.' : 'No users'}
+          {pendingOnly ? 'No pending approvals.' : 'No users found.'}
         </Card>
       )}
+
+      <CreateUserDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          qc.invalidateQueries({ queryKey: ['admin-users'] });
+          qc.invalidateQueries({ queryKey: ['admin-user-roles'] });
+          qc.invalidateQueries({ queryKey: ['staff'] });
+        }}
+      />
     </div>
   );
 }
