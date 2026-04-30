@@ -144,9 +144,16 @@ export default function Compliance() {
   const thresholdScope = scope === 'plant' ? plantId : 'global';
   const { data: thData, refetch: refetchThresholds } = useQuery({
     queryKey: ['thresholds', thresholdScope],
-    queryFn: () => api<{ scope: string; thresholds: Thresholds }>(
-      `/api/compliance/thresholds?scope=${encodeURIComponent(thresholdScope)}`,
-    ),
+    queryFn: async () => {
+      try {
+        return await api<{ scope: string; thresholds: Thresholds }>(
+          `/api/compliance/thresholds?scope=${encodeURIComponent(thresholdScope)}`,
+        );
+      } catch {
+        return null;
+      }
+    },
+    retry: false,
   });
 
   useEffect(() => {
