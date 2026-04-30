@@ -37,3 +37,4 @@ storage3>=0.11,<1.0
 supafunc>=0.9,<1.0
 realtime>=2.0,<3.0
 deprecation>=2.1.0
+mongomock-motor>=0.0.21
