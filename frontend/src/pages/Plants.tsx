@@ -629,14 +629,31 @@ function ReasonField({
 
 function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => void }) {
   const [form, setForm] = useState({
-    name: locator.name ?? '', location_desc: locator.location_desc ?? '', address: locator.address ?? '',
+    name: locator.name ?? '', address: locator.address ?? locator.location_desc ?? '',
     meter_brand: locator.meter_brand ?? '', meter_size: locator.meter_size ?? '', meter_serial: locator.meter_serial ?? '',
     meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
   });
+  const [locating, setLocating] = useState(false);
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm(f => ({ ...f, gps_lat: pos.coords.latitude.toFixed(6), gps_lng: pos.coords.longitude.toFixed(6) }));
+      toast.success('Location captured');
+    } catch {
+      toast.error('Could not get location');
+    } finally {
+      setLocating(false);
+    }
+  };
+
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
     const { error } = await supabase.from('locators').update({
-      name: form.name, location_desc: form.location_desc || null, address: form.address || null,
+      name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
@@ -644,21 +661,51 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
     if (error) { toast.error(error.message); return; }
     toast.success('Locator updated'); onClose();
   };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Locator</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-          <div><Label>Location</Label><Input value={form.location_desc} onChange={e => setForm({ ...form, location_desc: e.target.value })} /></div>
+          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
           <div className="grid grid-cols-3 gap-2">
             <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
             <div><Label>Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
             <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
-            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+
+          {/* GPS row — editable inputs + clickable map link + use-my-location */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" />View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use my location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+              </div>
+            </div>
           </div>
         </div>
         <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
