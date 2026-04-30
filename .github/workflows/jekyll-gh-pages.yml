@@ -38,6 +38,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://sosfbfxovtleuvahxvpm.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_cJS50v7hmwfGz-4LiYbFYQ_KiIO13w5
+          REACT_APP_BACKEND_URL: https://your-replit-backend-url.replit.dev
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
