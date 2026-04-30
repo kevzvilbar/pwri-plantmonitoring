@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppStore } from '@/store/appStore';
 
 type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin';
 
@@ -24,6 +25,9 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /** The currently selected shift operator profile.
+   *  Falls back to own profile when no override is set. */
+  activeOperator: Profile | null;
   roles: Role[];
   isAdmin: boolean;
   isManager: boolean;
@@ -38,8 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [operatorProfile, setOperatorProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const activeOperatorId = useAppStore((s) => s.activeOperatorId);
+  const setActiveOperatorId = useAppStore((s) => s.setActiveOperatorId);
 
   const loadProfileAndRoles = async (uid: string) => {
     const [{ data: prof }, { data: roleRows }] = await Promise.all([
@@ -49,6 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile((prof as Profile) ?? null);
     setRoles(((roleRows ?? []) as { role: Role }[]).map((r) => r.role));
   };
+
+  // Load the selected operator's profile whenever activeOperatorId changes
+  useEffect(() => {
+    if (!activeOperatorId) { setOperatorProfile(null); return; }
+    supabase.from('user_profiles').select('*').eq('id', activeOperatorId).maybeSingle().then(({ data }) => {
+      // Validate: if the stored id is stale / deleted, clear it
+      if (!data) { setActiveOperatorId(null); setOperatorProfile(null); return; }
+      setOperatorProfile(data as Profile);
+    });
+  }, [activeOperatorId, setActiveOperatorId]);
 
   useEffect(() => {
     // Set up listener FIRST (per Lovable Cloud auth knowledge)
@@ -66,6 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }, 0);
       } else {
         setProfile(null);
+        setOperatorProfile(null);
+        setActiveOperatorId(null);
         setRoles([]);
         setLoading(false);
       }
@@ -79,21 +99,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [setActiveOperatorId]);
 
   const refreshProfile = async () => {
     if (user) await loadProfileAndRoles(user.id);
   };
 
   const signOut = async () => {
+    setActiveOperatorId(null);
     await supabase.auth.signOut();
   };
 
   const isAdmin = roles.includes('Admin');
   const isManager = isAdmin || roles.includes('Manager');
 
+  // activeOperator: prefer the explicitly selected operator, fallback to own profile
+  const activeOperator = operatorProfile ?? profile;
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, roles, isAdmin, isManager, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, activeOperator, roles, isAdmin, isManager, loading, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );
