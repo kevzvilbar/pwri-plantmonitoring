@@ -73,6 +73,30 @@ def user_scoped_client(access_token: Optional[str] = None) -> Client:
     return client
 
 
+def service_role_client() -> Client:
+    """Build a Supabase client using the service-role key.
+
+    This bypasses RLS entirely — use ONLY for admin-privileged destructive
+    operations (hard deletes, cascades) where the caller's JWT cannot satisfy
+    RLS policies on rows owned by another user.
+
+    Falls back to the anon-key client with a warning if the service-role key
+    is not configured, so the endpoint degrades gracefully on deployments
+    that haven't set the variable yet.
+    """
+    url = os.environ.get("SUPABASE_URL")
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if url and service_key:
+        return create_client(url, service_key)
+    # Fallback: log warning but don't crash — the delete may still work if
+    # RLS policies permit the admin's own JWT to modify other users' rows.
+    log.warning(
+        "SUPABASE_SERVICE_ROLE_KEY is not set. Hard deletes may fail due to RLS. "
+        "Add the key to your environment to enable full admin delete capability."
+    )
+    return user_scoped_client()
+
+
 def bearer_token(authorization: Optional[str]) -> str:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")

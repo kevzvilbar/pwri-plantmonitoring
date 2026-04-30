@@ -45,6 +45,7 @@ from admin_helpers import (
     require_roles,
     resolve_plant_by_name,
     scrub_plant_assignments,
+    service_role_client,
     user_scoped_client,
     write_audit,
 )
@@ -127,13 +128,16 @@ def user_dependencies(client: Client, user_id: str) -> dict[str, Any]:
     except Exception:
         pass
 
+    # plant_assignments is JSONB array data in the profile row — it is deleted
+    # along with the profile row itself and is NOT a FK that blocks deletion.
+    # Only operational records (readings, incidents, etc.) are true blockers.
     return {
         "user_id": user_id,
         "role_rows": roles_count,
         "references": refs,
         "total_references": total,
         "assigned_plants": assigned,
-        "blocking": total > 0 or bool(assigned),
+        "blocking": total > 0,
     }
 
 
@@ -270,8 +274,9 @@ def soft_delete_user(
     client = user_scoped_client(token)
     label = _entity_label(client, "user", user_id)
     try:
+        svc = service_role_client()
         res = (
-            client.table("user_profiles")
+            svc.table("user_profiles")
             .update({"status": "Suspended"})
             .eq("id", user_id)
             .execute()
@@ -312,8 +317,11 @@ def hard_delete_user(
         )
     label = _entity_label(client, "user", user_id)
     try:
-        client.table("user_roles").delete().eq("user_id", user_id).execute()
-        client.table("user_profiles").delete().eq("id", user_id).execute()
+        # Use service-role client for the destructive deletes so RLS on
+        # user_profiles / user_roles doesn't block an admin removing another user.
+        svc = service_role_client()
+        svc.table("user_roles").delete().eq("user_id", user_id).execute()
+        svc.table("user_profiles").delete().eq("id", user_id).execute()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Hard delete failed: {e}")
 
