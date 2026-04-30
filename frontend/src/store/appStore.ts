@@ -6,6 +6,10 @@ interface AppState {
   setSelectedPlantId: (id: string | null) => void;
   unreadCount: number;
   setUnreadCount: (n: number) => void;
+  /** The profile ID of the currently active shift operator.
+   *  null means "use the authenticated user's own profile". */
+  activeOperatorId: string | null;
+  setActiveOperatorId: (id: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -15,7 +19,12 @@ export const useAppStore = create<AppState>()(
       setSelectedPlantId: (id) => set((state) => (state.selectedPlantId === id ? state : { selectedPlantId: id })),
       unreadCount: 0,
       setUnreadCount: (n) => set((state) => (state.unreadCount === n ? state : { unreadCount: n })),
+      activeOperatorId: null,
+      setActiveOperatorId: (id) => set((state) => (state.activeOperatorId === id ? state : { activeOperatorId: id })),
     }),
-    { name: 'pwri-app-state', partialize: (s) => ({ selectedPlantId: s.selectedPlantId }) },
+    {
+      name: 'pwri-app-state',
+      partialize: (s) => ({ selectedPlantId: s.selectedPlantId, activeOperatorId: s.activeOperatorId }),
+    },
   ),
 );
