@@ -102,8 +102,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
   const { isManager } = useAuth();
   const plant = plants?.find(p => p.id === plantId);
 
-  const [tab, setTab] = useState<'locators' | 'wells' | 'trains'>('locators');
-
   if (!plant) return <div>Plant not found.</div>;
 
   return (
@@ -138,15 +136,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <EnergySourceCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
 
-      <div className="grid grid-cols-3 gap-2">
-        {(['locators', 'wells', 'trains'] as const).map((t) => (
-          <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)} className="capitalize">{t}</Button>
-        ))}
-      </div>
-
-      {tab === 'locators' && <LocatorsList plantId={plantId} />}
-      {tab === 'wells' && <WellsList plantId={plantId} />}
-      {tab === 'trains' && <TrainsList plantId={plantId} />}
+      <LocatorsList plantId={plantId} />
+      <WellsList plantId={plantId} />
+      <TrainsList plantId={plantId} />
     </div>
   );
 }
