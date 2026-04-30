@@ -83,8 +83,16 @@ export default function AIAssistant() {
 
   const { data: sessions, refetch: refetchSessions } = useQuery<SessionPreview[]>({
     queryKey: ['ai-sessions', user?.id],
-    queryFn: () => api<SessionPreview[]>('/api/ai/sessions', { userId: user?.id }),
+    queryFn: async () => {
+      try {
+        return await api<SessionPreview[]>('/api/ai/sessions', { userId: user?.id });
+      } catch {
+        return [];
+      }
+    },
     staleTime: 10_000,
+    retry: false,
+    meta: { silent: true },
   });
 
   const loadSession = useCallback(async (sid: string) => {
@@ -93,7 +101,8 @@ export default function AIAssistant() {
       const res = await api<{ session_id: string; messages: Msg[] }>(`/api/ai/sessions/${sid}`);
       setMessages(res.messages ?? []);
     } catch (e: any) {
-      toast.error(`Failed to load session: ${e.message}`);
+      const isOffline = /fetch|network|connect/i.test(e.message);
+      if (!isOffline) toast.error(`Failed to load session: ${e.message}`);
     }
   }, []);
 
@@ -121,8 +130,12 @@ export default function AIAssistant() {
       setMessages((m) => [...m, { role: 'assistant', content: res.reply, created_at: res.created_at }]);
       refetchSessions();
     } catch (e: any) {
-      setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${e.message}` }]);
-      toast.error(`AI error: ${e.message}`);
+      const isOffline = /fetch|network|connect/i.test(e.message);
+      const friendly = isOffline
+        ? 'The AI backend is not reachable. Please ensure the server is running.'
+        : e.message;
+      setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${friendly}` }]);
+      if (!isOffline) toast.error(`AI error: ${friendly}`);
     } finally {
       setSending(false);
     }
@@ -202,7 +215,12 @@ export default function AIAssistant() {
       setScanResult(res);
       toast.success(`Found ${res.anomalies.length} anomaly(ies)`);
     } catch (e: any) {
-      toast.error(`Scan failed: ${e.message}`);
+      const isOffline = /fetch|network|connect/i.test(e.message);
+      if (isOffline) {
+        toast.error('AI backend is not reachable. Ensure the server is running.');
+      } else {
+        toast.error(`Scan failed: ${e.message}`);
+      }
     } finally {
       setScanning(false);
     }
