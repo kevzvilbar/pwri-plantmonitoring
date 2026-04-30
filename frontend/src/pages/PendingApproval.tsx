@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
@@ -7,6 +8,18 @@ import { Hourglass, LogOut, RefreshCw } from 'lucide-react';
 export default function PendingApproval() {
   const { profile, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
+
+  // Auto-redirect when confirmed flips to true
+  useEffect(() => {
+    if (profile?.confirmed === true) {
+      navigate('/', { replace: true });
+    }
+  }, [profile?.confirmed, navigate]);
+
+  const handleRefresh = async () => {
+    await refreshProfile();
+    // Navigation handled by useEffect above
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -48,7 +61,7 @@ export default function PendingApproval() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refreshProfile()}
+            onClick={handleRefresh}
             data-testid="pending-refresh-btn"
           >
             <RefreshCw className="h-3.5 w-3.5 mr-1" />
