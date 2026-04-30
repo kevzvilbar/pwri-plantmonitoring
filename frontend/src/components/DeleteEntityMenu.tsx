@@ -145,13 +145,9 @@ export function DeleteEntityMenu({
     }
     try {
       setBusy(true);
-      const params = new URLSearchParams();
-      if (reason) params.set('reason', reason);
-      if (force) params.set('force', 'true');
-      if (archive) params.set('archive', 'true');
-      const qs = params.toString() ? `?${params.toString()}` : '';
       const result = await api<{ archived?: boolean; archived_counts?: Record<string, number> }>(
-        'DELETE', `/api/admin/${entityPath}/${id}${qs}`,
+        'POST', `/api/admin/${entityPath}/${id}/hard-delete`,
+        { reason, force, archive },
       );
       const cap = copy.label[0].toUpperCase() + copy.label.slice(1);
       if (archive && result?.archived) {
