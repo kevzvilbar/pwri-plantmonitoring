@@ -1727,6 +1727,7 @@ function EditTrainDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { isManager } = useAuth();
 
   // Plant-wide type defaults
   const plantMediaType: 'AFM' | 'MMF' = (plant as any).filter_media_type ?? 'AFM';
@@ -1790,6 +1791,7 @@ function EditTrainDialog({
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. North Wing"
+              disabled={!isManager}
               data-testid="train-name-input"
             />
           </div>
@@ -2080,11 +2082,15 @@ function EditTrainDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={save} disabled={saving} data-testid="save-train-btn">
-            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Save Train
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            {isManager ? 'Cancel' : 'Close'}
           </Button>
+          {isManager && (
+            <Button onClick={save} disabled={saving} data-testid="save-train-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Save Train
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2095,7 +2101,6 @@ function EditTrainDialog({
 
 function TrainsList({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
-  const { isManager } = useAuth();
   const { data: plants } = usePlants();
   const plant = plants?.find((p) => p.id === plantId);
 
@@ -2151,17 +2156,15 @@ function TrainsList({ plantId }: { plantId: string }) {
                 <StatusPill tone={t.status === 'Running' ? 'accent' : t.status === 'Maintenance' ? 'warn' : 'muted'}>
                   {t.status}
                 </StatusPill>
-                {isManager && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => setEditTrain(t)}
-                    data-testid={`edit-train-${t.id}`}
-                  >
-                    <Wrench className="h-3 w-3 mr-1" />Edit
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setEditTrain(t)}
+                  data-testid={`edit-train-${t.id}`}
+                >
+                  <Wrench className="h-3 w-3 mr-1" />Edit Components
+                </Button>
               </div>
             </div>
             <Button size="sm" variant="link" className="px-0 mt-1 h-auto text-xs" onClick={() => navigate('/ro-trains')}>
