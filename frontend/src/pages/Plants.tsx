@@ -136,6 +136,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
       <BackwashModeCard plant={plant} />
       <EnergySourceCard plant={plant} />
+      <PlantComponentTypeCard plant={plant} />
 
       <div className="grid grid-cols-3 gap-2">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
@@ -1583,28 +1584,604 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
   );
 }
 
+// ─── Plant-level component type card ────────────────────────────────────────
+
+function PlantComponentTypeCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // These fields may not exist in older DB schemas — we use `?? 'AFM'` fallbacks.
+  const [mediaType, setMediaType] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
+  const [filterType, setFilterType] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('plants')
+      .update({ filter_media_type: mediaType, filter_housing_type: filterType } as any)
+      .eq('id', plant.id);
+    setSaving(false);
+    if (error) {
+      // Column may not exist yet — show a friendly note instead of crashing
+      toast.error(`Could not save plant-level type: ${error.message}. Apply DB migration to add filter_media_type / filter_housing_type columns to plants.`);
+      return;
+    }
+    toast.success('Component types updated for all trains');
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  const cancel = () => {
+    setMediaType((plant as any).filter_media_type ?? 'AFM');
+    setFilterType((plant as any).filter_housing_type ?? 'Cartridge Filter');
+    setEditing(false);
+  };
+
+  return (
+    <Card className="p-3" data-testid="plant-component-type-card">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-chart-6" /> Plant-wide Component Types
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
+            <span>
+              Media filter:{' '}
+              <span className="font-medium text-foreground">
+                {(plant as any).filter_media_type ?? 'AFM'}
+              </span>
+            </span>
+            <span>
+              Pre-filter:{' '}
+              <span className="font-medium text-foreground">
+                {(plant as any).filter_housing_type ?? 'Cartridge Filter'}
+              </span>
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            Applies universally — reflected in all train labels &amp; forms.
+          </div>
+        </div>
+        {isManager && !editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="edit-component-types-btn">
+            <Wrench className="h-3 w-3 mr-1" />Edit
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3 space-y-3">
+          {/* Media filter type */}
+          <div>
+            <Label className="text-xs mb-1.5 block">Media Filter Type (applied to all trains)</Label>
+            <div className="flex gap-2">
+              {(['AFM', 'MMF'] as const).map((opt) => (
+                <Button
+                  key={opt}
+                  size="sm"
+                  variant={mediaType === opt ? 'default' : 'outline'}
+                  onClick={() => setMediaType(opt)}
+                  data-testid={`media-type-${opt}`}
+                  className="flex-1"
+                >
+                  <span
+                    aria-hidden
+                    className={`mr-1.5 h-2 w-2 rounded-full border ${mediaType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                  />
+                  {opt}
+                </Button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              AFM = Active Filter Media · MMF = Multi-Media Filter
+            </p>
+          </div>
+
+          {/* Pre-filter housing type */}
+          <div>
+            <Label className="text-xs mb-1.5 block">Pre-filter Housing Type (applied to all trains)</Label>
+            <div className="flex gap-2">
+              {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => (
+                <Button
+                  key={opt}
+                  size="sm"
+                  variant={filterType === opt ? 'default' : 'outline'}
+                  onClick={() => setFilterType(opt)}
+                  data-testid={`filter-type-${opt.replace(' ', '-')}`}
+                  className="flex-1"
+                >
+                  <span
+                    aria-hidden
+                    className={`mr-1.5 h-2 w-2 rounded-full border ${filterType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                  />
+                  {opt}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Save &amp; Apply to All Trains
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Edit Train Dialog ───────────────────────────────────────────────────────
+
+function EditTrainDialog({
+  train,
+  plant,
+  onClose,
+}: {
+  train: any;
+  plant: any;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+
+  // Plant-wide type defaults
+  const plantMediaType: 'AFM' | 'MMF' = (plant as any).filter_media_type ?? 'AFM';
+  const plantFilterType: 'Cartridge Filter' | 'Bag Filter' = (plant as any).filter_housing_type ?? 'Cartridge Filter';
+
+  const [form, setForm] = useState({
+    name: train.name ?? '',
+    num_afm: String(train.num_afm ?? 0),
+    num_booster_pumps: String(train.num_booster_pumps ?? 0),
+    num_hp_pumps: String(train.num_hp_pumps ?? 0),
+    num_cartridge_filters: String(train.num_cartridge_filters ?? 0),
+    num_controllers: String(train.num_controllers ?? 0),
+    num_filter_housings: String(train.num_filter_housings ?? 0),
+    // Per-train overrides (fallback to plant-wide)
+    filter_media_type: (train as any).filter_media_type ?? plantMediaType,
+    filter_housing_type: (train as any).filter_housing_type ?? plantFilterType,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const num = (v: string) => (v === '' ? 0 : Math.max(0, parseInt(v, 10) || 0));
+
+  const save = async () => {
+    setSaving(true);
+    const payload: any = {
+      name: form.name.trim() || null,
+      num_afm: num(form.num_afm),
+      num_booster_pumps: num(form.num_booster_pumps),
+      num_hp_pumps: num(form.num_hp_pumps),
+      num_cartridge_filters: num(form.num_cartridge_filters),
+      num_controllers: num(form.num_controllers),
+      num_filter_housings: num(form.num_filter_housings),
+      filter_media_type: form.filter_media_type,
+      filter_housing_type: form.filter_housing_type,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('ro_trains').update(payload).eq('id', train.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Train ${train.train_number} updated`);
+    qc.invalidateQueries({ queryKey: ['ro-trains', train.plant_id] });
+    onClose();
+  };
+
+  const mediaType = form.filter_media_type as 'AFM' | 'MMF';
+  const filterHousingType = form.filter_housing_type as 'Cartridge Filter' | 'Bag Filter';
+  const usingPlantMedia = mediaType === plantMediaType;
+  const usingPlantFilter = filterHousingType === plantFilterType;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Train {train.train_number}{train.name ? ` · ${train.name}` : ''}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Train name */}
+          <div>
+            <Label className="text-xs">Train label / name (optional)</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. North Wing"
+              data-testid="train-name-input"
+            />
+          </div>
+
+          {/* ── Component counts ── */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Component Counts</div>
+
+            {/* Media filters row */}
+            <div>
+              <Label className="text-xs">
+                {mediaType} units{' '}
+                <span className="text-muted-foreground font-normal">(media filter)</span>
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_afm: String(Math.max(0, num(form.num_afm) - 1)) })}
+                  data-testid="dec-afm"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_afm}
+                  onChange={(e) => setForm({ ...form, num_afm: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-afm-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_afm: String(num(form.num_afm) + 1) })}
+                  data-testid="inc-afm"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Pre-filter housings row */}
+            <div>
+              <Label className="text-xs">
+                {filterHousingType} units{' '}
+                <span className="text-muted-foreground font-normal">(pre-filter)</span>
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_cartridge_filters: String(Math.max(0, num(form.num_cartridge_filters) - 1)) })}
+                  data-testid="dec-cf"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_cartridge_filters}
+                  onChange={(e) => setForm({ ...form, num_cartridge_filters: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-cf-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_cartridge_filters: String(num(form.num_cartridge_filters) + 1) })}
+                  data-testid="inc-cf"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Booster pumps */}
+            <div>
+              <Label className="text-xs">Booster Pumps</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_booster_pumps: String(Math.max(0, num(form.num_booster_pumps) - 1)) })}
+                  data-testid="dec-bp"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_booster_pumps}
+                  onChange={(e) => setForm({ ...form, num_booster_pumps: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-bp-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_booster_pumps: String(num(form.num_booster_pumps) + 1) })}
+                  data-testid="inc-bp"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* HP pumps */}
+            <div>
+              <Label className="text-xs">High-Pressure Pumps (HPP)</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_hp_pumps: String(Math.max(0, num(form.num_hp_pumps) - 1)) })}
+                  data-testid="dec-hpp"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_hp_pumps}
+                  onChange={(e) => setForm({ ...form, num_hp_pumps: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-hpp-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_hp_pumps: String(num(form.num_hp_pumps) + 1) })}
+                  data-testid="inc-hpp"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Controllers */}
+            <div>
+              <Label className="text-xs">Controllers</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_controllers: String(Math.max(0, num(form.num_controllers) - 1)) })}
+                  data-testid="dec-ctrl"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_controllers}
+                  onChange={(e) => setForm({ ...form, num_controllers: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-ctrl-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_controllers: String(num(form.num_controllers) + 1) })}
+                  data-testid="inc-ctrl"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Filter housings */}
+            <div>
+              <Label className="text-xs">Filter Housings</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_filter_housings: String(Math.max(0, num(form.num_filter_housings) - 1)) })}
+                  data-testid="dec-fh"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_filter_housings}
+                  onChange={(e) => setForm({ ...form, num_filter_housings: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-fh-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_filter_housings: String(num(form.num_filter_housings) + 1) })}
+                  data-testid="inc-fh"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Per-train type overrides ── */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Component Types{' '}
+              <span className="normal-case font-normal text-muted-foreground">(overrides plant-wide setting for this train)</span>
+            </div>
+
+            {/* Media filter type */}
+            <div>
+              <Label className="text-xs mb-1.5 block">
+                Media Filter Type
+                {usingPlantMedia && (
+                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                    ✓ Matches plant default
+                  </span>
+                )}
+              </Label>
+              <div className="flex gap-2">
+                {(['AFM', 'MMF'] as const).map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={mediaType === opt ? 'default' : 'outline'}
+                    onClick={() => setForm({ ...form, filter_media_type: opt })}
+                    data-testid={`train-media-${opt}`}
+                    className="flex-1"
+                  >
+                    <span
+                      aria-hidden
+                      className={`mr-1.5 h-2 w-2 rounded-full border ${mediaType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                    />
+                    {opt}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">AFM = Active Filter Media · MMF = Multi-Media Filter</p>
+            </div>
+
+            {/* Pre-filter housing type */}
+            <div>
+              <Label className="text-xs mb-1.5 block">
+                Pre-filter Housing Type
+                {usingPlantFilter && (
+                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                    ✓ Matches plant default
+                  </span>
+                )}
+              </Label>
+              <div className="flex gap-2">
+                {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={filterHousingType === opt ? 'default' : 'outline'}
+                    onClick={() => setForm({ ...form, filter_housing_type: opt })}
+                    data-testid={`train-filter-${opt.replace(' ', '-')}`}
+                    className="flex-1"
+                  >
+                    <span
+                      aria-hidden
+                      className={`mr-1.5 h-2 w-2 rounded-full border ${filterHousingType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                    />
+                    {opt}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {(!usingPlantMedia || !usingPlantFilter) && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                ⚠ This train differs from the plant default. It will display its own type labels.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={save} disabled={saving} data-testid="save-train-btn">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save Train
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Trains List ─────────────────────────────────────────────────────────────
+
 function TrainsList({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
+  const { isManager } = useAuth();
+  const { data: plants } = usePlants();
+  const plant = plants?.find((p) => p.id === plantId);
+
+  const qc = useQueryClient();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
-    queryFn: async () => (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [],
+    queryFn: async () =>
+      (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [],
   });
+
+  const [editTrain, setEditTrain] = useState<any | null>(null);
+
+  // Resolve the effective media/filter type for a given train:
+  // Train-level override wins; falls back to plant default; then hardcoded default.
+  const effectiveMediaType = (t: any) =>
+    (t as any).filter_media_type ?? (plant as any)?.filter_media_type ?? 'AFM';
+  const effectiveFilterType = (t: any) =>
+    (t as any).filter_housing_type ?? (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
+
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
-      {trains?.map((t: any) => (
-        <Card key={t.id} className="p-3">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="font-medium text-sm">Train {t.train_number} {t.name && `· ${t.name}`}</div>
-              <div className="text-xs text-muted-foreground">AFM {t.num_afm} · BP {t.num_booster_pumps} · HPP {t.num_hp_pumps} · CF {t.num_cartridge_filters}</div>
+
+      {trains?.map((t: any) => {
+        const mt = effectiveMediaType(t);
+        const ft = effectiveFilterType(t);
+        return (
+          <Card key={t.id} className="p-3" data-testid={`train-card-${t.id}`}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="min-w-0">
+                <div className="font-medium text-sm">
+                  Train {t.train_number}{t.name ? ` · ${t.name}` : ''}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span>{mt} × {t.num_afm ?? 0}</span>
+                  <span>BP × {t.num_booster_pumps ?? 0}</span>
+                  <span>HPP × {t.num_hp_pumps ?? 0}</span>
+                  <span>{ft} × {t.num_cartridge_filters ?? 0}</span>
+                  {(t.num_controllers ?? 0) > 0 && <span>Controllers × {t.num_controllers}</span>}
+                  {(t.num_filter_housings ?? 0) > 0 && <span>Housings × {t.num_filter_housings}</span>}
+                </div>
+                {/* Type badges */}
+                <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                    {mt}
+                  </span>
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                    {ft}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <StatusPill tone={t.status === 'Running' ? 'accent' : t.status === 'Maintenance' ? 'warn' : 'muted'}>
+                  {t.status}
+                </StatusPill>
+                {isManager && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => setEditTrain(t)}
+                    data-testid={`edit-train-${t.id}`}
+                  >
+                    <Wrench className="h-3 w-3 mr-1" />Edit
+                  </Button>
+                )}
+              </div>
             </div>
-            <StatusPill tone={t.status === 'Running' ? 'accent' : t.status === 'Maintenance' ? 'warn' : 'muted'}>{t.status}</StatusPill>
-          </div>
-          <Button size="sm" variant="link" className="px-0 mt-1" onClick={() => navigate('/ro-trains')}>Open log →</Button>
-        </Card>
-      ))}
+            <Button size="sm" variant="link" className="px-0 mt-1 h-auto text-xs" onClick={() => navigate('/ro-trains')}>
+              Open log →
+            </Button>
+          </Card>
+        );
+      })}
       {!trains?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No trains yet</Card>}
+
+      {editTrain && plant && (
+        <EditTrainDialog
+          train={editTrain}
+          plant={plant}
+          onClose={() => {
+            setEditTrain(null);
+            qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+          }}
+        />
+      )}
     </div>
   );
 }
