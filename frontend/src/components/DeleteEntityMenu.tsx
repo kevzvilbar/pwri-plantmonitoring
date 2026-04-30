@@ -321,12 +321,12 @@ export function DeleteEntityMenu({
             )}
             <AlertDialogAction
               onClick={() => doHard(false)}
-              disabled={busy || loadingDeps || (deps?.blocking ?? true) || !reasonValid}
+              disabled={busy || loadingDeps || (deps?.blocking ?? false) || !reasonValid}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
               data-testid="confirm-hard-delete"
             >
-              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              {deps?.blocking ? 'Blocked' : 'Delete permanently'}
+              {(busy || loadingDeps) && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {loadingDeps ? 'Checking…' : deps?.blocking ? 'Blocked' : 'Delete permanently'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
