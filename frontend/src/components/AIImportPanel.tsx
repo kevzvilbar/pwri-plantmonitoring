@@ -182,9 +182,18 @@ export default function AIImportPanel({
       const res = await fetch(`${base}/api/import/ai-analyze${qs}`, {
         method: 'POST', body: fd, headers: { Authorization: `Bearer ${token}` },
       });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        if (res.status === 404) throw new Error('Import API not found — is the backend running?');
+        if (res.status === 401 || res.status === 403) throw new Error('Not authorised — please sign in again.');
+        if (res.status >= 500) throw new Error(`Server error (${res.status}) — check backend logs.`);
+        throw new Error(`Unexpected response (${res.status}): ${text.slice(0, 120)}`);
+      }
       const json = await res.json();
       if (!res.ok) {
         throw new Error(typeof json?.detail === 'string' ? json.detail : `HTTP ${res.status}`);
+      }
       }
       const data = json as AnalyzeResponse;
       setResult(data);
@@ -256,6 +265,14 @@ export default function AIImportPanel({
           body: JSON.stringify(body),
         },
       );
+      const syncContentType = res.headers.get('content-type') ?? '';
+      if (!syncContentType.includes('application/json')) {
+        const text = await res.text();
+        if (res.status === 404) throw new Error('Sync API not found — is the backend running?');
+        if (res.status === 401 || res.status === 403) throw new Error('Not authorised — please sign in again.');
+        if (res.status >= 500) throw new Error(`Server error (${res.status}) — check backend logs.`);
+        throw new Error(`Unexpected response (${res.status}): ${text.slice(0, 120)}`);
+      }
       const json = await res.json();
       if (!res.ok) {
         throw new Error(typeof json?.detail === 'string' ? json.detail : `HTTP ${res.status}`);
