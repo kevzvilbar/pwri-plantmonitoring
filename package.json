@@ -4,5 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "build": "cd frontend && npm install && npm run build"
+  },
+  "devDependencies": {
+    "supabase": "^2.95.6"
   }
 }
