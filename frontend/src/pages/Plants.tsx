@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,12 +20,38 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2 } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-1 py-2 hover:bg-muted/30 rounded-md transition-colors text-left group"
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground group-hover:text-foreground">{title}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && <div className="space-y-2">{children}</div>}
+    </div>
+  );
+}
 
 export default function Plants() {
   const { id } = useParams();
@@ -136,9 +162,15 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <EnergySourceCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
 
-      <LocatorsList plantId={plantId} />
-      <WellsList plantId={plantId} />
-      <TrainsList plantId={plantId} />
+      <CollapsibleSection title="Locators" defaultOpen={false}>
+        <LocatorsList plantId={plantId} />
+      </CollapsibleSection>
+      <CollapsibleSection title="Wells" defaultOpen={false}>
+        <WellsList plantId={plantId} />
+      </CollapsibleSection>
+      <CollapsibleSection title="RO Trains" defaultOpen={true}>
+        <TrainsList plantId={plantId} />
+      </CollapsibleSection>
     </div>
   );
 }
