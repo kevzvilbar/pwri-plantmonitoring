@@ -9,11 +9,11 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { OperatorSwitcher } from '@/components/OperatorSwitcher';
 
 interface Notification {
   id: string;
@@ -29,7 +29,7 @@ const EMPTY_NOTIFICATIONS: Notification[] = [];
 const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
 
 export function TopBar() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile } = useAuth();
   const { data: plants } = usePlants();
   const { selectedPlantId, setSelectedPlantId, setUnreadCount, unreadCount } = useAppStore();
   const navigate = useNavigate();
@@ -73,8 +73,6 @@ export function TopBar() {
     await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
     qc.invalidateQueries({ queryKey: ['notifications'] });
   };
-
-  const initials = ((profile?.first_name?.[0] ?? '') + (profile?.last_name?.[0] ?? '')) || user?.email?.[0]?.toUpperCase() || '?';
 
   return (
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-topbar/0 shadow-sm">
@@ -138,26 +136,8 @@ export function TopBar() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 hover:bg-topbar/40 rounded-full p-1 transition-colors">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-accent text-accent-foreground text-xs font-semibold">{initials}</AvatarFallback>
-              </Avatar>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span className="font-medium">{profile?.first_name} {profile?.last_name}</span>
-                <span className="text-xs text-muted-foreground">{profile?.designation ?? user?.email}</span>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/profile')}>Profile</DropdownMenuItem>
-            <DropdownMenuItem onClick={signOut} className="text-danger">Sign out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Operator switcher replaces the old static avatar + sign-out dropdown */}
+        <OperatorSwitcher />
       </div>
     </header>
   );
