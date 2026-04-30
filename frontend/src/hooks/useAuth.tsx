@@ -17,6 +17,7 @@ export interface Profile {
   plant_assignments: string[];
   status: 'Pending' | 'Active' | 'Suspended';
   profile_complete: boolean;
+  /** Admin-approval flag (replaces Supabase email confirmation, iter 9) */
   confirmed?: boolean;
 }
 
@@ -24,6 +25,8 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /** The currently selected shift operator profile.
+   *  Falls back to own profile when no override is set. */
   activeOperator: Profile | null;
   roles: Role[];
   isAdmin: boolean;
@@ -45,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeOperatorId = useAppStore((s) => s.activeOperatorId);
 
-  // Use a ref for setActiveOperatorId so it never triggers effect re-runs
+  // Stable ref so effects never re-run just because Zustand recreated the setter
   const setActiveOperatorIdRef = useRef(useAppStore.getState().setActiveOperatorId);
 
   const loadProfileAndRoles = async (uid: string) => {
@@ -64,10 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data) { setActiveOperatorIdRef.current(null); setOperatorProfile(null); return; }
       setOperatorProfile(data as Profile);
     });
-  }, [activeOperatorId]);
+  }, [activeOperatorId]); // stable: no setter in deps
 
-  // Main auth effect — runs once on mount only
   useEffect(() => {
+    // Set up listener FIRST (per Lovable Cloud auth knowledge)
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
       setUser(sess?.user ?? null);
@@ -79,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null);
         setOperatorProfile(null);
-        setActiveOperatorIdRef.current(null);
+        setActiveOperatorIdRef.current(null); // use ref, not reactive setter
         setRoles([]);
         setLoading(false);
       }
@@ -106,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = roles.includes('Admin');
   const isManager = isAdmin || roles.includes('Manager');
+
+  // activeOperator: prefer the explicitly selected operator, fallback to own profile
   const activeOperator = operatorProfile ?? profile;
 
   return (
