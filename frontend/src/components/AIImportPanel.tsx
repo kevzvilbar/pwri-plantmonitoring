@@ -166,6 +166,9 @@ export default function AIImportPanel({
     if (f) onChooseFile(f);
   }, [onChooseFile]);
 
+  const backendUrl = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+  const backendConfigured = !!backendUrl;
+
   // --------------------------- Analyze ------------------------------------
   const runAnalyze = useCallback(async () => {
     if (!file) return;
@@ -177,7 +180,7 @@ export default function AIImportPanel({
       if (!token) throw new Error('Sign in required.');
       const fd = new FormData();
       fd.append('file', file);
-      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const base = backendUrl;
       const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
       const res = await fetch(`${base}/api/import/ai-analyze${qs}`, {
         method: 'POST', body: fd, headers: { Authorization: `Bearer ${token}` },
@@ -255,7 +258,7 @@ export default function AIImportPanel({
           entity_name: d.entity_name, column_mapping: d.column_mapping,
         })),
       };
-      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+      const base = backendUrl;
       const res = await fetch(
         `${base}/api/import/ai-sync/${encodeURIComponent(result.analysis_id)}`,
         {
@@ -305,6 +308,20 @@ export default function AIImportPanel({
           <h2 className="text-sm font-semibold">AI Universal Import</h2>
           <Badge variant="outline" className="text-[10px]">beta</Badge>
         </div>
+
+        {!backendConfigured && (
+          <div className="mb-3 rounded-md border border-amber-400/60 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-xs">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-300">Backend not connected</p>
+              <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                AI Import requires the Python backend to be running and reachable.
+                Set the <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">REACT_APP_BACKEND_URL</code> environment variable
+                (e.g. via GitHub Secrets) to your deployed backend URL to enable this feature.
+              </p>
+            </div>
+          </div>
+        )}
         <div
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
@@ -324,7 +341,7 @@ export default function AIImportPanel({
             <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()} data-testid="ai-import-browse-btn">
               <Upload className="h-3.5 w-3.5 mr-1" /> Browse
             </Button>
-            <Button size="sm" onClick={runAnalyze} disabled={!file || analyzing} data-testid="ai-import-analyze-btn">
+            <Button size="sm" onClick={runAnalyze} disabled={!file || analyzing || !backendConfigured} data-testid="ai-import-analyze-btn">
               {analyzing
                 ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Analyzing…</>
                 : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Analyze with AI</>}
