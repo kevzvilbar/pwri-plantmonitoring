@@ -171,13 +171,23 @@ export default function Import() {
 
   const runParse = useCallback(async () => {
     if (!file) return;
+    const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+    if (!base) {
+      toast.error('Backend URL not configured. Set REACT_APP_BACKEND_URL in your GitHub Secrets and redeploy.');
+      return;
+    }
     setParsing(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
       const res = await fetch(`${base}/api/import/parse-wellmeter`, { method: 'POST', body: fd });
       if (!res.ok) {
+        const contentType = res.headers.get('content-type') ?? '';
+        if (!contentType.includes('application/json')) {
+          if (res.status === 404) throw new Error('Backend not found — is the Railway service running?');
+          if (res.status === 405) throw new Error('Backend URL not set correctly — check REACT_APP_BACKEND_URL secret.');
+          throw new Error(`Server error (${res.status}) — check Railway logs.`);
+        }
         const t = await res.text();
         throw new Error(t || `HTTP ${res.status}`);
       }
