@@ -194,7 +194,6 @@ export default function AIImportPanel({
       if (!res.ok) {
         throw new Error(typeof json?.detail === 'string' ? json.detail : `HTTP ${res.status}`);
       }
-      }
       const data = json as AnalyzeResponse;
       setResult(data);
       // Seed default decisions: AI suggestion is auto-approved unless target=unknown/skip
