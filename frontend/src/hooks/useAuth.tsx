@@ -125,38 +125,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-
-type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin';
-
-export interface Profile {
-  id: string;
-  username: string | null;
-  first_name: string | null;
-  middle_name: string | null;
-  last_name: string | null;
-  suffix: string | null;
-  designation: string | null;
-  immediate_head_id: string | null;
-  plant_assignments: string[];
-  status: 'Pending' | 'Active' | 'Suspended';
-  profile_complete: boolean;
-  /** Admin-approval flag (replaces Supabase email confirmation, iter 9) */
-  confirmed?: boolean;
-}
-
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
-  profile: Profile | null;
-  /** The currently selected shift operator profile.
-   *  Falls back to own profile when no override is set. */
-  activeOperator: Profile | null;
-  roles: Role[];
-  isAdmin: boolean;
-  isManager: boolean;
-  loading: boolean;
-  refreshProfile: () => Promise<void>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
