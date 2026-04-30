@@ -49,6 +49,12 @@ class DeletionRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class HardDeleteRequest(BaseModel):
+    reason: Optional[str] = None
+    force: bool = False
+    archive: bool = False
+
+
 class CleanupPlantsRequest(BaseModel):
     names: List[str] = Field(..., min_length=1, max_length=50)
     reason: str = Field(..., min_length=5, max_length=500)
@@ -611,11 +617,12 @@ async def admin_user_soft_delete(user_id: str,
                              reason=(body.reason if body else None))
 
 
-@api_router.delete("/admin/users/{user_id}")
+@api_router.post("/admin/users/{user_id}/hard-delete")
 async def admin_user_hard_delete(user_id: str,
-                                  reason: Optional[str] = None,
-                                  force: bool = False,
+                                  body: Optional[HardDeleteRequest] = None,
                                   authorization: Optional[str] = Header(None)):
+    reason = body.reason if body else None
+    force = body.force if body else False
     return hard_delete_user(authorization, user_id, reason=reason, force=force)
 
 
@@ -633,12 +640,13 @@ async def admin_plant_soft_delete(plant_id: str,
                               reason=(body.reason if body else None))
 
 
-@api_router.delete("/admin/plants/{plant_id}")
+@api_router.post("/admin/plants/{plant_id}/hard-delete")
 async def admin_plant_hard_delete(plant_id: str,
-                                   reason: Optional[str] = None,
-                                   force: bool = False,
-                                   archive: bool = False,
+                                   body: Optional[HardDeleteRequest] = None,
                                    authorization: Optional[str] = Header(None)):
+    reason = body.reason if body else None
+    force = body.force if body else False
+    archive = body.archive if body else False
     return hard_delete_plant(
         authorization, plant_id, reason=reason, force=force, archive=archive,
     )
