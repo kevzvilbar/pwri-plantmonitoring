@@ -600,9 +600,8 @@ function EnergySourceInline({ plant, isManager, qc }: { plant: any; isManager: b
 
       {/* Edit panel — shown inline below */}
       {editing && (
-        <div className="mt-3 rounded-lg bg-white/10 p-3 space-y-2">
-          {/* Row 1: toggles always side-by-side */}
-          <div className="flex flex-wrap gap-4">
+        <div className="mt-3 rounded-lg bg-white/10 p-3 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex items-center gap-2 text-sm text-topbar-foreground/90">
               <Switch checked={hasSolar} onCheckedChange={setHasSolar} data-testid="energy-inline-solar" />
               <span className="inline-flex items-center gap-1"><Sun className="h-3.5 w-3.5 text-yellow-300" /> Solar</span>
@@ -612,28 +611,23 @@ function EnergySourceInline({ plant, isManager, qc }: { plant: any; isManager: b
               <span className="inline-flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-blue-200" /> Grid</span>
             </label>
           </div>
-          {/* Row 2: solar kW field (compact) + Cancel/Save inline */}
-          <div className="flex flex-wrap items-center gap-2">
-            {hasSolar && (
-              <div className="flex items-center gap-1.5">
-                <Sun className="h-3.5 w-3.5 text-yellow-300 shrink-0" />
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={(e) => setSolarKw(e.target.value)}
-                  placeholder="kW"
-                  className="w-24 h-7 text-sm bg-white/10 border-white/20 text-topbar-foreground placeholder:text-topbar-muted"
-                  data-testid="energy-inline-kw"
-                />
-              </div>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}
-                className="h-7 text-xs text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10">Cancel</Button>
-              <Button size="sm" onClick={save} disabled={saving}
-                className="h-7 text-xs bg-white/20 hover:bg-white/30 text-topbar-foreground border-0" data-testid="save-energy-inline-btn">
-                {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-              </Button>
+          {hasSolar && (
+            <div>
+              <Label className="text-xs text-topbar-foreground/70">Solar capacity (kW)</Label>
+              <Input
+                type="number" step="any" value={solarKw}
+                onChange={(e) => setSolarKw(e.target.value)}
+                placeholder="e.g. 50"
+                className="bg-white/10 border-white/20 text-topbar-foreground placeholder:text-topbar-muted mt-1"
+                data-testid="energy-inline-kw"
+              />
             </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10">Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} className="bg-white/20 hover:bg-white/30 text-topbar-foreground border-0" data-testid="save-energy-inline-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
           </div>
         </div>
       )}
@@ -699,47 +693,47 @@ function EnergySourceCard({ plant }: { plant: any }) {
       </div>
 
       {editing && (
-        <div className="mt-3 space-y-2">
-          {/* Row 1: toggles — side-by-side on all sizes */}
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={hasSolar} onCheckedChange={setHasSolar} data-testid="energy-has-solar" />
-              <span className="inline-flex items-center gap-1">
-                <Sun className="h-3.5 w-3.5 text-yellow-500" /> Solar
-              </span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={hasGrid} onCheckedChange={setHasGrid} data-testid="energy-has-grid" />
-              <span className="inline-flex items-center gap-1">
-                <Zap className="h-3.5 w-3.5 text-chart-6" /> Grid
-              </span>
-            </label>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasSolar}
+              onCheckedChange={setHasSolar}
+              data-testid="energy-has-solar"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasGrid}
+              onCheckedChange={setHasGrid}
+              data-testid="energy-has-grid"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Zap className="h-3.5 w-3.5 text-chart-6" /> Has grid
+            </span>
+          </label>
+          <div>
+            <Label className="text-xs">Solar capacity (kW)</Label>
+            <Input
+              type="number" step="any" value={solarKw}
+              onChange={(e) => setSolarKw(e.target.value)}
+              disabled={!hasSolar}
+              placeholder="e.g. 50"
+              data-testid="energy-solar-kw"
+            />
           </div>
-          {/* Row 2: compact kW input inline with Cancel/Save */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <Sun className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
-              <Label className="text-xs whitespace-nowrap">kW</Label>
-              <Input
-                type="number" step="any" value={solarKw}
-                onChange={(e) => setSolarKw(e.target.value)}
-                disabled={!hasSolar}
-                placeholder="e.g. 50"
-                data-testid="energy-solar-kw"
-                className="w-24 h-7 text-sm"
-              />
-            </div>
-            <div className="flex gap-2 ml-auto">
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
-                setEditing(false);
-                setHasSolar(!!plant.has_solar);
-                setHasGrid(plant.has_grid !== false);
-                setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
-              }} disabled={saving}>Cancel</Button>
-              <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving} data-testid="save-energy-btn">
-                {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-              </Button>
-            </div>
+          <div className="sm:col-span-3 flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => {
+              setEditing(false);
+              setHasSolar(!!plant.has_solar);
+              setHasGrid(plant.has_grid !== false);
+              setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+            }} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} data-testid="save-energy-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
           </div>
         </div>
       )}
@@ -1159,7 +1153,7 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
 }
 
 function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', location_desc: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '' });
+  const [form, setForm] = useState({ name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '' });
   const [locating, setLocating] = useState(false);
 
   const useMyLocation = async () => {
@@ -1184,7 +1178,7 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
     const { error } = await supabase.from('locators').insert({
-      plant_id: plantId, name: form.name, location_desc: form.location_desc || null, address: form.address || null,
+      plant_id: plantId, name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
@@ -1192,26 +1186,57 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
     if (error) { toast.error(error.message); return; }
     toast.success('Locator Added'); onClose();
   };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Locator</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-          <div><Label>Location</Label><Input value={form.location_desc} onChange={e => setForm({ ...form, location_desc: e.target.value })} /></div>
+          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
           <div className="grid grid-cols-3 gap-2">
             <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
-            <div><Label>Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+            <div>
+              <Label>Size</Label>
+              <div className="relative">
+                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
+              </div>
+            </div>
             <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
-            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+          {/* GPS row */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" />View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use my location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+              </div>
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={useMyLocation} disabled={locating}>
-            <MapPin className="h-3 w-3 mr-1" />
-            {locating ? 'Capturing…' : 'Use My Location'}
-          </Button>
         </div>
         <DialogFooter><Button onClick={submit}>Save</Button></DialogFooter>
       </DialogContent>
@@ -3179,20 +3204,24 @@ function downloadTemplate(filename: string, headers: string[]) {
 function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
   if (!rows.length) return null;
   return (
-    <div className="overflow-auto max-h-48 border rounded text-xs">
-      <table className="w-full text-left">
-        <thead className="bg-muted sticky top-0">
-          <tr>{headers.map(h => <th key={h} className="px-2 py-1 font-medium whitespace-nowrap">{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, 10).map((row, i) => (
-            <tr key={i} className="border-t">
-              {headers.map(h => <td key={h} className="px-2 py-1 whitespace-nowrap max-w-[120px] truncate">{row[h] ?? ''}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {rows.length > 10 && <p className="px-2 py-1 text-muted-foreground">…and {rows.length - 10} more rows</p>}
+    <div>
+      <div className="overflow-auto max-h-48 border rounded text-xs">
+        <table className="w-full text-left">
+          <thead className="bg-muted sticky top-0">
+            <tr>{headers.map(h => <th key={h} className="px-2 py-1 font-medium whitespace-nowrap">{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 10).map((row, i) => (
+              <tr key={i} className="border-t">
+                {headers.map(h => <td key={h} className="px-2 py-1 whitespace-nowrap max-w-[120px] truncate">{row[h] ?? ''}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 10 && (
+        <p className="text-xs text-muted-foreground mt-1 px-1">…and {rows.length - 10} more rows</p>
+      )}
     </div>
   );
 }
@@ -3200,7 +3229,7 @@ function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; he
 // ─── Locator CSV Import ───────────────────────────────────────────────────────
 
 const LOCATOR_CSV_HEADERS = [
-  'name', 'location_desc', 'address',
+  'name', 'address',
   'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
   'gps_lat', 'gps_lng',
 ];
@@ -3230,10 +3259,10 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
     const payload = rows.map(r => ({
       plant_id: plantId,
       name: r.name.trim(),
-      location_desc: r.location_desc || null,
       address: r.address || null,
+      location_desc: r.address || null,
       meter_brand: r.meter_brand || null,
-      meter_size: r.meter_size || null,
+      meter_size: r.meter_size ? r.meter_size : null,
       meter_serial: r.meter_serial || null,
       meter_installed_date: r.meter_installed_date || null,
       gps_lat: r.gps_lat ? +r.gps_lat : null,
