@@ -40,14 +40,7 @@ export default function Chemicals() {
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Chemicals</h1>
-      <Tabs defaultValue="dosing">
-        <TabsList className="grid grid-cols-2 w-full">
-          <TabsTrigger value="dosing">Dosing</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-        </TabsList>
-        <TabsContent value="dosing" className="mt-3"><DosingForm /></TabsContent>
-        <TabsContent value="inventory" className="mt-3"><Inventory /></TabsContent>
-      </Tabs>
+      <ChemicalTabs />
       <p className="text-xs text-muted-foreground text-center">
         Chemical Prices moved to <a href="/costs" className="underline text-accent">Costs</a>.
       </p>
@@ -394,5 +387,47 @@ function AddStockDialog() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── Chemical Tabs with distinct active colors ────────────────────────────────
+
+function ChemicalTabs() {
+  const [active, setActive] = useState<'dosing' | 'inventory'>('dosing');
+
+  return (
+    <div>
+      {/* Tab strip */}
+      <div className="grid grid-cols-2 w-full rounded-lg overflow-hidden border border-border">
+        <button
+          onClick={() => setActive('dosing')}
+          className={[
+            'py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none',
+            active === 'dosing'
+              ? 'bg-teal-700 text-white shadow-inner'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80',
+          ].join(' ')}
+        >
+          Dosing
+        </button>
+        <button
+          onClick={() => setActive('inventory')}
+          className={[
+            'py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none',
+            active === 'inventory'
+              ? 'bg-sky-700 text-white shadow-inner'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80',
+          ].join(' ')}
+        >
+          Inventory
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="mt-3">
+        {active === 'dosing' && <DosingForm />}
+        {active === 'inventory' && <Inventory />}
+      </div>
+    </div>
   );
 }
