@@ -1484,19 +1484,19 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'locator') {
         const { data } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, created_at, off_location_flag')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag')
           .eq('locator_id', entityId)
-          .gte('created_at', sinceIso)
-          .order('created_at', { ascending: false });
+          .gte('reading_datetime', sinceIso)
+          .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
       if (module === 'well') {
         const { data } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, created_at')
+          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime')
           .eq('well_id', entityId)
-          .gte('created_at', sinceIso)
-          .order('created_at', { ascending: false });
+          .gte('reading_datetime', sinceIso)
+          .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
       if (module === 'power') {
@@ -1583,10 +1583,10 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
-                  const dt = r.created_at ?? r.reading_datetime ?? r.event_date ?? '';
+                  const dt = r.reading_datetime ?? r.event_date ?? r.created_at ?? '';
                   const dateStr = dt
                     ? format(new Date(dt), 'MMM d, yyyy HH:mm')
-                    : r.event_date ?? '—';
+                    : '—';
                   return (
                     <tr key={r.id ?? i} className="border-t hover:bg-muted/40">
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{dateStr}</td>
