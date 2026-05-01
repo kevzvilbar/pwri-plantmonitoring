@@ -12,6 +12,8 @@ import { ChevronDown, UserCheck, UserCog, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
 function initials(p: Profile | null): string {
   if (!p) return '?';
   return ((p.first_name?.[0] ?? '') + (p.last_name?.[0] ?? '')).toUpperCase() || '?';
@@ -22,43 +24,91 @@ function fullName(p: Profile | null): string {
   return [p.first_name, p.last_name].filter(Boolean).join(' ') || p.username || 'Unknown';
 }
 
+/** Designation roles that are allowed to use Operator Switch. */
+const OPERATOR_DESIGNATIONS = ['Operator'];
+
+function canSwitchOperator(profile: Profile | null): boolean {
+  if (!profile?.designation) return false;
+  return OPERATOR_DESIGNATIONS.includes(profile.designation);
+}
+
 /**
- * Fetches all Active user profiles assigned to at least one of the
- * same plants as the authenticated user (or all profiles for Admins/Managers).
+ * Fetches Active Operator-designated profiles assigned to the SAME plant(s)
+ * as the authenticated user.  Only called when the logged-in user is an Operator.
  */
-function useSharedPlantProfiles(plantAssignments: string[], isManager: boolean) {
+function useSamePlantOperators(plantAssignments: string[]) {
   return useQuery<Profile[]>({
-    queryKey: ['shared-plant-profiles', plantAssignments.join(','), isManager],
+    queryKey: ['same-plant-operators', plantAssignments.join(',')],
     queryFn: async () => {
-      let q = supabase
+      if (plantAssignments.length === 0) return [];
+
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('status', 'Active')
-        .eq('profile_complete', true);
+        .eq('profile_complete', true)
+        .in('designation', OPERATOR_DESIGNATIONS)
+        .overlaps('plant_assignments', plantAssignments)
+        .order('first_name');
 
-      // Non-managers only see peers at their assigned plants
-      if (!isManager && plantAssignments.length > 0) {
-        q = q.overlaps('plant_assignments', plantAssignments);
-      }
-
-      const { data, error } = await q.order('first_name');
       if (error) throw error;
       return (data ?? []) as Profile[];
     },
-    enabled: true,
+    enabled: plantAssignments.length > 0,
     staleTime: 30_000,
   });
 }
 
+/** Post a switch-event audit record to the backend. */
+async function logSwitchEvent(payload: {
+  plant_id: string;
+  from_username: string;
+  to_username: string;
+  device_id: string;
+}) {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    await fetch(`${API_BASE}/operator/switch-log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Non-blocking — audit failure must not interrupt the UX
+    console.warn('[OperatorSwitcher] Failed to post switch audit log');
+  }
+}
+
+/** Stable device fingerprint stored in localStorage. */
+function getDeviceId(): string {
+  const key = 'pwri-device-id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 export function OperatorSwitcher() {
-  const { user, profile, activeOperator, signOut, isManager } = useAuth();
+  const { user, profile, activeOperator, signOut } = useAuth();
   const { activeOperatorId, setActiveOperatorId } = useAppStore();
   const navigate = useNavigate();
 
-  const plantAssignments = profile?.plant_assignments ?? [];
-  const { data: peers = [] } = useSharedPlantProfiles(plantAssignments, isManager);
+  // ── RBAC gate ──────────────────────────────────────────────────────────────
+  // Managers and Admins must NOT see the Switch Operator section.
+  const switchAllowed = canSwitchOperator(profile);
 
-  // Confirm-switch state — require a tap to confirm before committing
+  const plantAssignments = profile?.plant_assignments ?? [];
+  const { data: peers = [] } = useSamePlantOperators(
+    switchAllowed ? plantAssignments : [],
+  );
+
+  // Confirm-switch state — require a second tap to commit
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -68,7 +118,19 @@ export function OperatorSwitcher() {
   const isOverride = activeOperatorId !== null && activeOperatorId !== user?.id;
   const avatarBg = isOverride ? 'bg-amber-500' : 'bg-accent';
 
-  const handleSelect = (p: Profile) => {
+  const handleSelect = async (p: Profile) => {
+    // ── Cross-plant guard ──────────────────────────────────────────────────
+    // Validate that the target user shares at least one plant with the session.
+    const targetPlants: string[] = p.plant_assignments ?? [];
+    const sessionPlants: string[] = profile?.plant_assignments ?? [];
+    const sharedPlant = sessionPlants.find((pid) => targetPlants.includes(pid));
+
+    if (!sharedPlant) {
+      toast.error('Cannot switch: operator is not assigned to this plant.');
+      setOpen(false);
+      return;
+    }
+
     if (p.id === user?.id) {
       // Selecting own profile = clear override
       setActiveOperatorId(null);
@@ -77,12 +139,21 @@ export function OperatorSwitcher() {
       toast.success('Switched back to your own profile');
       return;
     }
+
     if (pendingId === p.id) {
       // Second tap = confirm
       setActiveOperatorId(p.id);
       setPendingId(null);
       setOpen(false);
       toast.success(`Now recording as ${fullName(p)}`);
+
+      // ── Audit log ────────────────────────────────────────────────────────
+      await logSwitchEvent({
+        plant_id: sharedPlant,
+        from_username: profile?.username ?? user?.id ?? 'unknown',
+        to_username: p.username ?? p.id,
+        device_id: getDeviceId(),
+      });
     } else {
       // First tap = ask for confirmation
       setPendingId(p.id);
@@ -117,7 +188,7 @@ export function OperatorSwitcher() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-64">
-        {/* Header: who is currently recording */}
+        {/* Header: logged-in user + active operator */}
         <DropdownMenuLabel className="pb-1">
           <div className="flex flex-col gap-0.5">
             {isOverride ? (
@@ -149,52 +220,56 @@ export function OperatorSwitcher() {
 
         <DropdownMenuSeparator />
 
-        {/* Switch operator section */}
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-normal py-1">
-          Switch operator
-        </DropdownMenuLabel>
+        {/* ── Switch Operator section — Operators only ── */}
+        {switchAllowed && (
+          <>
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-normal py-1">
+              Switch operator
+            </DropdownMenuLabel>
 
-        <div className="max-h-52 overflow-y-auto">
-          {peers.length === 0 && (
-            <div className="px-3 py-3 text-xs text-muted-foreground text-center">
-              No other active users at this plant
-            </div>
-          )}
-          {peers.map((p) => {
-            const isSelf = p.id === user?.id;
-            const isActive = (activeOperatorId ?? user?.id) === p.id;
-            const isPending = pendingId === p.id;
-
-            return (
-              <DropdownMenuItem
-                key={p.id}
-                className={`flex items-center gap-2.5 cursor-pointer py-2 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
-                onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
-              >
-                <Avatar className="h-7 w-7 flex-shrink-0">
-                  <AvatarFallback className={`text-[10px] font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
-                    {initials(p)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {fullName(p)}
-                    {isSelf && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground truncate">{p.designation ?? 'No designation'}</div>
+            <div className="max-h-52 overflow-y-auto">
+              {peers.length === 0 && (
+                <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                  No other active operators at this plant
                 </div>
-                {isActive && !isPending && (
-                  <span className="h-2 w-2 rounded-full bg-accent flex-shrink-0" />
-                )}
-                {isPending && (
-                  <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">Tap again to confirm</span>
-                )}
-              </DropdownMenuItem>
-            );
-          })}
-        </div>
+              )}
+              {peers.map((p) => {
+                const isSelf = p.id === user?.id;
+                const isActive = (activeOperatorId ?? user?.id) === p.id;
+                const isPending = pendingId === p.id;
 
-        <DropdownMenuSeparator />
+                return (
+                  <DropdownMenuItem
+                    key={p.id}
+                    className={`flex items-center gap-2.5 cursor-pointer py-2 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                    onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
+                  >
+                    <Avatar className="h-7 w-7 flex-shrink-0">
+                      <AvatarFallback className={`text-[10px] font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
+                        {initials(p)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {fullName(p)}
+                        {isSelf && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground truncate">{p.designation ?? 'No designation'}</div>
+                    </div>
+                    {isActive && !isPending && (
+                      <span className="h-2 w-2 rounded-full bg-accent flex-shrink-0" />
+                    )}
+                    {isPending && (
+                      <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">Tap again to confirm</span>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+
+            <DropdownMenuSeparator />
+          </>
+        )}
 
         {/* Actions */}
         {isOverride && (
