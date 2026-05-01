@@ -2547,7 +2547,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const plant = plants?.find((p) => p.id === plantId);
 
   const qc = useQueryClient();
-  const { isManager, user } = useAuth();
+  const { isManager, isAdmin, user } = useAuth();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
     queryFn: async () =>
