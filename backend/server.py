@@ -856,6 +856,155 @@ async def operator_switch_log(
     await db.operator_switch_log.insert_one(doc)
     return {"ok": True}
 
+# ── Admin User Creation ────────────────────────────────────────────────────────
+# Append this block anywhere above `app.include_router(api_router)` in server.py.
+#
+# Why this endpoint instead of supabase.auth.signUp() on the frontend?
+#
+# supabase.auth.signUp() is the *self-registration* flow. When the email already
+# exists it behaves differently depending on your project's email-confirmation
+# setting:
+#   - Confirmation OFF → silently returns the existing user (no error, same uid),
+#     causing the profile update to silently overwrite the existing account.
+#   - Confirmation ON  → returns an obfuscated fake response and fires a
+#     confirmation email to the address. The new "user" never appears in the
+#     admin list because profile_complete stays false and confirmed stays false.
+#
+# The Supabase Admin API (auth.admin.create_user) used below:
+#   - Is only callable with the service-role key (server-side only).
+#   - Does NOT send a confirmation email.
+#   - Raises a real error when the email already exists.
+#   - Allows `email_confirm=True` so the account is immediately usable.
+#
+# Multiple operators can share the same plant email because each gets a
+# DISTINCT auth.users row (different uid, same email is allowed only when the
+# Supabase project has "Allow multiple accounts per email" enabled — the Admin
+# API respects that setting). If your project does NOT allow duplicate emails,
+# the API will return a clear 422 "Email already registered" error, which the
+# frontend surfaces verbatim so the Admin knows to use a different address.
+
+
+class AdminCreateUserRequest(BaseModel):
+    email: str
+    password: str
+    username: str
+    first_name: str
+    last_name: str
+    middle_name: Optional[str] = None
+    suffix: Optional[str] = None
+    designation: Optional[str] = None
+
+
+@api_router.post("/admin/users/create")
+async def admin_create_user(
+    body: AdminCreateUserRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Admin-only. Create a new auth user + profile via the service-role key.
+
+    Unlike supabase.auth.signUp() (which is a public self-registration endpoint),
+    this endpoint:
+      - Uses the service-role Admin API → no confirmation email is sent.
+      - Sets email_confirm=True so the account is immediately active.
+      - Returns a real error if the email already exists in auth.users.
+      - Sets profile_complete=True and status='Pending' so the account appears
+        in the UsersPanel pending-approval queue immediately.
+    """
+    from fastapi import HTTPException as _HTTPException
+
+    token = bearer_token(authorization)
+    caller = caller_identity(token)
+    require_roles(caller, {"Admin"})
+
+    url = os.environ.get("SUPABASE_URL")
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not service_key:
+        raise _HTTPException(
+            status_code=500,
+            detail="SUPABASE_SERVICE_ROLE_KEY is not configured on the server.",
+        )
+
+    svc = create_client(url, service_key)
+
+    # ── 1. Create the auth.users row ──────────────────────────────────────────
+    try:
+        auth_resp = svc.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,   # skip confirmation email; Admin vouches for this account
+        })
+    except Exception as e:
+        msg = str(e)
+        # Surface Supabase's own error message (e.g. "Email already registered")
+        # so the frontend can show it verbatim.
+        raise _HTTPException(status_code=422, detail=msg)
+
+    uid = getattr(auth_resp.user, "id", None) if auth_resp and auth_resp.user else None
+    if not uid:
+        raise _HTTPException(status_code=500, detail="auth.admin.create_user returned no user ID.")
+
+    # ── 2. Fill in the user_profiles row (created by DB trigger on auth.users insert) ──
+    try:
+        profile_res = svc.table("user_profiles").update({
+            "username":        body.username,
+            "first_name":      body.first_name,
+            "middle_name":     body.middle_name or None,
+            "last_name":       body.last_name,
+            "suffix":          body.suffix or None,
+            "designation":     body.designation or None,
+            "profile_complete": True,
+            # status stays 'Pending' — Admin must click Approve to activate.
+        }).eq("id", uid).execute()
+    except Exception as e:
+        # Auth user was created but profile update failed — log and surface.
+        log.exception("admin_create_user: profile update failed for uid=%s", uid)
+        raise _HTTPException(
+            status_code=500,
+            detail=f"Auth user created (uid={uid}) but profile update failed: {e}",
+        )
+
+    if not (profile_res.data or []):
+        # Trigger may not have fired yet on some Supabase plans — do an upsert.
+        try:
+            svc.table("user_profiles").upsert({
+                "id":             uid,
+                "username":       body.username,
+                "first_name":     body.first_name,
+                "middle_name":    body.middle_name or None,
+                "last_name":      body.last_name,
+                "suffix":         body.suffix or None,
+                "designation":    body.designation or None,
+                "profile_complete": True,
+                "status":         "Pending",
+                "plant_assignments": [],
+            }).execute()
+        except Exception as e:
+            log.exception("admin_create_user: profile upsert fallback failed for uid=%s", uid)
+            raise _HTTPException(
+                status_code=500,
+                detail=f"Profile upsert fallback failed: {e}",
+            )
+
+    # ── 3. Assign default Operator role ──────────────────────────────────────
+    try:
+        svc.table("user_roles").upsert({"user_id": uid, "role": "Operator"}).execute()
+    except Exception as e:
+        log.warning("admin_create_user: role assignment failed for uid=%s: %s", uid, e)
+        # Non-fatal — admin can assign role manually in UsersPanel.
+
+    log.info(
+        "admin_create_user: created uid=%s username=%s by caller=%s",
+        uid, body.username, caller.get("label"),
+    )
+    return {
+        "ok": True,
+        "user_id": uid,
+        "email": body.email,
+        "username": body.username,
+    }
+
+
 # Include the router in the main app
 app.add_middleware(
     CORSMiddleware,
