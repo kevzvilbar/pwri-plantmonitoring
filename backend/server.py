@@ -796,6 +796,65 @@ async def cron_pm_forecast_sweep(x_cron_secret: Optional[str] = Header(None)):
         logging.exception("cron pm sweep failed")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── Operator Switch Audit Log ──────────────────────────────────────────────
+# Append this block anywhere below the existing api_router definitions in
+# server.py (e.g. just before the final `app.include_router(api_router)` call).
+
+
+class OperatorSwitchLogRequest(BaseModel):
+    plant_id: str
+    from_username: str
+    to_username: str
+    device_id: str
+
+
+@api_router.post("/operator/switch-log")
+async def operator_switch_log(
+    body: OperatorSwitchLogRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Record every Operator Switch event for accountability.
+
+    Stored fields
+    -------------
+    plant_id       – Plant where the switch occurred.
+    from_username  – Username of the session that initiated the switch.
+    to_username    – Username that will record subsequent events.
+    timestamp      – Server-side UTC timestamp (authoritative, not client-supplied).
+    device_id      – Stable device fingerprint generated in the browser.
+
+    Access
+    ------
+    Caller must supply a valid Supabase JWT in the Authorization header.
+    The endpoint does NOT enforce Designation server-side because the frontend
+    RBAC gate already prevents non-Operators from reaching this call; the stored
+    record is append-only and never modified or deleted.
+    """
+    # Validate the caller's JWT so anonymous callers cannot flood the log.
+    if not authorization or not authorization.startswith("Bearer "):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    # Verify with Supabase (raises on invalid/expired token)
+    user_resp = supa.auth.get_user(token)
+    caller_id = user_resp.user.id if user_resp and user_resp.user else None
+    if not caller_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Token validation failed")
+
+    doc = {
+        "plant_id":      body.plant_id,
+        "from_username": body.from_username,
+        "to_username":   body.to_username,
+        "timestamp":     datetime.utcnow(),
+        "device_id":     body.device_id,
+        # Extra: store the auth-user id of whoever was logged in (immutable audit trail)
+        "session_user_id": caller_id,
+    }
+    await db.operator_switch_log.insert_one(doc)
+    return {"ok": True}
 
 # Include the router in the main app
 app.add_middleware(
