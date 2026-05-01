@@ -78,18 +78,28 @@ export default function Operations() {
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
-      <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="locator">Locator</TabsTrigger>
-          <TabsTrigger value="well">Well</TabsTrigger>
-          <TabsTrigger value="blending">Blending</TabsTrigger>
-          <TabsTrigger value="power">Power</TabsTrigger>
-        </TabsList>
-        <TabsContent value="locator" className="mt-3"><LocatorReadingForm /></TabsContent>
-        <TabsContent value="well" className="mt-3"><WellReadingForm /></TabsContent>
-        <TabsContent value="blending" className="mt-3"><BlendingForm /></TabsContent>
-        <TabsContent value="power" className="mt-3"><PowerForm /></TabsContent>
-      </Tabs>
+      <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-lg w-full">
+        {(['locator', 'well', 'blending', 'power'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => handleTabChange(t)}
+            className={[
+              'py-2 text-sm font-medium rounded-md transition-all duration-200 capitalize focus-visible:outline-none',
+              tab === t
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            ].join(' ')}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3">
+        {tab === 'locator' && <LocatorReadingForm />}
+        {tab === 'well' && <WellReadingForm />}
+        {tab === 'blending' && <BlendingForm />}
+        {tab === 'power' && <PowerForm />}
+      </div>
     </div>
   );
 }
