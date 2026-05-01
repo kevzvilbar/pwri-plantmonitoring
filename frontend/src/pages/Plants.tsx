@@ -2371,32 +2371,54 @@ function TrainsList({ plantId }: { plantId: string }) {
   const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
   const [trainDeleteReason, setTrainDeleteReason] = useState('');
   const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
-  const [showAddTrain, setShowAddTrain] = useState(false);
 
-  const addTrainMutation = {
-    isPending: false,
-    mutate: async (form: {
-      train_number: number; name: string;
-      num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
-      num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
-    }) => {
+  // ── Add Train ──────────────────────────────────────────────────────────────
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSaving, setAddSaving] = useState(false);
+  const blankAddForm = () => ({
+    train_number: '',
+    name: '',
+    num_afm: '1',
+    num_booster_pumps: '1',
+    num_hp_pumps: '1',
+    num_cartridge_filters: '1',
+    num_controllers: '1',
+    num_filter_housings: '1',
+    status: 'Running' as 'Running' | 'Offline' | 'Maintenance',
+  });
+  const [addForm, setAddForm] = useState(blankAddForm);
+
+  const handleAddTrain = async () => {
+    const trainNum = parseInt(addForm.train_number, 10);
+    if (!addForm.train_number || isNaN(trainNum) || trainNum < 1) {
+      toast.error('Train number must be a positive integer');
+      return;
+    }
+    try {
+      setAddSaving(true);
       const { error } = await supabase.from('ro_trains').insert({
         plant_id: plantId,
-        train_number: form.train_number,
-        name: form.name || null,
-        num_afm: form.num_afm,
-        num_booster_pumps: form.num_booster_pumps,
-        num_cartridge_filters: form.num_cartridge_filters,
-        num_controllers: form.num_controllers,
-        num_filter_housings: form.num_filter_housings,
-        num_hp_pumps: form.num_hp_pumps,
-        status: 'Running' as any,
+        train_number: trainNum,
+        name: addForm.name.trim() || null,
+        num_afm: parseInt(addForm.num_afm, 10) || 1,
+        num_booster_pumps: parseInt(addForm.num_booster_pumps, 10) || 1,
+        num_hp_pumps: parseInt(addForm.num_hp_pumps, 10) || 1,
+        num_cartridge_filters: parseInt(addForm.num_cartridge_filters, 10) || 1,
+        num_controllers: parseInt(addForm.num_controllers, 10) || 1,
+        num_filter_housings: parseInt(addForm.num_filter_housings, 10) || 1,
+        status: addForm.status,
       });
-      if (error) { toast.error(`Failed to add train: ${error.message}`); return; }
-      toast.success('RO Train added');
+      if (error) throw error;
+      toast.success(`Train ${trainNum} added`);
       qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
-      setShowAddTrain(false);
-    },
+      qc.invalidateQueries({ queryKey: ['plants'] });
+      setAddForm(blankAddForm());
+      setAddOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to add train');
+    } finally {
+      setAddSaving(false);
+    }
   };
 
   const doTrainDelete = async () => {
@@ -2427,8 +2449,8 @@ function TrainsList({ plantId }: { plantId: string }) {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
         {isManager && (
-          <Button size="sm" onClick={() => setShowAddTrain(true)}>
-            <Plus className="h-4 w-4 mr-1" />Add Train
+          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="add-train-btn">
+            <Plus className="h-3 w-3 mr-1" />Add Train
           </Button>
         )}
       </div>
@@ -2496,14 +2518,6 @@ function TrainsList({ plantId }: { plantId: string }) {
       })}
       {!trains?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No trains yet</Card>}
 
-      <AddTrainDialog
-        open={showAddTrain}
-        onOpenChange={setShowAddTrain}
-        defaultTrainNumber={(trains?.length ?? 0) + 1}
-        onSubmit={(form) => addTrainMutation.mutate(form)}
-        loading={addTrainMutation.isPending}
-      />
-
       {editTrain && plant && (
         <EditTrainDialog
           train={editTrain}
@@ -2530,79 +2544,89 @@ function TrainsList({ plantId }: { plantId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
 
-// ─── Add Train Dialog ─────────────────────────────────────────────────────────
-
-type AddTrainFormData = {
-  train_number: number; name: string;
-  num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
-  num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
-};
-
-function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, loading }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  defaultTrainNumber: number;
-  onSubmit: (form: AddTrainFormData) => void;
-  loading: boolean;
-}) {
-  const [form, setForm] = useState<AddTrainFormData>({
-    train_number: defaultTrainNumber, name: '',
-    num_afm: 2, num_booster_pumps: 1, num_cartridge_filters: 1,
-    num_controllers: 1, num_filter_housings: 1, num_hp_pumps: 1,
-  });
-
-  useState(() => { setForm(f => ({ ...f, train_number: defaultTrainNumber })); });
-
-  const num = (field: keyof AddTrainFormData) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
-
-  const fields: { key: keyof AddTrainFormData; label: string }[] = [
-    { key: 'num_afm', label: 'AFM / MMF Units' },
-    { key: 'num_booster_pumps', label: 'Booster Pumps' },
-    { key: 'num_cartridge_filters', label: 'Cartridge Filters' },
-    { key: 'num_controllers', label: 'Controllers' },
-    { key: 'num_filter_housings', label: 'Filter Housings' },
-    { key: 'num_hp_pumps', label: 'HP Pumps' },
-  ];
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Add RO Train</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Train Number</Label>
-              <Input type="number" min={1} value={form.train_number} onChange={num('train_number')} />
-            </div>
-            <div>
-              <Label>Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input placeholder="e.g. Train A" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {fields.map(({ key, label }) => (
-              <div key={key}>
-                <Label>{label}</Label>
-                <Input type="number" min={0} value={form[key] as number} onChange={num(key)} />
+      {/* ── Add Train Dialog ── */}
+      <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setAddForm(blankAddForm()); setAddOpen(false); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add RO Train</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Train Number <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={addForm.train_number}
+                  onChange={(e) => setAddForm(f => ({ ...f, train_number: e.target.value }))}
+                  placeholder="e.g. 1"
+                  data-testid="add-train-number-input"
+                />
               </div>
-            ))}
+              <div className="space-y-1">
+                <Label className="text-xs">Name (optional)</Label>
+                <Input
+                  value={addForm.name}
+                  onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Train A"
+                  data-testid="add-train-name-input"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Initial Status</Label>
+              <div className="flex gap-2">
+                {(['Running', 'Offline', 'Maintenance'] as const).map((s) => (
+                  <Button
+                    key={s}
+                    type="button"
+                    size="sm"
+                    variant={addForm.status === s ? 'default' : 'outline'}
+                    className="flex-1 text-xs"
+                    onClick={() => setAddForm(f => ({ ...f, status: s }))}
+                  >
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Component Counts</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['num_afm', 'AFM Units'],
+                  ['num_booster_pumps', 'Booster Pumps'],
+                  ['num_hp_pumps', 'HP Pumps'],
+                  ['num_cartridge_filters', 'Cartridge Filters'],
+                  ['num_controllers', 'Controllers'],
+                  ['num_filter_housings', 'Filter Housings'],
+                ] as [keyof typeof addForm, string][]).map(([key, lbl]) => (
+                  <div key={key} className="space-y-0.5">
+                    <Label className="text-[10px] text-muted-foreground">{lbl}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={addForm[key]}
+                      onChange={(e) => setAddForm(f => ({ ...f, [key]: e.target.value }))}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
-          <Button onClick={() => onSubmit(form)} disabled={loading}>
-            {loading ? 'Adding…' : 'Add Train'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddForm(blankAddForm()); setAddOpen(false); }} disabled={addSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddTrain} disabled={addSaving || !addForm.train_number} data-testid="confirm-add-train">
+              {addSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Add Train
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
