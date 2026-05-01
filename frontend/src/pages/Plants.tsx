@@ -3290,6 +3290,8 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-3xl w-full">
+        <DialogHeader>
+          <DialogTitle>Import Locators from CSV</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
