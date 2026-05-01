@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -461,6 +461,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
+  const [showLocatorCsv, setShowLocatorCsv] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -605,6 +606,11 @@ function LocatorsList({ plantId }: { plantId: string }) {
               <Plus className="h-3 w-3 mr-1" />Add
             </Button>
           )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setShowLocatorCsv(true)}>
+              <Upload className="h-3 w-3 mr-1" />Import CSV
+            </Button>
+          )}
         </div>
       </div>
       {locators?.map((l: any) => {
@@ -667,6 +673,12 @@ function LocatorsList({ plantId }: { plantId: string }) {
       {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
       {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+      {showLocatorCsv && (
+        <LocatorCsvImportDialog
+          plantId={plantId}
+          onClose={() => { setShowLocatorCsv(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }}
+        />
+      )}
 
       {/* Single delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleteBusy && setDeleteTarget(null)}>
@@ -1038,6 +1050,7 @@ function WellsList({ plantId }: { plantId: string }) {
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [editingWell, setEditingWell] = useState<any | null>(null);
+  const [showWellCsv, setShowWellCsv] = useState(false);
   const [wellDeleteTarget, setWellDeleteTarget] = useState<any | null>(null);
   const [wellDeleteReason, setWellDeleteReason] = useState('');
   const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
@@ -1256,6 +1269,11 @@ function WellsList({ plantId }: { plantId: string }) {
             <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
               <Plus className="h-3 w-3 mr-1" />Add Well
             </Button>
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => setShowWellCsv(true)}>
+                <Upload className="h-3 w-3 mr-1" />Import CSV
+              </Button>
+            )}
           )}
         </div>
       </div>
@@ -1410,6 +1428,12 @@ function WellsList({ plantId }: { plantId: string }) {
         }} />
       )}
       {editingWell && <EditWellDialog well={editingWell} onClose={() => { setEditingWell(null); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }} />}
+      {showWellCsv && (
+        <WellCsvImportDialog
+          plantId={plantId}
+          onClose={() => { setShowWellCsv(false); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }}
+        />
+      )}
 
       {/* Single well delete confirm */}
       <AlertDialog open={!!wellDeleteTarget} onOpenChange={(o) => !o && !wellDeleteBusy && setWellDeleteTarget(null)}>
@@ -2536,6 +2560,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
   const [showAddTrain, setShowAddTrain] = useState(false);
   const [addTrainBusy, setAddTrainBusy] = useState(false);
+  const [showTrainCsv, setShowTrainCsv] = useState(false);
 
   const doAddTrain = async (form: {
     train_number: number; name: string;
@@ -2612,11 +2637,18 @@ function TrainsList({ plantId }: { plantId: string }) {
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
-        {isManager && (
-          <Button size="sm" variant="outline" onClick={() => setShowAddTrain(true)}>
-            <Plus className="h-3 w-3 mr-1" />Add Train
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <Button size="sm" variant="outline" onClick={() => setShowAddTrain(true)}>
+              <Plus className="h-3 w-3 mr-1" />Add Train
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setShowTrainCsv(true)}>
+              <Upload className="h-3 w-3 mr-1" />Import CSV
+            </Button>
+          )}
+        </div>
       </div>
 
       {trains?.map((t: any) => {
@@ -2705,6 +2737,12 @@ function TrainsList({ plantId }: { plantId: string }) {
         onSubmit={doAddTrain}
         loading={addTrainBusy}
       />
+      {showTrainCsv && (
+        <TrainCsvImportDialog
+          plantId={plantId}
+          onClose={() => { setShowTrainCsv(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
+        />
+      )}
 
       {editTrain && plant && (
         <EditTrainDialog
@@ -2807,6 +2845,344 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={() => onSubmit(form)} disabled={loading}>
             {loading ? 'Adding…' : 'Add Train'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Shared CSV utilities ─────────────────────────────────────────────────────
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    // Handle quoted fields containing commas
+    const vals: string[] = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    vals.push(cur.trim());
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function downloadTemplate(filename: string, headers: string[]) {
+  const blob = new Blob([headers.join(',') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="overflow-auto max-h-48 border rounded text-xs">
+      <table className="w-full text-left">
+        <thead className="bg-muted sticky top-0">
+          <tr>{headers.map(h => <th key={h} className="px-2 py-1 font-medium whitespace-nowrap">{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 10).map((row, i) => (
+            <tr key={i} className="border-t">
+              {headers.map(h => <td key={h} className="px-2 py-1 whitespace-nowrap max-w-[120px] truncate">{row[h] ?? ''}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 10 && <p className="px-2 py-1 text-muted-foreground">…and {rows.length - 10} more rows</p>}
+    </div>
+  );
+}
+
+// ─── Locator CSV Import ───────────────────────────────────────────────────────
+
+const LOCATOR_CSV_HEADERS = [
+  'name', 'location_desc', 'address',
+  'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
+  'gps_lat', 'gps_lng',
+];
+
+function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseCsv(ev.target?.result as string);
+      setRows(parsed);
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 1}: name is required`); });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    const payload = rows.map(r => ({
+      plant_id: plantId,
+      name: r.name.trim(),
+      location_desc: r.location_desc || null,
+      address: r.address || null,
+      meter_brand: r.meter_brand || null,
+      meter_size: r.meter_size || null,
+      meter_serial: r.meter_serial || null,
+      meter_installed_date: r.meter_installed_date || null,
+      gps_lat: r.gps_lat ? +r.gps_lat : null,
+      gps_lng: r.gps_lng ? +r.gps_lng : null,
+    }));
+    const { error } = await supabase.from('locators').insert(payload);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} locator(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import Locators from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate('locators_template.csv', LOCATOR_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{LOCATOR_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> is required. All others optional.</p>
+          </div>
+          <div>
+            <Label>Select CSV file</Label>
+            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={LOCATOR_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Well CSV Import ──────────────────────────────────────────────────────────
+
+const WELL_CSV_HEADERS = [
+  'name', 'diameter', 'drilling_depth_m',
+  'meter_brand', 'meter_size', 'meter_serial',
+  'has_power_meter', 'electric_meter_brand', 'electric_meter_size',
+  'electric_meter_serial', 'electric_meter_installed_date',
+  'gps_lat', 'gps_lng',
+];
+
+function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setRows(parseCsv(ev.target?.result as string));
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 1}: name is required`); });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    const payload = rows.map(r => ({
+      plant_id: plantId,
+      name: r.name.trim(),
+      diameter: r.diameter || null,
+      drilling_depth_m: r.drilling_depth_m ? +r.drilling_depth_m : null,
+      meter_brand: r.meter_brand || null,
+      meter_size: r.meter_size ? +r.meter_size : null,
+      meter_serial: r.meter_serial || null,
+      has_power_meter: r.has_power_meter?.toLowerCase() === 'true',
+      electric_meter_brand: r.electric_meter_brand || null,
+      electric_meter_size: r.electric_meter_size || null,
+      electric_meter_serial: r.electric_meter_serial || null,
+      electric_meter_installed_date: r.electric_meter_installed_date || null,
+      gps_lat: r.gps_lat ? +r.gps_lat : null,
+      gps_lng: r.gps_lng ? +r.gps_lng : null,
+      status: 'Active',
+    }));
+    const { error } = await supabase.from('wells').insert(payload as any);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} well(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import Wells from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate('wells_template.csv', WELL_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{WELL_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Numeric fields: drilling_depth_m, meter_size, gps_lat, gps_lng.</p>
+          </div>
+          <div>
+            <Label>Select CSV file</Label>
+            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={WELL_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Train CSV Import ─────────────────────────────────────────────────────────
+
+const TRAIN_CSV_HEADERS = [
+  'train_number', 'name',
+  'num_afm', 'num_booster_pumps', 'num_cartridge_filters',
+  'num_controllers', 'num_filter_housings', 'num_hp_pumps',
+];
+
+function TrainCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setRows(parseCsv(ev.target?.result as string));
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => {
+      if (!r.train_number || isNaN(+r.train_number)) errs.push(`Row ${i + 1}: train_number must be a number`);
+    });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    const payload = rows.map(r => ({
+      plant_id: plantId,
+      train_number: +r.train_number,
+      name: r.name || null,
+      num_afm: r.num_afm ? +r.num_afm : 0,
+      num_booster_pumps: r.num_booster_pumps ? +r.num_booster_pumps : 0,
+      num_cartridge_filters: r.num_cartridge_filters ? +r.num_cartridge_filters : 0,
+      num_controllers: r.num_controllers ? +r.num_controllers : 0,
+      num_filter_housings: r.num_filter_housings ? +r.num_filter_housings : 0,
+      num_hp_pumps: r.num_hp_pumps ? +r.num_hp_pumps : 0,
+      status: 'Running' as any,
+    }));
+    const { error } = await supabase.from('ro_trains').insert(payload);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} train(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import RO Trains from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate('ro_trains_template.csv', TRAIN_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{TRAIN_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>train_number</strong> required (integer). All component count fields default to 0 if blank.</p>
+          </div>
+          <div>
+            <Label>Select CSV file</Label>
+            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={TRAIN_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
           </Button>
         </DialogFooter>
       </DialogContent>
