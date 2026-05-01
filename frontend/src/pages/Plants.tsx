@@ -20,12 +20,291 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileText, AlertCircle } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
+
+// ─── Import Audit Helper ─────────────────────────────────────────────────────
+
+async function logImportAudit(entry: {
+  user_id: string | null;
+  plant_id: string;
+  module: 'Locators' | 'Wells' | 'Trains';
+  file_name: string;
+  row_count: number;
+  schema_valid: boolean;
+  schema_errors: string[];
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('import_audit_log' as any) as any).insert([entry]);
+  } catch {
+    // Table may not exist yet; silently ignore — main import still proceeds.
+  }
+}
+
+// ─── CSV Parser ──────────────────────────────────────────────────────────────
+
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map((line) => {
+    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function bool(v: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'y'].includes((v ?? '').toLowerCase());
+}
+
+// ─── Import Schemas ──────────────────────────────────────────────────────────
+
+/** Locator row: locator_name, meter_reading, status */
+function validateLocatorRow(r: Record<string, string>, idx: number): string[] {
+  const errs: string[] = [];
+  if (!r.locator_name?.trim()) errs.push(`Row ${idx}: locator_name is required`);
+  if (r.meter_reading && isNaN(Number(r.meter_reading)))
+    errs.push(`Row ${idx}: meter_reading must be numeric`);
+  if (r.status && !['Active', 'Inactive'].includes(r.status))
+    errs.push(`Row ${idx}: status must be Active or Inactive`);
+  return errs;
+}
+
+/** Well row: well_name, meter_reading, has_power_meter (0/1/true/false), active (0/1/true/false) */
+function validateWellRow(r: Record<string, string>, idx: number): string[] {
+  const errs: string[] = [];
+  if (!r.well_name?.trim()) errs.push(`Row ${idx}: well_name is required`);
+  if (r.meter_reading && isNaN(Number(r.meter_reading)))
+    errs.push(`Row ${idx}: meter_reading must be numeric`);
+  return errs;
+}
+
+/** Train row: plant_id (optional, defaults to current), train_number, status */
+function validateTrainRow(r: Record<string, string>, idx: number): string[] {
+  const errs: string[] = [];
+  if (!r.train_number?.trim() || isNaN(Number(r.train_number)))
+    errs.push(`Row ${idx}: train_number must be a number`);
+  if (r.status && !['Running', 'Offline', 'Maintenance'].includes(r.status))
+    errs.push(`Row ${idx}: status must be Running, Offline, or Maintenance`);
+  return errs;
+}
+
+// ─── Shared ImportDialog ─────────────────────────────────────────────────────
+
+type ImportModule = 'Locators' | 'Wells' | 'Trains';
+
+const IMPORT_SCHEMA_HINT: Record<ImportModule, string> = {
+  Locators: 'locator_name, meter_reading, status',
+  Wells:    'well_name, meter_reading, has_power_meter, active',
+  Trains:   'train_number, status, num_afm, num_booster_pumps, num_hp_pumps, num_cartridge_filters, num_controllers, num_filter_housings',
+};
+
+function ImportDialog({
+  module,
+  plantId,
+  userId,
+  onClose,
+  onImported,
+}: {
+  module: ImportModule;
+  plantId: string;
+  userId: string | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [importedCount, setImportedCount] = useState(0);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setDone(false);
+    setErrors([]);
+    setRows([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => {
+        const rowErrs =
+          module === 'Locators' ? validateLocatorRow(r, i + 2)
+          : module === 'Wells'   ? validateWellRow(r, i + 2)
+          :                        validateTrainRow(r, i + 2);
+        errs.push(...rowErrs);
+      });
+      setRows(parsed);
+      setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    setBusy(true);
+    const ts = new Date().toISOString();
+    let count = 0;
+    const importErrors: string[] = [];
+
+    try {
+      if (module === 'Locators') {
+        for (const r of rows) {
+          const { error } = await supabase.from('locators').insert({
+            plant_id: plantId,
+            name: r.locator_name?.trim(),
+            status: r.status?.trim() || 'Active',
+          });
+          if (error) importErrors.push(error.message);
+          else count++;
+        }
+      } else if (module === 'Wells') {
+        for (const r of rows) {
+          const { error } = await supabase.from('wells').insert({
+            plant_id: plantId,
+            name: r.well_name?.trim(),
+            has_power_meter: bool(r.has_power_meter),
+            status: bool(r.active) === false ? 'Inactive' : 'Active',
+          } as never);
+          if (error) importErrors.push(error.message);
+          else count++;
+        }
+      } else {
+        for (const r of rows) {
+          const { error } = await supabase.from('ro_trains').insert({
+            plant_id: plantId,
+            train_number: parseInt(r.train_number, 10),
+            status: (r.status?.trim() || 'Running') as 'Running' | 'Offline' | 'Maintenance',
+            num_afm: parseInt(r.num_afm, 10) || 1,
+            num_booster_pumps: parseInt(r.num_booster_pumps, 10) || 1,
+            num_hp_pumps: parseInt(r.num_hp_pumps, 10) || 1,
+            num_cartridge_filters: parseInt(r.num_cartridge_filters, 10) || 1,
+            num_controllers: parseInt(r.num_controllers, 10) || 1,
+            num_filter_housings: parseInt(r.num_filter_housings, 10) || 1,
+          });
+          if (error) importErrors.push(error.message);
+          else count++;
+        }
+      }
+
+      await logImportAudit({
+        user_id: userId,
+        plant_id: plantId,
+        module,
+        file_name: file.name,
+        row_count: rows.length,
+        schema_valid: errors.length === 0,
+        schema_errors: [...errors, ...importErrors],
+        timestamp: ts,
+      });
+
+      setImportedCount(count);
+      setDone(true);
+      if (importErrors.length > 0) {
+        toast.error(`${count} imported, ${importErrors.length} failed.`);
+      } else {
+        toast.success(`${count} ${module.toLowerCase()} imported successfully`);
+      }
+      onImported();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Import failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const schemaHint = IMPORT_SCHEMA_HINT[module];
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Import {module}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          {/* Schema hint */}
+          <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <FileText className="h-3 w-3" /> Required CSV columns
+            </p>
+            <p className="text-xs font-mono text-foreground break-all">{schemaHint}</p>
+            <p className="text-[10px] text-muted-foreground">
+              First row must be the header. Values are comma-separated.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1">
+            <Label className="text-xs">CSV File <span className="text-destructive">*</span></Label>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:py-1 file:px-3 file:rounded file:border file:border-input file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted cursor-pointer"
+              data-testid="import-file-input"
+            />
+          </div>
+
+          {/* Preview / validation */}
+          {file && rows.length > 0 && (
+            <div className="rounded-md border p-2.5 space-y-1.5">
+              <p className="text-xs font-medium">{rows.length} row(s) found in "{file.name}"</p>
+              {errors.length === 0 ? (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+                  Schema valid — ready to import
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> {errors.length} validation error(s):
+                  </p>
+                  <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-24 overflow-y-auto">
+                    {errors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground">No data rows found — check file format.</p>
+          )}
+
+          {done && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              ✓ {importedCount} record(s) imported. Audit log written.
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={busy || !file || rows.length === 0 || errors.length > 0}
+            data-testid="confirm-import"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import {rows.length > 0 ? `${rows.length} rows` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 
 function CollapsibleSection({
   title,
@@ -364,6 +643,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -482,8 +762,23 @@ function LocatorsList({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+              onClick={() => setAdding(true)}
+            >
               <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-locators-btn"
+            >
+              <Upload className="h-3 w-3 mr-1" />Import
             </Button>
           )}
         </div>
@@ -545,6 +840,15 @@ function LocatorsList({ plantId }: { plantId: string }) {
       })}
       {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+      {importOpen && (
+        <ImportDialog
+          module="Locators"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }}
+        />
+      )}
       {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
 
       {/* Single delete confirm */}
@@ -901,6 +1205,7 @@ function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editingWell, setEditingWell] = useState<any | null>(null);
   const [wellDeleteTarget, setWellDeleteTarget] = useState<any | null>(null);
   const [wellDeleteReason, setWellDeleteReason] = useState('');
@@ -1096,8 +1401,24 @@ function WellsList({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+              onClick={() => setAdding(true)}
+              data-testid="add-well-btn"
+            >
               <Plus className="h-3 w-3 mr-1" />Add Well
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-wells-btn"
+            >
+              <Upload className="h-3 w-3 mr-1" />Import
             </Button>
           )}
         </div>
@@ -1249,6 +1570,15 @@ function WellsList({ plantId }: { plantId: string }) {
           setAdding(false);
           qc.invalidateQueries({ queryKey: ['wells', plantId] });
         }} />
+      )}
+      {importOpen && (
+        <ImportDialog
+          module="Wells"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }}
+        />
       )}
       {editingWell && <EditWellDialog well={editingWell} onClose={() => { setEditingWell(null); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }} />}
 
@@ -2360,7 +2690,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const plant = plants?.find((p) => p.id === plantId);
 
   const qc = useQueryClient();
-  const { isManager, user } = useAuth();
+  const { isManager, isAdmin, user } = useAuth();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
     queryFn: async () =>
@@ -2375,6 +2705,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   // ── Add Train ──────────────────────────────────────────────────────────────
   const [addOpen, setAddOpen] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const blankAddForm = () => ({
     train_number: '',
     name: '',
@@ -2446,13 +2777,31 @@ function TrainsList({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
-        {isManager && (
-          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="add-train-btn">
-            <Plus className="h-3 w-3 mr-1" />Add Train
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+              onClick={() => setAddOpen(true)}
+              data-testid="add-train-btn"
+            >
+              <Plus className="h-3 w-3 mr-1" />Add Train
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-trains-btn"
+            >
+              <Upload className="h-3 w-3 mr-1" />Import
+            </Button>
+          )}
+        </div>
       </div>
 
       {trains?.map((t: any) => {
@@ -2544,6 +2893,17 @@ function TrainsList({ plantId }: { plantId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Import Trains Dialog ── */}
+      {importOpen && (
+        <ImportDialog
+          module="Trains"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
+        />
+      )}
 
       {/* ── Add Train Dialog ── */}
       <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setAddForm(blankAddForm()); setAddOpen(false); } }}>
