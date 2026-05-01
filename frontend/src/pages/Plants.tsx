@@ -3114,7 +3114,10 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
   const blank = (): AddTrainFormData => ({
     train_number: defaultTrainNumber, name: '',
     num_afm: 2, num_booster_pumps: 1, num_cartridge_filters: 1,
-    num_controllers: 1, num_filter_housings: isBagFilter ? 0 : 1, num_hp_pumps: 1,
+    num_controllers: 1,
+    // num_filter_housings is merged into num_cartridge_filters for Bag Filter plants
+    num_filter_housings: isBagFilter ? 0 : 1,
+    num_hp_pumps: 1,
   });
   const [form, setForm] = useState<AddTrainFormData>(blank);
 
@@ -3127,19 +3130,21 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
 
-  // Dynamic labels based on plant-wide component type settings:
-  // - Media: AFM or MMF
-  // - Pre-filter: Cartridge Filter → "Cartridge Housing"; Bag Filter → "Bag Filter" (Filter Housing hidden)
-  const afmLabel = `${plantMediaType} Units`;
-  const cfLabel  = 'Cartridge Housing';
-
+  // Dynamic labels:
+  // - Media: "AFM Units" or "MMF Units"
+  // - Pre-filter housing: Cartridge Filter → "Cartridge Housing" (separate Filter Housing field shown)
+  //                       Bag Filter       → "Filter Housing" (single merged field, Cartridge Housing hidden)
+  // - HP Pumps → "High Pressure Pumps"
+  const afmLabel       = `${plantMediaType} Units`;
+  const cfLabel        = isBagFilter ? 'Filter Housing' : 'Cartridge Housing';
+  // When Bag Filter: num_cartridge_filters doubles as the housing count; Filter Housings field is hidden.
   const fields: { key: keyof AddTrainFormData; label: string; hide?: boolean }[] = [
-    { key: 'num_afm',               label: afmLabel           },
-    { key: 'num_booster_pumps',     label: 'Booster Pumps'    },
-    { key: 'num_cartridge_filters', label: cfLabel            },
-    { key: 'num_controllers',       label: 'Controllers'      },
-    { key: 'num_filter_housings',   label: 'Filter Housings', hide: isBagFilter },
-    { key: 'num_hp_pumps',          label: 'HP Pumps'         },
+    { key: 'num_afm',               label: afmLabel                                          },
+    { key: 'num_booster_pumps',     label: 'Booster Pumps'                                   },
+    { key: 'num_cartridge_filters', label: cfLabel                                            },
+    { key: 'num_controllers',       label: 'Controllers'                                     },
+    { key: 'num_filter_housings',   label: 'Filter Housings',   hide: isBagFilter            },
+    { key: 'num_hp_pumps',          label: 'High Pressure Pumps'                             },
   ];
 
   return (
@@ -3210,15 +3215,17 @@ function downloadTemplate(filename: string, headers: string[]) {
 
 function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
   if (!rows.length) return null;
-  const colW = headers.length > 8 ? 90 : headers.length > 6 ? 110 : 130;
+  // Fixed column width — wide enough to read, narrow enough to scroll cleanly
+  const colW = 120;
   return (
-    <div>
-      <div className="overflow-x-auto overflow-y-auto max-h-48 border rounded" style={{ fontSize: 11 }}>
-        <table className="table-fixed text-left" style={{ minWidth: headers.length * colW }}>
-          <thead className="bg-muted sticky top-0">
+    <div className="rounded border overflow-hidden">
+      <div className="overflow-x-auto overflow-y-auto max-h-44" style={{ fontSize: 11 }}>
+        <table className="table-fixed text-left w-max" style={{ minWidth: headers.length * colW }}>
+          <thead className="bg-muted/80 sticky top-0 z-10">
             <tr>
               {headers.map(h => (
-                <th key={h} className="px-1.5 py-1 font-medium truncate" style={{ width: colW }}>
+                <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap border-b"
+                    style={{ width: colW, minWidth: colW }}>
                   {h}
                 </th>
               ))}
@@ -3226,10 +3233,11 @@ function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; he
           </thead>
           <tbody>
             {rows.slice(0, 10).map((row, i) => (
-              <tr key={i} className="border-t">
+              <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
                 {headers.map(h => (
-                  <td key={h} className="px-1.5 py-1 truncate" style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
-                    {row[h] ?? ''}
+                  <td key={h} className="px-2 py-1 truncate border-b border-border/40"
+                      style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
+                    {row[h] ?? <span className="text-muted-foreground/40">—</span>}
                   </td>
                 ))}
               </tr>
@@ -3238,7 +3246,9 @@ function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; he
         </table>
       </div>
       {rows.length > 10 && (
-        <p className="text-xs text-muted-foreground mt-1 px-1">…and {rows.length - 10} more rows</p>
+        <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/30 border-t">
+          …and {rows.length - 10} more rows
+        </p>
       )}
     </div>
   );
@@ -3295,7 +3305,7 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full">
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Import Locators from CSV</DialogTitle>
         </DialogHeader>
@@ -3410,7 +3420,7 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full">
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Import Wells from CSV</DialogTitle>
         </DialogHeader>
@@ -3483,11 +3493,14 @@ function TrainCsvImportDialog({ plantId, onClose,
     ? TRAIN_CSV_HEADERS_BASE.filter(h => h !== 'num_filter_housings')
     : TRAIN_CSV_HEADERS_BASE;
   // Human-readable header descriptions for the dialog
+  // When Bag Filter: num_cartridge_filters acts as the housing count
+  const cfNoteLabel = isBagFilter ? 'Filter Housing' : 'Cartridge Housing';
   const headerNotes = [
     `num_afm = ${plantMediaType} Units`,
     'num_booster_pumps = Booster Pumps',
-    'num_cartridge_filters = Cartridge Housing',
+    `num_cartridge_filters = ${cfNoteLabel}`,
     ...(isBagFilter ? [] : ['num_filter_housings = Filter Housings']),
+    'num_hp_pumps = High Pressure Pumps',
   ].join(' · ');
 
   const [rows, setRows] = useState<Record<string, string>[]>([]);
@@ -3532,7 +3545,7 @@ function TrainCsvImportDialog({ plantId, onClose,
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full">
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Import RO Trains from CSV</DialogTitle>
         </DialogHeader>
