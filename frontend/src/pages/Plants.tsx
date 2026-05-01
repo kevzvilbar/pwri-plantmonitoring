@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -2534,6 +2534,34 @@ function TrainsList({ plantId }: { plantId: string }) {
   const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
   const [trainDeleteReason, setTrainDeleteReason] = useState('');
   const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
+  const [showAddTrain, setShowAddTrain] = useState(false);
+  const [addTrainBusy, setAddTrainBusy] = useState(false);
+
+  const doAddTrain = async (form: {
+    train_number: number; name: string;
+    num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
+    num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
+  }) => {
+    setAddTrainBusy(true);
+    const { error } = await supabase.from('ro_trains').insert({
+      plant_id: plantId,
+      train_number: form.train_number,
+      name: form.name || null,
+      num_afm: form.num_afm,
+      num_booster_pumps: form.num_booster_pumps,
+      num_cartridge_filters: form.num_cartridge_filters,
+      num_controllers: form.num_controllers,
+      num_filter_housings: form.num_filter_housings,
+      num_hp_pumps: form.num_hp_pumps,
+      status: 'Running' as any,
+    });
+    setAddTrainBusy(false);
+    if (error) { toast.error(`Failed to add train: ${error.message}`); return; }
+    toast.success('RO Train added');
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    setShowAddTrain(false);
+  };
 
   const doTrainDelete = async () => {
     if (!trainDeleteTarget) return;
@@ -2582,7 +2610,14 @@ function TrainsList({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
+        {isManager && (
+          <Button size="sm" variant="outline" onClick={() => setShowAddTrain(true)}>
+            <Plus className="h-3 w-3 mr-1" />Add Train
+          </Button>
+        )}
+      </div>
 
       {trains?.map((t: any) => {
         const mt = effectiveMediaType(t);
@@ -2663,6 +2698,14 @@ function TrainsList({ plantId }: { plantId: string }) {
       })}
       {!trains?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No trains yet</Card>}
 
+      <AddTrainDialog
+        open={showAddTrain}
+        onOpenChange={setShowAddTrain}
+        defaultTrainNumber={(trains?.length ?? 0) + 1}
+        onSubmit={doAddTrain}
+        loading={addTrainBusy}
+      />
+
       {editTrain && plant && (
         <EditTrainDialog
           train={editTrain}
@@ -2690,5 +2733,83 @@ function TrainsList({ plantId }: { plantId: string }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// ─── Add Train Dialog ─────────────────────────────────────────────────────────
+
+type AddTrainFormData = {
+  train_number: number; name: string;
+  num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
+  num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
+};
+
+function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, loading }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultTrainNumber: number;
+  onSubmit: (form: AddTrainFormData) => void;
+  loading: boolean;
+}) {
+  const blank = (): AddTrainFormData => ({
+    train_number: defaultTrainNumber, name: '',
+    num_afm: 2, num_booster_pumps: 1, num_cartridge_filters: 1,
+    num_controllers: 1, num_filter_housings: 1, num_hp_pumps: 1,
+  });
+  const [form, setForm] = useState<AddTrainFormData>(blank);
+
+  useEffect(() => {
+    if (open) setForm({ ...blank(), train_number: defaultTrainNumber });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultTrainNumber]);
+
+  const num = (field: keyof AddTrainFormData) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
+
+  const fields: { key: keyof AddTrainFormData; label: string }[] = [
+    { key: 'num_afm',               label: 'AFM / MMF Units'   },
+    { key: 'num_booster_pumps',     label: 'Booster Pumps'     },
+    { key: 'num_cartridge_filters', label: 'Cartridge Filters' },
+    { key: 'num_controllers',       label: 'Controllers'       },
+    { key: 'num_filter_housings',   label: 'Filter Housings'   },
+    { key: 'num_hp_pumps',          label: 'HP Pumps'          },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add RO Train</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Train Number</Label>
+              <Input type="number" min={1} value={form.train_number} onChange={num('train_number')} />
+            </div>
+            <div>
+              <Label>Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input placeholder="e.g. Train A" value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {fields.map(({ key, label }) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                <Input type="number" min={0} value={form[key] as number} onChange={num(key)} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={() => onSubmit(form)} disabled={loading}>
+            {loading ? 'Adding…' : 'Add Train'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
