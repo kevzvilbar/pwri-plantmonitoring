@@ -398,14 +398,14 @@ function ChemicalTabs() {
   return (
     <div>
       {/* Tab strip */}
-      <div className="grid grid-cols-2 w-full rounded-lg overflow-hidden border border-border">
+      <div className="grid grid-cols-2 w-full gap-1 p-1 bg-muted rounded-lg">
         <button
           onClick={() => setActive('dosing')}
           className={[
-            'py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none',
+            'py-2 text-sm font-medium rounded-md transition-all duration-200 focus-visible:outline-none',
             active === 'dosing'
-              ? 'bg-teal-700 text-white shadow-inner'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              ? 'bg-teal-700 text-white shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
           ].join(' ')}
         >
           Dosing
@@ -413,10 +413,10 @@ function ChemicalTabs() {
         <button
           onClick={() => setActive('inventory')}
           className={[
-            'py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none',
+            'py-2 text-sm font-medium rounded-md transition-all duration-200 focus-visible:outline-none',
             active === 'inventory'
-              ? 'bg-sky-700 text-white shadow-inner'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              ? 'bg-teal-700 text-white shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
           ].join(' ')}
         >
           Inventory
