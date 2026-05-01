@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
@@ -29,11 +30,11 @@ export default function Costs() {
         <p className="text-sm text-muted-foreground">Production cost, power bills & tariffs, chemical prices</p>
       </div>
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
-        <TabsList className="grid grid-cols-4 w-full h-auto">
-          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2">Rollup</TabsTrigger>
-          <TabsTrigger value="power" className="text-xs sm:text-sm py-2">Power</TabsTrigger>
-          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2">Compare</TabsTrigger>
-          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2">Prices</TabsTrigger>
+        <TabsList className="grid grid-cols-4 w-full h-auto bg-muted rounded-xl p-1">
+          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Rollup</TabsTrigger>
+          <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Power</TabsTrigger>
+          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Compare</TabsTrigger>
+          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Prices</TabsTrigger>
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
         <TabsContent value="power" className="mt-3"><Power /></TabsContent>
@@ -272,9 +273,21 @@ function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; fr
 
 function Power() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
+  const canEdit = isManager || isAdmin;
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
+
+  // Month dropdown: generate last 24 months + next 2
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    for (let i = -2; i <= 24; i++) {
+      const d = subMonths(startOfMonth(new Date()), i - 2);
+      opts.push({ value: format(d, 'yyyy-MM-dd'), label: format(d, 'MMMM yyyy') });
+    }
+    return opts.reverse();
+  }, []);
+
   const [v, setV] = useState({
     billing_month: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     period_start: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
@@ -283,6 +296,10 @@ function Power() {
     generation_charge: '', distribution_charge: '', other_charges: '', total_amount: '',
     provider: '', remarks: '',
   });
+
+  // Multiplier confirmation dialog state
+  const [pendingMultiplier, setPendingMultiplier] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const totalKwh = v.previous_reading && v.current_reading
     ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
@@ -298,6 +315,28 @@ function Power() {
     queryFn: async () => plantId ? (await supabase.from('power_tariffs').select('*').eq('plant_id', plantId).order('effective_date', { ascending: false })).data ?? [] : [],
     enabled: !!plantId,
   });
+
+  // Auto-populate multiplier from last bill when plant changes
+  useEffect(() => {
+    if (bills && bills.length > 0) {
+      const lastBill = bills[0] as any;
+      if (lastBill.multiplier && lastBill.multiplier !== 1) {
+        setV(prev => ({ ...prev, multiplier: String(lastBill.multiplier) }));
+      }
+    }
+  }, [bills]);
+
+  const handleMultiplierChange = (val: string) => {
+    if (!canEdit) return;
+    const current = v.multiplier;
+    if (val !== current && bills && bills.length > 0) {
+      // Has existing bills — require confirmation
+      setPendingMultiplier(val);
+      setConfirmOpen(true);
+    } else {
+      setV({ ...v, multiplier: val });
+    }
+  };
 
   const submit = async () => {
     if (!plantId || !v.total_amount) { toast.error('Plant and total required'); return; }
@@ -334,7 +373,18 @@ function Power() {
         <div className="space-y-2">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-xs">Billing month</Label><Input type="date" value={v.billing_month} onChange={(e) => setV({ ...v, billing_month: e.target.value })} /></div>
+            {/* Billing Month — dropdown instead of date picker */}
+            <div>
+              <Label className="text-xs">Billing month</Label>
+              <Select value={v.billing_month} onValueChange={(val) => setV({ ...v, billing_month: val })}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" /></div>
           </div>
           <div className="flex gap-2">
@@ -348,9 +398,31 @@ function Power() {
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
-            <div><Label className="text-xs">Multiplier</Label><Input type="number" step="any" value={v.multiplier} onChange={(e) => setV({ ...v, multiplier: e.target.value })} /></div>
-            <div><Label className="text-xs">Total kWh (auto)</Label><Input value={totalKwh ?? ''} readOnly className="bg-muted" /></div>
           </div>
+          {/* Multiplier + Total kWh on same row */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Label className="text-xs flex items-center gap-1">
+                Multiplier
+                {!canEdit && <span className="text-[10px] text-muted-foreground">(read-only)</span>}
+              </Label>
+              <Input
+                type="number" step="any" value={v.multiplier}
+                readOnly={!canEdit}
+                className={!canEdit ? 'bg-muted cursor-not-allowed' : ''}
+                onChange={(e) => handleMultiplierChange(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs">Total kWh (auto)</Label>
+              <Input value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} readOnly className="bg-muted" />
+            </div>
+          </div>
+          {canEdit && (
+            <p className="text-[10px] text-muted-foreground">
+              Multiplier auto-fills from the last saved bill. Change only if the meter transformer ratio changes.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -385,7 +457,7 @@ function Power() {
             <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
               <div>
                 <div className="font-mono-num">{format(parseISO(b.billing_month), 'MMM yyyy')}</div>
-                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh</div>
+                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}</div>
               </div>
               <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
             </div>
@@ -412,6 +484,33 @@ function Power() {
           {!tariffs?.length && plantId && <p className="text-xs text-center text-muted-foreground py-2">No tariffs</p>}
         </div>
       </Card>
+
+      {/* Multiplier change confirmation dialog */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Multiplier?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The multiplier is changing from <strong>×{v.multiplier}</strong> to <strong>×{pendingMultiplier}</strong>.
+              This should only be done if the CT/PT transformer ratio on the meter has physically changed.
+              All future kWh calculations for this plant will use the new value.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingMultiplier(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingMultiplier !== null) setV(prev => ({ ...prev, multiplier: pendingMultiplier }));
+                setPendingMultiplier(null);
+                setConfirmOpen(false);
+              }}
+            >
+              Yes, change multiplier
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
