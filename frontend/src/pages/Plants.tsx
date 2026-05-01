@@ -1420,21 +1420,12 @@ function WellsList({ plantId }: { plantId: string }) {
   const { data: blendingIds } = useQuery<string[]>({
     queryKey: ['blending-wells', plantId],
     queryFn: async () => {
-      try {
-        const res = await fetch(`${BASE}/api/blending/wells?plant_id=${plantId}`);
-        if (!res.ok) return [];
-        const json = await res.json();
-        // Backend shape: { wells: [{ well_id, ... }, ...] }. Tolerate the
-        // legacy plain-array shape too in case callers diverge.
-        const arr: any[] = Array.isArray(json)
-          ? json
-          : Array.isArray(json?.wells)
-            ? json.wells
-            : [];
-        return arr.map((r: any) => r.well_id ?? r.id).filter(Boolean);
-      } catch {
-        return [];
-      }
+      const { data, error } = await supabase
+        .from('well_blending')
+        .select('well_id')
+        .eq('plant_id', plantId);
+      if (error) return [];
+      return (data ?? []).map((r: any) => r.well_id).filter(Boolean);
     },
   });
   const blendingSet = new Set(Array.isArray(blendingIds) ? blendingIds : []);
@@ -1528,16 +1519,22 @@ function WellsList({ plantId }: { plantId: string }) {
     if (!isManager) return;
     setBlendingBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
     try {
-      const { error } = await supabase
-        .from('wells')
-        .update({ is_blending: next } as any)
-        .eq('id', w.id);
-      if (error) throw new Error(error.message);
+      if (next) {
+        const { error } = await supabase
+          .from('well_blending')
+          .upsert({ well_id: w.id, plant_id: plantId, tagged_at: new Date().toISOString(), tagged_by: user?.id ?? null }, { onConflict: 'well_id' });
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from('well_blending')
+          .delete()
+          .eq('well_id', w.id);
+        if (error) throw new Error(error.message);
+      }
       toast.success(next
         ? `${w.name}: marked as blending — its meter feeds product line separately`
         : `${w.name}: blending cleared`);
       qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
-      qc.invalidateQueries({ queryKey: ['wells', plantId] });
     } catch (e: any) {
       toast.error(`Blending toggle failed: ${e.message || e}`);
     } finally {
