@@ -20,288 +20,52 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileText, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
+const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
 
-// ─── Import Audit Helper ─────────────────────────────────────────────────────
+// ─── SummaryCount pill ───────────────────────────────────────────────────────
+// Renders "active/total" — active count in primary color, total in muted.
+// If all active: green accent. If any inactive: amber warning.
 
-async function logImportAudit(entry: {
+function SummaryCount({ label }: { label: string }) {
+  const [active, total] = label.split('/').map(Number);
+  const allActive = active === total && total > 0;
+  const noneActive = active === 0;
+  const color = allActive
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : noneActive && total > 0
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-foreground';
+  return (
+    <div className={`font-mono-num text-sm font-medium ${color}`}>
+      {active}
+      <span className="text-muted-foreground font-normal">/{total}</span>
+    </div>
+  );
+}
+
+// ─── Entity status change audit logger ───────────────────────────────────────
+// Called whenever a Well, Locator, or RO Train flips Active ↔ Inactive.
+
+async function logStatusChange(entry: {
   user_id: string | null;
   plant_id: string;
-  module: 'Locators' | 'Wells' | 'Trains';
-  file_name: string;
-  row_count: number;
-  schema_valid: boolean;
-  schema_errors: string[];
+  entity_type: 'Well' | 'Locator' | 'RO Train';
+  entity_id: string;
+  entity_label: string;
+  from_status: string;
+  to_status: string;
   timestamp: string;
 }) {
   try {
-    await (supabase.from('import_audit_log' as any) as any).insert([entry]);
+    await (supabase.from('entity_status_audit_log' as any) as any).insert([entry]);
   } catch {
-    // Table may not exist yet; silently ignore — main import still proceeds.
+    // Table may not exist yet — silently ignore.
   }
-}
-
-// ─── CSV Parser ──────────────────────────────────────────────────────────────
-
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  return lines.slice(1).map((line) => {
-    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
-    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-  });
-}
-
-function bool(v: string | undefined): boolean {
-  return ['1', 'true', 'yes', 'y'].includes((v ?? '').toLowerCase());
-}
-
-// ─── Import Schemas ──────────────────────────────────────────────────────────
-
-/** Locator row: locator_name, meter_reading, status */
-function validateLocatorRow(r: Record<string, string>, idx: number): string[] {
-  const errs: string[] = [];
-  if (!r.locator_name?.trim()) errs.push(`Row ${idx}: locator_name is required`);
-  if (r.meter_reading && isNaN(Number(r.meter_reading)))
-    errs.push(`Row ${idx}: meter_reading must be numeric`);
-  if (r.status && !['Active', 'Inactive'].includes(r.status))
-    errs.push(`Row ${idx}: status must be Active or Inactive`);
-  return errs;
-}
-
-/** Well row: well_name, meter_reading, has_power_meter (0/1/true/false), active (0/1/true/false) */
-function validateWellRow(r: Record<string, string>, idx: number): string[] {
-  const errs: string[] = [];
-  if (!r.well_name?.trim()) errs.push(`Row ${idx}: well_name is required`);
-  if (r.meter_reading && isNaN(Number(r.meter_reading)))
-    errs.push(`Row ${idx}: meter_reading must be numeric`);
-  return errs;
-}
-
-/** Train row: plant_id (optional, defaults to current), train_number, status */
-function validateTrainRow(r: Record<string, string>, idx: number): string[] {
-  const errs: string[] = [];
-  if (!r.train_number?.trim() || isNaN(Number(r.train_number)))
-    errs.push(`Row ${idx}: train_number must be a number`);
-  if (r.status && !['Running', 'Offline', 'Maintenance'].includes(r.status))
-    errs.push(`Row ${idx}: status must be Running, Offline, or Maintenance`);
-  return errs;
-}
-
-// ─── Shared ImportDialog ─────────────────────────────────────────────────────
-
-type ImportModule = 'Locators' | 'Wells' | 'Trains';
-
-const IMPORT_SCHEMA_HINT: Record<ImportModule, string> = {
-  Locators: 'locator_name, meter_reading, status',
-  Wells:    'well_name, meter_reading, has_power_meter, active',
-  Trains:   'train_number, status, num_afm, num_booster_pumps, num_hp_pumps, num_cartridge_filters, num_controllers, num_filter_housings',
-};
-
-function ImportDialog({
-  module,
-  plantId,
-  userId,
-  onClose,
-  onImported,
-}: {
-  module: ImportModule;
-  plantId: string;
-  userId: string | null;
-  onClose: () => void;
-  onImported: () => void;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    setDone(false);
-    setErrors([]);
-    setRows([]);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const parsed = parseCSV(text);
-      const errs: string[] = [];
-      parsed.forEach((r, i) => {
-        const rowErrs =
-          module === 'Locators' ? validateLocatorRow(r, i + 2)
-          : module === 'Wells'   ? validateWellRow(r, i + 2)
-          :                        validateTrainRow(r, i + 2);
-        errs.push(...rowErrs);
-      });
-      setRows(parsed);
-      setErrors(errs);
-    };
-    reader.readAsText(f);
-  };
-
-  const doImport = async () => {
-    if (!file || rows.length === 0 || errors.length > 0) return;
-    setBusy(true);
-    const ts = new Date().toISOString();
-    let count = 0;
-    const importErrors: string[] = [];
-
-    try {
-      if (module === 'Locators') {
-        for (const r of rows) {
-          const { error } = await supabase.from('locators').insert({
-            plant_id: plantId,
-            name: r.locator_name?.trim(),
-            status: r.status?.trim() || 'Active',
-          });
-          if (error) importErrors.push(error.message);
-          else count++;
-        }
-      } else if (module === 'Wells') {
-        for (const r of rows) {
-          const { error } = await supabase.from('wells').insert({
-            plant_id: plantId,
-            name: r.well_name?.trim(),
-            has_power_meter: bool(r.has_power_meter),
-            status: bool(r.active) === false ? 'Inactive' : 'Active',
-          } as never);
-          if (error) importErrors.push(error.message);
-          else count++;
-        }
-      } else {
-        for (const r of rows) {
-          const { error } = await supabase.from('ro_trains').insert({
-            plant_id: plantId,
-            train_number: parseInt(r.train_number, 10),
-            status: (r.status?.trim() || 'Running') as 'Running' | 'Offline' | 'Maintenance',
-            num_afm: parseInt(r.num_afm, 10) || 1,
-            num_booster_pumps: parseInt(r.num_booster_pumps, 10) || 1,
-            num_hp_pumps: parseInt(r.num_hp_pumps, 10) || 1,
-            num_cartridge_filters: parseInt(r.num_cartridge_filters, 10) || 1,
-            num_controllers: parseInt(r.num_controllers, 10) || 1,
-            num_filter_housings: parseInt(r.num_filter_housings, 10) || 1,
-          });
-          if (error) importErrors.push(error.message);
-          else count++;
-        }
-      }
-
-      await logImportAudit({
-        user_id: userId,
-        plant_id: plantId,
-        module,
-        file_name: file.name,
-        row_count: rows.length,
-        schema_valid: errors.length === 0,
-        schema_errors: [...errors, ...importErrors],
-        timestamp: ts,
-      });
-
-      setImportedCount(count);
-      setDone(true);
-      if (importErrors.length > 0) {
-        toast.error(`${count} imported, ${importErrors.length} failed.`);
-      } else {
-        toast.success(`${count} ${module.toLowerCase()} imported successfully`);
-      }
-      onImported();
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Import failed');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const schemaHint = IMPORT_SCHEMA_HINT[module];
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Import {module}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-1">
-          {/* Schema hint */}
-          <div className="rounded-md border bg-muted/30 p-2.5 space-y-1">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-              <FileText className="h-3 w-3" /> Required CSV columns
-            </p>
-            <p className="text-xs font-mono text-foreground break-all">{schemaHint}</p>
-            <p className="text-[10px] text-muted-foreground">
-              First row must be the header. Values are comma-separated.
-            </p>
-          </div>
-
-          {/* File picker */}
-          <div className="space-y-1">
-            <Label className="text-xs">CSV File <span className="text-destructive">*</span></Label>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFile}
-              className="block w-full text-xs text-muted-foreground file:mr-3 file:py-1 file:px-3 file:rounded file:border file:border-input file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted cursor-pointer"
-              data-testid="import-file-input"
-            />
-          </div>
-
-          {/* Preview / validation */}
-          {file && rows.length > 0 && (
-            <div className="rounded-md border p-2.5 space-y-1.5">
-              <p className="text-xs font-medium">{rows.length} row(s) found in "{file.name}"</p>
-              {errors.length === 0 ? (
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
-                  Schema valid — ready to import
-                </p>
-              ) : (
-                <div className="space-y-0.5">
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" /> {errors.length} validation error(s):
-                  </p>
-                  <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-24 overflow-y-auto">
-                    {errors.map((e, i) => <li key={i}>{e}</li>)}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-          {file && rows.length === 0 && (
-            <p className="text-xs text-muted-foreground">No data rows found — check file format.</p>
-          )}
-
-          {done && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              ✓ {importedCount} record(s) imported. Audit log written.
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button
-            onClick={doImport}
-            disabled={busy || !file || rows.length === 0 || errors.length > 0}
-            data-testid="confirm-import"
-          >
-            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Import {rows.length > 0 ? `${rows.length} rows` : ''}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 
@@ -340,15 +104,46 @@ export default function Plants() {
   const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
   const navigate = useNavigate();
 
-  const { data: wellCounts } = useQuery({
-    queryKey: ['plants-well-counts'],
+  // Summary counts: active/total per plant for Wells, Locators, RO Trains
+  const { data: summaryCounts } = useQuery({
+    queryKey: ['plants-summary-counts'],
     queryFn: async () => {
-      const { data } = await supabase.from('wells').select('plant_id');
-      const by: Record<string, number> = {};
-      (data ?? []).forEach((r: any) => { by[r.plant_id] = (by[r.plant_id] ?? 0) + 1; });
-      return by;
+      const [wellsRes, locatorsRes, trainsRes] = await Promise.all([
+        supabase.from('wells').select('plant_id, status'),
+        supabase.from('locators').select('plant_id, status'),
+        supabase.from('ro_trains').select('plant_id, status'),
+      ]);
+
+      type Summary = Record<string, { active: number; total: number }>;
+      const tally = (
+        rows: { plant_id: string; status: string }[],
+        activeFn: (s: string) => boolean,
+      ): Summary => {
+        const out: Summary = {};
+        rows.forEach((r) => {
+          if (!out[r.plant_id]) out[r.plant_id] = { active: 0, total: 0 };
+          out[r.plant_id].total++;
+          if (activeFn(r.status)) out[r.plant_id].active++;
+        });
+        return out;
+      };
+
+      return {
+        wells:    tally(wellsRes.data    ?? [], (s) => s === 'Active'),
+        locators: tally(locatorsRes.data ?? [], (s) => s === 'Active'),
+        trains:   tally(trainsRes.data   ?? [], (s) => s === 'Running'),
+      };
     },
   });
+
+  const summaryLabel = (
+    counts: Record<string, { active: number; total: number }> | undefined,
+    plantId: string,
+  ) => {
+    const c = counts?.[plantId];
+    if (!c) return '0/0';
+    return `${c.active}/${c.total}`;
+  };
 
   if (id) return <PlantDetail plantId={id} />;
 
@@ -388,10 +183,22 @@ export default function Plants() {
               onClick={() => navigate(`/plants/${p.id}`)}
               className="grid grid-cols-4 gap-3 mt-3 text-xs cursor-pointer"
             >
-              <div><div className="text-muted-foreground">Capacity</div><div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} m³</div></div>
-              <div><div className="text-muted-foreground">RO trains</div><div className="font-mono-num text-sm">{p.num_ro_trains}</div></div>
-              <div><div className="text-muted-foreground">Wells</div><div className="font-mono-num text-sm">{wellCounts?.[p.id] ?? 0}</div></div>
-              <div><div className="text-muted-foreground">Status</div><div className="font-mono-num text-sm">{p.status}</div></div>
+              <div>
+                <div className="text-muted-foreground">Capacity</div>
+                <div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} m³</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Wells</div>
+                <SummaryCount label={summaryLabel(summaryCounts?.wells, p.id)} />
+              </div>
+              <div>
+                <div className="text-muted-foreground">Locators</div>
+                <SummaryCount label={summaryLabel(summaryCounts?.locators, p.id)} />
+              </div>
+              <div>
+                <div className="text-muted-foreground">RO Trains</div>
+                <SummaryCount label={summaryLabel(summaryCounts?.trains, p.id)} />
+              </div>
             </div>
           </Card>
         ))}
@@ -643,7 +450,6 @@ function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -664,6 +470,27 @@ function LocatorsList({ plantId }: { plantId: string }) {
     setDeleteTarget(null);
     setDeleteReason('');
     qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+  };
+
+  const toggleLocatorStatus = async (l: any) => {
+    if (!isManager) return;
+    const newStatus = l.status === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase.from('locators').update({ status: newStatus }).eq('id', l.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: user?.id ?? null,
+      plant_id: l.plant_id,
+      entity_type: 'Locator',
+      entity_id: l.id,
+      entity_label: l.name,
+      from_status: l.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Locator marked ${newStatus}`);
   };
 
   const { data: locators } = useQuery({
@@ -729,6 +556,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
     setSelected(new Set());
     toast.success(`${ids.length} locator(s) permanently deleted`);
     qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
   };
 
   if (detail) return <LocatorDetail locatorId={detail} onBack={() => setDetail(null)} />;
@@ -762,23 +590,8 @@ function LocatorsList({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
-              onClick={() => setAdding(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
               <Plus className="h-3 w-3 mr-1" />Add
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
-              onClick={() => setImportOpen(true)}
-              data-testid="import-locators-btn"
-            >
-              <Upload className="h-3 w-3 mr-1" />Import
             </Button>
           )}
         </div>
@@ -811,17 +624,19 @@ function LocatorsList({ plantId }: { plantId: string }) {
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
                     </div>
                   </div>
-                  {l.status === 'Active' ? (
-                    <span
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded-md shrink-0"
-                      title="Active"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Active
-                    </span>
-                  ) : (
-                    <StatusPill tone="muted">{l.status}</StatusPill>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleLocatorStatus(l); }}
+                    title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                      l.status === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {l.status}
+                  </button>
                 </div>
               </div>
               {isManager && (
@@ -840,15 +655,6 @@ function LocatorsList({ plantId }: { plantId: string }) {
       })}
       {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
-      {importOpen && (
-        <ImportDialog
-          module="Locators"
-          plantId={plantId}
-          userId={user?.id ?? null}
-          onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }}
-        />
-      )}
       {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
 
       {/* Single delete confirm */}
@@ -954,6 +760,8 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
     }
   };
 
+  const { user } = useAuth();
+
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
     const { error } = await supabase.from('locators').update({
@@ -963,6 +771,19 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
     }).eq('id', locator.id);
     if (error) { toast.error(error.message); return; }
+    // Audit status flip
+    if (form.status && form.status !== locator.status) {
+      await logStatusChange({
+        user_id: user?.id ?? null,
+        plant_id: locator.plant_id,
+        entity_type: 'Locator',
+        entity_id: locator.id,
+        entity_label: form.name,
+        from_status: locator.status,
+        to_status: form.status,
+        timestamp: new Date().toISOString(),
+      });
+    }
     toast.success('Locator updated'); onClose();
   };
 
@@ -1205,7 +1026,6 @@ function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
   const [adding, setAdding] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const [editingWell, setEditingWell] = useState<any | null>(null);
   const [wellDeleteTarget, setWellDeleteTarget] = useState<any | null>(null);
   const [wellDeleteReason, setWellDeleteReason] = useState('');
@@ -1225,12 +1045,33 @@ function WellsList({ plantId }: { plantId: string }) {
     setWellDeleteTarget(null);
     setWellDeleteReason('');
     qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
   };
   const { data: wells } = useQuery({
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
   });
+
+  // Toggle a single well Active ↔ Inactive and write audit log
+  const toggleWellStatus = async (w: any) => {
+    if (!isManager) return;
+    const newStatus = w.status === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase.from('wells').update({ status: newStatus }).eq('id', w.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: user?.id ?? null,
+      plant_id: w.plant_id,
+      entity_type: 'Well',
+      entity_id: w.id,
+      entity_label: w.name,
+      from_status: w.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Well marked ${newStatus}`);
+  };
   // Plant-level blending state — used to render the blending checkbox
   // per row and to know which wells inject directly into the product line.
   const { data: plant } = useQuery({
@@ -1325,7 +1166,7 @@ function WellsList({ plantId }: { plantId: string }) {
     setSelected(new Set());
     toast.success(`${ids.length} well(s) permanently deleted`);
     qc.invalidateQueries({ queryKey: ['wells', plantId] });
-    qc.invalidateQueries({ queryKey: ['plants-well-counts'] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
   };
 
   // Toggle dedicated power meter on a well. Independent of Blending — a well
@@ -1401,24 +1242,8 @@ function WellsList({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
-              onClick={() => setAdding(true)}
-              data-testid="add-well-btn"
-            >
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
               <Plus className="h-3 w-3 mr-1" />Add Well
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
-              onClick={() => setImportOpen(true)}
-              data-testid="import-wells-btn"
-            >
-              <Upload className="h-3 w-3 mr-1" />Import
             </Button>
           )}
         </div>
@@ -1488,17 +1313,19 @@ function WellsList({ plantId }: { plantId: string }) {
                       )}
                     </div>
                   </div>
-                  {w.status === 'Active' ? (
-                    <span
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded-md shrink-0"
-                      title="Active"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Active
-                    </span>
-                  ) : (
-                    <StatusPill tone="muted">{w.status}</StatusPill>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleWellStatus(w); }}
+                    title={isManager ? `Click to toggle status (currently ${w.status})` : w.status}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                      w.status === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${w.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {w.status}
+                  </button>
                 </div>
               </div>
               {/* Right-side row controls — Blending and Power are independent
@@ -1570,15 +1397,6 @@ function WellsList({ plantId }: { plantId: string }) {
           setAdding(false);
           qc.invalidateQueries({ queryKey: ['wells', plantId] });
         }} />
-      )}
-      {importOpen && (
-        <ImportDialog
-          module="Wells"
-          plantId={plantId}
-          userId={user?.id ?? null}
-          onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }}
-        />
       )}
       {editingWell && <EditWellDialog well={editingWell} onClose={() => { setEditingWell(null); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }} />}
 
@@ -1657,8 +1475,12 @@ function EditWellDialog({ well, onClose }: { well: any; onClose: () => void }) {
     meter_brand: well.meter_brand ?? '', meter_size: well.meter_size ?? '', meter_serial: well.meter_serial ?? '',
     gps_lat: well.gps_lat?.toString() ?? '', gps_lng: well.gps_lng?.toString() ?? '',
   });
+  const { user } = useAuth();
+
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name Required'); return; }
+    const prevStatus = well.status;
+    const nextStatus = well.status; // EditWellDialog doesn't change status — status changes via the toggle in the card
     const { error } = await supabase.from('wells').update({
       name: form.name.trim(), diameter: form.diameter || null,
       drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
@@ -2690,7 +2512,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const plant = plants?.find((p) => p.id === plantId);
 
   const qc = useQueryClient();
-  const { isManager, isAdmin, user } = useAuth();
+  const { isManager, user } = useAuth();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
     queryFn: async () =>
@@ -2701,56 +2523,6 @@ function TrainsList({ plantId }: { plantId: string }) {
   const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
   const [trainDeleteReason, setTrainDeleteReason] = useState('');
   const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
-
-  // ── Add Train ──────────────────────────────────────────────────────────────
-  const [addOpen, setAddOpen] = useState(false);
-  const [addSaving, setAddSaving] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const blankAddForm = () => ({
-    train_number: '',
-    name: '',
-    num_afm: '1',
-    num_booster_pumps: '1',
-    num_hp_pumps: '1',
-    num_cartridge_filters: '1',
-    num_controllers: '1',
-    num_filter_housings: '1',
-    status: 'Running' as 'Running' | 'Offline' | 'Maintenance',
-  });
-  const [addForm, setAddForm] = useState(blankAddForm);
-
-  const handleAddTrain = async () => {
-    const trainNum = parseInt(addForm.train_number, 10);
-    if (!addForm.train_number || isNaN(trainNum) || trainNum < 1) {
-      toast.error('Train number must be a positive integer');
-      return;
-    }
-    try {
-      setAddSaving(true);
-      const { error } = await supabase.from('ro_trains').insert({
-        plant_id: plantId,
-        train_number: trainNum,
-        name: addForm.name.trim() || null,
-        num_afm: parseInt(addForm.num_afm, 10) || 1,
-        num_booster_pumps: parseInt(addForm.num_booster_pumps, 10) || 1,
-        num_hp_pumps: parseInt(addForm.num_hp_pumps, 10) || 1,
-        num_cartridge_filters: parseInt(addForm.num_cartridge_filters, 10) || 1,
-        num_controllers: parseInt(addForm.num_controllers, 10) || 1,
-        num_filter_housings: parseInt(addForm.num_filter_housings, 10) || 1,
-        status: addForm.status,
-      });
-      if (error) throw error;
-      toast.success(`Train ${trainNum} added`);
-      qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
-      qc.invalidateQueries({ queryKey: ['plants'] });
-      setAddForm(blankAddForm());
-      setAddOpen(false);
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to add train');
-    } finally {
-      setAddSaving(false);
-    }
-  };
 
   const doTrainDelete = async () => {
     if (!trainDeleteTarget) return;
@@ -2770,6 +2542,28 @@ function TrainsList({ plantId }: { plantId: string }) {
 
   // Resolve the effective media/filter type for a given train:
   // Train-level override wins; falls back to plant default; then hardcoded default.
+  const toggleTrainStatus = async (t: any) => {
+    if (!isManager) return;
+    // Cycle: Running → Offline → Maintenance → Running
+    const cycle: Record<string, string> = { Running: 'Offline', Offline: 'Maintenance', Maintenance: 'Running' };
+    const newStatus = cycle[t.status] ?? 'Running';
+    const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: user?.id ?? null,
+      plant_id: t.plant_id,
+      entity_type: 'RO Train',
+      entity_id: t.id,
+      entity_label: `Train ${t.train_number}${t.name ? ' · ' + t.name : ''}`,
+      from_status: t.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Train ${t.train_number} → ${newStatus}`);
+  };
+
   const effectiveMediaType = (t: any) =>
     (t as any).filter_media_type ?? (plant as any)?.filter_media_type ?? 'AFM';
   const effectiveFilterType = (t: any) =>
@@ -2777,32 +2571,7 @@ function TrainsList({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center flex-wrap gap-2">
-        <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
-        <div className="flex items-center gap-2">
-          {isManager && (
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
-              onClick={() => setAddOpen(true)}
-              data-testid="add-train-btn"
-            >
-              <Plus className="h-3 w-3 mr-1" />Add Train
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 active:bg-primary/20"
-              onClick={() => setImportOpen(true)}
-              data-testid="import-trains-btn"
-            >
-              <Upload className="h-3 w-3 mr-1" />Import
-            </Button>
-          )}
-        </div>
-      </div>
+      <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
 
       {trains?.map((t: any) => {
         const mt = effectiveMediaType(t);
@@ -2833,9 +2602,25 @@ function TrainsList({ plantId }: { plantId: string }) {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <StatusPill tone={t.status === 'Running' ? 'accent' : t.status === 'Maintenance' ? 'warn' : 'muted'}>
+                <button
+                  type="button"
+                  onClick={() => toggleTrainStatus(t)}
+                  title={isManager ? `Click to cycle status (currently ${t.status})` : t.status}
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                    t.status === 'Running'
+                      ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                      : t.status === 'Maintenance'
+                        ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 hover:bg-amber-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                  } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    t.status === 'Running' ? 'bg-emerald-500'
+                    : t.status === 'Maintenance' ? 'bg-amber-500'
+                    : 'bg-muted-foreground'
+                  }`} />
                   {t.status}
-                </StatusPill>
+                </button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -2893,100 +2678,6 @@ function TrainsList({ plantId }: { plantId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* ── Import Trains Dialog ── */}
-      {importOpen && (
-        <ImportDialog
-          module="Trains"
-          plantId={plantId}
-          userId={user?.id ?? null}
-          onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
-        />
-      )}
-
-      {/* ── Add Train Dialog ── */}
-      <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setAddForm(blankAddForm()); setAddOpen(false); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Add RO Train</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Train Number <span className="text-destructive">*</span></Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={addForm.train_number}
-                  onChange={(e) => setAddForm(f => ({ ...f, train_number: e.target.value }))}
-                  placeholder="e.g. 1"
-                  data-testid="add-train-number-input"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Name (optional)</Label>
-                <Input
-                  value={addForm.name}
-                  onChange={(e) => setAddForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. Train A"
-                  data-testid="add-train-name-input"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Initial Status</Label>
-              <div className="flex gap-2">
-                {(['Running', 'Offline', 'Maintenance'] as const).map((s) => (
-                  <Button
-                    key={s}
-                    type="button"
-                    size="sm"
-                    variant={addForm.status === s ? 'default' : 'outline'}
-                    className="flex-1 text-xs"
-                    onClick={() => setAddForm(f => ({ ...f, status: s }))}
-                  >
-                    {s}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Component Counts</p>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  ['num_afm', 'AFM Units'],
-                  ['num_booster_pumps', 'Booster Pumps'],
-                  ['num_hp_pumps', 'HP Pumps'],
-                  ['num_cartridge_filters', 'Cartridge Filters'],
-                  ['num_controllers', 'Controllers'],
-                  ['num_filter_housings', 'Filter Housings'],
-                ] as [keyof typeof addForm, string][]).map(([key, lbl]) => (
-                  <div key={key} className="space-y-0.5">
-                    <Label className="text-[10px] text-muted-foreground">{lbl}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={addForm[key]}
-                      onChange={(e) => setAddForm(f => ({ ...f, [key]: e.target.value }))}
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setAddForm(blankAddForm()); setAddOpen(false); }} disabled={addSaving}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddTrain} disabled={addSaving || !addForm.train_number} data-testid="confirm-add-train">
-              {addSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Add Train
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
