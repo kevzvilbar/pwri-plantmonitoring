@@ -1269,11 +1269,11 @@ function WellsList({ plantId }: { plantId: string }) {
             <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-well-btn">
               <Plus className="h-3 w-3 mr-1" />Add Well
             </Button>
-            {isAdmin && (
-              <Button size="sm" variant="outline" onClick={() => setShowWellCsv(true)}>
-                <Upload className="h-3 w-3 mr-1" />Import CSV
-              </Button>
-            )}
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setShowWellCsv(true)}>
+              <Upload className="h-3 w-3 mr-1" />Import CSV
+            </Button>
           )}
         </div>
       </div>
