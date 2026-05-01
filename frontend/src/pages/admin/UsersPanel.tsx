@@ -128,41 +128,61 @@ function CreateUserDialog({
     }
     setBusy(true);
 
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-    });
+    // Use the backend Admin API instead of supabase.auth.signUp().
+    //
+    // supabase.auth.signUp() is a *public self-registration* endpoint. When the
+    // email already exists it either silently returns the existing user (if email
+    // confirmation is OFF) or sends a confirmation email and returns a fake
+    // obfuscated response (if email confirmation is ON) — in both cases the new
+    // account never appears in the pending queue and no real error is shown.
+    //
+    // The backend endpoint uses the service-role Admin API which:
+    //   - Does NOT send a confirmation email.
+    //   - Returns a real 422 error when the email already exists.
+    //   - Creates the profile row and sets profile_complete=true immediately.
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
 
-    if (signUpError) { toast.error(signUpError.message); setBusy(false); return; }
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL ?? ''}/admin/users/create`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            email:       form.email,
+            password:    form.password,
+            username:    form.username,
+            first_name:  form.first_name,
+            last_name:   form.last_name,
+            middle_name: form.middle_name || null,
+            suffix:      form.suffix || null,
+            designation: form.designation || null,
+          }),
+        },
+      );
 
-    const uid = signUpData.user?.id;
-    if (!uid) { toast.error('Sign-up succeeded but no user ID was returned.'); setBusy(false); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        const msg: string = typeof body.detail === 'string'
+          ? body.detail
+          : JSON.stringify(body.detail);
+        toast.error(msg);
+        setBusy(false);
+        return;
+      }
 
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .update({
-        username: form.username,
-        first_name: form.first_name,
-        middle_name: form.middle_name || null,
-        last_name: form.last_name,
-        suffix: form.suffix || null,
-        designation: form.designation || null,
-        profile_complete: true,
-      })
-      .eq('id', uid);
-
-    if (profileError) {
-      toast.error(`User created but profile update failed: ${profileError.message}`);
+      toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
       setBusy(false);
       onCreated();
       handleClose();
-      return;
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Unexpected error creating user.');
+      setBusy(false);
     }
-
-    toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
-    setBusy(false);
-    onCreated();
-    handleClose();
   };
 
   return (
