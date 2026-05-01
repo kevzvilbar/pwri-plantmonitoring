@@ -530,8 +530,9 @@ function Compare() {
       if (!plantId || !bills?.length) return [];
       const earliest = bills[bills.length - 1].period_start;
       const latest = bills[0].period_end;
+      // Also select multiplier so we can compute effective kWh = daily_consumption × multiplier
       const { data } = await supabase.from('power_readings')
-        .select('reading_datetime,daily_consumption_kwh')
+        .select('reading_datetime,daily_consumption_kwh,multiplier')
         .eq('plant_id', plantId)
         .gte('reading_datetime', earliest)
         .lte('reading_datetime', latest + 'T23:59:59');
@@ -541,17 +542,23 @@ function Compare() {
   });
 
   const rows = (bills ?? []).map((b: any) => {
-    const sumDaily = (dailyKwh ?? [])
-      .filter((d: any) => d.reading_datetime >= b.period_start && d.reading_datetime <= b.period_end + 'T23:59:59')
-      .reduce((s: number, d: any) => s + (+d.daily_consumption_kwh || 0), 0);
-    const variance = b.total_kwh ? ((sumDaily - +b.total_kwh) / +b.total_kwh) * 100 : null;
-    return { ...b, sumDaily, variance };
+    const periodReadings = (dailyKwh ?? [])
+      .filter((d: any) => d.reading_datetime >= b.period_start && d.reading_datetime <= b.period_end + 'T23:59:59');
+    const sumDaily = periodReadings.reduce((s: number, d: any) => s + (+d.daily_consumption_kwh || 0), 0);
+    // Effective kWh = Σ(daily_consumption × multiplier) — reflects CT ratio applied to each day
+    const sumEffective = periodReadings.reduce((s: number, d: any) => {
+      const mult = d.multiplier != null ? +d.multiplier : (b.multiplier ? +b.multiplier : 1);
+      return s + (+d.daily_consumption_kwh || 0) * mult;
+    }, 0);
+    const variance = b.total_kwh ? ((sumEffective - +b.total_kwh) / +b.total_kwh) * 100 : null;
+    return { ...b, sumDaily, sumEffective, variance };
   });
 
   const chartData = rows.slice().reverse().map((r: any) => ({
     month: format(parseISO(r.billing_month), 'MMM yy'),
     billed: +r.total_kwh || 0,
     daily: r.sumDaily || 0,
+    effective: r.sumEffective || 0,
   }));
 
   return (
@@ -571,6 +578,7 @@ function Compare() {
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="billed" fill="hsl(var(--chart-1))" name="Billed kWh" />
                   <Bar dataKey="daily" fill="hsl(var(--chart-2))" name="Sum daily kWh" />
+                  <Bar dataKey="effective" fill="hsl(var(--chart-3))" name="Eff. kWh (×mult)" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -579,10 +587,14 @@ function Compare() {
             <h4 className="text-sm font-semibold mb-2">Variance table</h4>
             <div className="space-y-1.5">
               {rows.map((r: any) => (
-                <div key={r.id} className="grid grid-cols-4 gap-2 text-xs border-b last:border-0 py-1.5 items-center">
+                <div key={r.id} className="grid grid-cols-5 gap-2 text-xs border-b last:border-0 py-1.5 items-center">
                   <div className="font-mono-num">{format(parseISO(r.billing_month), 'MMM yy')}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.total_kwh, 0)}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.sumDaily, 0)}</div>
+                  {/* Effective kWh = daily_consumption × multiplier — what actually gets billed */}
+                  <div className="font-mono-num text-right text-amber-700 dark:text-amber-400">
+                    {fmtNum(r.sumEffective, 0)}
+                  </div>
                   <div className="text-right">
                     {r.variance != null && (
                       <StatusPill tone={Math.abs(r.variance) > 15 ? 'danger' : Math.abs(r.variance) > 5 ? 'warn' : 'accent'}>
@@ -592,9 +604,13 @@ function Compare() {
                   </div>
                 </div>
               ))}
-              <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground pt-1">
-                <div>Month</div><div className="text-right">Billed</div><div className="text-right">Daily Σ</div><div className="text-right">Δ%</div>
+              <div className="grid grid-cols-5 gap-2 text-[10px] text-muted-foreground pt-1">
+                <div>Month</div><div className="text-right">Billed kWh</div><div className="text-right">Daily Σ</div>
+                <div className="text-right text-amber-600">Eff. kWh×</div><div className="text-right">Δ%</div>
               </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Eff. kWh× = Σ(daily reading × CT multiplier). Variance compares effective kWh to billed.
+              </p>
             </div>
           </Card>
         </>

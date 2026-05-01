@@ -27,14 +27,65 @@ const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // ─── CSV helpers ────────────────────────────────────────────────────────────
 
+// Robust CSV parser: handles quoted fields (including commas and newlines inside quotes),
+// BOM, CRLF, and flexible datetime formats exported from Excel.
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+      else inQuote = !inQuote;
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+// Normalise a datetime string that may be in any of:
+//   ISO 8601:  "2026-01-01T06:00"  "2026-01-01 06:00"
+//   Excel US:  "1/1/2026 6:00"     "1/1/2026"
+// Returns an ISO string or '' if unparseable.
+export function normaliseDatetime(raw: string): string {
+  if (!raw?.trim()) return '';
+  const s = raw.trim();
+  // Already ISO-like: YYYY-MM-DD...
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s.includes('T') ? s : s.replace(' ', 'T'));
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  // Excel US format: M/D/YYYY or M/D/YYYY H:mm or M/D/YYYY H:mm:ss
+  const excelRe = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
+  const m = s.match(excelRe);
+  if (m) {
+    const [, mo, dd, yyyy, hh = '0', mm = '0', ss = '0'] = m;
+    const d = new Date(+yyyy, +mo - 1, +dd, +hh, +mm, +ss);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  // Fallback
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
 function parseCSVText(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
+  // Strip BOM if present
+  const cleaned = text.replace(/^\uFEFF/, '').trim();
+  const lines = cleaned.split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  return lines.slice(1).map((line) => {
-    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
-    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-  });
+  const headers = parseCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim());
+  return lines.slice(1)
+    .filter((l) => l.trim()) // skip blank lines
+    .map((line) => {
+      const vals = parseCSVLine(line).map((v) => v.replace(/^"|"$/g, '').trim());
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    });
 }
 
 function triggerTemplateDownload(filename: string, headers: string[], exampleRow: Record<string, string>) {
@@ -458,8 +509,9 @@ function validatePowerRow(r: Record<string, string>, i: number): string[] {
   const e: string[] = [];
   if (!r.meter_reading_kwh?.trim() || isNaN(Number(r.meter_reading_kwh)))
     e.push(`Row ${i}: meter_reading_kwh is required and must be a number`);
-  if (!r.reading_datetime?.trim() || isNaN(Date.parse(r.reading_datetime)))
-    e.push(`Row ${i}: reading_datetime is required and must be a valid datetime`);
+  // Use normaliseDatetime so Excel-exported dates (e.g. "1/1/2026 6:00") are accepted.
+  if (!r.reading_datetime?.trim() || !normaliseDatetime(r.reading_datetime))
+    e.push(`Row ${i}: reading_datetime is required — accepted formats: YYYY-MM-DDTHH:mm or M/D/YYYY H:mm`);
   if (r.daily_solar_kwh && isNaN(Number(r.daily_solar_kwh)))
     e.push(`Row ${i}: daily_solar_kwh must be a number`);
   if (r.daily_grid_kwh && isNaN(Number(r.daily_grid_kwh)))
@@ -475,15 +527,17 @@ async function insertPowerReadings(
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
+    // Use normaliseDatetime so Excel-exported dates ("1/1/2026 6:00") insert correctly.
+    const iso = normaliseDatetime(r.reading_datetime) || new Date().toISOString();
     const { error } = await supabase.from('power_readings').insert({
       plant_id: plantId,
       meter_reading_kwh: +r.meter_reading_kwh,
-      reading_datetime: new Date(r.reading_datetime).toISOString(),
+      reading_datetime: iso,
       daily_solar_kwh: r.daily_solar_kwh ? +r.daily_solar_kwh : 0,
       daily_grid_kwh: r.daily_grid_kwh ? +r.daily_grid_kwh : 0,
       recorded_by: userId,
     });
-    if (error) errors.push(error.message);
+    if (error) errors.push(`[${r.reading_datetime}] ${error.message}`);
     else count++;
   }
   return { count, errors };
@@ -1275,6 +1329,9 @@ function PowerForm() {
   const showSolar = !!plant?.has_solar;
   const showGrid  = plant?.has_grid !== false;
 
+  // Multiplier: editable, auto-populated from latest tariff for the plant
+  const [multiplier, setMultiplier] = useState('1');
+
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
     queryFn: async () => plantId
@@ -1282,8 +1339,24 @@ function PowerForm() {
       : [],
     enabled: !!plantId,
   });
+
+  // Auto-fill multiplier from latest tariff when plant changes
+  const { data: latestTariff } = useQuery({
+    queryKey: ['op-power-tariff', plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('power_tariffs').select('multiplier').eq('plant_id', plantId).order('effective_date', { ascending: false }).limit(1)).data?.[0] ?? null
+      : null,
+    enabled: !!plantId,
+  });
+  useEffect(() => {
+    if (latestTariff?.multiplier && latestTariff.multiplier !== 1)
+      setMultiplier(String(latestTariff.multiplier));
+  }, [latestTariff, plantId]);
+
   const previous = history?.find((r: any) => r.id !== editingId)?.meter_reading_kwh ?? null;
   const daily    = previous != null && reading ? +reading - previous : null;
+  // (today_reading - yesterday_reading) * multiplier = daily power cost (kWh * CT ratio)
+  const dailyCost = daily != null ? daily * (+multiplier || 1) : null;
 
   const submit = async () => {
     if (!plantId || !reading) return;
@@ -1300,6 +1373,7 @@ function PowerForm() {
     const payload: any = {
       plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       meter_reading_kwh: +reading, recorded_by: user?.id,
+      multiplier: +multiplier || 1,
     };
     if (showSolar || showGrid) {
       payload.daily_solar_kwh = solarKwh ? +solarKwh : 0;
@@ -1318,6 +1392,7 @@ function PowerForm() {
     setReading(String(r.meter_reading_kwh));
     setSolarKwh(r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '');
     setGridKwh(r.daily_grid_kwh  != null ? String(r.daily_grid_kwh)  : '');
+    if (r.multiplier != null) setMultiplier(String(r.multiplier));
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
@@ -1354,12 +1429,44 @@ function PowerForm() {
         </div>
         <div>
           <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
-            placeholder="Plant Power Reading" data-testid="power-meter-input" />
+          {/* Reading + Multiplier on the same row */}
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex-1">
+              <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
+                placeholder="Plant Power Reading" data-testid="power-meter-input" />
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-muted-foreground select-none">×</span>
+              <div>
+                <Input
+                  type="number" step="any" min="1" value={multiplier}
+                  onChange={e => setMultiplier(e.target.value)}
+                  className="w-20 text-center font-mono-num"
+                  placeholder="×1"
+                  title="CT/multiplier ratio — auto-filled from latest tariff"
+                  data-testid="power-multiplier-input"
+                />
+              </div>
+            </div>
+          </div>
+          {/* Previous reading + live daily cost preview */}
           {previous != null && (
-            <div className="mt-1 text-xs text-muted-foreground">
-              Previous: <span className="font-mono-num">{fmtNum(previous)}</span>
-              {daily != null && <> · Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
+            <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
+              <div>
+                Previous: <span className="font-mono-num">{fmtNum(previous)}</span>
+                {daily != null && (
+                  <> · Δ <span className="font-mono-num">{fmtNum(daily)} kWh</span></>
+                )}
+              </div>
+              {dailyCost != null && (
+                <div className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-2 py-0.5">
+                  <Zap className="h-3 w-3 text-amber-500 shrink-0" />
+                  <span className="font-mono-num font-medium text-amber-700 dark:text-amber-300">
+                    {fmtNum(dailyCost, 2)} kWh
+                  </span>
+                  <span className="text-amber-600/70 dark:text-amber-400/60">effective daily (×{multiplier})</span>
+                </div>
+              )}
             </div>
           )}
         </div>
