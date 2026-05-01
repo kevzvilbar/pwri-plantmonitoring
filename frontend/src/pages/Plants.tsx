@@ -3335,8 +3335,9 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
 
 const WELL_CSV_HEADERS = [
   'name', 'diameter', 'drilling_depth_m',
-  'meter_brand', 'meter_size', 'meter_serial',
-  'has_power_meter', 'gps_lat', 'gps_lng',
+  'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
+  'has_power_meter',
+  'electric_meter_brand', 'electric_meter_size', 'electric_meter_serial', 'electric_meter_installed_date',
 ];
 
 function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
@@ -3360,19 +3361,28 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
     rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 1}: name is required`); });
     if (errs.length) { setErrors(errs); return; }
     setBusy(true);
-    const payload = rows.map(r => ({
-      plant_id: plantId,
-      name: r.name.trim(),
-      diameter: r.diameter || null,
-      drilling_depth_m: r.drilling_depth_m ? +r.drilling_depth_m : null,
-      meter_brand: r.meter_brand || null,
-      meter_size: r.meter_size ? +r.meter_size : null,
-      meter_serial: r.meter_serial || null,
-      has_power_meter: r.has_power_meter?.toLowerCase() === 'true',
-      gps_lat: r.gps_lat ? +r.gps_lat : null,
-      gps_lng: r.gps_lng ? +r.gps_lng : null,
-      status: 'Active',
-    }));
+    const payload = rows.map(r => {
+      const hasPower = r.has_power_meter?.toLowerCase() === 'true';
+      const row: any = {
+        plant_id: plantId,
+        name: r.name.trim(),
+        diameter: r.diameter || null,
+        drilling_depth_m: r.drilling_depth_m ? +r.drilling_depth_m : null,
+        meter_brand: r.meter_brand || null,
+        meter_size: r.meter_size ? +r.meter_size : null,
+        meter_serial: r.meter_serial || null,
+        meter_installed_date: r.meter_installed_date || null,
+        has_power_meter: hasPower,
+        status: 'Active',
+      };
+      if (hasPower) {
+        row.electric_meter_brand = r.electric_meter_brand || null;
+        row.electric_meter_size = r.electric_meter_size || null;
+        row.electric_meter_serial = r.electric_meter_serial || null;
+        row.electric_meter_installed_date = r.electric_meter_installed_date || null;
+      }
+      return row;
+    });
     const { error } = await supabase.from('wells').insert(payload as any);
     setBusy(false);
     if (error) { setErrors([error.message]); return; }
@@ -3382,7 +3392,7 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full">
+      <DialogContent className="max-w-3xl w-full">
         <DialogHeader>
           <DialogTitle>Import Wells from CSV</DialogTitle>
         </DialogHeader>
@@ -3396,7 +3406,7 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
           <div className="rounded-md bg-muted/40 border p-2">
             <p className="text-xs font-medium mb-1">Expected columns:</p>
             <p className="text-xs text-muted-foreground font-mono">{WELL_CSV_HEADERS.join(', ')}</p>
-            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Numeric fields: drilling_depth_m, meter_size, gps_lat, gps_lng.</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Electric meter fields only needed if has_power_meter is true. Numeric: drilling_depth_m, meter_size.</p>
           </div>
           <div>
             <Label>Select CSV file</Label>
@@ -3466,7 +3476,6 @@ function TrainCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: 
       num_controllers: r.num_controllers ? +r.num_controllers : 0,
       num_filter_housings: r.num_filter_housings ? +r.num_filter_housings : 0,
       num_hp_pumps: r.num_hp_pumps ? +r.num_hp_pumps : 0,
-      status: 'Running' as any,
     }));
     const { error } = await supabase.from('ro_trains').insert(payload);
     setBusy(false);
