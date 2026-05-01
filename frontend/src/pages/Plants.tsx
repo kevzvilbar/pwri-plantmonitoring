@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown } from 'lucide-react';
@@ -68,7 +69,23 @@ async function logStatusChange(entry: {
   }
 }
 
-
+// ─── Plant field-level audit logger ──────────────────────────────────────────
+// Logs name / address / capacity edits to plant_edit_audit_log.
+// Best-effort: silently ignored if table doesn't exist yet.
+async function logPlantEdit(entry: {
+  plant_id: string;
+  user_id: string | null;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('plant_edit_audit_log' as any) as any).insert([entry]);
+  } catch {
+    // Table may not exist yet — silently ignore.
+  }
+}
 
 function CollapsibleSection({
   title,
@@ -211,43 +228,209 @@ export default function Plants() {
 function PlantDetail({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
   const { data: plants } = usePlants();
-  const { isManager } = useAuth();
+  const { isManager, user } = useAuth();
+  const qc = useQueryClient();
   const plant = plants?.find(p => p.id === plantId);
 
   const [tab, setTab] = useState<'locators' | 'wells' | 'trains'>('locators');
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [infoSaving, setInfoSaving] = useState(false);
+  const [infoForm, setInfoForm] = useState({ name: '', address: '', capacity: '' });
+
+  // RO Train active/total count for this plant
+  const { data: trainCounts } = useQuery({
+    queryKey: ['ro-trains-count', plantId],
+    queryFn: async () => {
+      const { data } = await supabase.from('ro_trains').select('status').eq('plant_id', plantId);
+      const total = data?.length ?? 0;
+      const active = data?.filter((t) => t.status === 'Running').length ?? 0;
+      return { active, total };
+    },
+  });
 
   if (!plant) return <div>Plant not found.</div>;
 
+  const openInfoEdit = () => {
+    setInfoForm({
+      name: plant.name ?? '',
+      address: plant.address ?? '',
+      capacity: plant.design_capacity_m3 != null ? String(plant.design_capacity_m3) : '',
+    });
+    setEditingInfo(true);
+  };
+
+  const saveInfo = async () => {
+    setInfoSaving(true);
+    const payload: Record<string, any> = {};
+    const changes: { field: string; old: string | null; next: string | null }[] = [];
+
+    if (infoForm.name.trim() !== (plant.name ?? '')) {
+      changes.push({ field: 'name', old: plant.name ?? null, next: infoForm.name.trim() || null });
+      payload.name = infoForm.name.trim() || null;
+    }
+    if (infoForm.address.trim() !== (plant.address ?? '')) {
+      changes.push({ field: 'address', old: plant.address ?? null, next: infoForm.address.trim() || null });
+      payload.address = infoForm.address.trim() || null;
+    }
+    const newCap = infoForm.capacity ? parseFloat(infoForm.capacity) : null;
+    if (newCap !== (plant.design_capacity_m3 ?? null)) {
+      changes.push({ field: 'design_capacity_m3', old: plant.design_capacity_m3 != null ? String(plant.design_capacity_m3) : null, next: newCap != null ? String(newCap) : null });
+      payload.design_capacity_m3 = newCap;
+    }
+
+    if (!Object.keys(payload).length) { setEditingInfo(false); setInfoSaving(false); return; }
+
+    const { error } = await supabase.from('plants').update(payload).eq('id', plant.id);
+    setInfoSaving(false);
+    if (error) { toast.error(error.message); return; }
+
+    // Audit each changed field
+    const now = new Date().toISOString();
+    await Promise.all(
+      changes.map((c) =>
+        logPlantEdit({
+          plant_id: plant.id,
+          user_id: user?.id ?? null,
+          field_changed: c.field,
+          old_value: c.old,
+          new_value: c.next,
+          timestamp: now,
+        }),
+      ),
+    );
+
+    toast.success('Plant details updated');
+    setEditingInfo(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+    qc.invalidateQueries({ queryKey: ['ro-trains-count', plantId] });
+  };
+
   return (
     <div className="space-y-3 animate-fade-in">
-      <div className="flex items-center justify-between">
+      {/* Top nav bar */}
+      <div className="flex items-center justify-between gap-2">
         <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> All plants
         </button>
-        {isManager && (
-          <DeleteEntityMenu
-            kind="plant"
-            id={plant.id}
-            label={plant.name}
-            canSoftDelete={plant.status === 'Active'}
-            canHardDelete
-            invalidateKeys={[['plants']]}
-            onDeleted={() => navigate('/plants')}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openInfoEdit}
+              data-testid="edit-plant-info-btn"
+              className="gap-1"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Edit</span>
+            </Button>
+          )}
+          {isManager && (
+            <DeleteEntityMenu
+              kind="plant"
+              id={plant.id}
+              label={plant.name}
+              canSoftDelete={plant.status === 'Active'}
+              canHardDelete
+              invalidateKeys={[['plants']]}
+              onDeleted={() => navigate('/plants')}
+            />
+          )}
+        </div>
       </div>
-      <Card className="p-4 bg-gradient-stat text-topbar-foreground">
-        <h1 className="text-lg font-semibold">{plant.name}</h1>
-        <p className="text-xs text-topbar-muted flex items-center gap-1"><MapPin className="h-3 w-3" /> {plant.address}</p>
-        <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
-          <div><div className="opacity-70">Capacity</div><div className="font-mono-num text-base">{fmtNum(plant.design_capacity_m3 ?? 0)} m³</div></div>
-          <div><div className="opacity-70">RO trains</div><div className="font-mono-num text-base">{plant.num_ro_trains}</div></div>
-          <div><div className="opacity-70">Status</div><div className="text-sm font-semibold">{plant.status}</div></div>
+
+      {/* Main plant info card — gradient, responsive */}
+      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold leading-tight">{plant.name}</h1>
+          <p className="text-xs text-topbar-muted flex items-center gap-1 mt-0.5">
+            <MapPin className="h-3 w-3 shrink-0" />
+            <span className="truncate">{plant.address}</span>
+          </p>
+        </div>
+
+        {/* Stats — 2 cols on mobile, 3 on sm+ */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3 text-xs">
+          <div>
+            <div className="opacity-70">Capacity</div>
+            <div className="font-mono-num text-base">{fmtNum(plant.design_capacity_m3 ?? 0)} m³</div>
+          </div>
+          <div>
+            <div className="opacity-70">RO Trains</div>
+            {trainCounts ? (
+              <div className="font-mono-num text-base">
+                <span className={trainCounts.active === trainCounts.total && trainCounts.total > 0 ? 'text-emerald-300' : trainCounts.active === 0 && trainCounts.total > 0 ? 'text-amber-300' : ''}>
+                  {trainCounts.active}
+                </span>
+                <span className="opacity-60 font-normal">/{trainCounts.total}</span>
+              </div>
+            ) : (
+              <div className="font-mono-num text-base">{plant.num_ro_trains ?? '—'}</div>
+            )}
+            <div className="opacity-50 text-[10px] mt-0.5">active / total</div>
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <div className="opacity-70">Status</div>
+            <div className="text-sm font-semibold">{plant.status}</div>
+          </div>
+        </div>
+
+        {/* Energy Sources — inside the gradient card, collapsible */}
+        <div className="mt-4 pt-3 border-t border-white/10">
+          <EnergySourceInline plant={plant} isManager={isManager} qc={qc} />
         </div>
       </Card>
 
+      {/* Edit Plant Info Dialog */}
+      {editingInfo && (
+        <Dialog open onOpenChange={(o) => { if (!o && !infoSaving) setEditingInfo(false); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Plant Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <Label className="text-xs">Plant Name</Label>
+                <Input
+                  value={infoForm.name}
+                  onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
+                  placeholder="e.g. SRP"
+                  data-testid="edit-plant-name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Address</Label>
+                <Input
+                  value={infoForm.address}
+                  onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
+                  placeholder="e.g. South Road Properties, Cebu City"
+                  data-testid="edit-plant-address"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Capacity (m³)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={infoForm.capacity}
+                  onChange={(e) => setInfoForm({ ...infoForm, capacity: e.target.value })}
+                  placeholder="e.g. 4200"
+                  data-testid="edit-plant-capacity"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingInfo(false)} disabled={infoSaving}>Cancel</Button>
+              <Button onClick={saveInfo} disabled={infoSaving} data-testid="save-plant-info-btn">
+                {infoSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <BackwashModeCard plant={plant} />
-      <EnergySourceCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
 
       <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-lg w-full">
@@ -348,6 +531,107 @@ function BackwashModeCard({ plant }: { plant: any }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+// ─── EnergySourceInline ──────────────────────────────────────────────────────
+// Compact energy source display + edit — sits inside the gradient plant card.
+
+function EnergySourceInline({ plant, isManager, qc }: { plant: any; isManager: boolean; qc: any }) {
+  const [hasSolar, setHasSolar] = useState<boolean>(!!plant.has_solar);
+  const [hasGrid, setHasGrid] = useState<boolean>(plant.has_grid !== false);
+  const [solarKw, setSolarKw] = useState<string>(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('plants').update({
+      has_solar: hasSolar,
+      has_grid: hasGrid,
+      solar_capacity_kw: solarKw ? +solarKw : null,
+    }).eq('id', plant.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Energy sources updated');
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  const cancel = () => {
+    setHasSolar(!!plant.has_solar);
+    setHasGrid(plant.has_grid !== false);
+    setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+    setEditing(false);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold opacity-70 uppercase tracking-wide flex items-center gap-1">
+            <Zap className="h-3 w-3" /> Energy
+          </span>
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            {hasSolar && (
+              <span className="inline-flex items-center gap-1 opacity-90">
+                <Sun className="h-3 w-3 text-yellow-300" />
+                Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
+              </span>
+            )}
+            {hasGrid && (
+              <span className="inline-flex items-center gap-1 opacity-90">
+                <Zap className="h-3 w-3 text-blue-200" /> Grid
+              </span>
+            )}
+            {!hasSolar && !hasGrid && <span className="opacity-50 italic text-xs">No source</span>}
+          </div>
+        </div>
+        {isManager && !editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="text-[11px] opacity-70 hover:opacity-100 underline underline-offset-2 transition-opacity shrink-0"
+            data-testid="edit-energy-inline-btn"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {/* Edit panel — shown inline below */}
+      {editing && (
+        <div className="mt-3 rounded-lg bg-white/10 p-3 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="flex items-center gap-2 text-sm text-topbar-foreground/90">
+              <Switch checked={hasSolar} onCheckedChange={setHasSolar} data-testid="energy-inline-solar" />
+              <span className="inline-flex items-center gap-1"><Sun className="h-3.5 w-3.5 text-yellow-300" /> Solar</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-topbar-foreground/90">
+              <Switch checked={hasGrid} onCheckedChange={setHasGrid} data-testid="energy-inline-grid" />
+              <span className="inline-flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-blue-200" /> Grid</span>
+            </label>
+          </div>
+          {hasSolar && (
+            <div>
+              <Label className="text-xs text-topbar-foreground/70">Solar capacity (kW)</Label>
+              <Input
+                type="number" step="any" value={solarKw}
+                onChange={(e) => setSolarKw(e.target.value)}
+                placeholder="e.g. 50"
+                className="bg-white/10 border-white/20 text-topbar-foreground placeholder:text-topbar-muted mt-1"
+                data-testid="energy-inline-kw"
+              />
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10">Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} className="bg-white/20 hover:bg-white/30 text-topbar-foreground border-0" data-testid="save-energy-inline-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2636,7 +2920,13 @@ function TrainsList({ plantId }: { plantId: string }) {
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-semibold">RO Trains ({trains?.length ?? 0})</h3>
+        <h3 className="text-sm font-semibold">
+        RO Trains{' '}
+        <span className="font-normal text-muted-foreground">
+          ({trains ? `${trains.filter((t: any) => t.status === 'Running').length}/${trains.length}` : '0/0'})
+        </span>
+        <span className="ml-1 text-[10px] font-normal text-muted-foreground/60">active/total</span>
+      </h3>
         <div className="flex items-center gap-2">
           {isManager && (
             <Button size="sm" variant="outline" onClick={() => setShowAddTrain(true)}>
