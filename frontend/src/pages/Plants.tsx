@@ -3203,16 +3203,15 @@ function downloadTemplate(filename: string, headers: string[]) {
 
 function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
   if (!rows.length) return null;
-  // Narrow columns when there are many headers to prevent overflow
-  const colW = headers.length > 10 ? 80 : headers.length > 6 ? 100 : 130;
+  const colW = headers.length > 8 ? 90 : headers.length > 6 ? 110 : 130;
   return (
     <div>
-      <div className="overflow-x-auto overflow-y-auto max-h-48 border rounded text-xs">
+      <div className="overflow-x-auto overflow-y-auto max-h-48 border rounded" style={{ fontSize: 11 }}>
         <table className="table-fixed text-left" style={{ minWidth: headers.length * colW }}>
           <thead className="bg-muted sticky top-0">
             <tr>
               {headers.map(h => (
-                <th key={h} className="px-2 py-1 font-medium truncate" style={{ width: colW }}>
+                <th key={h} className="px-1.5 py-1 font-medium truncate" style={{ width: colW }}>
                   {h}
                 </th>
               ))}
@@ -3222,7 +3221,7 @@ function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; he
             {rows.slice(0, 10).map((row, i) => (
               <tr key={i} className="border-t">
                 {headers.map(h => (
-                  <td key={h} className="px-2 py-1 truncate" style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
+                  <td key={h} className="px-1.5 py-1 truncate" style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
                     {row[h] ?? ''}
                   </td>
                 ))}
@@ -3337,9 +3336,7 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
 const WELL_CSV_HEADERS = [
   'name', 'diameter', 'drilling_depth_m',
   'meter_brand', 'meter_size', 'meter_serial',
-  'has_power_meter', 'electric_meter_brand', 'electric_meter_size',
-  'electric_meter_serial', 'electric_meter_installed_date',
-  'gps_lat', 'gps_lng',
+  'has_power_meter', 'gps_lat', 'gps_lng',
 ];
 
 function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
@@ -3372,10 +3369,6 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
       meter_size: r.meter_size ? +r.meter_size : null,
       meter_serial: r.meter_serial || null,
       has_power_meter: r.has_power_meter?.toLowerCase() === 'true',
-      electric_meter_brand: r.electric_meter_brand || null,
-      electric_meter_size: r.electric_meter_size || null,
-      electric_meter_serial: r.electric_meter_serial || null,
-      electric_meter_installed_date: r.electric_meter_installed_date || null,
       gps_lat: r.gps_lat ? +r.gps_lat : null,
       gps_lng: r.gps_lng ? +r.gps_lng : null,
       status: 'Active',
