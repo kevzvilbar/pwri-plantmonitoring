@@ -17,7 +17,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -580,7 +580,7 @@ export default function Operations() {
 
 function LocatorReadingForm() {
   const qc = useQueryClient();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isManager } = useAuth();
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
 
@@ -662,6 +662,7 @@ function LocatorReadingForm() {
                     avgVol={avgByLocator[l.id] ?? null}
                     userId={user?.id}
                     onSaved={() => qc.invalidateQueries()}
+                    isManagerOrAdmin={isAdmin || isManager}
                   />
                 </li>
               ))}
@@ -692,15 +693,17 @@ function LocatorReadingForm() {
 }
 
 function LocatorRow({
-  locator, plantId, previous, todayReadings, avgVol, userId, onSaved,
+  locator, plantId, previous, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin,
 }: {
   locator: any; plantId: string; previous: number | null;
   todayReadings: any[]; avgVol: number | null;
   userId: string | undefined; onSaved: () => void;
+  isManagerOrAdmin: boolean;
 }) {
   const [reading, setReading]     = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving]       = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const cur       = +reading || 0;
   const dailyVol  = previous != null && reading ? cur - previous : null;
@@ -779,6 +782,20 @@ function LocatorRow({
           <X className="h-3.5 w-3.5" />
         </Button>
       )}
+      {isManagerOrAdmin && (
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 text-muted-foreground"
+          onClick={() => setShowHistory(true)} title="View reading history">
+          <History className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {showHistory && (
+        <ReadingHistoryDialog
+          entityName={locator.name}
+          module="locator"
+          entityId={locator.id}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
       {reading && (belowPrev || highVol) && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
           {belowPrev ? 'Below previous' : 'Volume unusually high vs. avg'}
@@ -792,7 +809,7 @@ function LocatorRow({
 
 function WellReadingForm() {
   const qc = useQueryClient();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isManager } = useAuth();
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
 
@@ -874,6 +891,7 @@ function WellReadingForm() {
                     userId={user?.id}
                     isBlending={blendingSet.has(w.id)}
                     onSaved={() => qc.invalidateQueries()}
+                    isManagerOrAdmin={isAdmin || isManager}
                   />
                 </li>
               ))}
@@ -904,17 +922,19 @@ function WellReadingForm() {
 }
 
 function WellRow({
-  well, plantId, previousMeter, previousPower, todayReadings, userId, isBlending, onSaved,
+  well, plantId, previousMeter, previousPower, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin,
 }: {
   well: any; plantId: string;
   previousMeter: number | null; previousPower: number | null;
   todayReadings: any[]; userId: string | undefined;
   isBlending: boolean; onSaved: () => void;
+  isManagerOrAdmin: boolean;
 }) {
   const [reading, setReading]         = useState('');
   const [powerReading, setPowerReading] = useState('');
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const cur        = +reading || 0;
   const dailyVol   = previousMeter != null && reading ? cur - previousMeter : null;
@@ -991,7 +1011,21 @@ function WellRow({
             <X className="h-3.5 w-3.5" />
           </Button>
         )}
+        {isManagerOrAdmin && (
+          <Button variant="ghost" className="h-9 w-9 p-0 text-muted-foreground"
+            onClick={() => setShowHistory(true)} title="View reading history">
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
+      {showHistory && (
+        <ReadingHistoryDialog
+          entityName={well.name}
+          module="well"
+          entityId={well.id}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         <div className="relative flex-1 sm:flex-initial sm:w-32">
@@ -1023,7 +1057,7 @@ function WellRow({
 
 function BlendingForm() {
   const qc = useQueryClient();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isManager } = useAuth();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
@@ -1107,6 +1141,7 @@ function BlendingForm() {
                       qc.invalidateQueries({ queryKey: ['blending-today', plantId] });
                       qc.invalidateQueries({ queryKey: ['blending-volume'] });
                     }}
+                    isManagerOrAdmin={isAdmin || isManager}
                   />
                 </li>
               ))}
@@ -1143,14 +1178,16 @@ function BlendingForm() {
 }
 
 function BlendingRow({
-  well, plantId, plantName, todayVolume, previousVolume, previousDate, onSaved,
+  well, plantId, plantName, todayVolume, previousVolume, previousDate, onSaved, isManagerOrAdmin,
 }: {
   well: any; plantId: string; plantName?: string;
   todayVolume: number; previousVolume: number | null; previousDate: string | null;
   onSaved: () => void;
+  isManagerOrAdmin: boolean;
 }) {
   const [volume, setVolume] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const save = async () => {
     const v = +volume;
@@ -1191,6 +1228,21 @@ function BlendingRow({
       <Button onClick={save} disabled={saving || !volume} size="sm" className="h-9 px-3 text-xs shrink-0 sm:order-last">
         {saving ? '...' : 'Save'}
       </Button>
+      {isManagerOrAdmin && (
+        <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground sm:order-last"
+          onClick={() => setShowHistory(true)} title="View blending history">
+          <History className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {showHistory && (
+        <ReadingHistoryDialog
+          entityName={well.name}
+          module="blending"
+          entityId={well.id}
+          plantId={plantId}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         <div className="relative flex-1 sm:flex-initial sm:w-32">
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
@@ -1208,7 +1260,7 @@ function BlendingRow({
 
 function PowerForm() {
   const qc = useQueryClient();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isManager } = useAuth();
   const { data: plants } = usePlants();
   const [plantId, setPlantId]     = useState('');
   const [reading, setReading]     = useState('');
@@ -1216,6 +1268,7 @@ function PowerForm() {
   const [gridKwh, setGridKwh]     = useState('');
   const [dt, setDt]               = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [powerHistoryOpen, setPowerHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
   const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
@@ -1350,7 +1403,15 @@ function PowerForm() {
       </Card>
 
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Last 7 readings</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold">Last 7 readings</h4>
+          {(isAdmin || isManager) && plantId && (
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground px-2"
+              onClick={() => setPowerHistoryOpen(true)}>
+              <History className="h-3 w-3" /> Full history
+            </Button>
+          )}
+        </div>
         {history?.length ? history.map((r: any) => (
           <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
             <span className="flex-1">{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
@@ -1382,6 +1443,191 @@ function PowerForm() {
           onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-power', plantId] }); }}
         />
       )}
+      {powerHistoryOpen && plantId && (
+        <ReadingHistoryDialog
+          entityName={plants?.find((p: any) => p.id === plantId)?.name ?? 'Plant'}
+          module="power"
+          entityId={plantId}
+          onClose={() => setPowerHistoryOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+// ─── Reading History Dialog ───────────────────────────────────────────────────
+
+type HistoryModule = 'locator' | 'well' | 'blending' | 'power';
+const HISTORY_WINDOWS = [
+  { label: '7D', days: 7 },
+  { label: '14D', days: 14 },
+  { label: '30D', days: 30 },
+  { label: '60D', days: 60 },
+] as const;
+
+function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }: {
+  entityName: string;
+  module: HistoryModule;
+  entityId: string;
+  plantId?: string;
+  onClose: () => void;
+}) {
+  const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['reading-history', module, entityId, days],
+    queryFn: async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const sinceIso = since.toISOString();
+
+      if (module === 'locator') {
+        const { data } = await supabase
+          .from('locator_readings')
+          .select('id, current_reading, previous_reading, created_at, off_location_flag')
+          .eq('locator_id', entityId)
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: false });
+        return data ?? [];
+      }
+      if (module === 'well') {
+        const { data } = await supabase
+          .from('well_readings')
+          .select('id, current_reading, previous_reading, power_meter_reading, created_at')
+          .eq('well_id', entityId)
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: false });
+        return data ?? [];
+      }
+      if (module === 'power') {
+        const { data } = await supabase
+          .from('power_readings')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime')
+          .eq('plant_id', entityId)
+          .gte('reading_datetime', sinceIso)
+          .order('reading_datetime', { ascending: false });
+        return data ?? [];
+      }
+      if (module === 'blending') {
+        // Blending events are in MongoDB via backend
+        try {
+          const res = await fetch(
+            `${BASE}/api/blending/history?well_id=${encodeURIComponent(entityId)}&days=${days}`
+          );
+          if (!res.ok) return [];
+          const json = await res.json();
+          return json.events ?? [];
+        } catch { return []; }
+      }
+      return [];
+    },
+  });
+
+  const title = module === 'power' ? `Power — ${entityName}` : `${entityName} — History`;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-base">{title}</DialogTitle>
+        </DialogHeader>
+
+        {/* Window selector */}
+        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+          {HISTORY_WINDOWS.map(({ label, days: d }) => (
+            <button
+              key={label}
+              onClick={() => setDays(d as any)}
+              className={[
+                'px-3 py-1 text-xs font-medium rounded-md transition-all',
+                days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto max-h-80 rounded border text-xs">
+          {isLoading ? (
+            <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : !rows?.length ? (
+            <p className="p-4 text-center text-muted-foreground">No readings in the last {days} days</p>
+          ) : (
+            <table className="w-full text-left">
+              <thead className="bg-muted sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Date & Time</th>
+                  {module === 'locator' && <>
+                    <th className="px-3 py-2 font-medium text-right">Reading</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ m³</th>
+                    <th className="px-3 py-2 font-medium">Flags</th>
+                  </>}
+                  {module === 'well' && <>
+                    <th className="px-3 py-2 font-medium text-right">Water (m³)</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ m³</th>
+                    <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
+                  </>}
+                  {module === 'blending' && <>
+                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
+                  </>}
+                  {module === 'power' && <>
+                    <th className="px-3 py-2 font-medium text-right">Daily (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right">Solar</th>
+                    <th className="px-3 py-2 font-medium text-right">Grid</th>
+                  </>}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r: any, i: number) => {
+                  const dt = r.created_at ?? r.reading_datetime ?? r.event_date ?? '';
+                  const dateStr = dt
+                    ? format(new Date(dt), 'MMM d, yyyy HH:mm')
+                    : r.event_date ?? '—';
+                  return (
+                    <tr key={r.id ?? i} className="border-t hover:bg-muted/40">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{dateStr}</td>
+                      {module === 'locator' && <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.previous_reading != null ? fmtNum(r.current_reading - r.previous_reading) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
+                        </td>
+                      </>}
+                      {module === 'well' && <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.previous_reading != null ? fmtNum(r.current_reading - r.previous_reading) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading) : '—'}
+                        </td>
+                      </>}
+                      {module === 'blending' && <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0)}</td>
+                      </>}
+                      {module === 'power' && <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.daily_consumption_kwh ?? 0)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
+                      </>}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <p className="text-[10px] text-muted-foreground">
+          Showing up to {days} days of history · {rows?.length ?? 0} records
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
