@@ -250,9 +250,20 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <EnergySourceCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-lg w-full">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
-          <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)} className="capitalize">{t}</Button>
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={[
+              'py-2 text-sm font-medium rounded-md transition-all duration-200 capitalize focus-visible:outline-none',
+              tab === t
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            ].join(' ')}
+          >
+            {t}
+          </button>
         ))}
       </div>
 
