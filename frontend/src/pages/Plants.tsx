@@ -1266,7 +1266,7 @@ function WellsList({ plantId }: { plantId: string }) {
         return (
           <Card
             key={w.id}
-            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBlending ? 'border-violet-300' : ''}`}
+            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBlending ? 'border-teal-400' : ''}`}
             data-testid={`well-card-${w.id}`}
           >
             <div className="flex items-start gap-2">
@@ -1353,7 +1353,7 @@ function WellsList({ plantId }: { plantId: string }) {
                   <label
                     className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
                       isBlending
-                        ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30'
+                        ? 'bg-teal-700 border-teal-700 text-white'
                         : 'bg-background border-border hover:bg-muted'
                     } ${blendingPending ? 'opacity-60 cursor-wait' : ''}`}
                     title={
@@ -1367,7 +1367,7 @@ function WellsList({ plantId }: { plantId: string }) {
                       checked={isBlending}
                       disabled={blendingPending}
                       onCheckedChange={(v) => toggleBlending(w, !!v)}
-                      className={isBlending ? 'border-violet-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600' : ''}
+                      className={isBlending ? 'border-teal-600 data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700' : ''}
                       data-testid={`well-blending-${w.id}`}
                     />
                     <span className="text-[11px] font-medium whitespace-nowrap">Blending</span>
@@ -1375,7 +1375,7 @@ function WellsList({ plantId }: { plantId: string }) {
                   <label
                     className={`flex items-center gap-1 h-7 px-2 rounded-md border cursor-pointer select-none transition-colors ${
                       w.has_power_meter
-                        ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30'
+                        ? 'bg-teal-700 border-teal-700 text-white'
                         : 'bg-background border-border hover:bg-muted'
                     } ${powerBusy.has(w.id) ? 'opacity-60 cursor-wait' : ''}`}
                     title={
@@ -1389,7 +1389,7 @@ function WellsList({ plantId }: { plantId: string }) {
                       checked={!!w.has_power_meter}
                       disabled={powerBusy.has(w.id)}
                       onCheckedChange={(v) => togglePowerMeter(w, !!v)}
-                      className={w.has_power_meter ? 'border-amber-500 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600' : ''}
+                      className={w.has_power_meter ? 'border-teal-600 data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700' : ''}
                       data-testid={`well-power-${w.id}`}
                     />
                     <span className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-0.5">
