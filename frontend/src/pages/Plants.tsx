@@ -2584,10 +2584,12 @@ function EditTrainDialog({
               </div>
             </div>
 
-            {/* Pre-filter housings row */}
+            {/* Pre-filter housing — label & visibility driven by plant-wide filter type */}
             <div>
               <Label className="text-xs">
-                {filterHousingType} units{' '}
+                {/* Bag Filter → "Filter Housing" (single merged field)
+                    Cartridge Filter → "Cartridge Housing" (separate field below) */}
+                {filterHousingType === 'Bag Filter' ? 'Filter Housing' : 'Cartridge Housing'}{' '}
                 <span className="text-muted-foreground font-normal">(pre-filter)</span>
               </Label>
               <div className="flex items-center gap-2 mt-1">
@@ -2719,7 +2721,8 @@ function EditTrainDialog({
               </div>
             </div>
 
-            {/* Filter housings */}
+            {/* Filter Housings — hidden for Bag Filter plants (merged into Cartridge Housing above) */}
+            {filterHousingType !== 'Bag Filter' && (
             <div>
               <Label className="text-xs">Filter Housings</Label>
               <div className="flex items-center gap-2 mt-1">
@@ -2751,6 +2754,7 @@ function EditTrainDialog({
                 </Button>
               </div>
             </div>
+            )}
           </div>
 
           {/* ── Per-train type overrides ── */}
@@ -2977,9 +2981,11 @@ function TrainsList({ plantId }: { plantId: string }) {
                   <span>{mt} × {t.num_afm ?? 0}</span>
                   <span>BP × {t.num_booster_pumps ?? 0}</span>
                   <span>HPP × {t.num_hp_pumps ?? 0}</span>
-                  <span>{ft} × {t.num_cartridge_filters ?? 0}</span>
+                  {/* Pre-filter housing — label uses effective filter type */}
+                  <span>{ft === 'Bag Filter' ? 'Filter Housing' : 'Cartridge Filter Housing'} × {t.num_cartridge_filters ?? 0}</span>
                   {(t.num_controllers ?? 0) > 0 && <span>Controllers × {t.num_controllers}</span>}
-                  {(t.num_filter_housings ?? 0) > 0 && <span>Housings × {t.num_filter_housings}</span>}
+                  {/* Separate Filter Housings — only shown for Cartridge Filter plants */}
+                  {ft !== 'Bag Filter' && (t.num_filter_housings ?? 0) > 0 && <span>Filter Housings × {t.num_filter_housings}</span>}
                 </div>
                 {/* Type badges */}
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
@@ -3130,21 +3136,23 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
 
-  // Dynamic labels:
-  // - Media: "AFM Units" or "MMF Units"
-  // - Pre-filter housing: Cartridge Filter → "Cartridge Housing" (separate Filter Housing field shown)
-  //                       Bag Filter       → "Filter Housing" (single merged field, Cartridge Housing hidden)
+  // Dynamic labels based on plant-wide component types:
+  // - Media field:  "AFM Units" or "MMF Units" (follows plantMediaType)
+  // - Housing field: ONE combined pre-filter field whose label reflects plantFilterType:
+  //     Cartridge Filter → "Cartridge Filter Housing"  (num_cartridge_filters)
+  //     Bag Filter       → "Filter Housing"            (num_cartridge_filters)
+  //   num_filter_housings is always hidden — it is merged into this single field.
   // - HP Pumps → "High Pressure Pumps"
-  const afmLabel       = `${plantMediaType} Units`;
-  const cfLabel        = isBagFilter ? 'Filter Housing' : 'Cartridge Housing';
-  // When Bag Filter: num_cartridge_filters doubles as the housing count; Filter Housings field is hidden.
+  const afmLabel = `${plantMediaType} Units`;
+  const housingLabel = isBagFilter ? 'Filter Housing' : 'Cartridge Filter Housing';
+  // Always hide the separate num_filter_housings — merged into housingLabel above.
   const fields: { key: keyof AddTrainFormData; label: string; hide?: boolean }[] = [
-    { key: 'num_afm',               label: afmLabel                                          },
-    { key: 'num_booster_pumps',     label: 'Booster Pumps'                                   },
-    { key: 'num_cartridge_filters', label: cfLabel                                            },
-    { key: 'num_controllers',       label: 'Controllers'                                     },
-    { key: 'num_filter_housings',   label: 'Filter Housings',   hide: isBagFilter            },
-    { key: 'num_hp_pumps',          label: 'High Pressure Pumps'                             },
+    { key: 'num_afm',               label: afmLabel         },
+    { key: 'num_booster_pumps',     label: 'Booster Pumps'  },
+    { key: 'num_cartridge_filters', label: housingLabel      },
+    { key: 'num_controllers',       label: 'Controllers'    },
+    { key: 'num_filter_housings',   label: 'Filter Housings', hide: true },
+    { key: 'num_hp_pumps',          label: 'High Pressure Pumps' },
   ];
 
   return (
@@ -3476,11 +3484,22 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
 
 // ─── Train CSV Import ─────────────────────────────────────────────────────────
 
-const TRAIN_CSV_HEADERS_BASE = [
-  'train_number', 'name',
-  'num_afm', 'num_booster_pumps', 'num_cartridge_filters',
-  'num_controllers', 'num_filter_housings', 'num_hp_pumps',
-];
+// Train CSV helpers — dynamic column names that reflect the plant-wide component type.
+// The housing field uses a single descriptive column name (no separate filter_housings column).
+function getTrainCsvHeaders(
+  plantMediaType: 'AFM' | 'MMF' = 'AFM',
+  plantFilterType: 'Cartridge Filter' | 'Bag Filter' = 'Cartridge Filter',
+): string[] {
+  // Column name mirrors the plant-wide filter type so the CSV is self-documenting.
+  const housingCol = plantFilterType === 'Bag Filter' ? 'filter_housing' : 'cartridge_filter_housing';
+  const afmCol     = plantMediaType === 'MMF' ? 'num_mmf' : 'num_afm';
+  return [
+    'train_number', 'name',
+    afmCol, 'num_booster_pumps',
+    housingCol,
+    'num_controllers', 'num_hp_pumps',
+  ];
+}
 
 function TrainCsvImportDialog({ plantId, onClose,
   plantFilterType = 'Cartridge Filter', plantMediaType = 'AFM',
@@ -3488,18 +3507,16 @@ function TrainCsvImportDialog({ plantId, onClose,
      plantFilterType?: 'Cartridge Filter' | 'Bag Filter';
      plantMediaType?: 'AFM' | 'MMF'; }) {
   const isBagFilter = plantFilterType === 'Bag Filter';
-  // Build dynamic CSV headers: omit num_filter_housings if Bag Filter
-  const TRAIN_CSV_HEADERS = isBagFilter
-    ? TRAIN_CSV_HEADERS_BASE.filter(h => h !== 'num_filter_housings')
-    : TRAIN_CSV_HEADERS_BASE;
-  // Human-readable header descriptions for the dialog
-  // When Bag Filter: num_cartridge_filters acts as the housing count
-  const cfNoteLabel = isBagFilter ? 'Filter Housing' : 'Cartridge Housing';
+  // Dynamic CSV headers based on plant component types
+  const TRAIN_CSV_HEADERS = getTrainCsvHeaders(plantMediaType, plantFilterType);
+  const housingCol = isBagFilter ? 'filter_housing' : 'cartridge_filter_housing';
+  const afmCol     = plantMediaType === 'MMF' ? 'num_mmf' : 'num_afm';
+  // Human-readable notes shown in the dialog
   const headerNotes = [
-    `num_afm = ${plantMediaType} Units`,
+    `${afmCol} = ${plantMediaType} Units`,
     'num_booster_pumps = Booster Pumps',
-    `num_cartridge_filters = ${cfNoteLabel}`,
-    ...(isBagFilter ? [] : ['num_filter_housings = Filter Housings']),
+    `${housingCol} = ${isBagFilter ? 'Filter Housing' : 'Cartridge Filter Housing'}`,
+    'num_controllers = Controllers',
     'num_hp_pumps = High Pressure Pumps',
   ].join(' · ');
 
@@ -3525,16 +3542,23 @@ function TrainCsvImportDialog({ plantId, onClose,
     });
     if (errs.length) { setErrors(errs); return; }
     setBusy(true);
+    // Read from dynamic column names — both the old internal names and the new descriptive ones are accepted.
+    const resolveHousing = (r: Record<string, string>) =>
+      +(r[housingCol] ?? r.num_cartridge_filters ?? 0);
+    const resolveAfm = (r: Record<string, string>) =>
+      +(r[afmCol] ?? r.num_afm ?? 0);
     const payload = rows.map(r => ({
       plant_id: plantId,
       train_number: +r.train_number,
       name: r.name || null,
-      num_afm: r.num_afm ? +r.num_afm : 0,
+      num_afm: resolveAfm(r),
       num_booster_pumps: r.num_booster_pumps ? +r.num_booster_pumps : 0,
-      num_cartridge_filters: r.num_cartridge_filters ? +r.num_cartridge_filters : 0,
+      num_cartridge_filters: resolveHousing(r),
       num_controllers: r.num_controllers ? +r.num_controllers : 0,
-      num_filter_housings: r.num_filter_housings ? +r.num_filter_housings : 0,
+      num_filter_housings: 0,
       num_hp_pumps: r.num_hp_pumps ? +r.num_hp_pumps : 0,
+      filter_media_type: plantMediaType,
+      filter_housing_type: plantFilterType,
     }));
     const { error } = await supabase.from('ro_trains').insert(payload);
     setBusy(false);
@@ -3551,7 +3575,7 @@ function TrainCsvImportDialog({ plantId, onClose,
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => downloadTemplate('ro_trains_template.csv', TRAIN_CSV_HEADERS)}>
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate(`ro_trains_${plantMediaType}_${plantFilterType.replace(' ', '_')}_template.csv`, TRAIN_CSV_HEADERS)}>
               <FileDown className="h-3 w-3 mr-1" />Download Template
             </Button>
             <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
