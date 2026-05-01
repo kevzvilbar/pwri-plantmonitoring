@@ -600,8 +600,9 @@ function EnergySourceInline({ plant, isManager, qc }: { plant: any; isManager: b
 
       {/* Edit panel — shown inline below */}
       {editing && (
-        <div className="mt-3 rounded-lg bg-white/10 p-3 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mt-3 rounded-lg bg-white/10 p-3 space-y-2">
+          {/* Row 1: toggles always side-by-side */}
+          <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm text-topbar-foreground/90">
               <Switch checked={hasSolar} onCheckedChange={setHasSolar} data-testid="energy-inline-solar" />
               <span className="inline-flex items-center gap-1"><Sun className="h-3.5 w-3.5 text-yellow-300" /> Solar</span>
@@ -611,23 +612,28 @@ function EnergySourceInline({ plant, isManager, qc }: { plant: any; isManager: b
               <span className="inline-flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-blue-200" /> Grid</span>
             </label>
           </div>
-          {hasSolar && (
-            <div>
-              <Label className="text-xs text-topbar-foreground/70">Solar capacity (kW)</Label>
-              <Input
-                type="number" step="any" value={solarKw}
-                onChange={(e) => setSolarKw(e.target.value)}
-                placeholder="e.g. 50"
-                className="bg-white/10 border-white/20 text-topbar-foreground placeholder:text-topbar-muted mt-1"
-                data-testid="energy-inline-kw"
-              />
+          {/* Row 2: solar kW field (compact) + Cancel/Save inline */}
+          <div className="flex flex-wrap items-center gap-2">
+            {hasSolar && (
+              <div className="flex items-center gap-1.5">
+                <Sun className="h-3.5 w-3.5 text-yellow-300 shrink-0" />
+                <Input
+                  type="number" step="any" value={solarKw}
+                  onChange={(e) => setSolarKw(e.target.value)}
+                  placeholder="kW"
+                  className="w-24 h-7 text-sm bg-white/10 border-white/20 text-topbar-foreground placeholder:text-topbar-muted"
+                  data-testid="energy-inline-kw"
+                />
+              </div>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}
+                className="h-7 text-xs text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10">Cancel</Button>
+              <Button size="sm" onClick={save} disabled={saving}
+                className="h-7 text-xs bg-white/20 hover:bg-white/30 text-topbar-foreground border-0" data-testid="save-energy-inline-btn">
+                {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+              </Button>
             </div>
-          )}
-          <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10">Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving} className="bg-white/20 hover:bg-white/30 text-topbar-foreground border-0" data-testid="save-energy-inline-btn">
-              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-            </Button>
           </div>
         </div>
       )}
@@ -693,47 +699,47 @@ function EnergySourceCard({ plant }: { plant: any }) {
       </div>
 
       {editing && (
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={hasSolar}
-              onCheckedChange={setHasSolar}
-              data-testid="energy-has-solar"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
-            </span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={hasGrid}
-              onCheckedChange={setHasGrid}
-              data-testid="energy-has-grid"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-chart-6" /> Has grid
-            </span>
-          </label>
-          <div>
-            <Label className="text-xs">Solar capacity (kW)</Label>
-            <Input
-              type="number" step="any" value={solarKw}
-              onChange={(e) => setSolarKw(e.target.value)}
-              disabled={!hasSolar}
-              placeholder="e.g. 50"
-              data-testid="energy-solar-kw"
-            />
+        <div className="mt-3 space-y-2">
+          {/* Row 1: toggles — side-by-side on all sizes */}
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={hasSolar} onCheckedChange={setHasSolar} data-testid="energy-has-solar" />
+              <span className="inline-flex items-center gap-1">
+                <Sun className="h-3.5 w-3.5 text-yellow-500" /> Solar
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={hasGrid} onCheckedChange={setHasGrid} data-testid="energy-has-grid" />
+              <span className="inline-flex items-center gap-1">
+                <Zap className="h-3.5 w-3.5 text-chart-6" /> Grid
+              </span>
+            </label>
           </div>
-          <div className="sm:col-span-3 flex gap-2 justify-end">
-            <Button size="sm" variant="ghost" onClick={() => {
-              setEditing(false);
-              setHasSolar(!!plant.has_solar);
-              setHasGrid(plant.has_grid !== false);
-              setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
-            }} disabled={saving}>Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving} data-testid="save-energy-btn">
-              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-            </Button>
+          {/* Row 2: compact kW input inline with Cancel/Save */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Sun className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+              <Label className="text-xs whitespace-nowrap">kW</Label>
+              <Input
+                type="number" step="any" value={solarKw}
+                onChange={(e) => setSolarKw(e.target.value)}
+                disabled={!hasSolar}
+                placeholder="e.g. 50"
+                data-testid="energy-solar-kw"
+                className="w-24 h-7 text-sm"
+              />
+            </div>
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                setEditing(false);
+                setHasSolar(!!plant.has_solar);
+                setHasGrid(plant.has_grid !== false);
+                setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+              }} disabled={saving}>Cancel</Button>
+              <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving} data-testid="save-energy-btn">
+                {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+              </Button>
+            </div>
           </div>
         </div>
       )}
