@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,14 +14,482 @@ import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { findExistingReading } from '@/lib/duplicateCheck';
+import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 
 const MAX_READINGS_PER_DAY = 3;
-const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
-// ---- Blending wells list (Mongo-backed) ----
+// ─── CSV helpers ────────────────────────────────────────────────────────────
+
+function parseCSVText(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map((line) => {
+    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function triggerTemplateDownload(filename: string, headers: string[], exampleRow: Record<string, string>) {
+  downloadCSV(filename, [exampleRow]);
+}
+
+// ─── Import audit logger ────────────────────────────────────────────────────
+
+async function logReadingImport(entry: {
+  user_id: string | null;
+  plant_id: string;
+  module: string;
+  file_name: string;
+  row_count: number;
+  schema_valid: boolean;
+  schema_errors: string[];
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('import_audit_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore if table missing */ }
+}
+
+// ─── Shared ImportReadingsDialog ────────────────────────────────────────────
+// Each module passes its own columns, validator, and inserter.
+
+interface ImportDialogProps {
+  title: string;
+  module: string;
+  plantId: string;
+  userId: string | null;
+  schemaHint: string;           // shown in the dialog
+  templateFilename: string;
+  templateRow: Record<string, string>;
+  validateRow: (r: Record<string, string>, i: number) => string[];
+  insertRows: (rows: Record<string, string>[], plantId: string) => Promise<{ count: number; errors: string[] }>;
+  onClose: () => void;
+  onImported: () => void;
+}
+
+function ImportReadingsDialog({
+  title, module, plantId, userId,
+  schemaHint, templateFilename, templateRow,
+  validateRow, insertRows,
+  onClose, onImported,
+}: ImportDialogProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile]     = useState<File | null>(null);
+  const [rows, setRows]     = useState<Record<string, string>[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy]     = useState(false);
+  const [done, setDone]     = useState(false);
+  const [imported, setImported] = useState(0);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseCSVText(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateRow(r, i + 2)));
+      setRows(parsed);
+      setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    setBusy(true);
+    const ts = new Date().toISOString();
+    const { count, errors: importErrors } = await insertRows(rows, plantId);
+    await logReadingImport({
+      user_id: userId,
+      plant_id: plantId,
+      module,
+      file_name: file.name,
+      row_count: rows.length,
+      schema_valid: errors.length === 0,
+      schema_errors: [...errors, ...importErrors],
+      timestamp: ts,
+    });
+    setBusy(false);
+    setImported(count);
+    setDone(true);
+    if (importErrors.length) toast.error(`${count} imported, ${importErrors.length} failed`);
+    else toast.success(`${count} reading(s) imported`);
+    onImported();
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            {title}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* Download template */}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRow)}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema reference */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required. <code>reading_datetime</code> accepts
+              ISO 8601 format (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
+              Leave blank to default to the import timestamp.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">
+              Select CSV file <span className="text-destructive">*</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="hidden"
+              data-testid="import-file-input"
+            />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0
+                ? 'border-destructive/40 bg-destructive/5'
+                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {Object.keys(rows[0]).map((h) => (
+                        <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((v, j) => (
+                          <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[120px] truncate">{v || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {done && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+              {imported} record(s) imported. Audit log written.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-teal-700 text-white hover:bg-teal-800"
+            data-testid="confirm-import-btn"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Per-module CSV configs ──────────────────────────────────────────────────
+
+// Locator readings:
+// locator_name*, current_reading*, reading_datetime, previous_reading
+const LOCATOR_SCHEMA = 'locator_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading';
+const LOCATOR_TEMPLATE_ROW = {
+  locator_name: 'MCWD - M1',
+  current_reading: '1234.56',
+  reading_datetime: '2024-06-15T08:30',
+  previous_reading: '1200.00',
+};
+
+function validateLocatorReadingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.locator_name?.trim()) e.push(`Row ${i}: locator_name is required`);
+  if (!r.current_reading?.trim() || isNaN(Number(r.current_reading)))
+    e.push(`Row ${i}: current_reading must be a number`);
+  if (r.previous_reading && isNaN(Number(r.previous_reading)))
+    e.push(`Row ${i}: previous_reading must be a number`);
+  if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+    e.push(`Row ${i}: reading_datetime is not a valid date`);
+  return e;
+}
+
+async function insertLocatorReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+): Promise<{ count: number; errors: string[] }> {
+  // Resolve locator names → IDs
+  const { data: locators } = await supabase
+    .from('locators').select('id, name').eq('plant_id', plantId);
+  const nameToId: Record<string, string> = {};
+  (locators ?? []).forEach((l: any) => { nameToId[l.name.toLowerCase()] = l.id; });
+
+  let count = 0;
+  const errors: string[] = [];
+  for (const r of rows) {
+    const locatorId = nameToId[r.locator_name?.toLowerCase()];
+    if (!locatorId) { errors.push(`Locator not found: "${r.locator_name}"`); continue; }
+    const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const { error } = await supabase.from('locator_readings').insert({
+      locator_id: locatorId,
+      plant_id: plantId,
+      current_reading: +r.current_reading,
+      previous_reading: r.previous_reading ? +r.previous_reading : null,
+      reading_datetime: dt,
+      recorded_by: userId,
+    });
+    if (error) errors.push(error.message);
+    else count++;
+  }
+  return { count, errors };
+}
+
+// Well readings:
+// well_name*, current_reading*, reading_datetime, previous_reading, power_meter_reading
+const WELL_SCHEMA = 'well_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, power_meter_reading';
+const WELL_TEMPLATE_ROW = {
+  well_name: 'Well #1',
+  current_reading: '5678.90',
+  reading_datetime: '2024-06-15T08:30',
+  previous_reading: '5600.00',
+  power_meter_reading: '',
+};
+
+function validateWellReadingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.well_name?.trim()) e.push(`Row ${i}: well_name is required`);
+  if (!r.current_reading?.trim() || isNaN(Number(r.current_reading)))
+    e.push(`Row ${i}: current_reading must be a number`);
+  if (r.previous_reading && isNaN(Number(r.previous_reading)))
+    e.push(`Row ${i}: previous_reading must be a number`);
+  if (r.power_meter_reading && isNaN(Number(r.power_meter_reading)))
+    e.push(`Row ${i}: power_meter_reading must be a number`);
+  if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+    e.push(`Row ${i}: reading_datetime is not a valid date`);
+  return e;
+}
+
+async function insertWellReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+): Promise<{ count: number; errors: string[] }> {
+  const { data: wells } = await supabase
+    .from('wells').select('id, name').eq('plant_id', plantId);
+  const nameToId: Record<string, string> = {};
+  (wells ?? []).forEach((w: any) => { nameToId[w.name.toLowerCase()] = w.id; });
+
+  let count = 0;
+  const errors: string[] = [];
+  for (const r of rows) {
+    const wellId = nameToId[r.well_name?.toLowerCase()];
+    if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
+    const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const { error } = await supabase.from('well_readings').insert({
+      well_id: wellId,
+      plant_id: plantId,
+      current_reading: +r.current_reading,
+      previous_reading: r.previous_reading ? +r.previous_reading : null,
+      power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
+      reading_datetime: dt,
+      recorded_by: userId,
+    });
+    if (error) errors.push(error.message);
+    else count++;
+  }
+  return { count, errors };
+}
+
+// Blending readings:
+// well_name*, volume_m3*, event_date (YYYY-MM-DD)
+const BLENDING_SCHEMA = 'well_name*, volume_m3* (m³), event_date (YYYY-MM-DD), reading_datetime (YYYY-MM-DDTHH:mm)';
+const BLENDING_TEMPLATE_ROW = {
+  well_name: 'Well #2',
+  volume_m3: '150.00',
+  event_date: '2024-06-15',
+  reading_datetime: '2024-06-15T08:30',
+};
+
+function validateBlendingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.well_name?.trim()) e.push(`Row ${i}: well_name is required`);
+  if (!r.volume_m3?.trim() || isNaN(Number(r.volume_m3)) || Number(r.volume_m3) <= 0)
+    e.push(`Row ${i}: volume_m3 must be a positive number`);
+  if (r.event_date && isNaN(Date.parse(r.event_date)))
+    e.push(`Row ${i}: event_date is not a valid date (use YYYY-MM-DD)`);
+  return e;
+}
+
+async function insertBlendingReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  plantName: string,
+): Promise<{ count: number; errors: string[] }> {
+  const { data: wells } = await supabase
+    .from('wells').select('id, name').eq('plant_id', plantId);
+  const nameToId: Record<string, string> = {};
+  (wells ?? []).forEach((w: any) => { nameToId[w.name.toLowerCase()] = w.id; });
+
+  let count = 0;
+  const errors: string[] = [];
+  for (const r of rows) {
+    const wellId = nameToId[r.well_name?.toLowerCase()];
+    if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
+    const eventDate = r.event_date || new Date().toISOString().slice(0, 10);
+    try {
+      const res = await fetch(`${BASE}/api/blending/audit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          well_id: wellId,
+          plant_id: plantId,
+          well_name: r.well_name,
+          plant_name: plantName,
+          event_date: eventDate,
+          volume_m3: +r.volume_m3,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      count++;
+    } catch (e: any) {
+      errors.push(e.message);
+    }
+  }
+  return { count, errors };
+}
+
+// Power readings:
+// meter_reading_kwh*, reading_datetime*, daily_solar_kwh, daily_grid_kwh
+const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), daily_solar_kwh, daily_grid_kwh';
+const POWER_TEMPLATE_ROW = {
+  meter_reading_kwh: '12345.6',
+  reading_datetime: '2024-06-15T08:30',
+  daily_solar_kwh: '',
+  daily_grid_kwh: '',
+};
+
+function validatePowerRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.meter_reading_kwh?.trim() || isNaN(Number(r.meter_reading_kwh)))
+    e.push(`Row ${i}: meter_reading_kwh is required and must be a number`);
+  if (!r.reading_datetime?.trim() || isNaN(Date.parse(r.reading_datetime)))
+    e.push(`Row ${i}: reading_datetime is required and must be a valid datetime`);
+  if (r.daily_solar_kwh && isNaN(Number(r.daily_solar_kwh)))
+    e.push(`Row ${i}: daily_solar_kwh must be a number`);
+  if (r.daily_grid_kwh && isNaN(Number(r.daily_grid_kwh)))
+    e.push(`Row ${i}: daily_grid_kwh must be a number`);
+  return e;
+}
+
+async function insertPowerReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+): Promise<{ count: number; errors: string[] }> {
+  let count = 0;
+  const errors: string[] = [];
+  for (const r of rows) {
+    const { error } = await supabase.from('power_readings').insert({
+      plant_id: plantId,
+      meter_reading_kwh: +r.meter_reading_kwh,
+      reading_datetime: new Date(r.reading_datetime).toISOString(),
+      daily_solar_kwh: r.daily_solar_kwh ? +r.daily_solar_kwh : 0,
+      daily_grid_kwh: r.daily_grid_kwh ? +r.daily_grid_kwh : 0,
+      recorded_by: userId,
+    });
+    if (error) errors.push(error.message);
+    else count++;
+  }
+  return { count, errors };
+}
+
+// ─── Blending wells list (Mongo-backed) ─────────────────────────────────────
 function useBlendingWells(plantId: string) {
   return useQuery<{ wells: { well_id: string }[] }>({
     queryKey: ['blending-wells', plantId],
@@ -41,30 +508,37 @@ function useBlendingWells(plantId: string) {
   });
 }
 
-// Map URL ?tab= values (including plural aliases used by BottomNav) to internal
-// tab values. Anything unknown falls through to the default "locator" tab.
 const TAB_ALIASES: Record<string, string> = {
-  locator: 'locator',
-  locators: 'locator',
-  well: 'well',
-  wells: 'well',
-  blending: 'blending',
-  // Back-compat: any old bookmark or hard-coded link that still uses
-  // ?tab=bypass keeps working and silently lands on the renamed tab.
-  bypass: 'blending',
+  locator: 'locator', locators: 'locator',
+  well: 'well', wells: 'well',
+  blending: 'blending', bypass: 'blending',
   power: 'power',
 };
 const VALID_TABS = new Set(['locator', 'well', 'blending', 'power']);
 
+// ─── PlantSelector ───────────────────────────────────────────────────────────
+function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: plants } = usePlants();
+  const { selectedPlantId } = useAppStore();
+  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
+      <SelectContent>
+        {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// ─── Operations page ─────────────────────────────────────────────────────────
 export default function Operations() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = TAB_ALIASES[(searchParams.get('tab') || '').toLowerCase()] ?? 'locator';
   const [tab, setTab] = useState<string>(urlTab);
 
-  // Keep tab state in sync when URL changes (e.g. user taps Wells & Locators).
   useEffect(() => {
     if (urlTab !== tab) setTab(urlTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTab]);
 
   const handleTabChange = (next: string) => {
@@ -85,9 +559,7 @@ export default function Operations() {
             onClick={() => handleTabChange(t)}
             className={[
               'py-2 text-sm font-medium rounded-md transition-all duration-200 capitalize focus-visible:outline-none',
-              tab === t
-                ? 'bg-teal-700 text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
+              tab === t ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
             ].join(' ')}
           >
             {t}
@@ -95,35 +567,22 @@ export default function Operations() {
         ))}
       </div>
       <div className="mt-3">
-        {tab === 'locator' && <LocatorReadingForm />}
-        {tab === 'well' && <WellReadingForm />}
+        {tab === 'locator'  && <LocatorReadingForm />}
+        {tab === 'well'     && <WellReadingForm />}
         {tab === 'blending' && <BlendingForm />}
-        {tab === 'power' && <PowerForm />}
+        {tab === 'power'    && <PowerForm />}
       </div>
     </div>
   );
 }
 
-function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: plants } = usePlants();
-  const { selectedPlantId } = useAppStore();
-  // One-shot seed: see PlantPick in Chemicals.tsx for the same pattern.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
-      <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-    </Select>
-  );
-}
-
-// ---------- LOCATOR (row-per-locator quick entry) ----------
+// ─── LOCATOR ─────────────────────────────────────────────────────────────────
 
 function LocatorReadingForm() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [plantId, setPlantId] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: locators } = useQuery({
     queryKey: ['op-locators', plantId],
@@ -133,15 +592,13 @@ function LocatorReadingForm() {
     enabled: !!plantId,
   });
 
-  // Fetch last 30 days of readings once, compute previous/today per locator client-side
   const { data: recentReadings } = useQuery({
     queryKey: ['op-loc-recent', plantId],
     queryFn: async () => {
       if (!plantId) return [];
       const start = new Date(); start.setDate(start.getDate() - 30);
       return (await supabase.from('locator_readings')
-        .select('*')
-        .eq('plant_id', plantId)
+        .select('*').eq('plant_id', plantId)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false })).data ?? [];
     },
@@ -154,19 +611,13 @@ function LocatorReadingForm() {
     const avgs: Record<string, number | null> = {};
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const volsByLocator: Record<string, number[]> = {};
-
     recentReadings?.forEach((r: any) => {
       if (!latest[r.locator_id]) latest[r.locator_id] = r;
-      if (new Date(r.reading_datetime) >= startOfDay) {
-        (today[r.locator_id] ||= []).push(r);
-      }
-      if (r.daily_volume != null && r.daily_volume > 0) {
-        (volsByLocator[r.locator_id] ||= []).push(r.daily_volume);
-      }
+      if (new Date(r.reading_datetime) >= startOfDay) (today[r.locator_id] ||= []).push(r);
+      if (r.daily_volume != null && r.daily_volume > 0) (volsByLocator[r.locator_id] ||= []).push(r.daily_volume);
     });
-    for (const [k, v] of Object.entries(volsByLocator)) {
+    for (const [k, v] of Object.entries(volsByLocator))
       avgs[k] = v.length ? v.reduce((s, n) => s + n, 0) / v.length : null;
-    }
     return { latestByLocator: latest, todayByLocator: today, avgByLocator: avgs };
   }, [recentReadings]);
 
@@ -174,7 +625,24 @@ function LocatorReadingForm() {
     <div className="space-y-3">
       <Card className="p-3">
         <Label>Plant</Label>
-        <PlantSelector value={plantId} onChange={setPlantId} />
+        {/* Plant selector row — Import button sits inline on the right */}
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1">
+            <PlantSelector value={plantId} onChange={setPlantId} />
+          </div>
+          {isAdmin && plantId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5 border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-locator-readings-btn"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          )}
+        </div>
       </Card>
 
       {plantId && (
@@ -188,8 +656,7 @@ function LocatorReadingForm() {
               {locators.map((l: any) => (
                 <li key={l.id}>
                   <LocatorRow
-                    locator={l}
-                    plantId={plantId}
+                    locator={l} plantId={plantId}
                     previous={latestByLocator[l.id]?.current_reading ?? null}
                     todayReadings={todayByLocator[l.id] ?? []}
                     avgVol={avgByLocator[l.id] ?? null}
@@ -204,6 +671,22 @@ function LocatorReadingForm() {
           )}
         </Card>
       )}
+
+      {importOpen && (
+        <ImportReadingsDialog
+          title="Import Locator Readings from CSV"
+          module="Locator Readings"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          schemaHint={LOCATOR_SCHEMA}
+          templateFilename="locator_readings_template.csv"
+          templateRow={LOCATOR_TEMPLATE_ROW}
+          validateRow={validateLocatorReadingRow}
+          insertRows={(rows, pid) => insertLocatorReadings(rows, pid, user?.id ?? null)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-loc-recent', plantId] }); }}
+        />
+      )}
     </div>
   );
 }
@@ -215,24 +698,21 @@ function LocatorRow({
   todayReadings: any[]; avgVol: number | null;
   userId: string | undefined; onSaved: () => void;
 }) {
-  const [reading, setReading] = useState('');
+  const [reading, setReading]     = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]       = useState(false);
 
-  const cur = +reading || 0;
-  const dailyVol = previous != null && reading ? cur - previous : null;
+  const cur       = +reading || 0;
+  const dailyVol  = previous != null && reading ? cur - previous : null;
   const belowPrev = previous != null && cur > 0 && cur < previous;
-  const highVol = avgVol != null && dailyVol != null && dailyVol > avgVol * ALERTS.avg_multiplier_warn;
+  const highVol   = avgVol != null && dailyVol != null && dailyVol > avgVol * ALERTS.avg_multiplier_warn;
   const todayCount = todayReadings.length;
-  const lastToday = todayReadings[0] ?? null;
-  const atLimit = !editingId && todayCount >= MAX_READINGS_PER_DAY;
+  const lastToday  = todayReadings[0] ?? null;
+  const atLimit    = !editingId && todayCount >= MAX_READINGS_PER_DAY;
 
   const save = async () => {
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
-    if (atLimit) {
-      toast.error(`${locator.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`);
-      return;
-    }
+    if (atLimit) { toast.error(`${locator.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
     if (belowPrev && !window.confirm(`${locator.name}: reading below previous — save anyway?`)) return;
     if (!belowPrev && highVol && !window.confirm(`${locator.name}: volume unusually high — save anyway?`)) return;
 
@@ -241,22 +721,15 @@ function LocatorRow({
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
-      if (locator.gps_lat && locator.gps_lng) {
+      if (locator.gps_lat && locator.gps_lng)
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
-      }
-    } catch (err) {
-      // GPS access denied or unavailable — proceed without coords.
-       
-      console.warn('[Operations] geolocation unavailable; submitting without GPS:', err);
-    }
+    } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
     const payload: any = {
       locator_id: locator.id, plant_id: plantId,
       current_reading: cur, previous_reading: previous,
-      gps_lat, gps_lng, off_location_flag: off,
-      recorded_by: userId,
+      gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
     };
-
     const { error } = editingId
       ? await supabase.from('locator_readings').update(payload).eq('id', editingId)
       : await supabase.from('locator_readings').insert(payload);
@@ -264,81 +737,48 @@ function LocatorRow({
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}`);
-    setReading(''); setEditingId(null);
-    onSaved();
+    setReading(''); setEditingId(null); onSaved();
   };
-
-  const editLastToday = () => {
-    if (!lastToday) return;
-    setEditingId(lastToday.id);
-    setReading(String(lastToday.current_reading));
-  };
-
-  const cancelEdit = () => { setEditingId(null); setReading(''); };
 
   return (
     <div className="p-3 flex flex-wrap items-center gap-2">
       <div className="min-w-0 flex-1 basis-[140px]">
         <div className="flex items-center gap-1.5">
           <div className="text-sm font-medium truncate">{locator.name}</div>
-          {lastToday?.off_location_flag && (
-            <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off</StatusPill>
-          )}
+          {lastToday?.off_location_flag && <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off</StatusPill>}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
         </div>
         <div className="text-xs text-muted-foreground truncate">
           prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
-          {dailyVol != null && (
-            <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>
-          )}
+          {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
           <span className="mx-1">·</span>
-          <span className={atLimit ? 'text-warn-foreground' : ''}>
-            {todayCount}/{MAX_READINGS_PER_DAY} today
-          </span>
+          <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
         </div>
       </div>
 
       <Input
-        type="number"
-        step="any"
-        inputMode="decimal"
-        value={reading}
-        onChange={(e) => setReading(e.target.value)}
-        placeholder="Reading"
-        className="w-28 sm:w-32 shrink-0"
+        type="number" step="any" inputMode="decimal"
+        value={reading} onChange={(e) => setReading(e.target.value)}
+        placeholder="Reading" className="w-28 sm:w-32 shrink-0"
       />
 
-      <Button
-        onClick={save}
-        disabled={saving || !reading || atLimit}
-        size="sm"
-        className="shrink-0"
-      >
+      <Button onClick={save} disabled={saving || !reading || atLimit} size="sm" className="shrink-0">
         {saving ? '...' : editingId ? 'Update' : 'Save'}
       </Button>
 
       {lastToday && !editingId && (
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 w-8 p-0 shrink-0"
-          onClick={editLastToday}
-          title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-        >
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+          onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
+          title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
           <Pencil className="h-3.5 w-3.5" />
         </Button>
       )}
-
       {editingId && (
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 w-8 p-0 shrink-0"
-          onClick={cancelEdit}
-          title="Cancel edit"
-        >
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+          onClick={() => { setEditingId(null); setReading(''); }} title="Cancel edit">
           <X className="h-3.5 w-3.5" />
         </Button>
       )}
-
       {reading && (belowPrev || highVol) && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
           {belowPrev ? 'Below previous' : 'Volume unusually high vs. avg'}
@@ -348,12 +788,13 @@ function LocatorRow({
   );
 }
 
-// ---------- WELL (row-per-well quick entry) ----------
+// ─── WELL ────────────────────────────────────────────────────────────────────
 
 function WellReadingForm() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [plantId, setPlantId] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: wells } = useQuery({
     queryKey: ['op-wells', plantId],
@@ -369,8 +810,7 @@ function WellReadingForm() {
       if (!plantId) return [];
       const start = new Date(); start.setDate(start.getDate() - 30);
       return (await supabase.from('well_readings')
-        .select('*')
-        .eq('plant_id', plantId)
+        .select('*').eq('plant_id', plantId)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false })).data ?? [];
     },
@@ -398,7 +838,22 @@ function WellReadingForm() {
     <div className="space-y-3">
       <Card className="p-3">
         <Label>Plant</Label>
-        <PlantSelector value={plantId} onChange={setPlantId} />
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1">
+            <PlantSelector value={plantId} onChange={setPlantId} />
+          </div>
+          {isAdmin && plantId && (
+            <Button
+              size="sm" variant="outline"
+              className="shrink-0 gap-1.5 border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-well-readings-btn"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          )}
+        </div>
       </Card>
 
       {plantId && (
@@ -412,8 +867,7 @@ function WellReadingForm() {
               {wells.map((w: any) => (
                 <li key={w.id}>
                   <WellRow
-                    well={w}
-                    plantId={plantId}
+                    well={w} plantId={plantId}
                     previousMeter={latestByWell[w.id]?.current_reading ?? null}
                     previousPower={latestByWell[w.id]?.power_meter_reading ?? null}
                     todayReadings={todayByWell[w.id] ?? []}
@@ -429,39 +883,49 @@ function WellReadingForm() {
           )}
         </Card>
       )}
+
+      {importOpen && (
+        <ImportReadingsDialog
+          title="Import Well Readings from CSV"
+          module="Well Readings"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          schemaHint={WELL_SCHEMA}
+          templateFilename="well_readings_template.csv"
+          templateRow={WELL_TEMPLATE_ROW}
+          validateRow={validateWellReadingRow}
+          insertRows={(rows, pid) => insertWellReadings(rows, pid, user?.id ?? null)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-well-recent', plantId] }); }}
+        />
+      )}
     </div>
   );
 }
 
 function WellRow({
-  well, plantId, previousMeter, previousPower, todayReadings, userId,
-  isBlending, onSaved,
+  well, plantId, previousMeter, previousPower, todayReadings, userId, isBlending, onSaved,
 }: {
   well: any; plantId: string;
   previousMeter: number | null; previousPower: number | null;
-  todayReadings: any[];
-  userId: string | undefined;
-  isBlending: boolean;
-  onSaved: () => void;
+  todayReadings: any[]; userId: string | undefined;
+  isBlending: boolean; onSaved: () => void;
 }) {
-  const [reading, setReading] = useState('');
+  const [reading, setReading]         = useState('');
   const [powerReading, setPowerReading] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId]     = useState<string | null>(null);
+  const [saving, setSaving]           = useState(false);
 
-  const cur = +reading || 0;
-  const dailyVol = previousMeter != null && reading ? cur - previousMeter : null;
-  const belowPrev = previousMeter != null && cur > 0 && cur < previousMeter;
+  const cur        = +reading || 0;
+  const dailyVol   = previousMeter != null && reading ? cur - previousMeter : null;
+  const belowPrev  = previousMeter != null && cur > 0 && cur < previousMeter;
   const todayCount = todayReadings.length;
-  const lastToday = todayReadings[0] ?? null;
-  const atLimit = !editingId && todayCount >= MAX_READINGS_PER_DAY;
+  const lastToday  = todayReadings[0] ?? null;
+  const atLimit    = !editingId && todayCount >= MAX_READINGS_PER_DAY;
 
   const save = async () => {
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
-    if (atLimit) {
-      toast.error(`${well.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`);
-      return;
-    }
+    if (atLimit) { toast.error(`${well.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
     if (belowPrev && !window.confirm(`${well.name}: meter below previous — save anyway?`)) return;
 
     setSaving(true);
@@ -469,20 +933,14 @@ function WellRow({
     try {
       const pos = await getCurrentPosition();
       gps_lat = pos.coords.latitude; gps_lng = pos.coords.longitude;
-    } catch (err) {
-      // GPS access denied or unavailable — proceed without coords.
-       
-      console.warn('[Operations] geolocation unavailable; submitting without GPS:', err);
-    }
+    } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
     const payload: any = {
       well_id: well.id, plant_id: plantId,
       current_reading: cur, previous_reading: previousMeter,
       power_meter_reading: powerReading ? +powerReading : null,
-      gps_lat, gps_lng, off_location_flag: false,
-      recorded_by: userId,
+      gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
     };
-
     const { error } = editingId
       ? await supabase.from('well_readings').update(payload).eq('id', editingId)
       : await supabase.from('well_readings').insert(payload);
@@ -490,25 +948,11 @@ function WellRow({
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
-    setReading(''); setPowerReading(''); setEditingId(null);
-    onSaved();
+    setReading(''); setPowerReading(''); setEditingId(null); onSaved();
   };
-
-  const editLastToday = () => {
-    if (!lastToday) return;
-    setEditingId(lastToday.id);
-    setReading(String(lastToday.current_reading ?? ''));
-    setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
-  };
-
-  const cancelEdit = () => { setEditingId(null); setReading(''); setPowerReading(''); };
 
   return (
-    <div
-      className="p-3 flex flex-wrap items-center gap-x-3 gap-y-2"
-      data-testid={`well-row-${well.id}`}
-    >
-      {/* Identity column — grows to fill row 1 next to the action buttons. */}
+    <div className="p-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-testid={`well-row-${well.id}`}>
       <div className="min-w-0 flex-1 sm:basis-[160px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
@@ -516,11 +960,7 @@ function WellRow({
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted px-1.5 py-0.5 rounded">kWh</span>
           )}
           {isBlending && (
-            <Badge
-              className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
-              data-testid={`blending-badge-${well.id}`}
-              title="Marked as Blending Well — injects directly to product water"
-            >
+            <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal" data-testid={`blending-badge-${well.id}`}>
               Blending
             </Badge>
           )}
@@ -528,119 +968,66 @@ function WellRow({
         </div>
         <div className="text-xs text-muted-foreground truncate">
           prev: <span className="font-mono-num">{previousMeter == null ? '—' : fmtNum(previousMeter)}</span>
-          {dailyVol != null && (
-            <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>
-          )}
+          {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
           <span className="mx-1">·</span>
-          <span className={atLimit ? 'text-warn-foreground' : ''}>
-            {todayCount}/{MAX_READINGS_PER_DAY} today
-          </span>
+          <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
         </div>
       </div>
 
-      {/* Action buttons — sit on the same row as identity (top-right on mobile,
-          end-of-row on desktop via order-last). Keeps inputs free to use the
-          full second row on mobile. */}
       <div className="flex items-center gap-1.5 shrink-0 sm:order-last">
-        <Button
-          onClick={save}
-          disabled={saving || !reading || atLimit}
-          className="h-9 px-3 text-xs"
-        >
+        <Button onClick={save} disabled={saving || !reading || atLimit} className="h-9 px-3 text-xs">
           {saving ? '...' : editingId ? 'Update' : 'Save'}
         </Button>
-
         {lastToday && !editingId && (
-          <Button
-            variant="ghost"
-            className="h-9 w-9 p-0"
-            onClick={editLastToday}
-            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
-          >
+          <Button variant="ghost" className="h-9 w-9 p-0"
+            onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading ?? '')); setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : ''); }}
+            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         )}
-
         {editingId && (
-          <Button
-            variant="ghost"
-            className="h-9 w-9 p-0"
-            onClick={cancelEdit}
-            title="Cancel edit"
-          >
+          <Button variant="ghost" className="h-9 w-9 p-0"
+            onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); }} title="Cancel edit">
             <X className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>
 
-      {/* Inputs — full width below identity on mobile, inline on desktop. */}
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
-        {well.has_power_meter ? (
-          <div className="relative flex-1 sm:flex-initial sm:w-32">
-            <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
-            <Input
-              type="number"
-              step="any"
-              inputMode="decimal"
-              value={reading}
-              onChange={(e) => setReading(e.target.value)}
-              placeholder="Water Meter"
-              className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
-              data-testid={`well-meter-input-${well.id}`}
-              title="Water meter reading (cumulative)"
-            />
-          </div>
-        ) : (
-          <div className="relative flex-1 sm:flex-initial sm:w-32">
-            <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
-            <Input
-              type="number"
-              step="any"
-              inputMode="decimal"
-              value={reading}
-              onChange={(e) => setReading(e.target.value)}
-              placeholder="Water Meter"
-              className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
-              data-testid={`well-meter-input-${well.id}`}
-              title="Water meter reading (cumulative)"
-            />
-          </div>
-        )}
-
+        <div className="relative flex-1 sm:flex-initial sm:w-32">
+          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
+          <Input type="number" step="any" inputMode="decimal" value={reading}
+            onChange={(e) => setReading(e.target.value)} placeholder="Water Meter"
+            className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+            data-testid={`well-meter-input-${well.id}`} />
+        </div>
         {well.has_power_meter && (
           <div className="relative flex-1 sm:flex-initial sm:w-32">
             <Zap className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-600 pointer-events-none" />
-            <Input
-              type="number"
-              step="any"
-              inputMode="decimal"
-              value={powerReading}
-              onChange={(e) => setPowerReading(e.target.value)}
-              placeholder="Power Meter"
+            <Input type="number" step="any" inputMode="decimal" value={powerReading}
+              onChange={(e) => setPowerReading(e.target.value)} placeholder="Power Meter"
               className="h-9 pl-7 w-full border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
-              title={`Power meter reading (cumulative) — previous: ${previousPower == null ? '—' : fmtNum(previousPower)}`}
-              data-testid={`well-power-input-${well.id}`}
-            />
+              data-testid={`well-power-input-${well.id}`} />
           </div>
         )}
       </div>
 
       {reading && belowPrev && (
-        <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">
-          Meter below previous
-        </div>
+        <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">Meter below previous</div>
       )}
     </div>
   );
 }
 
-// ---------- BLENDING (volume entry for wells tagged as blending) ----------
+// ─── BLENDING ────────────────────────────────────────────────────────────────
 
 function BlendingForm() {
   const qc = useQueryClient();
+  const { user, isAdmin } = useAuth();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
-  const plantName = plants?.find((p: any) => p.id === plantId)?.name;
+  const [importOpen, setImportOpen] = useState(false);
+  const plantName = plants?.find((p: any) => p.id === plantId)?.name ?? '';
 
   const { data: wells } = useQuery({
     queryKey: ['op-wells', plantId],
@@ -651,27 +1038,11 @@ function BlendingForm() {
   });
 
   const { data: blendingData } = useBlendingWells(plantId);
-  const blendingIds = useMemo(
-    () => new Set((blendingData?.wells ?? []).map((w) => w.well_id)),
-    [blendingData],
-  );
-  const blendingWells = useMemo(
-    () => (wells ?? []).filter((w: any) => blendingIds.has(w.id)),
-    [wells, blendingIds],
-  );
+  const blendingIds    = useMemo(() => new Set((blendingData?.wells ?? []).map((w) => w.well_id)), [blendingData]);
+  const blendingWells  = useMemo(() => (wells ?? []).filter((w: any) => blendingIds.has(w.id)), [wells, blendingIds]);
 
-  // Today's logged blending volume + most-recent prior entry per well.
-  // Wider window (14 days) so a previous entry can be surfaced. Backend
-  // returns today_volume_m3 (today only) separately from volume_m3 (window
-  // total), so the "today" label stays accurate even with a wider span.
   const { data: volumeData } = useQuery<{
-    by_well: {
-      well_id: string;
-      volume_m3: number;
-      today_volume_m3: number;
-      previous_volume_m3: number | null;
-      previous_event_date: string | null;
-    }[];
+    by_well: { well_id: string; volume_m3: number; today_volume_m3: number; previous_volume_m3: number | null; previous_event_date: string | null }[];
   }>({
     queryKey: ['blending-today', plantId],
     queryFn: async () => {
@@ -679,9 +1050,7 @@ function BlendingForm() {
         const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
         if (!res.ok) return { by_well: [] };
         return res.json();
-      } catch {
-        return { by_well: [] };
-      }
+      } catch { return { by_well: [] }; }
     },
     enabled: !!plantId,
     retry: false,
@@ -693,12 +1062,7 @@ function BlendingForm() {
   }, [volumeData]);
   const prevByWell = useMemo(() => {
     const m: Record<string, { volume: number | null; date: string | null }> = {};
-    for (const w of volumeData?.by_well ?? []) {
-      m[w.well_id] = {
-        volume: w.previous_volume_m3 ?? null,
-        date: w.previous_event_date ?? null,
-      };
-    }
+    for (const w of volumeData?.by_well ?? []) m[w.well_id] = { volume: w.previous_volume_m3 ?? null, date: w.previous_event_date ?? null };
     return m;
   }, [volumeData]);
 
@@ -706,7 +1070,22 @@ function BlendingForm() {
     <div className="space-y-3">
       <Card className="p-3">
         <Label>Plant</Label>
-        <PlantSelector value={plantId} onChange={setPlantId} />
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1">
+            <PlantSelector value={plantId} onChange={setPlantId} />
+          </div>
+          {isAdmin && plantId && (
+            <Button
+              size="sm" variant="outline"
+              className="shrink-0 gap-1.5 border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-blending-readings-btn"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          )}
+        </div>
       </Card>
 
       {plantId && (
@@ -720,9 +1099,7 @@ function BlendingForm() {
               {blendingWells.map((w: any) => (
                 <li key={w.id}>
                   <BlendingRow
-                    well={w}
-                    plantId={plantId}
-                    plantName={plantName}
+                    well={w} plantId={plantId} plantName={plantName}
                     todayVolume={todayByWell[w.id] ?? 0}
                     previousVolume={prevByWell[w.id]?.volume ?? null}
                     previousDate={prevByWell[w.id]?.date ?? null}
@@ -741,6 +1118,26 @@ function BlendingForm() {
           )}
         </Card>
       )}
+
+      {importOpen && (
+        <ImportReadingsDialog
+          title="Import Blending Readings from CSV"
+          module="Blending Readings"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          schemaHint={BLENDING_SCHEMA}
+          templateFilename="blending_readings_template.csv"
+          templateRow={BLENDING_TEMPLATE_ROW}
+          validateRow={validateBlendingRow}
+          insertRows={(rows, pid) => insertBlendingReadings(rows, pid, plantName)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            qc.invalidateQueries({ queryKey: ['blending-today', plantId] });
+            qc.invalidateQueries({ queryKey: ['blending-volume'] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -749,9 +1146,7 @@ function BlendingRow({
   well, plantId, plantName, todayVolume, previousVolume, previousDate, onSaved,
 }: {
   well: any; plantId: string; plantName?: string;
-  todayVolume: number;
-  previousVolume: number | null;
-  previousDate: string | null;
+  todayVolume: number; previousVolume: number | null; previousDate: string | null;
   onSaved: () => void;
 }) {
   const [volume, setVolume] = useState('');
@@ -759,31 +1154,23 @@ function BlendingRow({
 
   const save = async () => {
     const v = +volume;
-    if (!volume || !(v > 0)) {
-      toast.error(`${well.name}: enter a positive blending volume`);
-      return;
-    }
+    if (!volume || !(v > 0)) { toast.error(`${well.name}: enter a positive blending volume`); return; }
     setSaving(true);
     try {
       const res = await fetch(`${BASE}/api/blending/audit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          well_id: well.id, plant_id: plantId,
-          well_name: well.name, plant_name: plantName,
-          event_date: new Date().toISOString().slice(0, 10),
-          volume_m3: v,
+          well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
+          event_date: new Date().toISOString().slice(0, 10), volume_m3: v,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success(`${well.name}: blending volume saved (${fmtNum(v)} m³)`);
-      setVolume('');
-      onSaved();
+      setVolume(''); onSaved();
     } catch (e: any) {
       toast.error(`Blending save failed: ${e.message || e}`);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   return (
@@ -791,82 +1178,62 @@ function BlendingRow({
       <div className="min-w-0 flex-1 basis-[140px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="text-sm font-medium truncate">{well.name}</div>
-          <Badge
-            className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal"
-          >
-            Blending
-          </Badge>
+          <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal">Blending</Badge>
         </div>
         <div className="text-xs text-muted-foreground truncate">
-          prev:{' '}
-          <span
-            className="font-mono-num"
-            title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}
-          >
+          prev: <span className="font-mono-num" title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}>
             {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
           </span>
           <span className="mx-1">·</span>
           today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
         </div>
       </div>
-
-      <Button
-        onClick={save}
-        disabled={saving || !volume}
-        size="sm"
-        className="h-9 px-3 text-xs shrink-0 sm:order-last"
-      >
+      <Button onClick={save} disabled={saving || !volume} size="sm" className="h-9 px-3 text-xs shrink-0 sm:order-last">
         {saving ? '...' : 'Save'}
       </Button>
-
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         <div className="relative flex-1 sm:flex-initial sm:w-32">
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
-          <Input
-            type="number"
-            step="any"
-            inputMode="decimal"
-            value={volume}
-            onChange={(e) => setVolume(e.target.value)}
-            placeholder="Blending Reading"
+          <Input type="number" step="any" inputMode="decimal" value={volume}
+            onChange={(e) => setVolume(e.target.value)} placeholder="Blending Reading"
             className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
-            data-testid={`blending-input-${well.id}`}
-            title="Blending volume (m³) for today"
-          />
+            data-testid={`blending-input-${well.id}`} />
         </div>
       </div>
     </div>
   );
 }
 
-// ---------- POWER (unchanged plant-level form) ----------
+// ─── POWER ───────────────────────────────────────────────────────────────────
 
 function PowerForm() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { data: plants } = usePlants();
-  const [plantId, setPlantId] = useState('');
-  const [reading, setReading] = useState('');
-  const [solarKwh, setSolarKwh] = useState('');
-  const [gridKwh, setGridKwh] = useState('');
-  const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [plantId, setPlantId]     = useState('');
+  const [reading, setReading]     = useState('');
+  const [solarKwh, setSolarKwh]   = useState('');
+  const [gridKwh, setGridKwh]     = useState('');
+  const [dt, setDt]               = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
-  const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
+  const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const showSolar = !!plant?.has_solar;
-  const showGrid = plant?.has_grid !== false; // default true
+  const showGrid  = plant?.has_grid !== false;
 
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
-    queryFn: async () => plantId ? (await supabase.from('power_readings').select('*').eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? [] : [],
+    queryFn: async () => plantId
+      ? (await supabase.from('power_readings').select('*').eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? []
+      : [],
     enabled: !!plantId,
   });
   const previous = history?.find((r: any) => r.id !== editingId)?.meter_reading_kwh ?? null;
-  const daily = previous != null && reading ? +reading - previous : null;
+  const daily    = previous != null && reading ? +reading - previous : null;
 
   const submit = async () => {
     if (!plantId || !reading) return;
-
     if (!editingId) {
       const dup = await findExistingReading({
         table: 'power_readings', entityCol: 'plant_id', entityId: plantId,
@@ -877,21 +1244,17 @@ function PowerForm() {
         setEditingId(dup);
       }
     }
-
     const payload: any = {
       plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       meter_reading_kwh: +reading, recorded_by: user?.id,
     };
     if (showSolar || showGrid) {
       payload.daily_solar_kwh = solarKwh ? +solarKwh : 0;
-      payload.daily_grid_kwh = gridKwh ? +gridKwh : 0;
+      payload.daily_grid_kwh  = gridKwh  ? +gridKwh  : 0;
     }
-    let error;
-    if (editingId) {
-      ({ error } = await supabase.from('power_readings').update(payload).eq('id', editingId));
-    } else {
-      ({ error } = await supabase.from('power_readings').insert(payload));
-    }
+    const { error } = editingId
+      ? await supabase.from('power_readings').update(payload).eq('id', editingId)
+      : await supabase.from('power_readings').insert(payload);
     if (error) { toast.error(error.message); return; }
     toast.success(editingId ? 'Updated' : 'Power reading saved');
     setReading(''); setSolarKwh(''); setGridKwh(''); setEditingId(null);
@@ -901,7 +1264,7 @@ function PowerForm() {
   const startEdit = (r: any) => {
     setReading(String(r.meter_reading_kwh));
     setSolarKwh(r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '');
-    setGridKwh(r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '');
+    setGridKwh(r.daily_grid_kwh  != null ? String(r.daily_grid_kwh)  : '');
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
@@ -910,20 +1273,42 @@ function PowerForm() {
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-3">
-        <div><Label>Plant</Label><PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setEditingId(null); }} /></div>
+        <div>
+          <Label>Plant</Label>
+          {/* Plant row with inline Import button */}
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex-1">
+              <PlantSelector value={plantId} onChange={(v) => { setPlantId(v); setEditingId(null); }} />
+            </div>
+            {isAdmin && plantId && (
+              <Button
+                size="sm" variant="outline"
+                className="shrink-0 gap-1.5 border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                onClick={() => setImportOpen(true)}
+                data-testid="import-power-readings-btn"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Import
+              </Button>
+            )}
+          </div>
+        </div>
+
         <div>
           <Label>Date &amp; Time</Label>
-          <Input
-            type="datetime-local"
-            value={dt}
-            onChange={e => setDt(e.target.value)}
-            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left"
-          />
+          <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
+            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left" />
         </div>
         <div>
           <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)} placeholder="Plant Power Reading" data-testid="power-meter-input" />
-          {previous != null && <div className="mt-1 text-xs text-muted-foreground">Previous: <span className="font-mono-num">{fmtNum(previous)}</span> {daily != null && <>· Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}</div>}
+          <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
+            placeholder="Plant Power Reading" data-testid="power-meter-input" />
+          {previous != null && (
+            <div className="mt-1 text-xs text-muted-foreground">
+              Previous: <span className="font-mono-num">{fmtNum(previous)}</span>
+              {daily != null && <> · Daily: <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
+            </div>
+          )}
         </div>
 
         {(showSolar || showGrid) && (
@@ -938,38 +1323,32 @@ function PowerForm() {
               {showSolar && (
                 <div>
                   <Label className="text-xs">Daily Solar (kWh)</Label>
-                  <Input
-                    type="number" step="any" value={solarKwh}
-                    onChange={e => setSolarKwh(e.target.value)}
-                    placeholder="kWh from solar"
-                    data-testid="power-solar-input"
-                  />
+                  <Input type="number" step="any" value={solarKwh}
+                    onChange={e => setSolarKwh(e.target.value)} placeholder="kWh from solar" data-testid="power-solar-input" />
                 </div>
               )}
               {showGrid && (
                 <div>
                   <Label className="text-xs">Daily Grid (kWh)</Label>
-                  <Input
-                    type="number" step="any" value={gridKwh}
-                    onChange={e => setGridKwh(e.target.value)}
-                    placeholder="kWh from grid"
-                    data-testid="power-grid-input"
-                  />
+                  <Input type="number" step="any" value={gridKwh}
+                    onChange={e => setGridKwh(e.target.value)} placeholder="kWh from grid" data-testid="power-grid-input" />
                 </div>
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
-              Optional. Leave blank if you only have a single combined meter — the system
-              treats the daily delta as Grid by default.
+              Optional. Leave blank if you only have a single combined meter.
             </p>
           </details>
         )}
 
         <div className="flex gap-2">
           <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
-          {editingId && <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarKwh(''); setGridKwh(''); }}>Cancel</Button>}
+          {editingId && (
+            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarKwh(''); setGridKwh(''); }}>Cancel</Button>
+          )}
         </div>
       </Card>
+
       <Card className="p-3">
         <h4 className="text-sm font-semibold mb-2">Last 7 readings</h4>
         {history?.length ? history.map((r: any) => (
@@ -981,10 +1360,28 @@ function PowerForm() {
                 ☀{fmtNum(r.daily_solar_kwh ?? 0)} · ⚡{fmtNum(r.daily_grid_kwh ?? 0)}
               </span>
             )}
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
           </div>
         )) : <p className="text-xs text-muted-foreground">No readings</p>}
       </Card>
+
+      {importOpen && (
+        <ImportReadingsDialog
+          title="Import Power Readings from CSV"
+          module="Power Readings"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          schemaHint={POWER_SCHEMA}
+          templateFilename="power_readings_template.csv"
+          templateRow={POWER_TEMPLATE_ROW}
+          validateRow={validatePowerRow}
+          insertRows={(rows, pid) => insertPowerReadings(rows, pid, user?.id ?? null)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-power', plantId] }); }}
+        />
+      )}
     </div>
   );
 }
