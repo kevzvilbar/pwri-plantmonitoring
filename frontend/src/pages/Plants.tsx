@@ -3203,17 +3203,29 @@ function downloadTemplate(filename: string, headers: string[]) {
 
 function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
   if (!rows.length) return null;
+  // Narrow columns when there are many headers to prevent overflow
+  const colW = headers.length > 10 ? 80 : headers.length > 6 ? 100 : 130;
   return (
     <div>
-      <div className="overflow-auto max-h-48 border rounded text-xs">
-        <table className="w-full text-left">
+      <div className="overflow-x-auto overflow-y-auto max-h-48 border rounded text-xs">
+        <table className="table-fixed text-left" style={{ minWidth: headers.length * colW }}>
           <thead className="bg-muted sticky top-0">
-            <tr>{headers.map(h => <th key={h} className="px-2 py-1 font-medium whitespace-nowrap">{h}</th>)}</tr>
+            <tr>
+              {headers.map(h => (
+                <th key={h} className="px-2 py-1 font-medium truncate" style={{ width: colW }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody>
             {rows.slice(0, 10).map((row, i) => (
               <tr key={i} className="border-t">
-                {headers.map(h => <td key={h} className="px-2 py-1 whitespace-nowrap max-w-[120px] truncate">{row[h] ?? ''}</td>)}
+                {headers.map(h => (
+                  <td key={h} className="px-2 py-1 truncate" style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
+                    {row[h] ?? ''}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -3277,9 +3289,7 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Import Locators from CSV</DialogTitle>
+      <DialogContent className="max-w-3xl w-full">
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -3377,7 +3387,7 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl w-full">
         <DialogHeader>
           <DialogTitle>Import Wells from CSV</DialogTitle>
         </DialogHeader>
@@ -3472,7 +3482,7 @@ function TrainCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: 
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl w-full">
         <DialogHeader>
           <DialogTitle>Import RO Trains from CSV</DialogTitle>
         </DialogHeader>
