@@ -1528,22 +1528,16 @@ function WellsList({ plantId }: { plantId: string }) {
     if (!isManager) return;
     setBlendingBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
     try {
-      const res = await fetch(`${BASE}/api/blending/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': user?.id ?? '' },
-        body: JSON.stringify({
-          well_id: w.id,
-          plant_id: plantId,
-          well_name: w.name,
-          plant_name: plant?.name,
-          is_blending: next,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { error } = await supabase
+        .from('wells')
+        .update({ is_blending: next } as any)
+        .eq('id', w.id);
+      if (error) throw new Error(error.message);
       toast.success(next
         ? `${w.name}: marked as blending — its meter feeds product line separately`
         : `${w.name}: blending cleared`);
       qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
+      qc.invalidateQueries({ queryKey: ['wells', plantId] });
     } catch (e: any) {
       toast.error(`Blending toggle failed: ${e.message || e}`);
     } finally {
@@ -3057,10 +3051,14 @@ function TrainsList({ plantId }: { plantId: string }) {
         defaultTrainNumber={(trains?.length ?? 0) + 1}
         onSubmit={doAddTrain}
         loading={addTrainBusy}
+        plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
+        plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
       />
       {showTrainCsv && (
         <TrainCsvImportDialog
           plantId={plantId}
+          plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
+          plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
           onClose={() => { setShowTrainCsv(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
         />
       )}
@@ -3103,17 +3101,23 @@ type AddTrainFormData = {
   num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
 };
 
-function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, loading }: {
+function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, loading,
+  plantFilterType = 'Cartridge Filter', plantMediaType = 'AFM',
+}: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultTrainNumber: number;
   onSubmit: (form: AddTrainFormData) => void;
   loading: boolean;
+  plantFilterType?: 'Cartridge Filter' | 'Bag Filter';
+  plantMediaType?: 'AFM' | 'MMF';
 }) {
+  const isBagFilter = plantFilterType === 'Bag Filter';
+
   const blank = (): AddTrainFormData => ({
     train_number: defaultTrainNumber, name: '',
     num_afm: 2, num_booster_pumps: 1, num_cartridge_filters: 1,
-    num_controllers: 1, num_filter_housings: 1, num_hp_pumps: 1,
+    num_controllers: 1, num_filter_housings: isBagFilter ? 0 : 1, num_hp_pumps: 1,
   });
   const [form, setForm] = useState<AddTrainFormData>(blank);
 
@@ -3126,13 +3130,19 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
 
-  const fields: { key: keyof AddTrainFormData; label: string }[] = [
-    { key: 'num_afm',               label: 'AFM / MMF Units'   },
-    { key: 'num_booster_pumps',     label: 'Booster Pumps'     },
-    { key: 'num_cartridge_filters', label: 'Cartridge Filters' },
-    { key: 'num_controllers',       label: 'Controllers'       },
-    { key: 'num_filter_housings',   label: 'Filter Housings'   },
-    { key: 'num_hp_pumps',          label: 'HP Pumps'          },
+  // Dynamic labels based on plant-wide component type settings:
+  // - Media: AFM or MMF
+  // - Pre-filter: Cartridge Filter → "Cartridge Housing"; Bag Filter → "Bag Filter" (Filter Housing hidden)
+  const afmLabel = `${plantMediaType} Units`;
+  const cfLabel  = 'Cartridge Housing';
+
+  const fields: { key: keyof AddTrainFormData; label: string; hide?: boolean }[] = [
+    { key: 'num_afm',               label: afmLabel           },
+    { key: 'num_booster_pumps',     label: 'Booster Pumps'    },
+    { key: 'num_cartridge_filters', label: cfLabel            },
+    { key: 'num_controllers',       label: 'Controllers'      },
+    { key: 'num_filter_housings',   label: 'Filter Housings', hide: isBagFilter },
+    { key: 'num_hp_pumps',          label: 'HP Pumps'         },
   ];
 
   return (
@@ -3154,7 +3164,7 @@ function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, load
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {fields.map(({ key, label }) => (
+            {fields.filter(f => !f.hide).map(({ key, label }) => (
               <div key={key}>
                 <Label>{label}</Label>
                 <Input type="number" min={0} value={form[key] as number} onChange={num(key)} />
@@ -3305,8 +3315,19 @@ function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose
             <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> is required. All others optional.</p>
           </div>
           <div>
-            <Label>Select CSV file</Label>
-            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
           </div>
           {rows.length > 0 && (
             <>
@@ -3409,8 +3430,19 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
             <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Electric meter fields only needed if has_power_meter is true. Numeric: drilling_depth_m, meter_size.</p>
           </div>
           <div>
-            <Label>Select CSV file</Label>
-            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
           </div>
           {rows.length > 0 && (
             <>
@@ -3437,13 +3469,30 @@ function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: (
 
 // ─── Train CSV Import ─────────────────────────────────────────────────────────
 
-const TRAIN_CSV_HEADERS = [
+const TRAIN_CSV_HEADERS_BASE = [
   'train_number', 'name',
   'num_afm', 'num_booster_pumps', 'num_cartridge_filters',
   'num_controllers', 'num_filter_housings', 'num_hp_pumps',
 ];
 
-function TrainCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+function TrainCsvImportDialog({ plantId, onClose,
+  plantFilterType = 'Cartridge Filter', plantMediaType = 'AFM',
+}: { plantId: string; onClose: () => void;
+     plantFilterType?: 'Cartridge Filter' | 'Bag Filter';
+     plantMediaType?: 'AFM' | 'MMF'; }) {
+  const isBagFilter = plantFilterType === 'Bag Filter';
+  // Build dynamic CSV headers: omit num_filter_housings if Bag Filter
+  const TRAIN_CSV_HEADERS = isBagFilter
+    ? TRAIN_CSV_HEADERS_BASE.filter(h => h !== 'num_filter_housings')
+    : TRAIN_CSV_HEADERS_BASE;
+  // Human-readable header descriptions for the dialog
+  const headerNotes = [
+    `num_afm = ${plantMediaType} Units`,
+    'num_booster_pumps = Booster Pumps',
+    'num_cartridge_filters = Cartridge Housing',
+    ...(isBagFilter ? [] : ['num_filter_housings = Filter Housings']),
+  ].join(' · ');
+
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -3501,10 +3550,22 @@ function TrainCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: 
             <p className="text-xs font-medium mb-1">Expected columns:</p>
             <p className="text-xs text-muted-foreground font-mono">{TRAIN_CSV_HEADERS.join(', ')}</p>
             <p className="text-xs text-muted-foreground mt-1"><strong>train_number</strong> required (integer). All component count fields default to 0 if blank.</p>
+            <p className="text-xs text-muted-foreground mt-0.5 italic">{headerNotes}</p>
           </div>
           <div>
-            <Label>Select CSV file</Label>
-            <Input type="file" accept=".csv,text/csv" onChange={onFile} className="mt-1" />
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
           </div>
           {rows.length > 0 && (
             <>
