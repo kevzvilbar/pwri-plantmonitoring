@@ -50,7 +50,7 @@ async function api<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const base = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+  const base = (import.meta.env.VITE_API_URL as string) || '';
   const headers = await authHeaders();
   const res = await fetch(`${base}${path}`, {
     method,
