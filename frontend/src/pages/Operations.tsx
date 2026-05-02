@@ -1857,7 +1857,7 @@ function PowerForm() {
     queryKey: ['op-power', plantId],
     queryFn: async () => plantId
       ? (await supabase.from('power_readings')
-          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,multiplier,recorded_by')
+          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by')
           .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? []
       : [],
     enabled: !!plantId,
@@ -1882,7 +1882,7 @@ function PowerForm() {
     const payload: any = {
       plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       meter_reading_kwh: +reading, recorded_by: user?.id,
-      multiplier: effectiveMultiplier,
+      // multiplier is stored on electric_bills, not power_readings
     };
     if (showSolar && solarKwh) payload.daily_solar_kwh = +solarKwh;
     if ((showSolar || showGrid) && gridKwh) payload.daily_grid_kwh = +gridKwh;
@@ -1892,10 +1892,15 @@ function PowerForm() {
       : supabase.from('power_readings').insert(payload);
 
     let { error } = await runQuery();
-    // If solar/grid columns don't exist in DB yet, retry without them
-    if (error && (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh'))) {
+    // If optional columns don't exist in DB yet, strip and retry
+    if (error && (
+      error.message.includes('daily_solar_kwh') ||
+      error.message.includes('daily_grid_kwh') ||
+      error.message.includes('multiplier')
+    )) {
       delete payload.daily_solar_kwh;
       delete payload.daily_grid_kwh;
+      delete payload.multiplier;
       ({ error } = await runQuery());
     }
     if (error) { toast.error(error.message); return; }
