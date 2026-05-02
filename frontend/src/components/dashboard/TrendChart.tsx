@@ -249,93 +249,104 @@ export function TrendChart({
     const byDay = new Map<string, any>();
     const ensure = (d: string, sortKey: number) =>
       byDay.get(d) ?? byDay.set(d, {
-        date: d, sortKey, production: 0, consumption: 0,
-        rawwater: 0, recovery: 0, recoverySamples: 0,
+        date: d, sortKey,
+        production: 0, consumption: 0, rawwater: 0,
+        recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0,
         powerCost: 0, chemCost: 0, totalCost: 0,
         costProduction: 0,
+        // _raw* fields accumulate the true unclamped deltas so the tooltip
+        // can show the real value even when the chart plots 0 (clamped).
+        // null means "no negative delta seen" → tooltip shows normal value.
+        _rawProduction: null as number | null,
+        _rawConsumption: null as number | null,
+        _rawRawwater: null as number | null,
+        _rawKwh: null as number | null,
       }).get(d);
 
     // ── Meter-replacement-aware delta helper ────────────────────────────────
-    // Derives deltas by re-sequencing raw readings chronologically per
-    // plant_id. This is necessary because the DB's `previous_reading` field
-    // stores the value recorded at entry time — after a meter replacement the
-    // *next* reading's `previous_reading` still points to the old meter's
-    // last value, producing a false spike. By tracking the last seen
-    // current_reading per plant in JS we always diff against the true
-    // predecessor and can zero the delta for both the REPL row *and* the
-    // first reading on the new meter (where the raw diff would be huge).
-    //
-    // Rules (matching Operations table Δ column):
-    //   • REPL row itself           → delta = 0
-    //   • Reading right after REPL  → delta = 0  (new meter baseline)
-    //   • All other readings        → delta = max(0, current − lastSeen)
+    // Returns both `delta` (clamped ≥ 0, used for chart) and `rawDelta`
+    // (unclamped, null when no predecessor exists so we don't false-flag
+    // the first reading in the window).
     function computeSequentialDeltas(
       readings: any[],
       dailyVolumeField: string | null,
-    ): { r: any; delta: number }[] {
-      // Sort ascending by datetime so we can walk forward in time.
+    ): { r: any; delta: number; rawDelta: number | null }[] {
       const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()
       );
-      // Track last current_reading and whether the previous row was a REPL,
-      // keyed by plant_id so multi-plant selections don't bleed into each other.
-      const lastReading = new Map<string, number>();   // plant_id → last current_reading
-      const afterRepl   = new Set<string>();           // plant_ids whose next row should be zeroed
+      const lastReading = new Map<string, number>();
+      const afterRepl   = new Set<string>();
 
       return sorted.map((r) => {
         const plantKey = r.plant_id ?? '__';
         const isMR = !!r.is_meter_replacement;
         let delta = 0;
+        let rawDelta: number | null = null;
 
         if (isMR) {
           // REPL row: zero the delta, update baseline to this meter's reading.
-          delta = 0;
           lastReading.set(plantKey, +r.current_reading);
           afterRepl.add(plantKey);
         } else if (afterRepl.has(plantKey)) {
           // First reading after a REPL: zero (new meter baseline), update last.
-          delta = 0;
           lastReading.set(plantKey, +r.current_reading);
           afterRepl.delete(plantKey);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
           // Use pre-computed daily_volume when available (e.g. well/locator).
-          delta = Math.max(0, +r[dailyVolumeField]);
+          rawDelta = +r[dailyVolumeField];
+          delta = Math.max(0, rawDelta);
           lastReading.set(plantKey, +r.current_reading);
         } else if (lastReading.has(plantKey)) {
           // Normal sequential diff against last seen value for this plant.
-          delta = Math.max(0, +r.current_reading - lastReading.get(plantKey)!);
+          rawDelta = +r.current_reading - lastReading.get(plantKey)!;
+          delta = Math.max(0, rawDelta);
           lastReading.set(plantKey, +r.current_reading);
         } else {
           // First reading ever for this plant in the window — no predecessor.
-          delta = 0;
           lastReading.set(plantKey, +r.current_reading);
         }
 
-        return { r, delta };
+        return { r, delta, rawDelta };
       });
     }
 
+    // Helper: accumulate raw delta into a _raw field only when it's negative.
+    // Keeps null when all readings are non-negative (tooltip shows normal value).
+    const accumulateRaw = (row: any, field: string, rawDelta: number | null) => {
+      if (rawDelta === null) return;
+      if (rawDelta < 0) {
+        row[field] = (row[field] ?? 0) + rawDelta;
+      }
+    };
+
     // Raw Water = sum of well meter deltas (groundwater source meters).
-    computeSequentialDeltas(wellReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
+    computeSequentialDeltas(wellReadings ?? [], 'daily_volume').forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).rawwater += delta;
+      const row = ensure(key, dt.getTime());
+      row.rawwater += delta;
+      accumulateRaw(row, '_rawRawwater', rawDelta);
     });
 
     // Production = sum of product meter (treated-water output) deltas.
-    computeSequentialDeltas(productReadings ?? [], null).forEach(({ r, delta }) => {
+    computeSequentialDeltas(productReadings ?? [], null).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).production += delta;
+      const row = ensure(key, dt.getTime());
+      row.production += delta;
+      accumulateRaw(row, '_rawProduction', rawDelta);
     });
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
-    computeSequentialDeltas(locReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
+    computeSequentialDeltas(locReadings ?? [], 'daily_volume').forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).consumption += delta;
+      const row = ensure(key, dt.getTime());
+      row.consumption += delta;
+      accumulateRaw(row, '_rawConsumption', rawDelta);
     });
+
     (roReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
@@ -343,32 +354,22 @@ export function TrendChart({
       if (r.recovery_pct != null) { row.recovery += +r.recovery_pct; row.recoverySamples += 1; }
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
+
     // Power = sequential delta of meter_reading_kwh, exactly like well/locator.
-    // daily_consumption_kwh is pre-computed but still uses the stale
-    // previous_reading gap after a replacement, so we re-derive it
-    // sequentially using meter_reading_kwh as the cumulative counter.
-    // Falls back to daily_consumption_kwh when meter_reading_kwh is absent.
     computeSequentialDeltas(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
-        // Normalise: use meter_reading_kwh as current_reading for the helper,
-        // and daily_consumption_kwh as the daily_volume pre-computed field.
         current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
       })),
       'daily_consumption_kwh',
-    ).forEach(({ r, delta }) => {
+    ).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).kwh += delta;
+      const row = ensure(key, dt.getTime());
+      row.kwh += delta;
+      accumulateRaw(row, '_rawKwh', rawDelta);
     });
-    // Roll up daily ₱ totals across the selected plants. `cost_date` is
-    // a date string (YYYY-MM-DD) — anchor it at local midnight for a
-    // stable sortKey. `total_cost` is a generated column in some rows
-    // and null in others, so fall back to the power+chem sum.
-    // `costProduction` accumulates `production_m3` from the same row
-    // so we can compute a volume-weighted ₱/m³ at the end (don't reuse
-    // the well-readings `production` field — RO output ≠ billable
-    // production_m3 in some plants).
+
     (costReadings ?? []).forEach((r: any) => {
       const dt = new Date(`${r.cost_date}T00:00:00`);
       const key = format(dt, 'MMM d');
@@ -388,56 +389,84 @@ export function TrendChart({
         recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
         nrw: calc.nrw(d.production, d.consumption),
-        // Volume-weighted ₱/m³ — null when no production was recorded so
-        // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
       }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
-  // ── Per-day negative-value index (derived from chartData, not raw readings)
-  // Only checks the fields that are actually plotted for this metric, so
-  // each chart exclusively flags its own series — no cross-metric bleed.
-  const negativeByDate = useMemo<Map<string, string[]>>(() => {
-    const map = new Map<string, string[]>();
-    const flag = (date: string, label: string) => {
-      const arr = map.get(date);
-      if (arr) arr.push(label);
-      else map.set(date, [label]);
-    };
+  // ── Per-day negative-value index ────────────────────────────────────────
+  // Built from the _raw* fields stored in chartData. Each entry lists only
+  // the fields that are actually plotted for this metric and had a negative
+  // raw delta on that date. The tooltip uses this to show the true value
+  // (e.g. -900.3) even though the chart bar/line shows 0 (clamped).
+  const negativeByDate = useMemo<Map<string, { label: string; rawValue: number; chartValue: number }[]>>(() => {
+    const map = new Map<string, { label: string; rawValue: number; chartValue: number }[]>();
 
-    // Fields to check per metric — maps to the chart series visible to the user.
-    const checks: Record<string, Array<{ field: string; label: string }>> = {
-      production:    [{ field: 'production', label: 'Production (m³)' },
-                      { field: 'consumption', label: 'Consumption (m³)' }],
-      nrw:           [{ field: 'production', label: 'Production (m³)' },
-                      { field: 'consumption', label: 'Consumption (m³)' },
-                      { field: 'nrw',        label: 'NRW %' }],
-      rawwater:      [{ field: 'rawwater',   label: 'Raw Water (m³)' }],
-      recovery:      [{ field: 'recovery',   label: 'Recovery (%)' }],
-      tds:           [{ field: 'tds',        label: 'Permeate TDS (ppm)' }],
-      pv:            [{ field: 'production', label: 'Production (m³)' },
-                      { field: 'kwh',        label: 'Power (kWh)' }],
-      productionCost:[{ field: 'powerCost',  label: 'Power (₱)' },
-                      { field: 'chemCost',   label: 'Chemical (₱)' },
-                      { field: 'totalCost',  label: 'Total (₱)' }],
+    // Mapping: metric → which _raw field to check, its display label, and the
+    // corresponding plotted (clamped) field name.
+    const checks: Record<string, Array<{ rawField: string; chartField: string; label: string }>> = {
+      production:     [
+        { rawField: '_rawProduction',  chartField: 'production',  label: 'Production (m³)' },
+        { rawField: '_rawConsumption', chartField: 'consumption', label: 'Consumption (m³)' },
+      ],
+      nrw:            [
+        { rawField: '_rawProduction',  chartField: 'production',  label: 'Production (m³)' },
+        { rawField: '_rawConsumption', chartField: 'consumption', label: 'Consumption (m³)' },
+        // nrw is derived — flag it when the computed value is negative
+        { rawField: 'nrw',             chartField: 'nrw',         label: 'NRW %' },
+      ],
+      rawwater:       [{ rawField: '_rawRawwater', chartField: 'rawwater', label: 'Raw Water (m³)' }],
+      pv:             [
+        { rawField: '_rawProduction', chartField: 'production', label: 'Production (m³)' },
+        { rawField: '_rawKwh',        chartField: 'kwh',        label: 'Power (kWh)' },
+      ],
+      // recovery, tds, productionCost values come straight from the DB —
+      // no clamping — so rawField === chartField (negative = truly negative).
+      recovery:       [{ rawField: 'recovery',  chartField: 'recovery',  label: 'Recovery (%)' }],
+      tds:            [{ rawField: 'tds',        chartField: 'tds',       label: 'Permeate TDS (ppm)' }],
+      productionCost: [
+        { rawField: 'powerCost', chartField: 'powerCost', label: 'Power (₱)' },
+        { rawField: 'chemCost',  chartField: 'chemCost',  label: 'Chemical (₱)' },
+        { rawField: 'totalCost', chartField: 'totalCost', label: 'Total (₱)' },
+      ],
     };
 
     const fields = checks[metric] ?? [];
+
     for (const row of chartData) {
-      for (const { field, label } of fields) {
-        const v = row[field];
-        if (v != null && +v < 0) flag(row.date, label);
+      for (const { rawField, chartField, label } of fields) {
+        const raw = row[rawField];
+        // For _raw* fields: null means no negative delta → skip.
+        // For direct fields (recovery, tds, costs, nrw): check if < 0.
+        const isNegative = rawField.startsWith('_raw')
+          ? raw !== null && raw < 0
+          : raw != null && +raw < 0;
+
+        if (!isNegative) continue;
+
+        const entry = { label, rawValue: +raw, chartValue: +(row[chartField] ?? 0) };
+        const existing = map.get(row.date);
+        if (existing) existing.push(entry);
+        else map.set(row.date, [entry]);
       }
     }
 
     return map;
   }, [chartData, metric]);
 
-  // Custom tooltip that looks identical to the Recharts default but appends
-  // an amber warning section only on dates where a plotted value is negative.
+  // Custom tooltip — same look as Recharts default but:
+  //  • Shows the true raw (unclamped) value for any field that was clamped to 0
+  //  • Appends an amber warning row listing the affected series
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const warnings = negativeByDate.get(label as string) ?? [];
+
+    // Build a quick lookup from dataKey → rawValue for affected fields
+    const rawOverride = new Map(warnings.map((w) => {
+      // Match label back to dataKey by finding the payload entry with the same name
+      const entry = payload.find((p: any) => p.name === w.label);
+      return [entry?.dataKey, w.rawValue];
+    }));
+
     return (
       <div style={{
         background: 'hsl(var(--card))',
@@ -446,15 +475,30 @@ export function TrendChart({
         fontSize: 11,
         padding: '8px 10px',
         minWidth: 148,
-        maxWidth: 260,
+        maxWidth: 280,
         boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
       }}>
         <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
-        {payload.map((entry: any) => (
-          <p key={entry.dataKey} style={{ margin: '1px 0', color: entry.color ?? entry.stroke }}>
-            {entry.name}: {entry.value != null ? entry.value.toLocaleString() : '—'}
-          </p>
-        ))}
+        {payload.map((entry: any) => {
+          const override = rawOverride.get(entry.dataKey);
+          const displayValue = override !== undefined ? override : entry.value;
+          const isNegative = displayValue != null && displayValue < 0;
+          return (
+            <p key={entry.dataKey} style={{
+              margin: '1px 0',
+              color: entry.color ?? entry.stroke,
+            }}>
+              {entry.name}:{' '}
+              <span style={isNegative ? { fontWeight: 600 } : undefined}>
+                {displayValue != null ? displayValue.toLocaleString() : '—'}
+              </span>
+              {/* Show "(plotted as 0)" hint when the chart clamped a negative */}
+              {override !== undefined && (
+                <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>(chart: 0)</span>
+              )}
+            </p>
+          );
+        })}
         {warnings.length > 0 && (
           <div style={{
             marginTop: 6,
@@ -467,8 +511,8 @@ export function TrendChart({
           }}>
             <span style={{ fontSize: 12, lineHeight: 1 }}>⚠️</span>
             <span style={{ fontSize: 10, lineHeight: 1.4 }}>
-              <strong>Negative value:</strong>{' '}
-              {warnings.join(', ')}
+              <strong>Negative reading:</strong>{' '}
+              {warnings.map((w) => w.label).join(', ')}
             </span>
           </div>
         )}
