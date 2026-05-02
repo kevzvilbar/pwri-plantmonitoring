@@ -361,3 +361,4 @@ export function UsersPanel() {
       <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={invalidate} />
     </div>
   );
+}
