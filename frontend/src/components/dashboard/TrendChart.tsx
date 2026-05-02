@@ -394,6 +394,69 @@ export function TrendChart({
       }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
+  // ── Negative-value detection ────────────────────────────────────────────
+  // Scan raw readings for negative values and collect the affected field
+  // names so a small inline warning can be shown inside the chart card.
+  // This intentionally checks the raw source readings (not chartData which
+  // has Math.max(0,…) applied) so we catch data-quality issues even when
+  // the chart line itself appears fine.
+  const negativeFields = useMemo<string[]>(() => {
+    const flagged: string[] = [];
+
+    const hasNegative = (rows: any[] | undefined, field: string) =>
+      (rows ?? []).some((r) => r[field] != null && +r[field] < 0);
+
+    // Locator meters → consumption
+    if (
+      hasNegative(locReadings, 'daily_volume') ||
+      (locReadings ?? []).some((r) => {
+        const cur = +r.current_reading, prev = +r.previous_reading;
+        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
+      })
+    ) flagged.push('Locators');
+
+    // Well meters → raw water
+    if (
+      hasNegative(wellReadings, 'daily_volume') ||
+      (wellReadings ?? []).some((r) => {
+        const cur = +r.current_reading, prev = +r.previous_reading;
+        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
+      })
+    ) flagged.push('Raw Water');
+
+    // Product meters → production
+    if (
+      (productReadings ?? []).some((r) => {
+        const cur = +r.current_reading, prev = +r.previous_reading;
+        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
+      })
+    ) flagged.push('Production');
+
+    // Power meters → kWh
+    if (
+      hasNegative(powerReadings, 'daily_consumption_kwh') ||
+      (powerReadings ?? []).some((r) => {
+        const cur = +(r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0);
+        const prev = +(r.previous_reading ?? NaN);
+        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
+      })
+    ) flagged.push('Power');
+
+    // RO train readings → recovery / TDS / blending
+    if (hasNegative(roReadings, 'recovery_pct'))  flagged.push('Recovery');
+    if (hasNegative(roReadings, 'permeate_tds'))  flagged.push('TDS');
+    if (hasNegative(roReadings, 'blend_ratio'))   flagged.push('Blending');
+
+    // Production costs
+    if (
+      hasNegative(costReadings, 'power_cost') ||
+      hasNegative(costReadings, 'chem_cost')  ||
+      hasNegative(costReadings, 'total_cost')
+    ) flagged.push('Cost');
+
+    return flagged;
+  }, [locReadings, wellReadings, productReadings, powerReadings, roReadings, costReadings]);
+
   const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
@@ -449,6 +512,39 @@ export function TrendChart({
           )}
         </div>
       </div>
+      {/* Inline negative-value warning — shown inside the card, not above it */}
+      {negativeFields.length > 0 && (
+        <div
+          className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-2.5 py-1.5 mb-2 text-[11px] text-amber-800 dark:text-amber-300"
+          data-testid={`negative-warning-${metric}`}
+        >
+          {/* Warning icon */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5 mt-[1px] shrink-0 text-amber-500 dark:text-amber-400"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>
+            <span className="font-semibold">Negative readings detected</span>
+            {' — check meter data for: '}
+            {negativeFields.map((f, i) => (
+              <span key={f}>
+                <span className="font-medium text-amber-900 dark:text-amber-200">{f}</span>
+                {i < negativeFields.length - 1 && ', '}
+              </span>
+            ))}
+            {'. Values below zero may indicate meter drift, a missed replacement row, or a data entry error.'}
+          </span>
+        </div>
+      )}
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
