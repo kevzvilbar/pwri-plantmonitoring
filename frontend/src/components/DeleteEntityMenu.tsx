@@ -38,34 +38,61 @@ interface DependencySnapshot {
   assigned_users?: number;
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('You must be signed in.');
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+/** Count rows in a table matching a column value, returns 0 on error */
+async function countRefs(table: string, column: string, value: string): Promise<number> {
+  const { count } = await supabase
+    .from(table as any)
+    .select('*', { count: 'exact', head: true })
+    .eq(column, value);
+  return count ?? 0;
 }
 
-async function api<T>(
-  method: 'GET' | 'POST' | 'DELETE',
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  const base = (import.meta.env.VITE_API_URL as string) || '';
-  const headers = await authHeaders();
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try {
-      const j = await res.json();
-      msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
-    } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  return (await res.json()) as T;
+/** Build a dependency snapshot for a user by querying Supabase directly */
+async function fetchUserDeps(id: string): Promise<DependencySnapshot> {
+  const checks = await Promise.all([
+    countRefs('user_roles', 'user_id', id),
+    countRefs('afm_readings', 'recorded_by', id),
+    countRefs('cartridge_readings', 'recorded_by', id),
+    countRefs('checklist_executions', 'performed_by', id),
+    countRefs('cip_logs', 'performed_by', id),
+    countRefs('downtime_events', 'recorded_by', id),
+    countRefs('incidents', 'recorded_by', id),
+    countRefs('locator_readings', 'recorded_by', id),
+    countRefs('power_readings', 'recorded_by', id),
+  ]);
+  const [roles, ...rest] = checks;
+  const refs: Dependency[] = [
+    { table: 'afm_readings', count: rest[0] },
+    { table: 'cartridge_readings', count: rest[1] },
+    { table: 'checklist_executions', count: rest[2] },
+    { table: 'cip_logs', count: rest[3] },
+    { table: 'downtime_events', count: rest[4] },
+    { table: 'incidents', count: rest[5] },
+    { table: 'locator_readings', count: rest[6] },
+    { table: 'power_readings', count: rest[7] },
+  ].filter((r) => r.count > 0);
+  const total = refs.reduce((a, b) => a + b.count, 0);
+  return { blocking: refs.length > 0, total_references: total, references: refs, role_rows: roles };
+}
+
+/** Build a dependency snapshot for a plant by querying Supabase directly */
+async function fetchPlantDeps(id: string): Promise<DependencySnapshot> {
+  const checks = await Promise.all([
+    countRefs('locators', 'plant_id', id),
+    countRefs('downtime_events', 'plant_id', id),
+    countRefs('incidents', 'plant_id', id),
+    countRefs('daily_plant_summary', 'plant_id', id),
+    countRefs('electric_bills', 'plant_id', id),
+  ]);
+  const refs: Dependency[] = [
+    { table: 'locators', count: checks[0] },
+    { table: 'downtime_events', count: checks[1] },
+    { table: 'incidents', count: checks[2] },
+    { table: 'daily_plant_summary', count: checks[3] },
+    { table: 'electric_bills', count: checks[4] },
+  ].filter((r) => r.count > 0);
+  const total = refs.reduce((a, b) => a + b.count, 0);
+  return { blocking: refs.length > 0, total_references: total, references: refs };
 }
 
 interface DeleteMenuProps {
@@ -94,7 +121,6 @@ export function DeleteEntityMenu({
   const [loadingDeps, setLoadingDeps] = useState(false);
 
   const copy = KIND_COPY[kind];
-  const entityPath = kind === 'user' ? 'users' : 'plants';
   const reasonValid = reason.trim().length >= 5;
 
   const resetAndClose = () => {
@@ -109,10 +135,16 @@ export function DeleteEntityMenu({
   const doSoft = async () => {
     try {
       setBusy(true);
-      await api('POST', `/api/admin/${entityPath}/${id}/soft-delete`, { reason });
-      toast.success(`${copy.label[0].toUpperCase() + copy.label.slice(1)} marked ${copy.softName}`);
+      const cap = copy.label[0].toUpperCase() + copy.label.slice(1);
+      if (kind === 'user') {
+        const { error } = await supabase.from('user_profiles').update({ status: 'Suspended' }).eq('id', id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from('plants').update({ status: 'Inactive' }).eq('id', id);
+        if (error) throw new Error(error.message);
+      }
+      toast.success(`${cap} marked ${copy.softName}`);
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
-      qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
       resetAndClose();
       onDeleted?.();
     } catch (e: any) {
@@ -125,43 +157,35 @@ export function DeleteEntityMenu({
   const loadDeps = async () => {
     setLoadingDeps(true);
     try {
-      const snap = await api<DependencySnapshot>(
-        'GET',
-        `/api/admin/${entityPath}/${id}/dependencies`,
-      );
+      const snap = kind === 'user' ? await fetchUserDeps(id) : await fetchPlantDeps(id);
       setDeps(snap);
     } catch (e: any) {
-      // Non-blocking — dialog is already open; treat as no dependencies found
       setDeps({ blocking: false, total_references: 0, references: [] });
     } finally {
       setLoadingDeps(false);
     }
   };
 
-  const doHard = async (force = false, archive = false) => {
+  const doHard = async (force = false, _archive = false) => {
     if (!reasonValid) {
       toast.error('Please enter a reason of at least 5 characters.');
       return;
     }
     try {
       setBusy(true);
-      const result = await api<{ archived?: boolean; archived_counts?: Record<string, number> }>(
-        'POST', `/api/admin/${entityPath}/${id}/hard-delete`,
-        { reason, force, archive },
-      );
       const cap = copy.label[0].toUpperCase() + copy.label.slice(1);
-      if (archive && result?.archived) {
-        const total = Object.values(result.archived_counts ?? {}).reduce(
-          (a, b) => a + (Number(b) || 0), 0,
-        );
-        toast.success(`${cap} deleted — ${total} dependent row(s) archived`);
-      } else if (force) {
-        toast.success(`${cap} force-deleted (dependencies orphaned)`);
+      if (kind === 'user') {
+        // Remove roles first, then profile (FK order)
+        const { error: rolesErr } = await supabase.from('user_roles').delete().eq('user_id', id);
+        if (rolesErr) throw new Error(rolesErr.message);
+        const { error: profileErr } = await supabase.from('user_profiles').delete().eq('id', id);
+        if (profileErr) throw new Error(profileErr.message);
       } else {
-        toast.success(`${cap} permanently deleted`);
+        const { error } = await supabase.from('plants').delete().eq('id', id);
+        if (error) throw new Error(error.message);
       }
+      toast.success(force ? `${cap} force-deleted` : `${cap} permanently deleted`);
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
-      qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
       resetAndClose();
       onDeleted?.();
     } catch (e: any) {
