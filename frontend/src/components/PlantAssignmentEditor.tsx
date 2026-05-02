@@ -19,10 +19,12 @@ interface Props {
   invalidateKeys?: string[][];
   /** Disable the trigger when the caller lacks permission. */
   disabled?: boolean;
+  /** When true (Operator), only one plant may be selected at a time. */
+  singlePlantOnly?: boolean;
 }
 
 export function PlantAssignmentEditor({
-  userId, userLabel, currentPlantIds, invalidateKeys, disabled,
+  userId, userLabel, currentPlantIds, invalidateKeys, disabled, singlePlantOnly,
 }: Props) {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
@@ -37,6 +39,10 @@ export function PlantAssignmentEditor({
   const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
+      if (singlePlantOnly) {
+        // Operator: radio-style — selecting a new plant replaces any existing
+        return next.has(id) ? new Set<string>() : new Set<string>([id]);
+      }
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
@@ -80,7 +86,10 @@ export function PlantAssignmentEditor({
         <DialogHeader>
           <DialogTitle>Plant assignments</DialogTitle>
           <DialogDescription>
-            Choose which plants <strong>{userLabel}</strong> can access.
+            {singlePlantOnly
+              ? <>Operators can only be assigned to <strong>one plant</strong>. Select below for <strong>{userLabel}</strong>.</>
+              : <>Choose which plants <strong>{userLabel}</strong> can access.</>
+            }
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
@@ -92,7 +101,10 @@ export function PlantAssignmentEditor({
                 className="flex items-center gap-2 p-2 rounded-md border hover:bg-muted cursor-pointer"
                 data-testid={`plant-toggle-${p.id}`}
               >
-                <Checkbox checked={on} onCheckedChange={() => toggle(p.id)} />
+                {singlePlantOnly
+                  ? <input type="radio" name={`plant-${userId}`} checked={on} onChange={() => { setSelected(new Set([p.id])); }} className="accent-accent" />
+                  : <Checkbox checked={on} onCheckedChange={() => toggle(p.id)} />
+                }
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{p.name}</div>
                   <div className="text-[11px] text-muted-foreground truncate">

@@ -9,7 +9,25 @@ import {
   CommandSeparator,
 } from '@/components/ui/command';
 
-export const DEFAULT_DESIGNATIONS = ['Admin', 'Manager', 'Supervisor', 'Operator'] as const;
+export const DEFAULT_DESIGNATIONS = [
+  'Admin',
+  'Manager',
+  'Supervisor',
+  'Operator',
+  'Maintenance',
+  'Quality Assurance',
+  'Data Analyst',
+] as const;
+
+export type DefaultDesignation = typeof DEFAULT_DESIGNATIONS[number];
+
+/** The only designation that uses shared-email / multi-username sign-up. */
+export const OPERATOR_DESIGNATION = 'Operator' as const;
+
+/** Designations that get unique email + multi-plant support. */
+export const NON_OPERATOR_DESIGNATIONS: DefaultDesignation[] = [
+  'Admin', 'Manager', 'Supervisor', 'Maintenance', 'Quality Assurance', 'Data Analyst',
+];
 
 interface Props {
   value: string;
@@ -152,8 +170,8 @@ export function DesignationCombobox({
 
 /**
  * Derive a coarse-grained access level badge from the user's roles.
- * Admin → Full access, Manager → Elevated, Supervisor → Limited,
- * Operator/Technician/other → Restricted.
+ * Admin → Full access, Manager → Elevated, Supervisor/Maintenance/QA/Data Analyst → Limited,
+ * Operator/other → Restricted.
  */
 export function accessLevelFromRoles(roles: string[] | undefined | null): {
   label: string;
