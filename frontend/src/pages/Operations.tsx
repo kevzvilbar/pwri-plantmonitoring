@@ -1379,9 +1379,6 @@ function ProductForm() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">{meters?.length ?? 0} configured</span>
-                {canEdit && (
-                  <AddProductMeterButton plantId={plantId} onAdded={invalidate} />
-                )}
               </div>
             </div>
 
@@ -1407,7 +1404,7 @@ function ProductForm() {
             ) : (
               <div className="p-4 text-xs text-muted-foreground">
                 No product meters configured for this plant.{' '}
-                {canEdit && 'Use the + button above to add one.'}
+                {canEdit && 'Go to the plant detail page to add product meters.'}
               </div>
             )}
           </Card>

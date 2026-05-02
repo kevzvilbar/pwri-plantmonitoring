@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -375,8 +375,13 @@ function PlantDetail({ plantId }: { plantId: string }) {
           </div>
         </div>
 
-        {/* Energy Sources — inside the gradient card, collapsible */}
+        {/* Product Meters — compact inline list inside the hero card */}
         <div className="mt-4 pt-3 border-t border-white/10">
+          <ProductMetersInlineHero plant={plant} />
+        </div>
+
+        {/* Energy Sources — inside the gradient card, collapsible */}
+        <div className="mt-3 pt-3 border-t border-white/10">
           <EnergySourceInline plant={plant} isManager={isManager} qc={qc} />
         </div>
       </Card>
@@ -432,7 +437,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
       <BackwashModeCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
-      <ProductMetersCard plant={plant} />
 
       <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-lg w-full">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
@@ -454,6 +458,179 @@ function PlantDetail({ plantId }: { plantId: string }) {
       {tab === 'locators' && <LocatorsList plantId={plantId} />}
       {tab === 'wells' && <WellsList plantId={plantId} />}
       {tab === 'trains' && <TrainsList plantId={plantId} />}
+    </div>
+  );
+}
+
+// ─── Product Meters Inline Hero (inside the teal gradient card) ──────────────
+// Compact read + manage view rendered on the dark background of the plant hero.
+
+function ProductMetersInlineHero({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user } = useAuth();
+  const canEdit = isManager || isAdmin;
+
+  const { data: meters } = useQuery({
+    queryKey: ['product-meters', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_meters' as any)
+        .select('*')
+        .eq('plant_id', plant.id)
+        .order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
+
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+
+  const addMeter = async () => {
+    if (!newName.trim()) return;
+    setAddBusy(true);
+    const { data, error } = await supabase
+      .from('product_meters' as any)
+      .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
+      .select('id').single();
+    setAddBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id, meter_id: (data as any)?.id ?? '',
+      meter_name: newName.trim(), old_value: null, new_value: newName.trim(),
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
+    });
+    toast.success(`"${newName.trim()}" added`);
+    setNewName(''); setAdding(false); invalidate();
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs opacity-70">
+          <Gauge className="h-3.5 w-3.5" />
+          <span className="font-medium">Product Meters</span>
+          {meters && meters.length > 0 && (
+            <span className="opacity-60">({meters.length})</span>
+          )}
+        </div>
+        {canEdit && !adding && (
+          <button
+            onClick={() => setAdding(true)}
+            className="text-[11px] text-white/60 hover:text-white flex items-center gap-0.5 transition-colors"
+          >
+            <Plus className="h-3 w-3" />Add
+          </button>
+        )}
+      </div>
+
+      {meters && meters.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {meters.map((m: any) => (
+            <ProductMeterHeroPill key={m.id} meter={m} plantId={plant.id}
+              userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
+          ))}
+        </div>
+      )}
+
+      {meters && meters.length === 0 && !adding && (
+        <p className="text-[11px] opacity-50">
+          No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
+        </p>
+      )}
+
+      {adding && (
+        <div className="flex items-center gap-1.5 mt-1">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. Main Line…"
+            className="h-7 text-xs bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') addMeter();
+              if (e.key === 'Escape') { setAdding(false); setNewName(''); }
+            }}
+            autoFocus
+          />
+          <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()}
+            className="h-7 px-2 text-xs bg-white/20 hover:bg-white/30 text-white border-0">
+            {addBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+          </Button>
+          <button onClick={() => { setAdding(false); setNewName(''); }}
+            className="text-white/50 hover:text-white transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductMeterHeroPill({ meter, plantId, userId, canEdit, onChanged }: {
+  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(meter.name);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (!name.trim() || name === meter.name) { setEditing(false); return; }
+    setBusy(true);
+    const { error } = await supabase
+      .from('product_meters' as any).update({ name: name.trim() } as any).eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: meter.id, meter_name: name.trim(),
+      old_value: meter.name, new_value: name.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+    onChanged();
+    setEditing(false);
+  };
+
+  const remove = async () => {
+    if (!confirm(`Delete meter "${meter.name}"? All its readings will be lost.`)) return;
+    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', meter.id);
+    await supabase.from('product_meters' as any).delete().eq('id', meter.id);
+    onChanged();
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <Input value={name} onChange={(e) => setName(e.target.value)}
+          className="h-6 text-xs w-28 bg-white/10 border-white/20 text-white"
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+          autoFocus />
+        <button onClick={save} disabled={busy}
+          className="text-[10px] text-white/70 hover:text-white px-1">
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+        </button>
+        <button onClick={() => setEditing(false)} className="text-white/40 hover:text-white">
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-center gap-1 bg-white/10 hover:bg-white/15 rounded-full px-2.5 py-0.5 text-[11px] text-white/80 transition-colors">
+      <span>{meter.name}</span>
+      {canEdit && (
+        <>
+          <button onClick={() => setEditing(true)}
+            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity ml-0.5">
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+          <button onClick={remove}
+            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity">
+            <Trash2 className="h-2.5 w-2.5" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
