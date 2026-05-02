@@ -174,7 +174,7 @@ export function TrendChart({
   };
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime'),
+    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsLocReadings,
   });
   // Product meter readings — the treated-water output meters installed on
@@ -185,7 +185,7 @@ export function TrendChart({
     queryKey: ['trend-product', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
-        .select('current_reading,previous_reading,reading_datetime')
+        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
@@ -196,7 +196,7 @@ export function TrendChart({
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime'),
+    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsWellReadings,
   });
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
@@ -244,37 +244,50 @@ export function TrendChart({
       }).get(d);
 
     // Raw Water = sum of well meter deltas (groundwater source meters).
+    // When a reading is marked as a meter replacement, the delta is zeroed
+    // (matching the Operations table display) so replacement events don't
+    // create artificial spikes on the chart.
     (wellReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      const delta = r.daily_volume != null
-        ? +r.daily_volume
-        : (r.current_reading != null && r.previous_reading != null)
-          ? Math.max(0, +r.current_reading - +r.previous_reading)
-          : 0;
+      const delta = r.is_meter_replacement
+        ? 0
+        : r.daily_volume != null
+          ? +r.daily_volume
+          : (r.current_reading != null && r.previous_reading != null)
+            ? Math.max(0, +r.current_reading - +r.previous_reading)
+            : 0;
       row.rawwater += delta;
     });
     // Production = sum of product meter (treated-water output) deltas.
+    // Meter replacement readings are zeroed to avoid artificial spikes,
+    // consistent with the Operations table's Δ column behaviour.
     (productReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      const delta = (r.current_reading != null && r.previous_reading != null)
-        ? Math.max(0, +r.current_reading - +r.previous_reading)
-        : 0;
+      const delta = r.is_meter_replacement
+        ? 0
+        : (r.current_reading != null && r.previous_reading != null)
+          ? Math.max(0, +r.current_reading - +r.previous_reading)
+          : 0;
       row.production += delta;
     });
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
+    // Meter replacement readings are zeroed to avoid artificial spikes,
+    // consistent with the Operations table's Δ column behaviour.
     (locReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      const delta = r.daily_volume != null
-        ? +r.daily_volume
-        : (r.current_reading != null && r.previous_reading != null)
-          ? Math.max(0, +r.current_reading - +r.previous_reading)
-          : 0;
+      const delta = r.is_meter_replacement
+        ? 0
+        : r.daily_volume != null
+          ? +r.daily_volume
+          : (r.current_reading != null && r.previous_reading != null)
+            ? Math.max(0, +r.current_reading - +r.previous_reading)
+            : 0;
       row.consumption += delta;
     });
     (roReadings ?? []).forEach((r: any) => {
