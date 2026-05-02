@@ -432,6 +432,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
       <BackwashModeCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
+      <ProductMetersCard plant={plant} />
 
       <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-lg w-full">
         {(['locators', 'wells', 'trains'] as const).map((t) => (
@@ -457,7 +458,226 @@ function PlantDetail({ plantId }: { plantId: string }) {
   );
 }
 
-function BackwashModeCard({ plant }: { plant: any }) {
+// ─── Product Meters Card ──────────────────────────────────────────────────────
+// Manager/Admin can add, rename, and remove product meters per plant.
+// Operators can view meters and their latest readings but cannot edit.
+
+async function logProductMeterAudit(entry: {
+  plant_id: string;
+  meter_id: string;
+  meter_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  user_id: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('product_meter_audit_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore */ }
+}
+
+function ProductMetersCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user } = useAuth();
+  const canEdit = isManager || isAdmin;
+
+  const { data: meters, isLoading } = useQuery({
+    queryKey: ['product-meters', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_meters' as any)
+        .select('*')
+        .eq('plant_id', plant.id)
+        .order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
+
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+
+  const addMeter = async () => {
+    if (!newName.trim()) { toast.error('Enter a meter name'); return; }
+    setAddBusy(true);
+    const { data, error } = await supabase
+      .from('product_meters' as any)
+      .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
+      .select('id')
+      .single();
+    setAddBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id,
+      meter_id: (data as any)?.id ?? '',
+      meter_name: newName.trim(),
+      old_value: null,
+      new_value: newName.trim(),
+      user_id: user?.id ?? null,
+      timestamp: new Date().toISOString(),
+    });
+    toast.success(`"${newName.trim()}" added`);
+    setNewName(''); setAdding(false); invalidate();
+  };
+
+  return (
+    <Card className="p-3 space-y-2" data-testid="product-meters-card">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Gauge className="h-4 w-4 text-teal-600" />
+          <div>
+            <div className="text-sm font-semibold">Product Meters</div>
+            <div className="text-[11px] text-muted-foreground">
+              Meter readings flow into Operations → Product tab.
+            </div>
+          </div>
+        </div>
+        {canEdit && !adding && (
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-product-meter-btn">
+            <Plus className="h-3 w-3 mr-1" />Add
+          </Button>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+        </div>
+      )}
+
+      {!isLoading && meters && (
+        <div className="space-y-1.5">
+          {meters.map((m: any) => (
+            <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
+          ))}
+          {meters.length === 0 && (
+            <p className="text-xs text-muted-foreground">No product meters yet.{canEdit ? ' Click Add to create one.' : ''}</p>
+          )}
+        </div>
+      )}
+
+      {/* Inline add form */}
+      {adding && (
+        <div className="flex items-center gap-2 pt-1 border-t">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. Main Line, Secondary Line…"
+            className="h-8 text-sm"
+            onKeyDown={(e) => { if (e.key === 'Enter') addMeter(); if (e.key === 'Escape') { setAdding(false); setNewName(''); } }}
+            autoFocus
+            data-testid="product-meter-name-input"
+          />
+          <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()} data-testid="save-product-meter-btn">
+            {addBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewName(''); }}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── ProductMeterRow inside Plants (rename + delete) ───────────────────────────
+
+function ProductMeterRow({
+  meter, plantId, userId, canEdit, onChanged,
+}: {
+  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(meter.name ?? '');
+  const [busy, setBusy] = useState(false);
+
+  const saveName = async () => {
+    if (!nameInput.trim()) { toast.error('Name required'); return; }
+    setBusy(true);
+    const { error } = await supabase
+      .from('product_meters' as any)
+      .update({ name: nameInput.trim() } as any)
+      .eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId,
+      meter_id: meter.id,
+      meter_name: nameInput.trim(),
+      old_value: meter.name,
+      new_value: nameInput.trim(),
+      user_id: userId,
+      timestamp: new Date().toISOString(),
+    });
+    toast.success('Meter renamed');
+    setEditing(false);
+    onChanged();
+  };
+
+  const deleteMeter = async () => {
+    if (!confirm(`Delete meter "${meter.name}"? All its readings will be removed.`)) return;
+    setBusy(true);
+    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', meter.id);
+    const { error } = await supabase.from('product_meters' as any).delete().eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId,
+      meter_id: meter.id,
+      meter_name: meter.name,
+      old_value: meter.name,
+      new_value: null,
+      user_id: userId,
+      timestamp: new Date().toISOString(),
+    });
+    toast.success(`"${meter.name}" deleted`);
+    onChanged();
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40" data-testid={`plant-product-meter-${meter.id}`}>
+      <Gauge className="h-3.5 w-3.5 text-teal-500 shrink-0" />
+      {editing ? (
+        <>
+          <Input
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            className="h-7 text-sm flex-1"
+            onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
+            autoFocus
+          />
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={saveName} disabled={busy}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name); }}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-sm flex-1 truncate">{meter.name}</span>
+          {canEdit && (
+            <>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 sm:opacity-0 sm:group-hover:opacity-100" title="Rename"
+                onClick={() => { setNameInput(meter.name); setEditing(true); }}>
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button size="sm" variant="ghost"
+                className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 sm:opacity-0 sm:group-hover:opacity-100"
+                title="Delete" onClick={deleteMeter} disabled={busy}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── BackwashModeCard ─────────────────────────────────────────────────────────
   const qc = useQueryClient();
   const { isManager, user, profile } = useAuth();
   const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');

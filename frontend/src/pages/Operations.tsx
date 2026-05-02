@@ -17,7 +17,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -511,10 +511,11 @@ function useBlendingWells(plantId: string) {
 const TAB_ALIASES: Record<string, string> = {
   locator: 'locator', locators: 'locator',
   well: 'well', wells: 'well',
+  product: 'product', production: 'product',
   blending: 'blending', bypass: 'blending',
   power: 'power',
 };
-const VALID_TABS = new Set(['locator', 'well', 'blending', 'power']);
+const VALID_TABS = new Set(['locator', 'well', 'product', 'blending', 'power']);
 
 // ─── PlantSelector ───────────────────────────────────────────────────────────
 function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -552,8 +553,8 @@ export default function Operations() {
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
-      <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-lg w-full">
-        {(['locator', 'well', 'blending', 'power'] as const).map((t) => (
+      <div className="grid grid-cols-5 gap-1 p-1 bg-muted rounded-lg w-full">
+        {(['locator', 'well', 'product', 'blending', 'power'] as const).map((t) => (
           <button
             key={t}
             onClick={() => handleTabChange(t)}
@@ -569,6 +570,7 @@ export default function Operations() {
       <div className="mt-3">
         {tab === 'locator'  && <LocatorReadingForm />}
         {tab === 'well'     && <WellReadingForm />}
+        {tab === 'product'  && <ProductForm />}
         {tab === 'blending' && <BlendingForm />}
         {tab === 'power'    && <PowerForm />}
       </div>
@@ -1253,6 +1255,546 @@ function BlendingRow({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── PRODUCT METER audit logger ──────────────────────────────────────────────
+
+async function logProductMeterChange(entry: {
+  plant_id: string;
+  meter_id: string;
+  meter_name: string;
+  old_value: number | null;
+  new_value: number | null;
+  user_id: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('product_meter_audit_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore if table missing */ }
+}
+
+async function logProductionCalc(entry: {
+  plant_id: string;
+  meter_id: string;
+  meter_name: string;
+  entry_name: string;
+  production_volume: number;
+  user_id: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('production_calc_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore if table missing */ }
+}
+
+// ─── PRODUCT ─────────────────────────────────────────────────────────────────
+
+function ProductForm() {
+  const qc = useQueryClient();
+  const { user, isAdmin, isManager } = useAuth();
+  const { data: plants } = usePlants();
+  const [plantId, setPlantId] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const canEdit = isAdmin || isManager;
+
+  // Product meters for the selected plant
+  const { data: meters, isLoading: metersLoading } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data } = await supabase
+        .from('product_meters' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: !!plantId,
+  });
+
+  // Latest reading per meter
+  const { data: latestReadings } = useQuery({
+    queryKey: ['product-readings-latest', plantId],
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data } = await supabase
+        .from('product_meter_readings' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(200);
+      // Return only latest per meter_id
+      const seen = new Set<string>();
+      return ((data ?? []) as any[]).filter((r) => {
+        if (seen.has(r.meter_id)) return false;
+        seen.add(r.meter_id);
+        return true;
+      });
+    },
+    enabled: !!plantId,
+  });
+
+  const latestByMeter = useMemo(() => {
+    const m: Record<string, any> = {};
+    for (const r of latestReadings ?? []) m[r.meter_id] = r;
+    return m;
+  }, [latestReadings]);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['product-meters', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3">
+        <Label>Plant</Label>
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1">
+            <PlantSelector value={plantId} onChange={setPlantId} />
+          </div>
+          {canEdit && plantId && (
+            <Button
+              size="sm" variant="outline"
+              className="shrink-0 gap-1.5 border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+              onClick={() => setImportOpen(true)}
+              data-testid="import-product-readings-btn"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {plantId && (
+        <>
+          {/* Product Meter list */}
+          <Card className="p-0 overflow-hidden">
+            <div className="px-3 py-2 border-b bg-muted/40 text-xs font-medium flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Gauge className="h-3.5 w-3.5 text-teal-600" />
+                <span>Product meters</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">{meters?.length ?? 0} configured</span>
+                {canEdit && (
+                  <AddProductMeterButton plantId={plantId} onAdded={invalidate} />
+                )}
+              </div>
+            </div>
+
+            {metersLoading ? (
+              <div className="p-4 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading meters…
+              </div>
+            ) : meters?.length ? (
+              <ul className="divide-y">
+                {meters.map((m: any) => (
+                  <li key={m.id}>
+                    <ProductMeterRow
+                      meter={m}
+                      plantId={plantId}
+                      latest={latestByMeter[m.id] ?? null}
+                      userId={user?.id ?? null}
+                      canEdit={canEdit}
+                      onSaved={invalidate}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="p-4 text-xs text-muted-foreground">
+                No product meters configured for this plant.{' '}
+                {canEdit && 'Use the + button above to add one.'}
+              </div>
+            )}
+          </Card>
+
+          {/* CSV import dialog */}
+          {importOpen && (
+            <ImportReadingsDialog
+              title="Import Product Meter Readings from CSV"
+              module="Product Meter Readings"
+              plantId={plantId}
+              userId={user?.id ?? null}
+              schemaHint="meter_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading"
+              templateFilename="product_meter_readings_template.csv"
+              templateRow={{
+                meter_name: 'Main Line',
+                current_reading: '12345.67',
+                reading_datetime: '2024-06-15T08:30',
+                previous_reading: '12200.00',
+              }}
+              validateRow={(r, i) => {
+                const e: string[] = [];
+                if (!r.meter_name?.trim()) e.push(`Row ${i}: meter_name is required`);
+                if (!r.current_reading?.trim() || isNaN(Number(r.current_reading)))
+                  e.push(`Row ${i}: current_reading must be a number`);
+                if (r.previous_reading && isNaN(Number(r.previous_reading)))
+                  e.push(`Row ${i}: previous_reading must be a number`);
+                if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+                  e.push(`Row ${i}: reading_datetime is not a valid date`);
+                return e;
+              }}
+              insertRows={async (rows, pid) => {
+                // Resolve meter names → IDs
+                const { data: meterList } = await supabase
+                  .from('product_meters' as any)
+                  .select('id, name')
+                  .eq('plant_id', pid);
+                const nameToId: Record<string, string> = {};
+                ((meterList ?? []) as any[]).forEach((m: any) => {
+                  nameToId[m.name.toLowerCase()] = m.id;
+                });
+                let count = 0;
+                const errors: string[] = [];
+                for (const r of rows) {
+                  const meterId = nameToId[r.meter_name?.toLowerCase()];
+                  if (!meterId) { errors.push(`Meter not found: "${r.meter_name}"`); continue; }
+                  const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+                  const { error } = await supabase.from('product_meter_readings' as any).insert({
+                    meter_id: meterId,
+                    plant_id: pid,
+                    current_reading: +r.current_reading,
+                    previous_reading: r.previous_reading ? +r.previous_reading : null,
+                    reading_datetime: dt,
+                    recorded_by: user?.id ?? null,
+                  } as any);
+                  if (error) errors.push(error.message);
+                  else count++;
+                }
+                return { count, errors };
+              }}
+              onClose={() => setImportOpen(false)}
+              onImported={() => { setImportOpen(false); invalidate(); }}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Add product meter button (Manager/Admin only) ─────────────────────────────
+
+function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) { toast.error('Enter a meter name'); return; }
+    setBusy(true);
+    const { error } = await supabase.from('product_meters' as any).insert({
+      plant_id: plantId,
+      name: name.trim(),
+      sort_order: 0,
+    } as any);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`"${name.trim()}" added`);
+    setName(''); setOpen(false); onAdded();
+  };
+
+  return (
+    <>
+      <Button size="sm" variant="outline" className="h-6 text-xs px-2 gap-1" onClick={() => setOpen(true)}>
+        <span className="text-base leading-none">+</span> Add meter
+      </Button>
+      <Dialog open={open} onOpenChange={(o) => { if (!o) { setName(''); } setOpen(o); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Add product meter</DialogTitle></DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label>Meter name *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Main Line, Secondary Line…"
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              This name appears in Operations → Product and in all audit logs.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button onClick={submit} disabled={busy || !name.trim()}>
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ── Product meter row ─────────────────────────────────────────────────────────
+
+function ProductMeterRow({
+  meter, plantId, latest, userId, canEdit, onSaved,
+}: {
+  meter: any;
+  plantId: string;
+  latest: any | null;
+  userId: string | null;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const [reading, setReading] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(meter.name ?? '');
+  const [nameSaving, setNameSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const previous = latest?.current_reading ?? null;
+  const cur = +reading || 0;
+  const productionVolume = previous != null && reading ? cur - previous : null;
+
+  const save = async () => {
+    if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
+    setSaving(true);
+    const dt = new Date().toISOString();
+    const { error } = await supabase.from('product_meter_readings' as any).insert({
+      meter_id: meter.id,
+      plant_id: plantId,
+      current_reading: cur,
+      previous_reading: previous,
+      reading_datetime: dt,
+      recorded_by: userId,
+    } as any);
+    if (error) { toast.error(error.message); setSaving(false); return; }
+
+    // Audit the production volume calculation
+    if (productionVolume != null) {
+      await logProductionCalc({
+        plant_id: plantId,
+        meter_id: meter.id,
+        meter_name: meter.name,
+        entry_name: meter.name,
+        production_volume: productionVolume,
+        user_id: userId,
+        timestamp: dt,
+      });
+    }
+
+    toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume)} m³ produced` : ''}`);
+    setReading(''); setSaving(false); onSaved();
+  };
+
+  const saveName = async () => {
+    if (!nameInput.trim()) { toast.error('Name required'); return; }
+    setNameSaving(true);
+    const { error } = await supabase
+      .from('product_meters' as any)
+      .update({ name: nameInput.trim() } as any)
+      .eq('id', meter.id);
+    setNameSaving(false);
+    if (error) { toast.error(error.message); return; }
+
+    // Audit name change
+    await logProductMeterChange({
+      plant_id: plantId,
+      meter_id: meter.id,
+      meter_name: nameInput.trim(),
+      old_value: null,
+      new_value: null,
+      user_id: userId,
+      timestamp: new Date().toISOString(),
+    });
+
+    toast.success('Meter name updated');
+    setEditingName(false);
+    onSaved();
+  };
+
+  return (
+    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`product-meter-row-${meter.id}`}>
+      {/* Name + rename button */}
+      <div className="min-w-0 flex-1 basis-[160px]">
+        {editingName ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              className="h-7 text-sm w-36"
+              onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+              autoFocus
+            />
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={saveName} disabled={nameSaving}>
+              {nameSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingName(false); setNameInput(meter.name); }}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className="text-sm font-medium truncate flex items-center gap-1.5">
+              <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+              {meter.name}
+            </div>
+            {canEdit && (
+              <Button
+                size="sm" variant="ghost"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
+                onClick={() => { setNameInput(meter.name); setEditingName(true); }}
+                title="Rename meter"
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        )}
+        <div className="text-xs text-muted-foreground mt-0.5">
+          prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
+          {productionVolume != null && (
+            <>
+              {' · '}
+              <span className="font-mono-num text-teal-600 font-medium">{fmtNum(productionVolume)} m³</span>
+              {' produced'}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Reading input */}
+      <div className="relative shrink-0">
+        <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
+        <Input
+          type="number" step="any" inputMode="decimal"
+          value={reading}
+          onChange={(e) => setReading(e.target.value)}
+          placeholder="Product Reading"
+          className="h-9 pl-7 w-36 border-teal-300 focus-visible:ring-teal-300 bg-teal-50/40 dark:bg-teal-950/20"
+          data-testid={`product-meter-input-${meter.id}`}
+        />
+      </div>
+
+      {/* Save + History */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button
+          onClick={save}
+          disabled={saving || !reading}
+          size="sm"
+          className="h-9 px-3 text-xs"
+          data-testid={`product-meter-save-${meter.id}`}
+        >
+          {saving ? '…' : 'Save'}
+        </Button>
+        {canEdit && (
+          <Button
+            variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground"
+            onClick={() => setShowHistory(true)} title="View history"
+          >
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {/* Inline production volume badge */}
+      {productionVolume != null && (
+        <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-xs">
+          <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+          <span className="text-teal-700 dark:text-teal-300">
+            Production volume: <span className="font-mono-num font-semibold">{fmtNum(productionVolume)} m³</span>
+            <span className="text-teal-600/70 ml-1.5">(current − previous)</span>
+          </span>
+        </div>
+      )}
+
+      {showHistory && (
+        <ProductMeterHistoryDialog
+          meter={meter}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Product meter history dialog ──────────────────────────────────────────────
+
+function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: () => void }) {
+  const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+  const WINDOWS = [{ label: '7D', days: 7 }, { label: '14D', days: 14 }, { label: '30D', days: 30 }, { label: '60D', days: 60 }] as const;
+
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['product-meter-history', meter.id, days],
+    queryFn: async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const { data } = await supabase
+        .from('product_meter_readings' as any)
+        .select('id, current_reading, previous_reading, reading_datetime')
+        .eq('meter_id', meter.id)
+        .gte('reading_datetime', since.toISOString())
+        .order('reading_datetime', { ascending: false });
+      return (data ?? []) as any[];
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-base flex items-center gap-1.5">
+            <Gauge className="h-4 w-4 text-teal-600" /> {meter.name} — History
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+          {WINDOWS.map(({ label, days: d }) => (
+            <button key={label} onClick={() => setDays(d as any)}
+              className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
+                days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}>{label}</button>
+          ))}
+        </div>
+        <div className="overflow-auto max-h-80 rounded border text-xs">
+          {isLoading ? (
+            <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : !rows?.length ? (
+            <p className="p-4 text-center text-muted-foreground">No readings in the last {days} days</p>
+          ) : (
+            <table className="w-full text-left">
+              <thead className="bg-muted sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Date & Time</th>
+                  <th className="px-3 py-2 font-medium text-right">Reading</th>
+                  <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r: any, i: number) => {
+                  const vol = r.previous_reading != null
+                    ? r.current_reading - r.previous_reading
+                    : null;
+                  return (
+                    <tr key={r.id ?? i} className="border-t hover:bg-muted/40">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                        {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono-num text-teal-600">
+                        {vol != null ? fmtNum(vol) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Showing up to {days} days · {rows?.length ?? 0} records
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
 
