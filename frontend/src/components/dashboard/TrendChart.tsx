@@ -159,6 +159,55 @@ export function TrendChart({
   const needsPowerReadings = metric === 'pv';
   const needsCostReadings = metric === 'productionCost';
 
+  // ── Entity name lookups — fetched once per plant selection ─────────────────
+  // Used to build human-friendly meter-replacement tooltip messages like
+  // "Well 4 Raw Meter was Replaced" or "McDonalds Product Meter was Replaced".
+  const { data: wellNames } = useQuery({
+    queryKey: ['entity-names-wells', plantIds],
+    queryFn: async () => {
+      const { data } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((w: any) => map.set(w.id, w.name));
+      return map;
+    },
+    enabled: plantIds.length > 0 && needsWellReadings,
+  });
+
+  const { data: locatorNames } = useQuery({
+    queryKey: ['entity-names-locators', plantIds],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name').in('plant_id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((l: any) => map.set(l.id, l.name));
+      return map;
+    },
+    enabled: plantIds.length > 0 && needsLocReadings,
+  });
+
+  const { data: productMeterNames } = useQuery({
+    queryKey: ['entity-names-product-meters', plantIds],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as never) as any)
+        .select('id, name').in('plant_id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((m: any) => map.set(m.id, m.name));
+      return map;
+    },
+    enabled: plantIds.length > 0 && needsProductMeterReadings,
+  });
+
+  // Plant names are used for power meter replacement messages (one power meter per plant).
+  const { data: plantNames } = useQuery({
+    queryKey: ['entity-names-plants', plantIds],
+    queryFn: async () => {
+      const { data } = await supabase.from('plants').select('id, name').in('id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((p: any) => map.set(p.id, p.name));
+      return map;
+    },
+    enabled: plantIds.length > 0 && needsPowerReadings,
+  });
+
   const supaSelect = async <T,>(table: string, cols: string) => {
     // Supabase JS v2 narrows `from(table)` to a literal-string union
     // pulled from the generated types. Our caller passes a string
@@ -278,6 +327,9 @@ export function TrendChart({
         _rawConsumption: null as number | null,
         _rawRawwater: null as number | null,
         _rawKwh: null as number | null,
+        // _meterReplacements: list of human-readable entity names replaced on this day.
+        // e.g. ["Well 4 Raw Meter", "McDonalds Product Meter"]
+        _meterReplacements: [] as string[],
       }).get(d);
 
     // ── Unified meter-replacement-aware delta helper ────────────────────────
@@ -312,7 +364,7 @@ export function TrendChart({
       readings: any[],
       entityKeyField: string,
       dailyVolumeField: string | null,
-    ): { r: any; delta: number; rawDelta: number | null }[] {
+    ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
       const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
@@ -327,31 +379,31 @@ export function TrendChart({
         if (isMR) {
           lastReading.set(entityKey, +r.current_reading);
           afterRepl.add(entityKey);
-          return { r, delta: 0, rawDelta: null };
+          return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
         }
 
         if (afterRepl.has(entityKey)) {
           lastReading.set(entityKey, +r.current_reading);
           afterRepl.delete(entityKey);
-          return { r, delta: 0, rawDelta: null };
+          return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
         }
 
         if (dailyVolumeField && r[dailyVolumeField] != null) {
           const rawDelta = +r[dailyVolumeField];
           const delta    = Math.max(0, rawDelta);
           lastReading.set(entityKey, +r.current_reading);
-          return { r, delta, rawDelta };
+          return { r, delta, rawDelta, isMeterReplacement: false };
         }
 
         if (!lastReading.has(entityKey)) {
           lastReading.set(entityKey, +r.current_reading);
-          return { r, delta: 0, rawDelta: null };
+          return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
         const delta    = Math.max(0, rawDelta);
         lastReading.set(entityKey, +r.current_reading);
-        return { r, delta, rawDelta };
+        return { r, delta, rawDelta, isMeterReplacement: false };
       });
     }
 
@@ -368,30 +420,45 @@ export function TrendChart({
     // Uses computeEntityDeltas keyed by well_id for correct per-well scoping.
 
 
-    computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta }) => {
+    computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.rawwater += delta;
       accumulateRaw(row, '_rawRawwater', rawDelta);
+      if (isMeterReplacement) {
+        const entityName = wellNames?.get(r.well_id) ?? r.well_id ?? 'Well';
+        const label = `${entityName} Raw Meter`;
+        if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+      }
     });
 
     // Production = sum of product meter (treated-water output) deltas.
-    computeEntityDeltas(productReadings ?? [], 'meter_id', null).forEach(({ r, delta, rawDelta }) => {
+    computeEntityDeltas(productReadings ?? [], 'meter_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.production += delta;
       accumulateRaw(row, '_rawProduction', rawDelta);
+      if (isMeterReplacement) {
+        const entityName = productMeterNames?.get(r.meter_id) ?? r.meter_id ?? 'Product Meter';
+        const label = `${entityName} Product Meter`;
+        if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+      }
     });
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
-    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume').forEach(({ r, delta, rawDelta }) => {
+    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.consumption += delta;
       accumulateRaw(row, '_rawConsumption', rawDelta);
+      if (isMeterReplacement) {
+        const entityName = locatorNames?.get(r.locator_id) ?? r.locator_id ?? 'Locator';
+        const label = `${entityName} Meter`;
+        if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+      }
     });
 
     (roReadings ?? []).forEach((r: any) => {
@@ -410,12 +477,17 @@ export function TrendChart({
       })),
       'plant_id',
       'daily_consumption_kwh',
-    ).forEach(({ r, delta, rawDelta }) => {
+    ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.kwh += delta;
       accumulateRaw(row, '_rawKwh', rawDelta);
+      if (isMeterReplacement) {
+        const entityName = plantNames?.get(r.plant_id) ?? r.plant_id ?? 'Plant';
+        const label = `${entityName} Power Meter`;
+        if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+      }
     });
 
     (costReadings ?? []).forEach((r: any) => {
@@ -438,8 +510,10 @@ export function TrendChart({
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
         nrw: calc.nrw(d.production, d.consumption),
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
+        // _meterReplacements is already in ...d — preserved here for the tooltip
       }));
-  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
+  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
+      wellNames, locatorNames, productMeterNames, plantNames]);
 
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
@@ -503,10 +577,16 @@ export function TrendChart({
 
   // Custom tooltip — same look as Recharts default but:
   //  • Shows the true raw (unclamped) value for any field that was clamped to 0
-  //  • Appends an amber warning row listing the affected series
+  //  • When the zero was caused by a meter replacement, shows "🔧 [Name] was Replaced"
+  //    instead of the generic "⚠️ Negative reading" warning
+  //  • If both a replacement AND a genuine negative exist on the same day, shows both
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const warnings = negativeByDate.get(label as string) ?? [];
+
+    // Meter replacements for this date — from chartData row
+    const chartRow = chartData.find((d) => d.date === label);
+    const replacements: string[] = chartRow?._meterReplacements ?? [];
 
     // Build a quick lookup from dataKey → rawValue for affected fields
     const rawOverride = new Map(warnings.map((w) => {
@@ -514,6 +594,18 @@ export function TrendChart({
       const entry = payload.find((p: any) => p.name === w.label);
       return [entry?.dataKey, w.rawValue];
     }));
+
+    // Warnings that are NOT covered by a meter replacement (genuine negatives)
+    // A warning is "covered" if the value is 0 on the chart (i.e. clamped) AND
+    // there are replacements on this day — the zero was caused by the replacement.
+    const genuineNegatives = replacements.length > 0
+      ? warnings.filter((w) => {
+          const entry = payload.find((p: any) => p.name === w.label);
+          const chartVal = entry?.value ?? 0;
+          // If the chart shows 0, the replacement explains it — not a genuine negative
+          return chartVal !== 0;
+        })
+      : warnings;
 
     return (
       <div style={{
@@ -523,13 +615,17 @@ export function TrendChart({
         fontSize: 11,
         padding: '8px 10px',
         minWidth: 148,
-        maxWidth: 280,
+        maxWidth: 300,
         boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
       }}>
         <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
         {payload.map((entry: any) => {
           const override = rawOverride.get(entry.dataKey);
-          const displayValue = override !== undefined ? override : entry.value;
+          // On replacement days the chart plots 0 (adjusted/offset value).
+          // Show 0 — which IS the correct adjusted reading — not the raw negative.
+          const displayValue = (override !== undefined && replacements.length === 0)
+            ? override
+            : entry.value;
           const isNegative = displayValue != null && displayValue < 0;
           return (
             <p key={entry.dataKey} style={{
@@ -540,14 +636,42 @@ export function TrendChart({
               <span style={isNegative ? { fontWeight: 600 } : undefined}>
                 {displayValue != null ? displayValue.toLocaleString() : '—'}
               </span>
-              {/* Show "(plotted as 0)" hint when the chart clamped a negative */}
-              {override !== undefined && (
+              {/* Only show "chart: 0" hint when value was clamped AND it's a genuine negative */}
+              {override !== undefined && replacements.length === 0 && (
                 <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>(chart: 0)</span>
               )}
             </p>
           );
         })}
-        {warnings.length > 0 && (
+
+        {/* ── Meter replacement notice — replaces negative-reading warning ── */}
+        {replacements.length > 0 && (
+          <div style={{
+            marginTop: 6,
+            paddingTop: 5,
+            borderTop: '1px solid hsl(var(--border))',
+          }}>
+            {replacements.map((name) => (
+              <div key={name} style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 5,
+                color: '#92400e',
+                marginBottom: 2,
+              }}>
+                <span style={{ fontSize: 12, lineHeight: 1 }}>🔧</span>
+                <span style={{ fontSize: 10, lineHeight: 1.4 }}>
+                  <strong>{name} was Replaced</strong>
+                  {' '}
+                  <span style={{ opacity: 0.75 }}>(value adjusted to 0)</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Genuine negative readings (not explained by a replacement) ── */}
+        {genuineNegatives.length > 0 && (
           <div style={{
             marginTop: 6,
             paddingTop: 5,
@@ -560,7 +684,7 @@ export function TrendChart({
             <span style={{ fontSize: 12, lineHeight: 1 }}>⚠️</span>
             <span style={{ fontSize: 10, lineHeight: 1.4 }}>
               <strong>Negative reading:</strong>{' '}
-              {warnings.map((w) => w.label).join(', ')}
+              {genuineNegatives.map((w) => w.label).join(', ')}
             </span>
           </div>
         )}
