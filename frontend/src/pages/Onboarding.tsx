@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { DesignationCombobox } from '@/components/DesignationCombobox';
+import { DesignationCombobox, OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { toast } from 'sonner';
 
 export default function Onboarding() {
@@ -34,13 +34,21 @@ export default function Onboarding() {
       : <Navigate to="/" replace />;
   }
 
+  const isOperator = form.designation === OPERATOR_DESIGNATION;
+
   const togglePlant = (id: string) => {
-    setForm((f) => ({
-      ...f,
-      plant_assignments: f.plant_assignments.includes(id)
-        ? f.plant_assignments.filter((x) => x !== id)
-        : [...f.plant_assignments, id],
-    }));
+    setForm((f) => {
+      if (isOperator) {
+        // Operators may only hold a single plant assignment
+        return { ...f, plant_assignments: f.plant_assignments.includes(id) ? [] : [id] };
+      }
+      return {
+        ...f,
+        plant_assignments: f.plant_assignments.includes(id)
+          ? f.plant_assignments.filter((x) => x !== id)
+          : [...f.plant_assignments, id],
+      };
+    });
   };
 
   const handleCreatePlant = async () => {
@@ -95,7 +103,9 @@ export default function Onboarding() {
         </div>
 
         <div>
-          <Label className="mb-2 block">Plant assignments *</Label>
+          <Label className="mb-2 block">
+            Plant assignment{isOperator ? ' * (single plant — Operators are limited to one)' : 's *'}
+          </Label>
 
           {noPlants ? (
             <p className="text-sm text-muted-foreground mb-2">No plants found. Create one to continue.</p>
@@ -103,7 +113,10 @@ export default function Onboarding() {
             <div className="grid grid-cols-2 gap-2 mb-3">
               {plants.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-secondary">
-                  <Checkbox checked={form.plant_assignments.includes(p.id)} onCheckedChange={() => togglePlant(p.id)} />
+                  {isOperator
+                    ? <input type="radio" name="onboarding-plant" checked={form.plant_assignments.includes(p.id)} onChange={() => togglePlant(p.id)} className="accent-accent" />
+                    : <Checkbox checked={form.plant_assignments.includes(p.id)} onCheckedChange={() => togglePlant(p.id)} />
+                  }
                   <span className="text-sm">{p.name}</span>
                 </label>
               ))}
