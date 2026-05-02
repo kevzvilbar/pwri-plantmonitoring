@@ -2485,18 +2485,17 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     }
   };
 
-  // Toggle meter-replacement flag directly without opening the full edit panel
+  // One-click toggle — saves is_meter_replacement without opening the edit panel
   const toggleMeterReplacement = async (r: any) => {
     setTogglingId(r.id);
     const next = !r.is_meter_replacement;
     let error: any = null;
-    if (module === 'well') {
+    if (module === 'well')
       ({ error } = await (supabase.from('well_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-    } else if (module === 'locator') {
+    else if (module === 'locator')
       ({ error } = await (supabase.from('locator_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-    } else if (module === 'power') {
+    else if (module === 'power')
       ({ error } = await (supabase.from('power_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-    }
     setTogglingId(null);
     if (error) { toast.error(error.message); return; }
     toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
@@ -2659,13 +2658,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                 </>
               )}
             </div>
-            {/* Meter replacement toggle inside edit form */}
             <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
               <input
                 type="checkbox"
                 checked={!!editRow.isMeterReplacement}
                 onChange={e => setEditRow({ ...editRow, isMeterReplacement: e.target.checked })}
-                className="h-3.5 w-3.5 rounded accent-orange-500"
+                className="h-3.5 w-3.5 accent-orange-500"
               />
               <span className="text-[11px] text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
             </label>
@@ -2726,10 +2724,10 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
                   const isMeterReplacement = !!r.is_meter_replacement;
-                  // rows are sorted descending → rows[i+1] is the immediately preceding reading
+                  // rows sorted descending → rows[i+1] is the immediately preceding reading in time
                   const predecessor: any = rows[i + 1] ?? null;
 
-                  // Shared checkbox cell rendered for well/locator/power
+                  // Shared "Repl." toggle cell — rendered for well / locator / power
                   const replCell = (
                     <td className="px-2 py-1.5 text-center">
                       <button
@@ -2737,16 +2735,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         disabled={isDeleting || isToggling}
                         onClick={() => toggleMeterReplacement(r)}
                         className={[
-                          'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors shrink-0',
+                          'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                           'disabled:opacity-40 disabled:cursor-not-allowed',
                           isMeterReplacement
                             ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
-                            : 'border-input bg-background hover:border-orange-400',
+                            : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
                         ].join(' ')}
                       >
                         {isToggling
                           ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          : isMeterReplacement ? <span className="text-[9px] leading-none">✓</span> : null
+                          : isMeterReplacement ? <span className="text-[9px] font-bold leading-none">✓</span> : null
                         }
                       </button>
                     </td>
@@ -2757,19 +2755,22 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       key={r.id ?? i}
                       className={[
                         'border-t',
-                        isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20'
-                          : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
-                          : 'hover:bg-muted/40',
+                        isEditing      ? 'bg-teal-50/60 dark:bg-teal-950/20'
+                        : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                        : 'hover:bg-muted/40',
                       ].join(' ')}
                     >
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           {dateStr}
                           {isMeterReplacement && (
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">repl.</span>
+                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
+                              repl.
+                            </span>
                           )}
                         </span>
                       </td>
+
                       {module === 'locator' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
@@ -2783,6 +2784,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                           {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
                         </td>
                       </>}
+
                       {module === 'well' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
@@ -2796,9 +2798,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading) : '—'}
                         </td>
                       </>}
+
                       {module === 'blending' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0)}</td>
                       </>}
+
                       {module === 'power' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
@@ -2810,6 +2814,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
                       </>}
+
                       {canEditDelete && (
                         <td className="px-2 py-1 text-center">
                           <div className="flex items-center justify-center gap-0.5">
