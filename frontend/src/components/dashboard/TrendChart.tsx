@@ -61,9 +61,8 @@ export function ClusterCharts({
 
 // Card-wrapped trend chart used both for `inline` (compact height,
 // stacked beneath each cluster) and `sections` (regular height,
-// single open at a time). The TrendChart component itself owns the
-// range buttons and supabase queries, so this wrapper is purely
-// presentational.
+// single open at a time). Title and range buttons share the same row
+// so the chart area is maximised, especially on mobile.
 export function InlineTrendChart({
   metric, title, plantIds, compact = false,
 }: {
@@ -74,8 +73,7 @@ export function InlineTrendChart({
 }) {
   return (
     <Card className="p-3" data-testid={`inline-trend-${metric}`}>
-      <h2 className="text-sm font-semibold mb-2">{title}</h2>
-      <TrendChart metric={metric} plantIds={plantIds} compact={compact} />
+      <TrendChart metric={metric} title={title} plantIds={plantIds} compact={compact} />
     </Card>
   );
 }
@@ -111,13 +109,16 @@ export function TrendModal({
 // its own range state, supabase queries, and chart rendering. The
 // `compact` prop swaps in a shorter chart height for the inline view
 // where multiple charts stack vertically and we want to keep the
-// page from getting absurdly tall.
+// page from getting absurdly tall. When `title` is provided the
+// component renders it on the same row as the range buttons so the
+// chart area is maximised on mobile.
 export function TrendChart({
-  metric, plantIds, compact = false,
+  metric, plantIds, compact = false, title,
 }: {
   metric: string;
   plantIds: string[];
   compact?: boolean;
+  title?: string;
 }) {
   const [range, setRange] = useState<RangeKey>('7D');
   const [from, setFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
@@ -274,47 +275,62 @@ export function TrendChart({
       }));
   }, [locReadings, wellReadings, roReadings, powerReadings, costReadings]);
 
-  const chartHeight = compact ? 'h-[260px]' : 'h-[420px]';
+  const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
+
+  // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
+  // label doesn't eat into the chart area on narrow mobile screens.
+  const formatYAxis = (value: number) => {
+    if (value === 0) return '0';
+    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+    return String(value);
+  };
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
-            className="h-8 px-2.5"
-            onClick={() => setRange(r)} data-testid={`trend-range-${metric}-${r}`}>{r}</Button>
-        ))}
-        <Button
-          size="sm"
-          variant={range === 'CUSTOM' ? 'default' : 'outline'}
-          className="h-8 px-2.5"
-          onClick={() => setRange('CUSTOM')}
-          data-testid={`trend-range-${metric}-CUSTOM`}
-        >Custom</Button>
-        {range === 'CUSTOM' && (
-          <div className="flex items-center gap-1.5 ml-1">
-            <Input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="h-8 w-[140px] text-xs"
-              data-testid={`trend-from-${metric}`}
-            />
-            <span className="text-xs text-muted-foreground">→</span>
-            <Input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="h-8 w-[140px] text-xs"
-              data-testid={`trend-to-${metric}`}
-            />
-          </div>
+      {/* Title and range buttons share one row so the chart isn't pushed down */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        {title && (
+          <span className="text-sm font-semibold mr-1 shrink-0">{title}</span>
         )}
-        {isFetching && (
-          <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
-        )}
+        <div className="flex flex-wrap items-center gap-1">
+          {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
+            <Button key={r} size="sm" variant={range === r ? 'default' : 'outline'}
+              className="h-7 px-2 text-xs"
+              onClick={() => setRange(r)} data-testid={`trend-range-${metric}-${r}`}>{r}</Button>
+          ))}
+          <Button
+            size="sm"
+            variant={range === 'CUSTOM' ? 'default' : 'outline'}
+            className="h-7 px-2 text-xs"
+            onClick={() => setRange('CUSTOM')}
+            data-testid={`trend-range-${metric}-CUSTOM`}
+          >Custom</Button>
+          {range === 'CUSTOM' && (
+            <div className="flex items-center gap-1 mt-1 w-full sm:w-auto sm:mt-0">
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="h-7 w-[130px] text-xs"
+                data-testid={`trend-from-${metric}`}
+              />
+              <span className="text-xs text-muted-foreground">→</span>
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="h-7 w-[130px] text-xs"
+                data-testid={`trend-to-${metric}`}
+              />
+            </div>
+          )}
+          {isFetching && (
+            <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
+          )}
+        </div>
       </div>
-      <div className={`${chartHeight} w-full relative mt-2`} data-testid={`trend-chart-${metric}`}>
+      <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="rounded-md border border-rose-300 bg-rose-50/95 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/80 dark:border-rose-900 dark:text-rose-300 shadow-sm pointer-events-auto max-w-md text-center">
@@ -335,13 +351,13 @@ export function TrendChart({
         )}
         <ResponsiveContainer width="100%" height="100%">
           {metric === 'nrw' ? (
-            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
-              <YAxis yAxisId="vol" tick={{ fontSize: 11 }} stroke="hsl(var(--chart-1))" label={{ value: 'Volume (m³)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: 'NRW (%)', angle: 90, position: 'insideRight', fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={30} label={{ value: 'NRW%', angle: 90, position: 'insideRight', fontSize: 9, offset: 8 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
@@ -352,25 +368,25 @@ export function TrendChart({
             // magnitude bucket (single-digit ₱/m³ vs thousands of ₱) so
             // sharing one axis would either flatten the unit-cost line or
             // crush the totals. Dashed stroke flags it as a derived ratio.
-            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
-              <YAxis yAxisId="amt" tick={{ fontSize: 11 }} stroke="hsl(var(--accent))" label={{ value: 'Cost (₱)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-              <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 11 }} stroke="hsl(var(--warn))" label={{ value: '₱/m³', angle: 90, position: 'insideRight', fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis yAxisId="amt" tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={formatYAxis} width={36} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={30} label={{ value: '₱/m³', angle: 90, position: 'insideRight', fontSize: 9, offset: 8 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
               <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
               <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
               <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
             </ComposedChart>
           ) : (
-            <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Date', position: 'insideBottom', offset: -4, fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" label={{ value: TREND_Y_LABEL[metric] ?? 'Value', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               {metric === 'production' && (<>
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
                 <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
