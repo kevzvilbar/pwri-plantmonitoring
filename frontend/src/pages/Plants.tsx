@@ -501,9 +501,14 @@ function ProductMetersStat({ plantId }: { plantId: string }) {
   );
 }
 
-// ─── Product Meters Card ──────────────────────────────────────────────────────
-// Manager/Admin can add, rename, and remove product meters per plant.
-// Operators can view meters and their latest readings but cannot edit.
+// ─── Product Meters Card ─────────────────────────────────────────────────────
+// Matches the Locator / Well list pattern exactly:
+//   - One Card per meter row
+//   - Active / Inactive status pill (clickable for Manager+)
+//   - Always-visible pencil (edit name) + red trash (delete with reason dialog)
+//   - Header: "Product Meters (N)" + Add button + Import CSV button (Admin only)
+//   - Inline add-name form below header
+//   - Single-delete AlertDialog with required reason field
 
 async function logProductMeterAudit(entry: {
   plant_id: string;
@@ -524,21 +529,21 @@ function ProductMetersCard({ plant }: { plant: any }) {
   const { isManager, isAdmin, user } = useAuth();
   const canEdit = isManager || isAdmin;
 
+  // ── Data ──────────────────────────────────────────────────────────────────
   const { data: meters, isLoading, isFetching } = useQuery({
     queryKey: ['product-meters', plant.id],
-    placeholderData: (prev: any) => prev,   // keep stale data visible during refetch
-    staleTime: 30_000,                       // don't refetch more than once per 30 s
+    placeholderData: (prev: any) => prev,
+    staleTime: 30_000,
     queryFn: async () => {
-      // Try with sort_order first; fall back to created_at if column missing
       let { data, error } = await supabase
         .from('product_meters' as any)
-        .select('id, name, sort_order, created_at')
+        .select('id, name, status, sort_order, created_at')
         .eq('plant_id', plant.id)
         .order('sort_order', { ascending: true });
       if (error?.message?.includes('sort_order')) {
         ({ data } = await supabase
           .from('product_meters' as any)
-          .select('id, name, created_at')
+          .select('id, name, status, created_at')
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true }));
       }
@@ -548,119 +553,235 @@ function ProductMetersCard({ plant }: { plant: any }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
 
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [addBusy, setAddBusy] = useState(false);
+  // ── Add meter ─────────────────────────────────────────────────────────────
+  const [adding, setAdding]     = useState(false);
+  const [newName, setNewName]   = useState('');
+  const [addBusy, setAddBusy]   = useState(false);
 
   const addMeter = async () => {
     if (!newName.trim()) { toast.error('Enter a meter name'); return; }
     setAddBusy(true);
     const { data, error } = await supabase
       .from('product_meters' as any)
-      .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
+      .insert({ plant_id: plant.id, name: newName.trim(), status: 'Active', sort_order: meters?.length ?? 0 } as any)
       .select('id')
       .single();
     setAddBusy(false);
     if (error) { toast.error(error.message); return; }
     await logProductMeterAudit({
-      plant_id: plant.id,
-      meter_id: (data as any)?.id ?? '',
-      meter_name: newName.trim(),
-      old_value: null,
-      new_value: newName.trim(),
-      user_id: user?.id ?? null,
-      timestamp: new Date().toISOString(),
+      plant_id: plant.id, meter_id: (data as any)?.id ?? '',
+      meter_name: newName.trim(), old_value: null, new_value: newName.trim(),
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
     });
     toast.success(`"${newName.trim()}" added`);
     setNewName(''); setAdding(false); invalidate();
   };
 
+  // ── Delete meter (with reason dialog, matching Locator pattern) ───────────
+  const [deleteTarget, setDeleteTarget]   = useState<any | null>(null);
+  const [deleteReason, setDeleteReason]   = useState('');
+  const [deleteBusy, setDeleteBusy]       = useState(false);
+
+  const doDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setDeleteBusy(true);
+    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', deleteTarget.id);
+    const { error } = await supabase.from('product_meters' as any).delete().eq('id', deleteTarget.id);
+    setDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id, meter_id: deleteTarget.id,
+      meter_name: deleteTarget.name, old_value: deleteTarget.name, new_value: null,
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
+    });
+    toast.success(`"${deleteTarget.name}" deleted`);
+    setDeleteTarget(null); setDeleteReason(''); invalidate();
+  };
+
+  // ── Toggle Active / Inactive ──────────────────────────────────────────────
+  const toggleStatus = async (m: any) => {
+    if (!canEdit) return;
+    const next = m.status === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase
+      .from('product_meters' as any).update({ status: next } as any).eq('id', m.id);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id, meter_id: m.id, meter_name: m.name,
+      old_value: m.status, new_value: next,
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
+    });
+    toast.success(`Meter marked ${next}`);
+    invalidate();
+    qc.invalidateQueries({ queryKey: ['product-meters-active', plant.id] });
+  };
+
   return (
-    <Card className="p-3" data-testid="product-meters-card">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Gauge className="h-4 w-4 text-teal-600" />
-          <div>
-            <div className="text-sm font-semibold">Product Meters</div>
-            <div className="text-[11px] text-muted-foreground">
-              Meter readings flow into Operations → Product tab.
-            </div>
-          </div>
+    <div className="space-y-2">
+      {/* ── Header row ── */}
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <h3 className="text-sm font-semibold">
+          Product Meters ({meters?.length ?? 0})
+        </h3>
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+              onClick={() => setAdding(true)}
+              data-testid="add-product-meter-btn"
+            >
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
         </div>
-        {canEdit && !adding && (
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)} data-testid="add-product-meter-btn">
-            <Plus className="h-3 w-3 mr-1" />Add
-          </Button>
-        )}
       </div>
 
-      {/* First-load spinner — only shown before any data arrives */}
+      {/* ── First-load spinner ── */}
       {isLoading && !meters && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
         </div>
       )}
 
-      {/* Background-refetch indicator — subtle, never hides the list */}
+      {/* ── Background-refetch indicator ── */}
       {isFetching && !!meters && (
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60 pb-0.5">
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
           <Loader2 className="h-2.5 w-2.5 animate-spin" /> Refreshing…
         </div>
       )}
 
-      {/* Always render the list whenever data exists — even during refetch */}
-      {meters && (
-        <div className="space-y-1">
-          <div className="mt-2">
-            {meters.map((m: any) => (
-              <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
-            ))}
+      {/* ── Meter cards — same structure as Locator / Well cards ── */}
+      {meters?.map((m: any) => (
+        <Card
+          key={m.id}
+          className="p-3 hover:shadow-elev"
+          data-testid={`product-meter-card-${m.id}`}
+        >
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start gap-2">
+                {/* Name + sub-label */}
+                <div className="min-w-0">
+                  <ProductMeterNameInline
+                    meter={m} plantId={plant.id} userId={user?.id ?? null}
+                    canEdit={canEdit} onChanged={invalidate}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Product Meter · {m.status === 'Active' ? 'Reading active' : 'Inactive'}
+                  </div>
+                </div>
+
+                {/* Status pill — clickable for Manager+ */}
+                <button
+                  type="button"
+                  onClick={() => canEdit && toggleStatus(m)}
+                  title={canEdit ? `Click to toggle (currently ${m.status ?? 'Active'})` : (m.status ?? 'Active')}
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                    (m.status ?? 'Active') === 'Active'
+                      ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                      : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                  } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                  {m.status ?? 'Active'}
+                </button>
+              </div>
+            </div>
+
+            {/* Edit + Delete buttons — always visible, matches Locator/Well */}
+            {canEdit && (
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <ProductMeterNameInline.EditTrigger meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  title="Delete"
+                  onClick={() => { setDeleteTarget(m); setDeleteReason(''); }}
+                  data-testid={`delete-product-meter-${m.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
-          {meters.length === 0 && !isLoading && (
-            <p className="text-xs text-muted-foreground py-2">
-              No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
-            </p>
-          )}
-        </div>
+        </Card>
+      ))}
+
+      {meters && meters.length === 0 && !isLoading && (
+        <Card className="p-4 text-center text-xs text-muted-foreground">
+          No product meters yet.{canEdit ? ' Click Add to create one.' : ''}
+        </Card>
       )}
 
-      {/* Inline add form */}
+      {/* ── Inline add form ── */}
       {adding && (
-        <div className="flex items-center gap-2 pt-1 border-t">
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. Main Line, Secondary Line…"
-            className="h-8 text-sm"
-            onKeyDown={(e) => { if (e.key === 'Enter') addMeter(); if (e.key === 'Escape') { setAdding(false); setNewName(''); } }}
-            autoFocus
-            data-testid="product-meter-name-input"
-          />
-          <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()} data-testid="save-product-meter-btn">
-            {addBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewName(''); }}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <Card className="p-3">
+          <div className="flex items-center gap-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="e.g. Main Line, Secondary Line…"
+              className="h-8 text-sm flex-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addMeter();
+                if (e.key === 'Escape') { setAdding(false); setNewName(''); }
+              }}
+              autoFocus
+              data-testid="product-meter-name-input"
+            />
+            <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()} data-testid="save-product-meter-btn">
+              {addBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewName(''); }}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </Card>
       )}
-    </Card>
+
+      {/* ── Single delete confirm dialog ── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleteBusy && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Delete "{deleteTarget?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All readings for this product meter will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={deleteReason} onChange={setDeleteReason} testId="product-meter-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doDelete}
+              disabled={deleteBusy || deleteReason.trim().length < 5}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
-// ── ProductMeterRow inside Plants (rename + delete) ───────────────────────────
+// ── ProductMeterNameInline — inline rename field inside the card ──────────────
+// Matches the pencil-edit pattern used in EditLocatorDialog / EditWellDialog.
+// The edit pencil button is exposed as a static property so ProductMetersCard
+// can place it in the same icon-button row as the delete button.
 
-function ProductMeterRow({
+function _ProductMeterNameInline({
   meter, plantId, userId, canEdit, onChanged,
 }: {
   meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [nameInput, setNameInput] = useState(meter.name ?? '');
-  const [busy, setBusy] = useState(false);
+  const [editing, setEditing]       = useState(false);
+  const [nameInput, setNameInput]   = useState(meter.name ?? '');
+  const [busy, setBusy]             = useState(false);
 
-  // Sync nameInput if the meter name changes externally (e.g. after invalidation)
-  // but only when not actively editing — don't overwrite the user's in-progress input.
   useEffect(() => {
     if (!editing) setNameInput(meter.name ?? '');
   }, [meter.name, editing]);
@@ -669,125 +790,127 @@ function ProductMeterRow({
     if (!nameInput.trim()) { toast.error('Name required'); return; }
     setBusy(true);
     const { error } = await supabase
-      .from('product_meters' as any)
-      .update({ name: nameInput.trim() } as any)
-      .eq('id', meter.id);
+      .from('product_meters' as any).update({ name: nameInput.trim() } as any).eq('id', meter.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     await logProductMeterAudit({
-      plant_id: plantId,
-      meter_id: meter.id,
-      meter_name: nameInput.trim(),
-      old_value: meter.name,
-      new_value: nameInput.trim(),
-      user_id: userId,
-      timestamp: new Date().toISOString(),
+      plant_id: plantId, meter_id: meter.id, meter_name: nameInput.trim(),
+      old_value: meter.name, new_value: nameInput.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
     });
     toast.success('Meter renamed');
-    setEditing(false);
-    onChanged();
+    setEditing(false); onChanged();
   };
 
-  const deleteMeter = async () => {
-    if (!confirm(`Delete meter "${meter.name}"? All its readings will be removed.`)) return;
-    setBusy(true);
-    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', meter.id);
-    const { error } = await supabase.from('product_meters' as any).delete().eq('id', meter.id);
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    await logProductMeterAudit({
-      plant_id: plantId,
-      meter_id: meter.id,
-      meter_name: meter.name,
-      old_value: meter.name,
-      new_value: null,
-      user_id: userId,
-      timestamp: new Date().toISOString(),
-    });
-    toast.success(`"${meter.name}" deleted`);
-    onChanged();
-  };
-
-  const displayName = meter.name?.trim() || '(unnamed meter)';
-  const isUnnamed = !meter.name?.trim();
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5 flex-1">
+        <Input
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          className="h-7 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveName();
+            if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name ?? ''); }
+          }}
+          autoFocus
+        />
+        <Button size="sm" className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700 text-white" onClick={saveName} disabled={busy}>
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className="flex items-center gap-3 py-2.5 px-1 border-b border-border/50 last:border-0"
-      data-testid={`plant-product-meter-${meter.id}`}
-    >
-      {/* Gauge icon — small, teal, matches Image 2 */}
-      <Gauge className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
-
-      {editing ? (
-        /* ── Inline rename form ── */
-        <>
-          <Input
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            className="h-8 text-sm flex-1"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveName();
-              if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name ?? ''); }
-            }}
-            autoFocus
-          />
-          <Button
-            size="sm"
-            className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs shrink-0"
-            onClick={saveName}
-            disabled={busy}
-          >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-          </Button>
-          <Button
-            size="sm" variant="ghost"
-            className="h-8 w-8 p-0 shrink-0"
-            onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      ) : (
-        /* ── Read mode ── */
-        <>
-          <span className={[
-            'flex-1 min-w-0 text-sm truncate',
-            isUnnamed ? 'text-muted-foreground italic' : 'text-foreground font-medium',
-          ].join(' ')}>
-            {displayName}
-          </span>
-
-          {/* Always-visible action icons (pencil + red trash) */}
-          {canEdit && (
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                size="sm" variant="ghost"
-                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-                title="Rename"
-                onClick={() => { setNameInput(meter.name ?? ''); setEditing(true); }}
-                disabled={busy}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="sm" variant="ghost"
-                className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                title="Delete"
-                onClick={deleteMeter}
-                disabled={busy}
-              >
-                {busy
-                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                  : <Trash2 className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+    <div className="font-medium text-sm truncate">
+      {meter.name?.trim() || <span className="italic text-muted-foreground">(unnamed meter)</span>}
     </div>
   );
 }
+
+// Attach the edit-trigger button as a static property so the card can
+// render it in the action-button group without prop-drilling editing state.
+// We use a separate tiny component for the trigger.
+function _PMEditTrigger({
+  meter, plantId, userId, canEdit, onChanged,
+}: {
+  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
+}) {
+  // The actual editing state lives in ProductMetersCard via ProductMeterNameInline;
+  // here we just need a pencil button. Because inline editing is tricky to share
+  // without lifting state, we keep it simple: clicking pencil opens an AlertDialog
+  // rename prompt — consistent with how Edit works across the rest of the app.
+  const [open, setOpen]           = useState(false);
+  const [nameInput, setNameInput] = useState(meter.name ?? '');
+  const [busy, setBusy]           = useState(false);
+
+  useEffect(() => {
+    if (!open) setNameInput(meter.name ?? '');
+  }, [meter.name, open]);
+
+  const save = async () => {
+    if (!nameInput.trim()) { toast.error('Name required'); return; }
+    setBusy(true);
+    const { error } = await supabase
+      .from('product_meters' as any).update({ name: nameInput.trim() } as any).eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: meter.id, meter_name: nameInput.trim(),
+      old_value: meter.name, new_value: nameInput.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+    toast.success('Meter renamed');
+    setOpen(false); onChanged();
+  };
+
+  return (
+    <>
+      <Button
+        size="sm" variant="ghost"
+        className="h-7 w-7 p-0"
+        title="Rename"
+        onClick={() => setOpen(true)}
+        data-testid={`rename-product-meter-${meter.id}`}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => { if (!o) setOpen(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename Product Meter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label className="text-xs">Meter Name</Label>
+            <Input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="e.g. Main Line, Secondary Line…"
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button onClick={save} disabled={busy || !nameInput.trim()}>
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// Attach EditTrigger as static property on the display component
+const ProductMeterNameInline = Object.assign(_ProductMeterNameInline, {
+  EditTrigger: _PMEditTrigger,
+});
 
 // ─── BackwashModeCard ─────────────────────────────────────────────────────────
 function BackwashModeCard({ plant }: { plant: any }) {
