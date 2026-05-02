@@ -2030,7 +2030,11 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
-                  const vol = r.previous_reading != null ? r.current_reading - r.previous_reading : null;
+                  // rows are sorted descending; rows[i+1] is the immediately prior reading
+                  // in time — always current − predecessor (handles same-day multiple readings,
+                  // meter replacements, and PMS correctly).
+                  const predecessor: any = rows[i + 1] ?? null;
+                  const vol = predecessor != null ? r.current_reading - predecessor.current_reading : null;
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
                   return (
@@ -2374,11 +2378,10 @@ const HISTORY_WINDOWS = [
 // Inline edit state for a history row
 interface HistoryEditState {
   id: string;
-  datetime: string;          // "yyyy-MM-dd'T'HH:mm"
-  value: string;             // primary numeric field
-  value2?: string;           // secondary (power for well, or solar for power)
-  value3?: string;           // tertiary (grid for power)
-  isMeterReplacement?: boolean; // when true, Δ is forced to 0 for this row
+  datetime: string;     // "yyyy-MM-dd'T'HH:mm"
+  value: string;        // primary numeric field
+  value2?: string;      // secondary (power for well, or solar for power)
+  value3?: string;      // tertiary (grid for power)
 }
 
 function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }: {
@@ -2398,8 +2401,6 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  // Track which row's meter-replacement toggle is being saved
-  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Helper: parse a YYYY-MM-DD string as LOCAL midnight (avoids UTC timezone shift)
   const localMidnight = (dateStr: string) => {
@@ -2430,7 +2431,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'locator') {
         const { data } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceIso)
           .lte('reading_datetime', untilIso)
@@ -2440,7 +2441,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'well') {
         const { data } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, is_meter_replacement')
+          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceIso)
           .lte('reading_datetime', untilIso)
@@ -2450,7 +2451,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'power') {
         const { data } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime, is_meter_replacement')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
           .lte('reading_datetime', untilIso)
@@ -2478,31 +2479,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     const dt = r.reading_datetime ?? r.created_at ?? '';
     const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
     if (module === 'well') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '', isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '' });
     } else if (module === 'locator') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? '') });
     } else if (module === 'power') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '' });
     }
-  };
-
-  // Toggle meter-replacement flag directly on a row (no full edit form needed)
-  const toggleMeterReplacement = async (r: any) => {
-    setTogglingId(r.id);
-    const next = !r.is_meter_replacement;
-    let error: any = null;
-    if (module === 'well') {
-      ({ error } = await supabase.from('well_readings').update({ is_meter_replacement: next } as any).eq('id', r.id));
-    } else if (module === 'locator') {
-      ({ error } = await supabase.from('locator_readings').update({ is_meter_replacement: next } as any).eq('id', r.id));
-    } else if (module === 'power') {
-      ({ error } = await supabase.from('power_readings').update({ is_meter_replacement: next } as any).eq('id', r.id));
-    }
-    setTogglingId(null);
-    if (error) { toast.error(error.message); return; }
-    toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
-    qc.invalidateQueries({ queryKey });
-    qc.invalidateQueries();
   };
 
   const saveEdit = async () => {
@@ -2516,22 +2498,19 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         current_reading: +editRow.value,
         power_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
-        is_meter_replacement: !!editRow.isMeterReplacement,
-      } as any).eq('id', editRow.id));
+      }).eq('id', editRow.id));
     } else if (module === 'locator') {
       ({ error } = await supabase.from('locator_readings').update({
         current_reading: +editRow.value,
         reading_datetime: dtIso,
-        is_meter_replacement: !!editRow.isMeterReplacement,
-      } as any).eq('id', editRow.id));
+      }).eq('id', editRow.id));
     } else if (module === 'power') {
       ({ error } = await supabase.from('power_readings').update({
         meter_reading_kwh: +editRow.value,
         daily_solar_kwh: editRow.value2 ? +editRow.value2 : null,
         daily_grid_kwh: editRow.value3 ? +editRow.value3 : null,
         reading_datetime: dtIso,
-        is_meter_replacement: !!editRow.isMeterReplacement,
-      } as any).eq('id', editRow.id));
+      }).eq('id', editRow.id));
     }
 
     setSaving(false);
@@ -2689,13 +2668,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   {module === 'locator' && <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center">Meter Repl.</th>
                     <th className="px-3 py-2 font-medium">Flags</th>
                   </>}
                   {module === 'well' && <>
                     <th className="px-3 py-2 font-medium text-right">Water</th>
                     <th className="px-3 py-2 font-medium text-right">Δ</th>
-                    <th className="px-2 py-2 font-medium text-center">Meter Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
                   </>}
                   {module === 'blending' && <>
@@ -2703,7 +2680,6 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   </>}
                   {module === 'power' && <>
                     <th className="px-3 py-2 font-medium text-right">Daily (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center">Meter Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Solar</th>
                     <th className="px-3 py-2 font-medium text-right">Grid</th>
                   </>}
@@ -2716,63 +2692,19 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   const dateStr = dt ? format(new Date(dt), 'MMM d, yyyy HH:mm') : '—';
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
-                  const isToggling = togglingId === r.id;
-                  // rows sorted descending → rows[i+1] is the immediately prior reading in time
+                  // rows are sorted descending (newest first), so rows[i+1] is the
+                  // immediately preceding reading in time — always use current − predecessor
+                  // regardless of date boundary (handles same-day multiple readings, meter
+                  // replacements, and PMS correctly).
                   const predecessor: any = rows[i + 1] ?? null;
-                  const isMeterReplacement = !!r.is_meter_replacement;
-
-                  // Meter-replacement toggle button — small checkbox-style button
-                  const MeterReplBtn = (
-                    <td className="px-2 py-1.5 text-center">
-                      <button
-                        title={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
-                        disabled={!!editRow || isDeleting || isToggling}
-                        onClick={() => toggleMeterReplacement(r)}
-                        className={[
-                          'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                          'disabled:opacity-40 disabled:cursor-not-allowed',
-                          isMeterReplacement
-                            ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
-                            : 'border-muted-foreground/40 text-transparent hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30',
-                        ].join(' ')}
-                      >
-                        {isToggling
-                          ? <Loader2 className="h-2.5 w-2.5 animate-spin text-white" />
-                          : <span className="text-[9px] font-bold leading-none">✕</span>
-                        }
-                      </button>
-                    </td>
-                  );
-
                   return (
-                    <tr
-                      key={r.id ?? i}
-                      className={[
-                        'border-t',
-                        isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' :
-                        isMeterReplacement ? 'bg-orange-50/50 dark:bg-orange-950/10' :
-                        'hover:bg-muted/40',
-                      ].join(' ')}
-                    >
-                      <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          {dateStr}
-                          {isMeterReplacement && (
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/40 px-1 py-0.5 rounded leading-none">
-                              repl.
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                    <tr key={r.id ?? i} className={['border-t', isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' : 'hover:bg-muted/40'].join(' ')}>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{dateStr}</td>
                       {module === 'locator' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
-                          }
+                          {predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'}
                         </td>
-                        {MeterReplBtn}
                         <td className="px-3 py-1.5">
                           {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
                         </td>
@@ -2780,12 +2712,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       {module === 'well' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
-                          }
+                          {predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'}
                         </td>
-                        {MeterReplBtn}
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading) : '—'}
                         </td>
@@ -2795,12 +2723,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       </>}
                       {module === 'power' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
-                          }
+                          {predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'}
                         </td>
-                        {MeterReplBtn}
                         <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
                       </>}
