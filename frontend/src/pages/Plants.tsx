@@ -532,21 +532,39 @@ function ProductMetersCard({ plant }: { plant: any }) {
   // ── Data ──────────────────────────────────────────────────────────────────
   const { data: meters, isLoading, isFetching } = useQuery({
     queryKey: ['product-meters', plant.id],
-    placeholderData: (prev: any) => prev,
-    staleTime: 30_000,
+    // Use placeholderData only on first load (prev is undefined).
+    // Passing prev unconditionally causes stale data to persist during
+    // background refetches triggered by invalidate(), which is what made
+    // the list appear to "reset" after rename/delete/toggle actions.
+    placeholderData: (prev: any) => prev ?? undefined,
     queryFn: async () => {
+      // Try full schema first (status + sort_order both present)
       let { data, error } = await supabase
         .from('product_meters' as any)
         .select('id, name, status, sort_order, created_at')
         .eq('plant_id', plant.id)
         .order('sort_order', { ascending: true });
+
+      // sort_order column missing → retry without it
       if (error?.message?.includes('sort_order')) {
-        ({ data } = await supabase
+        ({ data, error } = await supabase
           .from('product_meters' as any)
           .select('id, name, status, created_at')
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true }));
       }
+
+      // status column missing (not yet migrated) → fetch without it, default to 'Active'
+      if (error?.message?.includes('status')) {
+        let fallback;
+        ({ data: fallback } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, created_at')
+          .eq('plant_id', plant.id)
+          .order('created_at', { ascending: true }));
+        return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
+      }
+
       return (data ?? []) as any[];
     },
   });
@@ -561,11 +579,19 @@ function ProductMetersCard({ plant }: { plant: any }) {
   const addMeter = async () => {
     if (!newName.trim()) { toast.error('Enter a meter name'); return; }
     setAddBusy(true);
-    const { data, error } = await supabase
+    // Try insert with status; if column missing, retry without it
+    let { data, error } = await supabase
       .from('product_meters' as any)
       .insert({ plant_id: plant.id, name: newName.trim(), status: 'Active', sort_order: meters?.length ?? 0 } as any)
       .select('id')
       .single();
+    if (error?.message?.includes('status')) {
+      ({ data, error } = await supabase
+        .from('product_meters' as any)
+        .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
+        .select('id')
+        .single());
+    }
     setAddBusy(false);
     if (error) { toast.error(error.message); return; }
     await logProductMeterAudit({
@@ -602,9 +628,13 @@ function ProductMetersCard({ plant }: { plant: any }) {
   // ── Toggle Active / Inactive ──────────────────────────────────────────────
   const toggleStatus = async (m: any) => {
     if (!canEdit) return;
-    const next = m.status === 'Active' ? 'Inactive' : 'Active';
+    const next = (m.status ?? 'Active') === 'Active' ? 'Inactive' : 'Active';
     const { error } = await supabase
       .from('product_meters' as any).update({ status: next } as any).eq('id', m.id);
+    if (error?.message?.includes('status')) {
+      toast.error('Status column not yet available — run the migration SQL in Supabase first.');
+      return;
+    }
     if (error) { toast.error(error.message); return; }
     await logProductMeterAudit({
       plant_id: plant.id, meter_id: m.id, meter_name: m.name,
@@ -619,7 +649,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
   return (
     <div className="space-y-2">
       {/* ── Header row ── */}
-      <div className="flex justify-between items-center flex-wrap gap-2">
+      <div className="relative flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-sm font-semibold">
           Product Meters ({meters?.length ?? 0})
         </h3>
@@ -644,11 +674,9 @@ function ProductMetersCard({ plant }: { plant: any }) {
         </div>
       )}
 
-      {/* ── Background-refetch indicator ── */}
+      {/* Subtle refetch dot — never displaces list items */}
       {isFetching && !!meters && (
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
-          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Refreshing…
-        </div>
+        <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" aria-hidden />
       )}
 
       {/* ── Meter cards — same structure as Locator / Well cards ── */}
@@ -865,7 +893,11 @@ function _PMEditTrigger({
       user_id: userId, timestamp: new Date().toISOString(),
     });
     toast.success('Meter renamed');
-    setOpen(false); onChanged();
+    // Call onChanged (invalidate) BEFORE closing the dialog.
+    // Calling it after setOpen(false) can race with React's Dialog unmount
+    // cleanup, causing the invalidation to be dropped mid-teardown.
+    onChanged();
+    setOpen(false);
   };
 
   return (
