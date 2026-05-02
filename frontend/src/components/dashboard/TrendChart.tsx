@@ -300,11 +300,14 @@ export function TrendChart({
           afterRepl.delete(plantKey);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
           // Use pre-computed daily_volume when available (e.g. well/locator).
-          delta = Math.max(0, +r[dailyVolumeField]);
+          // Allow negative values through — they signal meter drift or data issues
+          // and must be visible in tooltips with a warning.
+          delta = +r[dailyVolumeField];
           lastReading.set(plantKey, +r.current_reading);
         } else if (lastReading.has(plantKey)) {
           // Normal sequential diff against last seen value for this plant.
-          delta = Math.max(0, +r.current_reading - lastReading.get(plantKey)!);
+          // Do NOT clamp: negative diff = meter went backwards (needs warning).
+          delta = +r.current_reading - lastReading.get(plantKey)!;
           lastReading.set(plantKey, +r.current_reading);
         } else {
           // First reading ever for this plant in the window — no predecessor.
@@ -359,6 +362,7 @@ export function TrendChart({
     ).forEach(({ r, delta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
+      // Allow negative kwh through — surfaced in tooltip as a warning.
       ensure(key, dt.getTime()).kwh += delta;
     });
     // Roll up daily ₱ totals across the selected plants. `cost_date` is
@@ -383,34 +387,66 @@ export function TrendChart({
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => ({
-        ...d,
-        recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
-        tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
-        // *Raw fields hold the true value (may be negative when meter drifts
-        // or data is missing). Used only in tooltips for accurate display +
-        // warning indicator. The chart fields are clamped to 0 so lines/bars
-        // never render below the axis.
-        productionRaw: d.production,
-        production: Math.max(0, d.production),
-        rawwaterRaw: d.rawwater,
-        rawwater: Math.max(0, d.rawwater),
-        // nrwRaw: true value (may be negative) — shown in tooltip with warning.
-        // nrw: null when negative so the line stays connected via connectNulls
-        // but Recharts won't plot a segment below the 0% axis baseline.
-        nrwRaw: (() => { const v = calc.nrw(d.production, d.consumption); return v != null ? +v.toFixed(1) : null; })(),
-        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return (v != null && v >= 0) ? +v.toFixed(1) : null; })(),
-        // Volume-weighted ₱/m³ — null when no production was recorded so
-        // Recharts skips the point cleanly instead of plotting Infinity.
-        unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
-      }));
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => {
+        const nrwTrue = calc.nrw(d.production, d.consumption);
+        const nrwRaw  = nrwTrue != null ? +nrwTrue.toFixed(1) : null;
+        return {
+          ...d,
+          recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
+          tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
+          // *Raw fields — true values, may be negative (meter drift / bad data).
+          // Shown in tooltips with a ⚠ warning when negative.
+          productionRaw:  d.production,
+          consumptionRaw: d.consumption,
+          rawwaterRaw:    d.rawwater,
+          kwhRaw:         d.kwh,
+          nrwRaw,
+          // Chart (display) fields — bars/lines for volume-type metrics are
+          // clamped to 0 so the primary axis stays clean. Tooltip always shows
+          // the true rawXxx value so operators see the real figure.
+          production:  Math.max(0, d.production),
+          rawwater:    Math.max(0, d.rawwater),
+          consumption: Math.max(0, d.consumption),
+          kwh:         Math.max(0, d.kwh),
+          // NRW % has a dedicated right y-axis with allowDataOverflow + an
+          // unrestricted domain so negative values plot correctly.
+          nrw: nrwRaw,
+          // Volume-weighted ₱/m³ — null when no production was recorded so
+          // Recharts skips the point cleanly instead of plotting Infinity.
+          unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
+        };
+      });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
   const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
 
+  // ── Negative-value warning banner ────────────────────────────────────────
+  // Scans chartData for any day where a tracked raw metric is negative and
+  // surfaces a persistent amber banner above the chart so operators notice
+  // data quality issues even without hovering individual points.
+  const negativeFields: Record<string, string> = {
+    productionRaw:  'Production',
+    consumptionRaw: 'Locators / Consumption',
+    rawwaterRaw:    'Raw Water',
+    kwhRaw:         'Power (kWh)',
+    nrwRaw:         'NRW %',
+  };
+  const negativeWarnings = useMemo(() => {
+    const found = new Set<string>();
+    chartData.forEach((row: any) => {
+      Object.entries(negativeFields).forEach(([field, label]) => {
+        if (typeof row[field] === 'number' && row[field] < 0) found.add(label);
+      });
+    });
+    return Array.from(found);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartData]);
+
   // ── Shared tooltip rendered across all metric charts ─────────────────────
-  // Shows the real (possibly negative) value for production/rawwater and
-  // surfaces a ⚠ warning when any metric on that day is negative.
+  // Shows the real (possibly negative) value for all tracked metrics and
+  // surfaces a ⚠ warning banner + per-row flag when any value on that day
+  // is negative (covers: Locators/Consumption, Raw Water, Power, Production,
+  // Blending/NRW %).
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     // payload[0].payload is the full data row — use it to read *Raw fields
@@ -418,13 +454,24 @@ export function TrendChart({
     // chart visually renders (clamped to 0 / null for bars and lines).
     const row = payload[0]?.payload ?? {};
 
-    // Map dataKey → the raw field name that holds the true value
+    // Map dataKey → the raw field that holds the true (possibly negative) value.
+    // Every metric that can go negative must be listed here so the tooltip
+    // shows the real number and the ⚠ warning fires correctly.
     const RAW_FIELD: Record<string, string> = {
-      production: 'productionRaw',
-      rawwater:   'rawwaterRaw',
-      nrw:        'nrwRaw',
+      production:  'productionRaw',   // product-meter delta
+      consumption: 'consumptionRaw',  // locator-meter delta
+      rawwater:    'rawwaterRaw',      // well-meter delta
+      kwh:         'kwhRaw',           // power-meter delta
+      nrw:         'nrwRaw',           // NRW % (derived, can go negative)
     };
-    const UNIT_SUFFIX: Record<string, string> = { nrw: '%' };
+    const UNIT_SUFFIX: Record<string, string> = {
+      nrw:       '%',
+      recovery:  '%',
+      tds:       ' ppm',
+      kwh:       ' kWh',
+      unitCost:  ' ₱/m³',
+      totalCost: ' ₱', powerCost: ' ₱', chemCost: ' ₱',
+    };
 
     // Build display entries — each holds the true value to show
     const entries = payload.map((p: any) => {
@@ -519,6 +566,17 @@ export function TrendChart({
           )}
         </div>
       </div>
+      {negativeWarnings.length > 0 && (
+        <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-400/60 bg-amber-50/90 dark:bg-amber-950/40 dark:border-amber-700/60 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 shadow-sm">
+          <span className="shrink-0 font-bold mt-px">⚠</span>
+          <span>
+            <span className="font-semibold">Negative readings detected</span>
+            {' — '}check meter data for:{' '}
+            <span className="font-medium">{negativeWarnings.join(', ')}</span>.
+            {' '}Values below zero may indicate meter drift, a missed replacement row, or a data entry error.
+          </span>
+        </div>
+      )}
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -544,7 +602,7 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(350 75% 50%)" width={36} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} allowDataOverflow />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(350 75% 50%)" width={42} tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} allowDataOverflow />
               <Tooltip content={NegativeAwareTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="vol" dataKey="production" name="Production (m³)">
@@ -552,9 +610,22 @@ export function TrendChart({
                   <Cell key={i} fill={d.productionRaw < 0 ? 'hsl(350 75% 50%)' : 'hsl(var(--chart-1))'} />
                 ))}
               </Bar>
-              <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+              <Bar yAxisId="vol" dataKey="consumption" name="Consumption (m³)">
+                {chartData.map((d: any, i: number) => (
+                  <Cell key={i} fill={d.consumptionRaw < 0 ? 'hsl(350 75% 50%)' : 'hsl(var(--chart-2))'} />
+                ))}
+              </Bar>
+              <ReferenceLine yAxisId="vol" y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.35} />
               <ReferenceLine yAxisId="pct" y={0} stroke="hsl(350 75% 50%)" strokeDasharray="3 3" strokeOpacity={0.5} />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="NRW %" connectNulls />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2}
+                dot={(props: any) => {
+                  const { cx, cy, payload } = props;
+                  if (payload.nrwRaw != null && payload.nrwRaw < 0) {
+                    return <circle key={cx} cx={cx} cy={cy} r={4} fill="hsl(350 75% 50%)" stroke="white" strokeWidth={1.5} />;
+                  }
+                  return <g key={cx} />;
+                }}
+                activeDot={{ r: 3 }} name="NRW %" connectNulls />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
@@ -578,25 +649,32 @@ export function TrendChart({
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36}
+                domain={negativeWarnings.length > 0 ? ['auto', 'auto'] : [0, 'auto']}
+                allowDataOverflow
+                label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <Tooltip content={NegativeAwareTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
+              {/* Zero-baseline reference line — visible only when negatives exist */}
+              {negativeWarnings.length > 0 && (
+                <ReferenceLine y={0} stroke="hsl(350 75% 50%)" strokeDasharray="4 3" strokeOpacity={0.6} />
+              )}
               {metric === 'production' && (<>
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" connectNulls />
+                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" connectNulls />
               </>)}
               {metric === 'rawwater' && (
-                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
+                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" connectNulls />
               )}
               {metric === 'recovery' && (
-                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
+                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" connectNulls />
               )}
               {metric === 'tds' && (
-                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
+                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" connectNulls />
               )}
               {metric === 'pv' && (<>
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" connectNulls />
+                <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" connectNulls />
               </>)}
             </LineChart>
           )}
