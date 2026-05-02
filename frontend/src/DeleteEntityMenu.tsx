@@ -132,7 +132,7 @@ export function DeleteEntityMenu({
       setDeps(snap);
     } catch (e: any) {
       // Non-blocking — dialog is already open; treat as no dependencies found
-      setDeps({ blocking: false, total: 0, rows: [] });
+      setDeps({ blocking: false, total_references: 0, references: [] });
     } finally {
       setLoadingDeps(false);
     }
