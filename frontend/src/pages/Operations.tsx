@@ -58,6 +58,22 @@ async function logReadingImport(entry: {
   } catch { /* silently ignore if table missing */ }
 }
 
+// ─── Duplicate check helper for CSV imports ──────────────────────────────────
+// Returns: 'insert' | 'overwrite' | 'skip'
+// Uses a module-level cache per import session so we only ask once per conflict.
+const _dupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
+function clearDupDecisions() { _dupDecisions.clear(); }
+
+async function resolveImportDuplicate(key: string, label: string): Promise<'overwrite' | 'skip'> {
+  if (_dupDecisions.has(key)) return _dupDecisions.get(key)!;
+  const overwrite = window.confirm(
+    `Duplicate detected: a reading for "${label}" already exists at this date & time.\n\nClick OK to overwrite it, or Cancel to skip this row.`
+  );
+  const decision: 'overwrite' | 'skip' = overwrite ? 'overwrite' : 'skip';
+  _dupDecisions.set(key, decision);
+  return decision;
+}
+
 // ─── Shared ImportReadingsDialog ────────────────────────────────────────────
 // Each module passes its own columns, validator, and inserter.
 
@@ -88,11 +104,14 @@ function ImportReadingsDialog({
   const [busy, setBusy]     = useState(false);
   const [done, setDone]     = useState(false);
   const [imported, setImported] = useState(0);
+  // Duplicate handling: rows that match existing records
+  const [dupRows, setDupRows] = useState<Record<string, string>[]>([]);
+  const [dupResolved, setDupResolved] = useState(false);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f); setDone(false); setErrors([]); setRows([]);
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = parseCSVText(ev.target?.result as string);
@@ -107,7 +126,35 @@ function ImportReadingsDialog({
   const doImport = async () => {
     if (!file || rows.length === 0 || errors.length > 0) return;
     setBusy(true);
+    clearDupDecisions();
     const ts = new Date().toISOString();
+
+    // ── Duplicate detection ──────────────────────────────────────────────────
+    // Group rows by datetime (normalised to minute). Detect rows where another
+    // row in the same import shares the same datetime (intra-file dups).
+    const seenKeys = new Map<string, number>(); // key → first row index
+    const intraDups: number[] = [];
+    rows.forEach((r, i) => {
+      const dtRaw = r.reading_datetime || r.event_date || '';
+      const key = dtRaw ? `${new Date(dtRaw).toISOString().slice(0, 16)}` : `__nodate__${i}`;
+      if (seenKeys.has(key)) intraDups.push(i);
+      else seenKeys.set(key, i);
+    });
+
+    // If intra-file duplicates exist, warn and block
+    if (intraDups.length > 0 && !dupResolved) {
+      const proceed = window.confirm(
+        `${intraDups.length} row(s) in the file share the same date & time as another row.\n\nOnly the first occurrence of each duplicate will be imported. Continue?`
+      );
+      if (!proceed) { setBusy(false); return; }
+      // Keep only first occurrence of each key
+      const uniqueRows = rows.filter((r, i) => !intraDups.includes(i));
+      setRows(uniqueRows);
+      setDupResolved(true);
+      setBusy(false);
+      return; // let user click Import again with deduplicated rows
+    }
+
     const { count, errors: importErrors } = await insertRows(rows, plantId);
     await logReadingImport({
       user_id: userId,
@@ -316,6 +363,28 @@ async function insertLocatorReadings(
     const locatorId = nameToId[r.locator_name?.toLowerCase()];
     if (!locatorId) { errors.push(`Locator not found: "${r.locator_name}"`); continue; }
     const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const dtMin = dt.slice(0, 16); // minute-level key
+
+    // Check for existing reading at the same datetime
+    const { data: existing } = await supabase.from('locator_readings')
+      .select('id').eq('locator_id', locatorId)
+      .gte('reading_datetime', `${dtMin}:00`)
+      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
+    if (existing && existing.length > 0) {
+      const decision = await resolveImportDuplicate(`${locatorId}|${dtMin}`, `${r.locator_name} @ ${dtMin}`);
+      if (decision === 'skip') continue;
+      // overwrite: update existing
+      const { error } = await supabase.from('locator_readings').update({
+        current_reading: +r.current_reading,
+        previous_reading: r.previous_reading ? +r.previous_reading : null,
+        reading_datetime: dt,
+        recorded_by: userId,
+      }).eq('id', existing[0].id);
+      if (error) errors.push(error.message); else count++;
+      continue;
+    }
+
     const { error } = await supabase.from('locator_readings').insert({
       locator_id: locatorId,
       plant_id: plantId,
@@ -371,6 +440,28 @@ async function insertWellReadings(
     const wellId = nameToId[r.well_name?.toLowerCase()];
     if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
     const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const dtMin = dt.slice(0, 16);
+
+    // Duplicate check
+    const { data: existing } = await supabase.from('well_readings')
+      .select('id').eq('well_id', wellId)
+      .gte('reading_datetime', `${dtMin}:00`)
+      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
+    if (existing && existing.length > 0) {
+      const decision = await resolveImportDuplicate(`${wellId}|${dtMin}`, `${r.well_name} @ ${dtMin}`);
+      if (decision === 'skip') continue;
+      const { error } = await supabase.from('well_readings').update({
+        current_reading: +r.current_reading,
+        previous_reading: r.previous_reading ? +r.previous_reading : null,
+        power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
+        reading_datetime: dt,
+        recorded_by: userId,
+      }).eq('id', existing[0].id);
+      if (error) errors.push(error.message); else count++;
+      continue;
+    }
+
     const { error } = await supabase.from('well_readings').insert({
       well_id: wellId,
       plant_id: plantId,
@@ -476,32 +567,43 @@ async function insertPowerReadings(
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
-    // Build base payload — never include solar/grid columns unless they have a value.
-    // This prevents "column not found in schema cache" on DBs that haven't run the
-    // energy migration yet.
+    const dt = new Date(r.reading_datetime).toISOString();
+    const dtMin = dt.slice(0, 16);
+
+    // Duplicate check for power readings
+    const { data: existing } = await supabase.from('power_readings')
+      .select('id').eq('plant_id', plantId)
+      .gte('reading_datetime', `${dtMin}:00`)
+      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
     const payload: Record<string, any> = {
       plant_id: plantId,
       meter_reading_kwh: +r.meter_reading_kwh,
-      reading_datetime: new Date(r.reading_datetime).toISOString(),
+      reading_datetime: dt,
       recorded_by: userId,
     };
-    // Only attach solar/grid if the CSV row actually supplied them
     if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
     if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
 
-    const { error } = await supabase.from('power_readings').insert(payload);
-    if (error) {
-      // If the column doesn't exist yet, retry without it so the row still saves
-      if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
-        delete payload.daily_solar_kwh;
-        delete payload.daily_grid_kwh;
-        const { error: e2 } = await supabase.from('power_readings').insert(payload);
-        if (e2) errors.push(e2.message); else count++;
-      } else {
-        errors.push(error.message);
-      }
+    const doInsert = async () => {
+      const { error } = await supabase.from('power_readings').insert(payload);
+      if (error) {
+        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
+          delete payload.daily_solar_kwh; delete payload.daily_grid_kwh;
+          const { error: e2 } = await supabase.from('power_readings').insert(payload);
+          if (e2) errors.push(e2.message); else count++;
+        } else { errors.push(error.message); }
+      } else { count++; }
+    };
+
+    if (existing && existing.length > 0) {
+      const decision = await resolveImportDuplicate(`${plantId}|${dtMin}`, `Power @ ${dtMin}`);
+      if (decision === 'skip') continue;
+      // overwrite
+      const { error } = await supabase.from('power_readings').update(payload).eq('id', existing[0].id);
+      if (error) errors.push(error.message); else count++;
     } else {
-      count++;
+      await doInsert();
     }
   }
   return { count, errors };
@@ -724,6 +826,7 @@ function LocatorRow({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving]       = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [customDt, setCustomDt]   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   const cur       = +reading || 0;
   const dailyVol  = previous != null && reading ? cur - previous : null;
@@ -752,6 +855,7 @@ function LocatorRow({
       locator_id: locator.id, plant_id: plantId,
       current_reading: cur, previous_reading: previous,
       gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
+      reading_datetime: new Date(customDt).toISOString(),
     };
     const { error } = editingId
       ? await supabase.from('locator_readings').update(payload).eq('id', editingId)
@@ -778,6 +882,13 @@ function LocatorRow({
           <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
         </div>
       </div>
+
+      <Input
+        type="datetime-local" value={customDt}
+        onChange={e => setCustomDt(e.target.value)}
+        className="w-44 shrink-0 text-xs h-9"
+        title="Reading date & time"
+      />
 
       <Input
         type="number" step="any" inputMode="decimal"
@@ -955,6 +1066,7 @@ function WellRow({
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [customDt, setCustomDt]       = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   const cur        = +reading || 0;
   const dailyVol   = previousMeter != null && reading ? cur - previousMeter : null;
@@ -980,6 +1092,7 @@ function WellRow({
       current_reading: cur, previous_reading: previousMeter,
       power_meter_reading: powerReading ? +powerReading : null,
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
+      reading_datetime: new Date(customDt).toISOString(),
     };
     const { error } = editingId
       ? await supabase.from('well_readings').update(payload).eq('id', editingId)
@@ -1048,10 +1161,14 @@ function WellRow({
       )}
 
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
+        <Input type="datetime-local" value={customDt}
+          onChange={e => setCustomDt(e.target.value)}
+          className="shrink-0 text-xs h-9 w-44"
+          title="Reading date & time" />
         <div className="relative flex-1 sm:flex-initial sm:w-32">
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={reading}
-            onChange={(e) => setReading(e.target.value)} placeholder="Water Meter"
+            onChange={(e) => setReading(e.target.value)} placeholder="Water"
             className="h-9 pl-7 w-full border-cyan-300 focus-visible:ring-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
             data-testid={`well-meter-input-${well.id}`} />
         </div>
@@ -1469,6 +1586,27 @@ function ProductForm() {
                   const meterId = nameToId[r.meter_name?.toLowerCase()];
                   if (!meterId) { errors.push(`Meter not found: "${r.meter_name}"`); continue; }
                   const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+                  const dtMin = dt.slice(0, 16);
+
+                  // Duplicate check
+                  const { data: existing } = await supabase.from('product_meter_readings' as any)
+                    .select('id').eq('meter_id', meterId)
+                    .gte('reading_datetime', `${dtMin}:00`)
+                    .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
+                  if (existing && existing.length > 0) {
+                    const decision = await resolveImportDuplicate(`${meterId}|${dtMin}`, `${r.meter_name} @ ${dtMin}`);
+                    if (decision === 'skip') continue;
+                    const { error } = await supabase.from('product_meter_readings' as any).update({
+                      current_reading: +r.current_reading,
+                      previous_reading: r.previous_reading ? +r.previous_reading : null,
+                      reading_datetime: dt,
+                      recorded_by: user?.id ?? null,
+                    } as any).eq('id', (existing as any[])[0].id);
+                    if (error) errors.push(error.message); else count++;
+                    continue;
+                  }
+
                   const { error } = await supabase.from('product_meter_readings' as any).insert({
                     meter_id: meterId,
                     plant_id: pid,
@@ -1564,6 +1702,7 @@ function ProductMeterRow({
   const [nameInput, setNameInput] = useState(meter.name ?? '');
   const [nameSaving, setNameSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
@@ -1572,7 +1711,7 @@ function ProductMeterRow({
   const save = async () => {
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
     setSaving(true);
-    const dt = new Date().toISOString();
+    const dt = new Date(customDt).toISOString();
     const { error } = await supabase.from('product_meter_readings' as any).insert({
       meter_id: meter.id,
       plant_id: plantId,
@@ -1677,6 +1816,10 @@ function ProductMeterRow({
       </div>
 
       {/* Reading input */}
+      <Input type="datetime-local" value={customDt}
+        onChange={e => setCustomDt(e.target.value)}
+        className="h-9 w-44 shrink-0 text-xs"
+        title="Reading date & time" />
       <div className="relative shrink-0">
         <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
         <Input
@@ -1734,11 +1877,17 @@ function ProductMeterRow({
 // ── Product meter history dialog ──────────────────────────────────────────────
 
 function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: () => void }) {
+  const qc = useQueryClient();
   const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+  const [editRow, setEditRow] = useState<{ id: string; datetime: string; value: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const WINDOWS = [{ label: '7D', days: 7 }, { label: '14D', days: 14 }, { label: '30D', days: 30 }, { label: '60D', days: 60 }] as const;
 
+  const queryKey = ['product-meter-history', meter.id, days];
+
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['product-meter-history', meter.id, days],
+    queryKey,
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - days);
@@ -1752,6 +1901,32 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     },
   });
 
+  const saveEdit = async () => {
+    if (!editRow) return;
+    setSaving(true);
+    const { error } = await supabase.from('product_meter_readings' as any).update({
+      current_reading: +editRow.value,
+      reading_datetime: new Date(editRow.datetime).toISOString(),
+    } as any).eq('id', editRow.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Reading updated');
+    setEditRow(null);
+    qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries();
+  };
+
+  const deleteRow = async (id: string) => {
+    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
+    setDeletingId(id);
+    const { error } = await supabase.from('product_meter_readings' as any).delete().eq('id', id);
+    setDeletingId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Reading deleted');
+    qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries();
+  };
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
@@ -1762,13 +1937,39 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
         </DialogHeader>
         <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
           {WINDOWS.map(({ label, days: d }) => (
-            <button key={label} onClick={() => setDays(d as any)}
+            <button key={label} onClick={() => { setDays(d as any); setEditRow(null); }}
               className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
                 days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}>{label}</button>
           ))}
         </div>
-        <div className="overflow-auto max-h-80 rounded border text-xs">
+
+        {editRow && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-xs">
+            <p className="font-medium">Editing reading</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px]">Date &amp; Time</Label>
+                <Input type="datetime-local" value={editRow.datetime}
+                  onChange={e => setEditRow({ ...editRow, datetime: e.target.value })} className="h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[11px]">Reading</Label>
+                <Input type="number" step="any" value={editRow.value}
+                  onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
+                className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs px-3">
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-auto max-h-72 rounded border text-xs">
           {isLoading ? (
             <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -1782,21 +1983,36 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
                   <th className="px-3 py-2 font-medium">Date & Time</th>
                   <th className="px-3 py-2 font-medium text-right">Reading</th>
                   <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
+                  <th className="px-2 py-2 font-medium text-center w-16">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
-                  const vol = r.previous_reading != null
-                    ? r.current_reading - r.previous_reading
-                    : null;
+                  const vol = r.previous_reading != null ? r.current_reading - r.previous_reading : null;
+                  const isEditing = editRow?.id === r.id;
+                  const isDeleting = deletingId === r.id;
                   return (
-                    <tr key={r.id ?? i} className="border-t hover:bg-muted/40">
+                    <tr key={r.id ?? i} className={['border-t', isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' : 'hover:bg-muted/40'].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                       <td className="px-3 py-1.5 text-right font-mono-num text-teal-600">
                         {vol != null ? fmtNum(vol) : '—'}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <button title="Edit" disabled={!!editRow || isDeleting}
+                            onClick={() => setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) })}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button title="Delete" disabled={!!editRow || isDeleting}
+                            onClick={() => deleteRow(r.id)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
+                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2113,6 +2329,15 @@ const HISTORY_WINDOWS = [
   { label: '60D', days: 60 },
 ] as const;
 
+// Inline edit state for a history row
+interface HistoryEditState {
+  id: string;
+  datetime: string;     // "yyyy-MM-dd'T'HH:mm"
+  value: string;        // primary numeric field
+  value2?: string;      // secondary (power for well, or solar for power)
+  value3?: string;      // tertiary (grid for power)
+}
+
 function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }: {
   entityName: string;
   module: HistoryModule;
@@ -2120,10 +2345,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   plantId?: string;
   onClose: () => void;
 }) {
+  const qc = useQueryClient();
   const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+  const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const queryKey = ['reading-history', module, entityId, days];
 
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['reading-history', module, entityId, days],
+    queryKey,
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - days);
@@ -2150,14 +2381,13 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'power') {
         const { data } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
       if (module === 'blending') {
-        // Blending events are in MongoDB via backend
         try {
           const res = await fetch(
             `${BASE}/api/blending/history?well_id=${encodeURIComponent(entityId)}&days=${days}`
@@ -2171,11 +2401,72 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     },
   });
 
+  const startEdit = (r: any) => {
+    const dt = r.reading_datetime ?? r.created_at ?? '';
+    const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
+    if (module === 'well') {
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '' });
+    } else if (module === 'locator') {
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? '') });
+    } else if (module === 'power') {
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '' });
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editRow) return;
+    setSaving(true);
+    let error: any = null;
+    const dtIso = new Date(editRow.datetime).toISOString();
+
+    if (module === 'well') {
+      ({ error } = await supabase.from('well_readings').update({
+        current_reading: +editRow.value,
+        power_meter_reading: editRow.value2 ? +editRow.value2 : null,
+        reading_datetime: dtIso,
+      }).eq('id', editRow.id));
+    } else if (module === 'locator') {
+      ({ error } = await supabase.from('locator_readings').update({
+        current_reading: +editRow.value,
+        reading_datetime: dtIso,
+      }).eq('id', editRow.id));
+    } else if (module === 'power') {
+      ({ error } = await supabase.from('power_readings').update({
+        meter_reading_kwh: +editRow.value,
+        daily_solar_kwh: editRow.value2 ? +editRow.value2 : null,
+        daily_grid_kwh: editRow.value3 ? +editRow.value3 : null,
+        reading_datetime: dtIso,
+      }).eq('id', editRow.id));
+    }
+
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Reading updated');
+    setEditRow(null);
+    qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries();
+  };
+
+  const deleteRow = async (id: string) => {
+    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
+    setDeletingId(id);
+    let error: any = null;
+    if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
+    else if (module === 'locator') ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
+    else if (module === 'power') ({ error } = await supabase.from('power_readings').delete().eq('id', id));
+    setDeletingId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Reading deleted');
+    qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries();
+  };
+
   const title = module === 'power' ? `Power — ${entityName}` : `${entityName} — History`;
+  const canEditDelete = module !== 'blending';
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-base">{title}</DialogTitle>
         </DialogHeader>
@@ -2185,7 +2476,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           {HISTORY_WINDOWS.map(({ label, days: d }) => (
             <button
               key={label}
-              onClick={() => setDays(d as any)}
+              onClick={() => { setDays(d as any); setEditRow(null); }}
               className={[
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
                 days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
@@ -2196,8 +2487,64 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           ))}
         </div>
 
+        {/* Inline edit form */}
+        {editRow && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-xs">
+            <p className="font-medium text-foreground">Editing reading</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px]">Date &amp; Time</Label>
+                <Input type="datetime-local" value={editRow.datetime}
+                  onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
+                  className="h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[11px]">
+                  {module === 'well' ? 'Water (unitless)' : module === 'locator' ? 'Reading' : 'Meter Reading (kWh)'}
+                </Label>
+                <Input type="number" step="any" value={editRow.value}
+                  onChange={e => setEditRow({ ...editRow, value: e.target.value })}
+                  className="h-8 text-xs" />
+              </div>
+              {module === 'well' && (
+                <div>
+                  <Label className="text-[11px]">Power Meter (kWh)</Label>
+                  <Input type="number" step="any" value={editRow.value2 ?? ''}
+                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
+                    className="h-8 text-xs" placeholder="optional" />
+                </div>
+              )}
+              {module === 'power' && (
+                <>
+                  <div>
+                    <Label className="text-[11px]">Daily Solar (kWh)</Label>
+                    <Input type="number" step="any" value={editRow.value2 ?? ''}
+                      onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
+                      className="h-8 text-xs" placeholder="optional" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Daily Grid (kWh)</Label>
+                    <Input type="number" step="any" value={editRow.value3 ?? ''}
+                      onChange={e => setEditRow({ ...editRow, value3: e.target.value })}
+                      className="h-8 text-xs" placeholder="optional" />
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
+                className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs px-3">
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
-        <div className="overflow-auto max-h-80 rounded border text-xs">
+        <div className="overflow-auto max-h-72 rounded border text-xs">
           {isLoading ? (
             <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -2211,12 +2558,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   <th className="px-3 py-2 font-medium">Date & Time</th>
                   {module === 'locator' && <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
-                    <th className="px-3 py-2 font-medium text-right">Δ m³</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ</th>
                     <th className="px-3 py-2 font-medium">Flags</th>
                   </>}
                   {module === 'well' && <>
-                    <th className="px-3 py-2 font-medium text-right">Water (m³)</th>
-                    <th className="px-3 py-2 font-medium text-right">Δ m³</th>
+                    <th className="px-3 py-2 font-medium text-right">Water</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ</th>
                     <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
                   </>}
                   {module === 'blending' && <>
@@ -2227,16 +2574,17 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                     <th className="px-3 py-2 font-medium text-right">Solar</th>
                     <th className="px-3 py-2 font-medium text-right">Grid</th>
                   </>}
+                  {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
                   const dt = r.reading_datetime ?? r.event_date ?? r.created_at ?? '';
-                  const dateStr = dt
-                    ? format(new Date(dt), 'MMM d, yyyy HH:mm')
-                    : '—';
+                  const dateStr = dt ? format(new Date(dt), 'MMM d, yyyy HH:mm') : '—';
+                  const isEditing = editRow?.id === r.id;
+                  const isDeleting = deletingId === r.id;
                   return (
-                    <tr key={r.id ?? i} className="border-t hover:bg-muted/40">
+                    <tr key={r.id ?? i} className={['border-t', isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' : 'hover:bg-muted/40'].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{dateStr}</td>
                       {module === 'locator' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
@@ -2264,6 +2612,28 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
                       </>}
+                      {canEditDelete && (
+                        <td className="px-2 py-1 text-center">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <button
+                              title="Edit"
+                              disabled={!!editRow || isDeleting}
+                              onClick={() => startEdit(r)}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              title="Delete"
+                              disabled={!!editRow || isDeleting}
+                              onClick={() => deleteRow(r.id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                            >
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
