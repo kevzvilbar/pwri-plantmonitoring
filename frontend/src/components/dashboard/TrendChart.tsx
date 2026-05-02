@@ -387,7 +387,7 @@ export function TrendChart({
         ...d,
         recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
-        nrw: calc.nrw(d.production, d.consumption),
+        nrw: Math.max(0, calc.nrw(d.production, d.consumption)),
         // Volume-weighted ₱/m³ — null when no production was recorded so
         // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
@@ -474,12 +474,12 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `${v}%`} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(262 80% 58%)" width={36} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} />
               <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(262 80% 58%)" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
