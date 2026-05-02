@@ -398,8 +398,8 @@ export function TrendChart({
         // nrwRaw: true value (may be negative) — shown in tooltip with warning.
         // nrw: null when negative so the line stays connected via connectNulls
         // but Recharts won't plot a segment below the 0% axis baseline.
-        nrwRaw: +calc.nrw(d.production, d.consumption).toFixed(1),
-        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return v < 0 ? null : +v.toFixed(1); })(),
+        nrwRaw: (() => { const v = calc.nrw(d.production, d.consumption); return v != null ? +v.toFixed(1) : null; })(),
+        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return (v != null && v >= 0) ? +v.toFixed(1) : null; })(),
         // Volume-weighted ₱/m³ — null when no production was recorded so
         // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
