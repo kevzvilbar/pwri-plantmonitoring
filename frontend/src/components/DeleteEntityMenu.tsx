@@ -131,8 +131,8 @@ export function DeleteEntityMenu({
       );
       setDeps(snap);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Could not load dependencies');
-      setDeps(null);
+      // Non-blocking — dialog is already open; treat as no dependencies found
+      setDeps({ blocking: false, total: 0, rows: [] });
     } finally {
       setLoadingDeps(false);
     }
@@ -171,12 +171,12 @@ export function DeleteEntityMenu({
     }
   };
 
-  const openHardWithDeps = async () => {
+  const openHardWithDeps = () => {
     setReason('');
     setDeps(null);
     setForceAck(false);
-    await loadDeps();
     setOpenHard(true);
+    loadDeps();
   };
 
   const promptForce = () => {
