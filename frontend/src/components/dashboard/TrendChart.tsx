@@ -172,11 +172,13 @@ export function TrendChart({
     if (error) throw new Error(`${table}: ${error.message}`);
     return (data as T[]) ?? [];
   };
+
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsLocReadings,
   });
+
   // Product meter readings — the treated-water output meters installed on
   // the product line. These are the authoritative source for Production volume,
   // distinct from well (raw water) meters and locator (distribution) meters.
@@ -207,11 +209,24 @@ export function TrendChart({
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
   });
+
+  // ── Well readings — fetch with well_id so deltas are scoped per well ────────
+  // Operations.tsx saves well readings with well_id + plant_id but never
+  // writes daily_volume. Raw Water must therefore be computed as the sum of
+  // (current_reading − previous_reading) per well per day, excluding rows
+  // flagged is_meter_replacement and the first reading after a replacement.
+  // Fetching well_id here (instead of relying on plant_id alone) lets
+  // computeWellDeltas group correctly by individual meter rather than by
+  // plant, preventing cross-well subtraction that produced the -4,853,089 bug.
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>(
+      'well_readings',
+      'well_id,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id',
+    ),
     enabled: plantIds.length > 0 && needsWellReadings,
   });
+
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>('ro_train_readings', 'recovery_pct,permeate_tds,reading_datetime'),
@@ -222,6 +237,7 @@ export function TrendChart({
     queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
+
   // Production-cost rows use a date column (`cost_date`) rather than a
   // datetime, so the generic `supaSelect` helper (which filters on
   // `reading_datetime`) doesn't fit. Inline this single query instead.
@@ -264,7 +280,9 @@ export function TrendChart({
         _rawKwh: null as number | null,
       }).get(d);
 
-    // ── Meter-replacement-aware delta helper ────────────────────────────────
+    // ── Generic meter-replacement-aware delta helper ────────────────────────
+    // Used for locator, product meter, and power readings where `entityKey`
+    // is plant_id (one meter per plant).
     // Returns both `delta` (clamped ≥ 0, used for chart) and `rawDelta`
     // (unclamped, null when no predecessor exists so we don't false-flag
     // the first reading in the window).
@@ -293,7 +311,7 @@ export function TrendChart({
           lastReading.set(plantKey, +r.current_reading);
           afterRepl.delete(plantKey);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-          // Use pre-computed daily_volume when available (e.g. well/locator).
+          // Use pre-computed daily_volume when available (e.g. locator).
           rawDelta = +r[dailyVolumeField];
           delta = Math.max(0, rawDelta);
           lastReading.set(plantKey, +r.current_reading);
@@ -311,6 +329,50 @@ export function TrendChart({
       });
     }
 
+    // ── Well-specific delta computation (Raw Water) ─────────────────────────
+    // Operations.tsx never writes daily_volume for well_readings — it only
+    // saves current_reading + previous_reading per well per entry. The correct
+    // Raw Water delta is therefore:
+    //
+    //   delta = current_reading − previous_reading   (from the same DB row)
+    //
+    // This is ALWAYS available because Operations.tsx sets previous_reading =
+    // previousMeter at save time (line 1092). Using the stored previous_reading
+    // from each row is safer than doing an in-memory sequential diff across
+    // readings because:
+    //   1. There can be multiple readings per day per well (up to 3).
+    //   2. Readings from different wells share plant_id — a plant-keyed diff
+    //      would incorrectly subtract Well B's last reading from Well A's next.
+    //   3. The stored previous_reading already reflects what the operator saw
+    //      at the time of entry, making it the single source of truth.
+    //
+    // Meter-replacement rows: is_meter_replacement = true → delta = 0.
+    // First-reading-after-replacement: previous_reading is null or the new
+    // meter's starting value — we treat these as 0 via the null guard below.
+    function computeWellDeltas(
+      readings: any[],
+    ): { r: any; delta: number; rawDelta: number | null }[] {
+      return readings.map((r) => {
+        // Replacement rows always contribute 0.
+        if (r.is_meter_replacement) {
+          return { r, delta: 0, rawDelta: null };
+        }
+
+        const cur  = +r.current_reading;
+        const prev = r.previous_reading != null ? +r.previous_reading : null;
+
+        // No stored previous_reading → first reading for this well in the DB
+        // (or after a replacement that cleared it). Treat as 0 — no predecessor.
+        if (prev === null) {
+          return { r, delta: 0, rawDelta: null };
+        }
+
+        const rawDelta = cur - prev;
+        const delta    = Math.max(0, rawDelta);
+        return { r, delta, rawDelta };
+      });
+    }
+
     // Helper: accumulate raw delta into a _raw field only when it's negative.
     // Keeps null when all readings are non-negative (tooltip shows normal value).
     const accumulateRaw = (row: any, field: string, rawDelta: number | null) => {
@@ -320,8 +382,11 @@ export function TrendChart({
       }
     };
 
-    // Raw Water = sum of well meter deltas (groundwater source meters).
-    computeSequentialDeltas(wellReadings ?? [], 'daily_volume').forEach(({ r, delta, rawDelta }) => {
+    // ── Raw Water = sum of per-well (current − previous) deltas ────────────
+    // Uses computeWellDeltas which relies on the stored previous_reading
+    // column rather than in-memory sequential diff, preventing cross-well
+    // contamination and multi-reading-per-day order issues.
+    computeWellDeltas(wellReadings ?? []).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -355,7 +420,7 @@ export function TrendChart({
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
 
-    // Power = sequential delta of meter_reading_kwh, exactly like well/locator.
+    // Power = sequential delta of meter_reading_kwh, exactly like locator.
     computeSequentialDeltas(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
