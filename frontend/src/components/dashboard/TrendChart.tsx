@@ -395,9 +395,11 @@ export function TrendChart({
         production: Math.max(0, d.production),
         rawwaterRaw: d.rawwater,
         rawwater: Math.max(0, d.rawwater),
-        // NRW: null when negative so Recharts skips those points entirely and
-        // the right y-axis never dips below 0%.
-        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return v < 0 ? null : v; })(),
+        // nrwRaw: true value (may be negative) — shown in tooltip with warning.
+        // nrw: null when negative so the line stays connected via connectNulls
+        // but Recharts won't plot a segment below the 0% axis baseline.
+        nrwRaw: +calc.nrw(d.production, d.consumption).toFixed(1),
+        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return v < 0 ? null : +v.toFixed(1); })(),
         // Volume-weighted ₱/m³ — null when no production was recorded so
         // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
@@ -411,23 +413,33 @@ export function TrendChart({
   // surfaces a ⚠ warning when any metric on that day is negative.
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
-    const d = payload[0]?.payload;
-    const hasNegProd    = (d?.productionRaw ?? 0) < 0;
-    const hasNegRaw     = (d?.rawwaterRaw   ?? 0) < 0;
-    const anyNegative   = hasNegProd || hasNegRaw;
+    // payload[0].payload is the full data row — use it to read *Raw fields
+    // which hold true (possibly negative) values regardless of what the
+    // chart visually renders (clamped to 0 / null for bars and lines).
+    const row = payload[0]?.payload ?? {};
 
-    // Map from recharts dataKey → raw-value field and unit suffix
+    // Map dataKey → the raw field name that holds the true value
     const RAW_FIELD: Record<string, string> = {
       production: 'productionRaw',
       rawwater:   'rawwaterRaw',
+      nrw:        'nrwRaw',
     };
     const UNIT_SUFFIX: Record<string, string> = { nrw: '%' };
+
+    // Build display entries — each holds the true value to show
+    const entries = payload.map((p: any) => {
+      const rawField = RAW_FIELD[p.dataKey];
+      const rawVal   = rawField !== undefined ? (row[rawField] ?? p.value) : p.value;
+      return { ...p, rawVal };
+    });
+
+    const anyNegative = entries.some((e: any) => typeof e.rawVal === 'number' && e.rawVal < 0);
 
     return (
       <div style={{
         background: 'hsl(var(--card))',
         border: `1px solid ${anyNegative ? 'hsl(350 75% 50%)' : 'hsl(var(--border))'}`,
-        borderRadius: 8, fontSize: 11, padding: '8px 12px', minWidth: 180,
+        borderRadius: 8, fontSize: 11, padding: '8px 12px', minWidth: 190,
       }}>
         <p style={{ fontWeight: 600, marginBottom: 4 }}>{label}</p>
         {anyNegative && (
@@ -436,18 +448,16 @@ export function TrendChart({
             ⚠ Negative reading — check meter data
           </p>
         )}
-        {payload.map((p: any) => {
-          const rawField  = RAW_FIELD[p.dataKey];
-          const rawVal    = rawField ? (d?.[rawField] ?? p.value) : p.value;
-          const isNeg     = typeof rawVal === 'number' && rawVal < 0;
-          const suffix    = UNIT_SUFFIX[p.dataKey] ?? '';
-          const nameLabel = isNeg ? `${p.name} ⚠` : p.name;
-          const color     = isNeg ? 'hsl(350 75% 50%)' : p.color;
-          const display   = typeof rawVal === 'number'
-            ? rawVal.toLocaleString(undefined, { maximumFractionDigits: 1 })
-            : rawVal;
+        {entries.map((e: any) => {
+          const isNeg     = typeof e.rawVal === 'number' && e.rawVal < 0;
+          const suffix    = UNIT_SUFFIX[e.dataKey] ?? '';
+          const nameLabel = isNeg ? `${e.name} ⚠` : e.name;
+          const color     = isNeg ? 'hsl(350 75% 50%)' : e.color;
+          const display   = typeof e.rawVal === 'number'
+            ? e.rawVal.toLocaleString(undefined, { maximumFractionDigits: 1 })
+            : e.rawVal;
           return (
-            <p key={p.dataKey} style={{ color, margin: '2px 0' }}>
+            <p key={e.dataKey} style={{ color, margin: '2px 0' }}>
               {nameLabel} : {display}{suffix}
             </p>
           );
@@ -544,7 +554,7 @@ export function TrendChart({
               </Bar>
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
               <ReferenceLine yAxisId="pct" y={0} stroke="hsl(350 75% 50%)" strokeDasharray="3 3" strokeOpacity={0.5} />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="NRW %" />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="NRW %" connectNulls />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
