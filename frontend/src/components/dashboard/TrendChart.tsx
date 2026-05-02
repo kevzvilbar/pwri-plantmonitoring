@@ -330,45 +330,66 @@ export function TrendChart({
     }
 
     // ── Well-specific delta computation (Raw Water) ─────────────────────────
-    // Operations.tsx never writes daily_volume for well_readings — it only
-    // saves current_reading + previous_reading per well per entry. The correct
-    // Raw Water delta is therefore:
+    // Keyed by well_id (not plant_id) so readings from different wells never
+    // bleed into each other's diff. Algorithm mirrors computeSequentialDeltas
+    // but uses well_id as the entity key.
     //
-    //   delta = current_reading − previous_reading   (from the same DB row)
+    // Meter-replacement handling (matches Operations.tsx display logic):
+    //   • REPL row (is_meter_replacement = true):
+    //       delta = 0, new baseline = current_reading, mark well as "afterRepl"
+    //   • First non-REPL row after a REPL:
+    //       delta = 0 (new meter baseline — no valid predecessor), clear flag
+    //   • All subsequent rows: delta = current_reading − last seen current_reading
     //
-    // This is ALWAYS available because Operations.tsx sets previous_reading =
-    // previousMeter at save time (line 1092). Using the stored previous_reading
-    // from each row is safer than doing an in-memory sequential diff across
-    // readings because:
-    //   1. There can be multiple readings per day per well (up to 3).
-    //   2. Readings from different wells share plant_id — a plant-keyed diff
-    //      would incorrectly subtract Well B's last reading from Well A's next.
-    //   3. The stored previous_reading already reflects what the operator saw
-    //      at the time of entry, making it the single source of truth.
-    //
-    // Meter-replacement rows: is_meter_replacement = true → delta = 0.
-    // First-reading-after-replacement: previous_reading is null or the new
-    // meter's starting value — we treat these as 0 via the null guard below.
+    // Why NOT use stored previous_reading from the DB row:
+    //   The row saved at Feb 19 06:00 has previous_reading = 114,586 (old meter).
+    //   The REPL row at 07:00 sets current_reading = 999,998 (new meter start).
+    //   The 08:00 row then has previous_reading = 999,998 — all fine in isolation.
+    //   But the 06:00 row's stored previous_reading pre-dates the replacement and
+    //   can produce a massive positive delta (999,998 − 114,592 = +885,406) when
+    //   the REPL row is processed out-of-order or when multiple same-day entries
+    //   are present. Sequential in-memory tracking avoids this entirely.
     function computeWellDeltas(
       readings: any[],
     ): { r: any; delta: number; rawDelta: number | null }[] {
-      return readings.map((r) => {
-        // Replacement rows always contribute 0.
-        if (r.is_meter_replacement) {
+      // Sort all readings chronologically across all wells in one pass.
+      const sorted = [...readings].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+
+      // Per-well state: last seen current_reading, and whether the next
+      // non-REPL row should be zeroed (first reading after a replacement).
+      const lastReading = new Map<string, number>(); // well_id → last current_reading
+      const afterRepl   = new Set<string>();          // well_ids whose next row is zeroed
+
+      return sorted.map((r) => {
+        const wellKey = r.well_id ?? r.plant_id ?? '__';
+        const isMR    = !!r.is_meter_replacement;
+
+        if (isMR) {
+          // Replacement row: zero delta, reset baseline to new meter start.
+          lastReading.set(wellKey, +r.current_reading);
+          afterRepl.add(wellKey);
           return { r, delta: 0, rawDelta: null };
         }
 
-        const cur  = +r.current_reading;
-        const prev = r.previous_reading != null ? +r.previous_reading : null;
-
-        // No stored previous_reading → first reading for this well in the DB
-        // (or after a replacement that cleared it). Treat as 0 — no predecessor.
-        if (prev === null) {
+        if (afterRepl.has(wellKey)) {
+          // First reading after a replacement: no valid predecessor → zero delta.
+          lastReading.set(wellKey, +r.current_reading);
+          afterRepl.delete(wellKey);
           return { r, delta: 0, rawDelta: null };
         }
 
-        const rawDelta = cur - prev;
+        if (!lastReading.has(wellKey)) {
+          // First ever reading for this well in the window — no predecessor.
+          lastReading.set(wellKey, +r.current_reading);
+          return { r, delta: 0, rawDelta: null };
+        }
+
+        // Normal case: diff against last seen reading for this specific well.
+        const rawDelta = +r.current_reading - lastReading.get(wellKey)!;
         const delta    = Math.max(0, rawDelta);
+        lastReading.set(wellKey, +r.current_reading);
         return { r, delta, rawDelta };
       });
     }
