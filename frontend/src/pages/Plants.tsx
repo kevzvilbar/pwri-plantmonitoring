@@ -225,6 +225,41 @@ export default function Plants() {
   );
 }
 
+// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
+function ProductMetersStat({ plantId }: { plantId: string }) {
+  const { data: meters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_meters' as any).select('id').eq('plant_id', plantId);
+      return (data ?? []) as any[];
+    },
+  });
+  const { data: readingCounts } = useQuery({
+    queryKey: ['product-meters-active', plantId],
+    queryFn: async () => {
+      if (!meters?.length) return {} as Record<string, boolean>;
+      const ids = meters.map((m: any) => m.id);
+      const { data } = await supabase
+        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
+      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
+      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
+    },
+    enabled: !!meters?.length,
+  });
+  const total = meters?.length ?? 0;
+  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
+  return (
+    <div>
+      <div className="font-mono-num text-lg font-bold">
+        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className="opacity-40 font-normal text-base">/{total}</span>
+      </div>
+      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+    </div>
+  );
+}
+
 function PlantDetail({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
   const { data: plants } = usePlants();
@@ -466,40 +501,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
   );
 }
 
-// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
-function ProductMetersStat({ plantId }: { plantId: string }) {
-  const { data: meters } = useQuery({
-    queryKey: ['product-meters', plantId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('product_meters' as any).select('id').eq('plant_id', plantId);
-      return (data ?? []) as any[];
-    },
-  });
-  const { data: readingCounts } = useQuery({
-    queryKey: ['product-meters-active', plantId],
-    queryFn: async () => {
-      if (!meters?.length) return {} as Record<string, boolean>;
-      const ids = meters.map((m: any) => m.id);
-      const { data } = await supabase
-        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
-      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
-      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
-    },
-    enabled: !!meters?.length,
-  });
-  const total = meters?.length ?? 0;
-  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
-  return (
-    <div>
-      <div className="font-mono-num text-lg font-bold">
-        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
-        <span className="opacity-40 font-normal text-base">/{total}</span>
-      </div>
-      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
-    </div>
-  );
-}
 
 // ─── Product Meters Card ──────────────────────────────────────────────────────
 // Manager/Admin can add, rename, and remove product meters per plant.
