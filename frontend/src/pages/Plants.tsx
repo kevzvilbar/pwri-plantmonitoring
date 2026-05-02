@@ -308,20 +308,22 @@ function PlantDetail({ plantId }: { plantId: string }) {
   return (
     <div className="space-y-3 animate-fade-in">
       {/* Back nav */}
-      <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
+      <button onClick={() => navigate('/plants')}
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
         <ChevronLeft className="h-4 w-4" /> All plants
       </button>
 
-      {/* Main plant info card — gradient hero */}
+      {/* Hero card */}
       <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden relative">
 
-        {/* Top-right: Status pill + Edit + Delete */}
+        {/* Top-right action bar */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
+          {/* Status pill */}
           <span className={[
-            'text-xs font-semibold px-2.5 py-1 rounded-full border',
+            'text-xs font-semibold px-3 py-1 rounded-full',
             plant.status === 'Active'
-              ? 'bg-white/10 border-white/20 text-white'
-              : 'bg-amber-400/20 border-amber-400/30 text-amber-200',
+              ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+              : 'bg-amber-400/20 text-amber-200 border border-amber-400/30',
           ].join(' ')}>
             Status: <span className="font-bold">{plant.status}</span>
           </span>
@@ -329,39 +331,39 @@ function PlantDetail({ plantId }: { plantId: string }) {
             <Button size="sm" variant="ghost"
               onClick={openInfoEdit}
               data-testid="edit-plant-info-btn"
-              className="h-8 gap-1 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs">
-              <Pencil className="h-3 w-3" />Edit
+              className="h-8 gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-xs font-medium">
+              <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
           )}
           {isManager && (
-            <DeleteEntityMenu
-              kind="plant" id={plant.id} label={plant.name}
-              canSoftDelete={plant.status === 'Active'} canHardDelete
-              invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
-            />
+            <div className="[&_button]:bg-white/15 [&_button]:hover:bg-white/25 [&_button]:text-white [&_button]:border [&_button]:border-white/30 [&_button]:rounded-lg [&_svg]:text-white">
+              <DeleteEntityMenu
+                kind="plant" id={plant.id} label={plant.name}
+                canSoftDelete={plant.status === 'Active'} canHardDelete
+                invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
+              />
+            </div>
           )}
         </div>
 
-        {/* Plant name + address */}
-        <div className="min-w-0 pr-44">
+        {/* Name + address */}
+        <div className="min-w-0 pr-56">
           <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
-          <p className="text-xs text-topbar-muted flex items-center gap-1 mt-0.5">
+          <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
             <MapPin className="h-3 w-3 shrink-0" />
             <span className="truncate">{plant.address}</span>
           </p>
         </div>
 
-        {/* Stats row — Capacity / RO Trains / Product Meters */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 text-xs">
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
           <div>
-            <div className="opacity-60 text-[11px] uppercase tracking-wide">Capacity</div>
-            <div className="font-mono-num text-lg font-semibold mt-0.5">
-              {fmtNum(plant.design_capacity_m3 ?? 0)} m³
-            </div>
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Capacity</div>
+            <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} m³</div>
           </div>
           <div>
-            <div className="opacity-60 text-[11px] uppercase tracking-wide">RO Trains</div>
-            <div className="font-mono-num text-lg font-semibold mt-0.5">
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">RO Trains</div>
+            <div className="font-mono-num text-lg font-bold">
               {trainCounts ? (
                 <>
                   <span className={
@@ -370,14 +372,14 @@ function PlantDetail({ plantId }: { plantId: string }) {
                       : trainCounts.active === 0 && trainCounts.total > 0
                         ? 'text-amber-300' : ''
                   }>{trainCounts.active}</span>
-                  <span className="opacity-50 font-normal text-base">/{trainCounts.total}</span>
+                  <span className="opacity-40 font-normal text-base">/{trainCounts.total}</span>
                 </>
               ) : (plant.num_ro_trains ?? '—')}
             </div>
             <div className="opacity-40 text-[10px]">active / total</div>
           </div>
-          <div className="col-span-2 sm:col-span-1">
-            <div className="opacity-60 text-[11px] uppercase tracking-wide">Product Meters</div>
+          <div>
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Product Meters</div>
             <ProductMetersStat plantId={plant.id} onEdit={() => setTab('product')} />
           </div>
         </div>
@@ -461,55 +463,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
       {tab === 'wells' && <WellsList plantId={plantId} />}
       {tab === 'product' && <ProductMetersCard plant={plant} />}
       {tab === 'trains' && <TrainsList plantId={plantId} />}
-    </div>
-  );
-}
-
-// ─── ProductMetersStat — tiny active/total + Edit link for hero card ────────────
-function ProductMetersStat({ plantId, onEdit }: { plantId: string; onEdit: () => void }) {
-  const { isManager, isAdmin } = useAuth();
-  const canEdit = isManager || isAdmin;
-  const { data: meters } = useQuery({
-    queryKey: ['product-meters', plantId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('product_meters' as any).select('id,name').eq('plant_id', plantId);
-      return (data ?? []) as any[];
-    },
-  });
-  // "active" = meters that have at least one reading (non-zero readings count)
-  const { data: readingCounts } = useQuery({
-    queryKey: ['product-meters-active', plantId],
-    queryFn: async () => {
-      if (!meters?.length) return {};
-      const ids = meters.map((m: any) => m.id);
-      const { data } = await supabase
-        .from('product_meter_readings' as any)
-        .select('meter_id')
-        .in('meter_id', ids);
-      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
-      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)]));
-    },
-    enabled: !!meters?.length,
-  });
-  const total = meters?.length ?? 0;
-  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
-
-  return (
-    <div className="mt-0.5">
-      <div className="font-mono-num text-lg font-semibold">
-        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
-        <span className="opacity-50 font-normal text-base">/{total}</span>
-      </div>
-      <div className="flex items-center gap-2 mt-0.5">
-        <span className="opacity-40 text-[10px]">active / total</span>
-        {canEdit && (
-          <button onClick={onEdit}
-            className="text-[10px] text-white/50 hover:text-white underline underline-offset-2 transition-colors">
-            Edit
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -715,17 +668,19 @@ function ProductMeterRow({
         <>
           <span className="text-sm flex-1 truncate">{meter.name}</span>
           {canEdit && (
-            <>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 sm:opacity-0 sm:group-hover:opacity-100" title="Rename"
+            <div className="flex items-center gap-0.5 shrink-0">
+              <Button size="sm" variant="ghost"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                title="Rename"
                 onClick={() => { setNameInput(meter.name); setEditing(true); }}>
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button size="sm" variant="ghost"
-                className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 sm:opacity-0 sm:group-hover:opacity-100"
+                className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
                 title="Delete" onClick={deleteMeter} disabled={busy}>
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
-            </>
+            </div>
           )}
         </>
       )}
