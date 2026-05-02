@@ -316,14 +316,13 @@ function PlantDetail({ plantId }: { plantId: string }) {
       {/* Hero card */}
       <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden relative">
 
-        {/* Top-right action bar */}
+        {/* Top-right: Status pill + Edit + Delete */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
-          {/* Status pill */}
           <span className={[
-            'text-xs font-semibold px-3 py-1 rounded-full',
+            'text-xs font-semibold px-3 py-1 rounded-full border',
             plant.status === 'Active'
-              ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
-              : 'bg-amber-400/20 text-amber-200 border border-amber-400/30',
+              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
+              : 'bg-amber-400/20 text-amber-200 border-amber-400/30',
           ].join(' ')}>
             Status: <span className="font-bold">{plant.status}</span>
           </span>
@@ -336,7 +335,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <div className="[&_button]:bg-white/15 [&_button]:hover:bg-white/25 [&_button]:text-white [&_button]:border [&_button]:border-white/30 [&_button]:rounded-lg [&_svg]:text-white">
+            <div className="[&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white">
               <DeleteEntityMenu
                 kind="plant" id={plant.id} label={plant.name}
                 canSoftDelete={plant.status === 'Active'} canHardDelete
@@ -355,7 +354,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
           </p>
         </div>
 
-        {/* Stats row */}
+        {/* Stats: Capacity / RO Trains / Product Meters */}
         <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
           <div>
             <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Capacity</div>
@@ -376,7 +375,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
                 </>
               ) : (plant.num_ro_trains ?? '—')}
             </div>
-            <div className="opacity-40 text-[10px]">active / total</div>
+            <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
           </div>
           <div>
             <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Product Meters</div>
@@ -480,12 +479,12 @@ function ProductMetersStat({ plantId }: { plantId: string }) {
   const { data: readingCounts } = useQuery({
     queryKey: ['product-meters-active', plantId],
     queryFn: async () => {
-      if (!meters?.length) return {};
+      if (!meters?.length) return {} as Record<string, boolean>;
       const ids = meters.map((m: any) => m.id);
       const { data } = await supabase
         .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
       const seen = new Set((data ?? []).map((r: any) => r.meter_id));
-      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)]));
+      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
     },
     enabled: !!meters?.length,
   });
