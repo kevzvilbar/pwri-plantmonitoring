@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Legend, ComposedChart, Bar,
+  Legend, ComposedChart, Bar, ReferenceLine, Cell,
 } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
@@ -387,7 +387,17 @@ export function TrendChart({
         ...d,
         recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
-        nrw: calc.nrw(d.production, d.consumption),
+        // *Raw fields hold the true value (may be negative when meter drifts
+        // or data is missing). Used only in tooltips for accurate display +
+        // warning indicator. The chart fields are clamped to 0 so lines/bars
+        // never render below the axis.
+        productionRaw: d.production,
+        production: Math.max(0, d.production),
+        rawwaterRaw: d.rawwater,
+        rawwater: Math.max(0, d.rawwater),
+        // NRW: null when negative so Recharts skips those points entirely and
+        // the right y-axis never dips below 0%.
+        nrw: (() => { const v = calc.nrw(d.production, d.consumption); return v < 0 ? null : v; })(),
         // Volume-weighted ₱/m³ — null when no production was recorded so
         // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
@@ -395,6 +405,56 @@ export function TrendChart({
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
   const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
+
+  // ── Shared tooltip rendered across all metric charts ─────────────────────
+  // Shows the real (possibly negative) value for production/rawwater and
+  // surfaces a ⚠ warning when any metric on that day is negative.
+  const NegativeAwareTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
+    const hasNegProd    = (d?.productionRaw ?? 0) < 0;
+    const hasNegRaw     = (d?.rawwaterRaw   ?? 0) < 0;
+    const anyNegative   = hasNegProd || hasNegRaw;
+
+    // Map from recharts dataKey → raw-value field and unit suffix
+    const RAW_FIELD: Record<string, string> = {
+      production: 'productionRaw',
+      rawwater:   'rawwaterRaw',
+    };
+    const UNIT_SUFFIX: Record<string, string> = { nrw: '%' };
+
+    return (
+      <div style={{
+        background: 'hsl(var(--card))',
+        border: `1px solid ${anyNegative ? 'hsl(350 75% 50%)' : 'hsl(var(--border))'}`,
+        borderRadius: 8, fontSize: 11, padding: '8px 12px', minWidth: 180,
+      }}>
+        <p style={{ fontWeight: 600, marginBottom: 4 }}>{label}</p>
+        {anyNegative && (
+          <p style={{ color: 'hsl(350 75% 50%)', fontWeight: 600, marginBottom: 6, fontSize: 10,
+            background: 'hsl(350 75% 50% / 0.08)', borderRadius: 4, padding: '2px 6px' }}>
+            ⚠ Negative reading — check meter data
+          </p>
+        )}
+        {payload.map((p: any) => {
+          const rawField  = RAW_FIELD[p.dataKey];
+          const rawVal    = rawField ? (d?.[rawField] ?? p.value) : p.value;
+          const isNeg     = typeof rawVal === 'number' && rawVal < 0;
+          const suffix    = UNIT_SUFFIX[p.dataKey] ?? '';
+          const nameLabel = isNeg ? `${p.name} ⚠` : p.name;
+          const color     = isNeg ? 'hsl(350 75% 50%)' : p.color;
+          const display   = typeof rawVal === 'number'
+            ? rawVal.toLocaleString(undefined, { maximumFractionDigits: 1 })
+            : rawVal;
+          return (
+            <p key={p.dataKey} style={{ color, margin: '2px 0' }}>
+              {nameLabel} : {display}{suffix}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
   // label doesn't eat into the chart area on narrow mobile screens.
@@ -474,11 +534,16 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(350 75% 50%)" width={36} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(350 75% 50%)" width={36} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} allowDataOverflow />
+              <Tooltip content={NegativeAwareTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
+              <Bar yAxisId="vol" dataKey="production" name="Production (m³)">
+                {chartData.map((d: any, i: number) => (
+                  <Cell key={i} fill={d.productionRaw < 0 ? 'hsl(350 75% 50%)' : 'hsl(var(--chart-1))'} />
+                ))}
+              </Bar>
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+              <ReferenceLine yAxisId="pct" y={0} stroke="hsl(350 75% 50%)" strokeDasharray="3 3" strokeOpacity={0.5} />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
@@ -492,7 +557,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="amt" tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={formatYAxis} width={36} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `₱${v}`} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Tooltip content={NegativeAwareTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
               <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
@@ -504,7 +569,7 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Tooltip content={NegativeAwareTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {metric === 'production' && (<>
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
