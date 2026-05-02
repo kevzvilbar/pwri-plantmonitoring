@@ -2030,7 +2030,11 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
-                  const vol = r.previous_reading != null ? r.current_reading - r.previous_reading : null;
+                  // rows are sorted descending; rows[i+1] is the immediately prior reading
+                  // in time — always current − predecessor (handles same-day multiple readings,
+                  // meter replacements, and PMS correctly).
+                  const predecessor: any = rows[i + 1] ?? null;
+                  const vol = predecessor != null ? r.current_reading - predecessor.current_reading : null;
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
                   return (
@@ -2688,13 +2692,18 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   const dateStr = dt ? format(new Date(dt), 'MMM d, yyyy HH:mm') : '—';
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
+                  // rows are sorted descending (newest first), so rows[i+1] is the
+                  // immediately preceding reading in time — always use current − predecessor
+                  // regardless of date boundary (handles same-day multiple readings, meter
+                  // replacements, and PMS correctly).
+                  const predecessor: any = rows[i + 1] ?? null;
                   return (
                     <tr key={r.id ?? i} className={['border-t', isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' : 'hover:bg-muted/40'].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{dateStr}</td>
                       {module === 'locator' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
-                          {r.previous_reading != null ? fmtNum(r.current_reading - r.previous_reading) : '—'}
+                          {predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'}
                         </td>
                         <td className="px-3 py-1.5">
                           {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
@@ -2703,7 +2712,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       {module === 'well' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
-                          {r.previous_reading != null ? fmtNum(r.current_reading - r.previous_reading) : '—'}
+                          {predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.power_meter_reading != null ? fmtNum(r.power_meter_reading) : '—'}
@@ -2713,7 +2722,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0)}</td>
                       </>}
                       {module === 'power' && <>
-                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.daily_consumption_kwh ?? 0)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'}
+                        </td>
                         <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
                       </>}
