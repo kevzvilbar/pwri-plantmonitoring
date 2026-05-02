@@ -380,7 +380,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
           </div>
           <div>
             <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Product Meters</div>
-            <ProductMetersStat plantId={plant.id} onEdit={() => setTab('product')} />
+            <ProductMetersStat plantId={plant.id} />
           </div>
         </div>
 
@@ -463,6 +463,41 @@ function PlantDetail({ plantId }: { plantId: string }) {
       {tab === 'wells' && <WellsList plantId={plantId} />}
       {tab === 'product' && <ProductMetersCard plant={plant} />}
       {tab === 'trains' && <TrainsList plantId={plantId} />}
+    </div>
+  );
+}
+
+// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
+function ProductMetersStat({ plantId }: { plantId: string }) {
+  const { data: meters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_meters' as any).select('id').eq('plant_id', plantId);
+      return (data ?? []) as any[];
+    },
+  });
+  const { data: readingCounts } = useQuery({
+    queryKey: ['product-meters-active', plantId],
+    queryFn: async () => {
+      if (!meters?.length) return {};
+      const ids = meters.map((m: any) => m.id);
+      const { data } = await supabase
+        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
+      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
+      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)]));
+    },
+    enabled: !!meters?.length,
+  });
+  const total = meters?.length ?? 0;
+  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
+  return (
+    <div>
+      <div className="font-mono-num text-lg font-bold">
+        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className="opacity-40 font-normal text-base">/{total}</span>
+      </div>
+      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
     </div>
   );
 }
