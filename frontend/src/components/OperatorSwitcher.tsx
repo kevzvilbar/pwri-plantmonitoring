@@ -24,7 +24,6 @@ function fullName(p: Profile | null): string {
   return [p.first_name, p.last_name].filter(Boolean).join(' ') || p.username || 'Unknown';
 }
 
-/** Designation roles that are allowed to use Operator Switch. */
 const OPERATOR_DESIGNATIONS = ['Operator'];
 
 function canSwitchOperator(profile: Profile | null): boolean {
@@ -33,8 +32,8 @@ function canSwitchOperator(profile: Profile | null): boolean {
 }
 
 /**
- * Fetches Active Operator-designated profiles assigned to the SAME plant(s)
- * as the authenticated user.  Only called when the logged-in user is an Operator.
+ * Fetches Active Operator profiles on the same plant(s).
+ * Uses .contains() per plant id to work around PostgREST array overlap issues.
  */
 function useSamePlantOperators(plantAssignments: string[]) {
   return useQuery<Profile[]>({
@@ -42,24 +41,40 @@ function useSamePlantOperators(plantAssignments: string[]) {
     queryFn: async () => {
       if (plantAssignments.length === 0) return [];
 
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('status', 'Active')
-        .eq('profile_complete', true)
-        .in('designation', OPERATOR_DESIGNATIONS)
-        .overlaps('plant_assignments', plantAssignments)
-        .order('first_name');
+      // Query once per plant and union — avoids .overlaps() PostgREST compatibility issues
+      const results = await Promise.all(
+        plantAssignments.map((pid) =>
+          supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('status', 'Active')
+            .eq('designation', 'Operator')
+            .contains('plant_assignments', [pid])
+            .order('first_name'),
+        ),
+      );
 
-      if (error) throw error;
-      return (data ?? []) as Profile[];
+      // Merge and deduplicate by id
+      const seen = new Set<string>();
+      const merged: Profile[] = [];
+      for (const { data } of results) {
+        for (const row of data ?? []) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            merged.push(row as Profile);
+          }
+        }
+      }
+      // Sort by first name
+      return merged.sort((a, b) =>
+        (a.first_name ?? '').localeCompare(b.first_name ?? ''),
+      );
     },
     enabled: plantAssignments.length > 0,
     staleTime: 30_000,
   });
 }
 
-/** Post a switch-event audit record to the backend. */
 async function logSwitchEvent(payload: {
   plant_id: string;
   from_username: string;
@@ -78,19 +93,14 @@ async function logSwitchEvent(payload: {
       body: JSON.stringify(payload),
     });
   } catch {
-    // Non-blocking — audit failure must not interrupt the UX
     console.warn('[OperatorSwitcher] Failed to post switch audit log');
   }
 }
 
-/** Stable device fingerprint stored in localStorage. */
 function getDeviceId(): string {
   const key = 'pwri-device-id';
   let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-  }
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
   return id;
 }
 
@@ -99,28 +109,21 @@ export function OperatorSwitcher() {
   const { activeOperatorId, setActiveOperatorId } = useAppStore();
   const navigate = useNavigate();
 
-  // ── RBAC gate ──────────────────────────────────────────────────────────────
-  // Managers and Admins must NOT see the Switch Operator section.
   const switchAllowed = canSwitchOperator(profile);
-
   const plantAssignments = profile?.plant_assignments ?? [];
   const { data: peers = [] } = useSamePlantOperators(
     switchAllowed ? plantAssignments : [],
   );
 
-  // Confirm-switch state — require a second tap to commit
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Reset pending if menu closes without confirming
   useEffect(() => { if (!open) setPendingId(null); }, [open]);
 
   const isOverride = activeOperatorId !== null && activeOperatorId !== user?.id;
   const avatarBg = isOverride ? 'bg-amber-500' : 'bg-accent';
 
   const handleSelect = async (p: Profile) => {
-    // ── Cross-plant guard ──────────────────────────────────────────────────
-    // Validate that the target user shares at least one plant with the session.
     const targetPlants: string[] = p.plant_assignments ?? [];
     const sessionPlants: string[] = profile?.plant_assignments ?? [];
     const sharedPlant = sessionPlants.find((pid) => targetPlants.includes(pid));
@@ -132,7 +135,6 @@ export function OperatorSwitcher() {
     }
 
     if (p.id === user?.id) {
-      // Selecting own profile = clear override
       setActiveOperatorId(null);
       setPendingId(null);
       setOpen(false);
@@ -141,13 +143,10 @@ export function OperatorSwitcher() {
     }
 
     if (pendingId === p.id) {
-      // Second tap = confirm
       setActiveOperatorId(p.id);
       setPendingId(null);
       setOpen(false);
       toast.success(`Now recording as ${fullName(p)}`);
-
-      // ── Audit log ────────────────────────────────────────────────────────
       await logSwitchEvent({
         plant_id: sharedPlant,
         from_username: profile?.username ?? user?.id ?? 'unknown',
@@ -155,7 +154,6 @@ export function OperatorSwitcher() {
         device_id: getDeviceId(),
       });
     } else {
-      // First tap = ask for confirmation
       setPendingId(p.id);
     }
   };
@@ -170,122 +168,110 @@ export function OperatorSwitcher() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-1.5 hover:bg-topbar/40 rounded-full pl-1 pr-2 py-1 transition-colors">
+        <button className="flex items-center gap-1 hover:bg-topbar/40 rounded-full pl-1 pr-1.5 py-0.5 transition-colors">
           <div className="relative">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className={`${avatarBg} text-white text-xs font-semibold`}>
+            <Avatar className="h-7 w-7">
+              <AvatarFallback className={`${avatarBg} text-white text-[11px] font-semibold`}>
                 {initials(activeOperator)}
               </AvatarFallback>
             </Avatar>
             {isOverride && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-amber-400 border-2 border-topbar flex items-center justify-center">
-                <UserCheck className="h-2 w-2 text-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 border-2 border-topbar flex items-center justify-center">
+                <UserCheck className="h-1.5 w-1.5 text-white" />
               </span>
             )}
           </div>
-          <ChevronDown className="h-3.5 w-3.5 text-topbar-muted" />
+          <ChevronDown className="h-3 w-3 text-topbar-muted" />
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64">
-        {/* Header: logged-in user + active operator */}
-        <DropdownMenuLabel className="pb-1">
-          <div className="flex flex-col gap-0.5">
-            {isOverride ? (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <UserCheck className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                  <span className="font-semibold text-sm truncate">{fullName(activeOperator)}</span>
-                </div>
-                <span className="text-xs text-muted-foreground pl-5">
-                  Active operator · {activeOperator?.designation ?? 'No designation'}
-                </span>
-                <span className="text-[10px] text-muted-foreground pl-5 mt-0.5">
-                  Logged in as {fullName(profile)}
-                </span>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <UserCog className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="font-semibold text-sm truncate">{fullName(profile)}</span>
-                </div>
-                <span className="text-xs text-muted-foreground pl-5">
-                  {profile?.designation ?? 'No designation'}
-                </span>
-              </>
-            )}
-          </div>
-        </DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-56">
 
-        <DropdownMenuSeparator />
+        {/* Header */}
+        <div className="px-3 py-2">
+          {isOverride ? (
+            <>
+              <div className="flex items-center gap-1.5">
+                <UserCheck className="h-3 w-3 text-amber-500 shrink-0" />
+                <span className="font-semibold text-xs truncate">{fullName(activeOperator)}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">Active · {activeOperator?.designation}</p>
+              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">Logged in as {fullName(profile)}</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5">
+                <UserCog className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="font-semibold text-xs truncate">{fullName(profile)}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">{profile?.designation ?? 'No designation'}</p>
+            </>
+          )}
+        </div>
 
-        {/* ── Switch Operator section — Operators only ── */}
+        <DropdownMenuSeparator className="my-0" />
+
+        {/* Switch Operator — Operators only */}
         {switchAllowed && (
           <>
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-normal py-1">
+            <p className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
               Switch operator
-            </DropdownMenuLabel>
-
-            <div className="max-h-52 overflow-y-auto">
-              {peers.length === 0 && (
-                <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+            </p>
+            <div className="max-h-44 overflow-y-auto">
+              {peers.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground text-center">
                   No other active operators at this plant
-                </div>
-              )}
-              {peers.map((p) => {
-                const isSelf = p.id === user?.id;
-                const isActive = (activeOperatorId ?? user?.id) === p.id;
-                const isPending = pendingId === p.id;
-
-                return (
-                  <DropdownMenuItem
-                    key={p.id}
-                    className={`flex items-center gap-2.5 cursor-pointer py-2 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
-                    onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
-                  >
-                    <Avatar className="h-7 w-7 flex-shrink-0">
-                      <AvatarFallback className={`text-[10px] font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
-                        {initials(p)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {fullName(p)}
-                        {isSelf && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
+                </p>
+              ) : (
+                peers.map((p) => {
+                  const isSelf = p.id === user?.id;
+                  const isActive = (activeOperatorId ?? user?.id) === p.id;
+                  const isPending = pendingId === p.id;
+                  return (
+                    <DropdownMenuItem
+                      key={p.id}
+                      className={`flex items-center gap-2 cursor-pointer py-1.5 px-3 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                      onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
+                    >
+                      <Avatar className="h-6 w-6 shrink-0">
+                        <AvatarFallback className={`text-[9px] font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
+                          {initials(p)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate leading-tight">
+                          {fullName(p)}
+                          {isSelf && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-muted-foreground truncate">{p.designation ?? 'No designation'}</div>
-                    </div>
-                    {isActive && !isPending && (
-                      <span className="h-2 w-2 rounded-full bg-accent flex-shrink-0" />
-                    )}
-                    {isPending && (
-                      <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">Tap again to confirm</span>
-                    )}
-                  </DropdownMenuItem>
-                );
-              })}
+                      {isActive && !isPending && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                      )}
+                      {isPending && (
+                        <span className="text-[10px] text-amber-600 font-medium shrink-0">Confirm?</span>
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
             </div>
-
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="my-0" />
           </>
         )}
 
         {/* Actions */}
         {isOverride && (
-          <DropdownMenuItem onClick={clearOverride} className="text-amber-600 gap-2">
-            <UserCog className="h-4 w-4" />
-            Back to my profile
+          <DropdownMenuItem onClick={clearOverride} className="text-amber-600 gap-2 text-xs py-1.5">
+            <UserCog className="h-3.5 w-3.5" /> Back to my profile
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2">
-          <UserCog className="h-4 w-4" />
-          My profile
+        <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2 text-xs py-1.5">
+          <UserCog className="h-3.5 w-3.5" /> My profile
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={signOut} className="text-danger gap-2">
-          <LogOut className="h-4 w-4" />
-          Sign out
+        <DropdownMenuItem onClick={signOut} className="text-danger gap-2 text-xs py-1.5">
+          <LogOut className="h-3.5 w-3.5" /> Sign out
         </DropdownMenuItem>
+
       </DropdownMenuContent>
     </DropdownMenu>
   );
