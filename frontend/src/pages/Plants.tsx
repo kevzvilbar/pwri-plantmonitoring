@@ -678,6 +678,7 @@ function ProductMeterRow({
 }
 
 // ─── BackwashModeCard ─────────────────────────────────────────────────────────
+function BackwashModeCard({ plant }: { plant: any }) {
   const qc = useQueryClient();
   const { isManager, user, profile } = useAuth();
   const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
