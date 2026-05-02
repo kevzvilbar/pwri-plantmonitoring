@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { calc } from '@/lib/calculations';
@@ -16,6 +16,7 @@ import { format, subDays, startOfDay } from 'date-fns';
 import {
   ChartMetric, DashboardViewMode, RANGE_DAYS, RangeKey, TREND_Y_LABEL,
 } from './types';
+import { useAppStore } from '@/store/appStore';
 
 // Renders the per-cluster trend chart slot beneath a cluster's StatCards.
 //   • inline   — every chart in the cluster is rendered directly below
@@ -120,9 +121,15 @@ export function TrendChart({
   compact?: boolean;
   title?: string;
 }) {
-  const [range, setRange] = useState<RangeKey>('7D');
-  const [from, setFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
-  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+  // All charts share a single range selection via the global store so
+  // that picking 14D on one chart instantly syncs every other chart.
+  const range = useAppStore((s) => s.chartRange);
+  const from = useAppStore((s) => s.chartFrom);
+  const to = useAppStore((s) => s.chartTo);
+  const setRange = useAppStore((s) => s.setChartRange);
+  const setChartCustomDates = useAppStore((s) => s.setChartCustomDates);
+  const handleFromChange = (v: string) => setChartCustomDates(v, to);
+  const handleToChange = (v: string) => setChartCustomDates(from, v);
 
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
@@ -311,7 +318,7 @@ export function TrendChart({
               <Input
                 type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => handleFromChange(e.target.value)}
                 className="h-7 w-[130px] text-xs"
                 data-testid={`trend-from-${metric}`}
               />
@@ -319,7 +326,7 @@ export function TrendChart({
               <Input
                 type="date"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => handleToChange(e.target.value)}
                 className="h-7 w-[130px] text-xs"
                 data-testid={`trend-to-${metric}`}
               />
