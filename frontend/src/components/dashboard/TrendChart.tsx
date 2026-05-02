@@ -184,12 +184,25 @@ export function TrendChart({
   const { data: productReadings, isFetching: fetchingProduct, error: errProduct } = useQuery({
     queryKey: ['trend-product', metric, startKey, endKey, plantIds],
     queryFn: async () => {
+      // Try with is_meter_replacement first; fall back gracefully if column
+      // doesn't exist in this deployment (field will be undefined → false).
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
         .select('current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
-      if (error) throw new Error(`product_meter_readings: ${error.message}`);
+      if (error) {
+        if (error.message?.includes('is_meter_replacement')) {
+          const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
+            .select('current_reading,previous_reading,reading_datetime')
+            .in('plant_id', plantIds)
+            .gte('reading_datetime', startISO)
+            .lte('reading_datetime', endISO);
+          if (e2) throw new Error(`product_meter_readings: ${e2.message}`);
+          return (d2 as any[]) ?? [];
+        }
+        throw new Error(`product_meter_readings: ${error.message}`);
+      }
       return (data as any[]) ?? [];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
@@ -206,7 +219,7 @@ export function TrendChart({
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,reading_datetime'),
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
   // Production-cost rows use a date column (`cost_date`) rather than a
@@ -297,10 +310,14 @@ export function TrendChart({
       if (r.recovery_pct != null) { row.recovery += +r.recovery_pct; row.recoverySamples += 1; }
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
+    // Power = sum of daily_consumption_kwh. Zero on meter replacement
+    // so a new meter install doesn't create an artificial energy spike.
     (powerReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
+      if (!r.is_meter_replacement) {
+        ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
+      }
     });
     // Roll up daily ₱ totals across the selected plants. `cost_date` is
     // a date string (YYYY-MM-DD) — anchor it at local midnight for a
