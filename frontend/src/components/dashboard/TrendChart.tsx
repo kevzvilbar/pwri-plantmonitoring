@@ -287,6 +287,7 @@ export function TrendChart({
         const plantKey = r.plant_id ?? '__';
         const isMR = !!r.is_meter_replacement;
         let delta = 0;
+        let rawDelta: number | null = null; // unclipped; negative = bad reading
 
         if (isMR) {
           // REPL row: zero the delta, update baseline to this meter's reading.
@@ -300,11 +301,13 @@ export function TrendChart({
           afterRepl.delete(plantKey);
         } else if (dailyVolumeField && r[dailyVolumeField] != null) {
           // Use pre-computed daily_volume when available (e.g. well/locator).
-          delta = Math.max(0, +r[dailyVolumeField]);
+          rawDelta = +r[dailyVolumeField];
+          delta = Math.max(0, rawDelta);
           lastReading.set(plantKey, +r.current_reading);
         } else if (lastReading.has(plantKey)) {
           // Normal sequential diff against last seen value for this plant.
-          delta = Math.max(0, +r.current_reading - lastReading.get(plantKey)!);
+          rawDelta = +r.current_reading - lastReading.get(plantKey)!;
+          delta = Math.max(0, rawDelta);
           lastReading.set(plantKey, +r.current_reading);
         } else {
           // First reading ever for this plant in the window — no predecessor.
@@ -312,7 +315,7 @@ export function TrendChart({
           lastReading.set(plantKey, +r.current_reading);
         }
 
-        return { r, delta };
+        return { r, delta, rawDelta };
       });
     }
 
@@ -394,54 +397,60 @@ export function TrendChart({
       }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
-  const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
-
-  // ── Per-day negative-reading index ─────────────────────────────────────
-  // Maps "MMM d" date keys to the list of field labels that had a negative
-  // (or suspicious zero-after-non-zero) raw reading on that day. Used by
-  // the custom tooltip to show an inline warning only on affected dates.
+  // ── Per-day negative-reading index ────────────────────────────────────
+  // Re-runs the same sequential delta logic as chartData but keeps the
+  // raw (unclipped) delta so we can detect genuinely negative readings.
+  // Only dates where rawDelta < 0 get flagged — no false positives from
+  // first-reading-of-window rows (rawDelta stays null there).
   const negativeByDate = useMemo<Map<string, string[]>>(() => {
     const map = new Map<string, string[]>();
     const flag = (key: string, label: string) => {
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(label);
+      const existing = map.get(key);
+      if (existing) { if (!existing.includes(label)) existing.push(label); }
+      else map.set(key, [label]);
     };
 
-    const checkDelta = (
-      readings: any[] | undefined,
+    // Reusable sequential-delta scanner that mirrors computeSequentialDeltas
+    // but flags days where the raw delta is negative.
+    const scanNegatives = (
+      readings: any[],
       dailyVolumeField: string | null,
       label: string,
     ) => {
-      const sorted = [...(readings ?? [])].sort(
+      const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
       const lastReading = new Map<string, number>();
+      const afterRepl = new Set<string>();
       sorted.forEach((r) => {
         const plantKey = r.plant_id ?? '__';
         const isMR = !!r.is_meter_replacement;
-        const dt = new Date(r.reading_datetime);
-        const key = format(dt, 'MMM d');
+        const key = format(new Date(r.reading_datetime), 'MMM d');
         if (isMR) {
           lastReading.set(plantKey, +r.current_reading);
-          return;
-        }
-        if (dailyVolumeField && r[dailyVolumeField] != null) {
+          afterRepl.add(plantKey);
+        } else if (afterRepl.has(plantKey)) {
+          lastReading.set(plantKey, +r.current_reading);
+          afterRepl.delete(plantKey);
+        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
           if (+r[dailyVolumeField] < 0) flag(key, label);
           lastReading.set(plantKey, +r.current_reading);
-          return;
+        } else if (lastReading.has(plantKey)) {
+          const raw = +r.current_reading - lastReading.get(plantKey)!;
+          if (raw < 0) flag(key, label);
+          lastReading.set(plantKey, +r.current_reading);
+        } else {
+          // First-ever reading for this plant in this window — no predecessor,
+          // so no delta can be computed; skip without flagging.
+          lastReading.set(plantKey, +r.current_reading);
         }
-        if (lastReading.has(plantKey)) {
-          const delta = +r.current_reading - lastReading.get(plantKey)!;
-          if (delta < 0) flag(key, label);
-        }
-        lastReading.set(plantKey, +r.current_reading);
       });
     };
 
-    checkDelta(wellReadings,    'daily_volume',        'Raw Water');
-    checkDelta(locReadings,     'daily_volume',        'Locators');
-    checkDelta(productReadings, null,                  'Production');
-    checkDelta(
+    scanNegatives(wellReadings ?? [],    'daily_volume',        'Raw Water');
+    scanNegatives(locReadings ?? [],     'daily_volume',        'Locators');
+    scanNegatives(productReadings ?? [], null,                  'Production');
+    scanNegatives(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
         current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
@@ -467,8 +476,8 @@ export function TrendChart({
     return map;
   }, [locReadings, wellReadings, productReadings, powerReadings, roReadings, costReadings]);
 
-  // Custom tooltip that mirrors Recharts' default style but appends an
-  // amber warning line when the hovered date has negative raw readings.
+  // Custom tooltip: identical look to Recharts default but appends an amber
+  // warning only on dates where a genuinely negative delta was detected.
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const warnings = negativeByDate.get(label as string) ?? [];
@@ -497,15 +506,17 @@ export function TrendChart({
             gap: 4,
             color: '#b45309',
           }}>
-            <span style={{ fontSize: 11, lineHeight: 1.3 }}>⚠️</span>
-            <span style={{ fontSize: 10, lineHeight: 1.3 }}>
-              Negative reading: {warnings.join(', ')}
+            <span style={{ fontSize: 12 }}>⚠️</span>
+            <span style={{ fontSize: 10, lineHeight: 1.4 }}>
+              <strong>Negative reading:</strong> {warnings.join(', ')}
             </span>
           </div>
         )}
       </div>
     );
   };
+
+  const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
   // label doesn't eat into the chart area on narrow mobile screens.
