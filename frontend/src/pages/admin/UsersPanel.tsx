@@ -95,28 +95,46 @@ function CreateUserDialog({ open, onClose, onCreated }: {
     if (!isOperator && plantIds.length === 0) { toast.error('Assign at least one plant.'); return; }
 
     setBusy(true);
+    const assignedPlants = isOperator ? [plantId] : plantIds;
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL ?? ''}/admin/users/create`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({
-            email: form.email, password: form.password, username: form.username,
-            first_name: form.first_name, last_name: form.last_name,
-            middle_name: form.middle_name || null, suffix: form.suffix || null,
-            designation: form.designation || null,
-            plant_assignments: isOperator ? [plantId] : plantIds,
-          }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ detail: res.statusText }));
-        const msg = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-        toast.error(msg); setBusy(false); return;
+      // Save current admin session so we can restore it after creating the user
+      const { data: adminSession } = await supabase.auth.getSession();
+
+      // 1. Create the auth user
+      const { error: upErr } = await supabase.auth.signUp({
+        email: form.email, password: form.password,
+      });
+      if (upErr) throw new Error(upErr.message);
+
+      // 2. Sign in as the new user to call the RPC
+      const { error: inErr } = await supabase.auth.signInWithPassword({
+        email: form.email, password: form.password,
+      });
+      if (inErr) throw new Error(inErr.message);
+
+      // 3. Complete onboarding profile
+      const { error: rpErr } = await supabase.rpc('complete_onboarding', {
+        _username: form.username,
+        _first_name: form.first_name,
+        _middle_name: form.middle_name || null,
+        _last_name: form.last_name,
+        _suffix: form.suffix || null,
+        _designation: form.designation || null,
+        _plant_assignments: assignedPlants,
+      });
+      if (rpErr) throw new Error(rpErr.message);
+
+      // 4. Sign out the new user
+      await supabase.auth.signOut();
+
+      // 5. Restore admin session
+      if (adminSession.session?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: adminSession.session.access_token,
+          refresh_token: adminSession.session.refresh_token,
+        });
       }
+
       toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
       setBusy(false); onCreated(); handleClose();
     } catch (err: any) {
@@ -214,6 +232,19 @@ export function UsersPanel() {
     (roles ?? []).filter((r: any) => r.user_id === uid).map((r: any) => r.role as string);
 
   const plantName = (id: string) => (plants ?? []).find((p) => p.id === id)?.name ?? id;
+
+  const logPlantAssignmentChange = async (userId: string, newPlants: string[], justification = 'Admin update') => {
+    try {
+      const { data: actor } = await supabase.auth.getUser();
+      await supabase.from('plant_assignment_audit' as any).insert({
+        user_id: userId,
+        admin_id: actor.user?.id ?? null,
+        new_plant_ids: newPlants,
+        justification,
+        changed_at: new Date().toISOString(),
+      } as any);
+    } catch { /* audit table may not exist yet — non-blocking */ }
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-users'] });
