@@ -152,7 +152,8 @@ export function TrendChart({
     };
   }, [range, from, to]);
 
-  const needsWellReadings = metric === 'production' || metric === 'nrw' || metric === 'rawwater' || metric === 'pv';
+  const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv';
+  const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
@@ -173,8 +174,25 @@ export function TrendChart({
   };
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,reading_datetime'),
+    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime'),
     enabled: plantIds.length > 0 && needsLocReadings,
+  });
+  // Product meter readings — the treated-water output meters installed on
+  // the product line. These are the authoritative source for Production volume,
+  // distinct from well (raw water) meters and locator (distribution) meters.
+  // The table is not in the generated Supabase types so we cast as `never`.
+  const { data: productReadings, isFetching: fetchingProduct, error: errProduct } = useQuery({
+    queryKey: ['trend-product', metric, startKey, endKey, plantIds],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
+        .select('current_reading,previous_reading,reading_datetime')
+        .in('plant_id', plantIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO);
+      if (error) throw new Error(`product_meter_readings: ${error.message}`);
+      return (data as any[]) ?? [];
+    },
+    enabled: plantIds.length > 0 && needsProductMeterReadings,
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
@@ -211,8 +229,8 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsCostReadings,
   });
 
-  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost;
-  const queryError = (errLoc || errWell || errRo || errPower || errCost) as Error | null;
+  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
+  const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
 
   const chartData = useMemo(() => {
     const byDay = new Map<string, any>();
@@ -225,26 +243,39 @@ export function TrendChart({
         costProduction: 0,
       }).get(d);
 
+    // Raw Water = sum of well meter deltas (groundwater source meters).
     (wellReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      // Prefer the stored daily_volume; fall back to meter delta
-      // (current_reading − previous_reading) for wells where daily_volume
-      // was not explicitly saved. Negative deltas (meter reset / correction)
-      // are clamped to 0 so they don't drag down the chart.
       const delta = r.daily_volume != null
         ? +r.daily_volume
         : (r.current_reading != null && r.previous_reading != null)
           ? Math.max(0, +r.current_reading - +r.previous_reading)
           : 0;
-      row.production += delta;
       row.rawwater += delta;
     });
+    // Production = sum of product meter (treated-water output) deltas.
+    (productReadings ?? []).forEach((r: any) => {
+      const dt = new Date(r.reading_datetime);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      const delta = (r.current_reading != null && r.previous_reading != null)
+        ? Math.max(0, +r.current_reading - +r.previous_reading)
+        : 0;
+      row.production += delta;
+    });
+    // Consumption = sum of locator (distribution/endpoint) meter deltas.
     (locReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).consumption += r.daily_volume ?? 0;
+      const row = ensure(key, dt.getTime());
+      const delta = r.daily_volume != null
+        ? +r.daily_volume
+        : (r.current_reading != null && r.previous_reading != null)
+          ? Math.max(0, +r.current_reading - +r.previous_reading)
+          : 0;
+      row.consumption += delta;
     });
     (roReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
@@ -289,7 +320,7 @@ export function TrendChart({
         // Recharts skips the point cleanly instead of plotting Infinity.
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
       }));
-  }, [locReadings, wellReadings, roReadings, powerReadings, costReadings]);
+  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
   const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
 
@@ -328,15 +359,15 @@ export function TrendChart({
                 type="date"
                 value={from}
                 onChange={(e) => handleFromChange(e.target.value)}
-                className="h-7 w-[130px] text-xs"
+                className="h-7 w-[120px] sm:w-[130px] text-[11px] px-1.5"
                 data-testid={`trend-from-${metric}`}
               />
-              <span className="text-xs text-muted-foreground">→</span>
+              <span className="text-xs text-muted-foreground shrink-0">→</span>
               <Input
                 type="date"
                 value={to}
                 onChange={(e) => handleToChange(e.target.value)}
-                className="h-7 w-[130px] text-xs"
+                className="h-7 w-[120px] sm:w-[130px] text-[11px] px-1.5"
                 data-testid={`trend-to-${metric}`}
               />
             </div>
