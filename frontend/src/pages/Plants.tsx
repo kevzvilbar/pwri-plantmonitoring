@@ -458,10 +458,10 @@ function PlantDetail({ plantId }: { plantId: string }) {
         ))}
       </div>
 
-      {tab === 'locators' && <LocatorsList plantId={plantId} />}
-      {tab === 'wells' && <WellsList plantId={plantId} />}
-      {tab === 'product' && <ProductMetersCard plant={plant} />}
-      {tab === 'trains' && <TrainsList plantId={plantId} />}
+      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} /></div>
+      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
+      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
+      <div className={tab === 'trains'   ? undefined : 'hidden'}><TrainsList plantId={plantId} /></div>
     </div>
   );
 }
@@ -524,8 +524,10 @@ function ProductMetersCard({ plant }: { plant: any }) {
   const { isManager, isAdmin, user } = useAuth();
   const canEdit = isManager || isAdmin;
 
-  const { data: meters, isLoading } = useQuery({
+  const { data: meters, isLoading, isFetching } = useQuery({
     queryKey: ['product-meters', plant.id],
+    placeholderData: (prev: any) => prev,   // keep stale data visible during refetch
+    staleTime: 30_000,                       // don't refetch more than once per 30 s
     queryFn: async () => {
       // Try with sort_order first; fall back to created_at if column missing
       let { data, error } = await supabase
@@ -592,18 +594,27 @@ function ProductMetersCard({ plant }: { plant: any }) {
         )}
       </div>
 
-      {isLoading && (
+      {/* First-load spinner — only shown before any data arrives */}
+      {isLoading && !meters && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
         </div>
       )}
 
-      {!isLoading && meters && (
+      {/* Background-refetch indicator — subtle, never hides the list */}
+      {isFetching && !!meters && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60 pb-0.5">
+          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Refreshing…
+        </div>
+      )}
+
+      {/* Always render the list whenever data exists — even during refetch */}
+      {meters && (
         <div className="space-y-1">
           {meters.map((m: any) => (
             <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
           ))}
-          {meters.length === 0 && (
+          {meters.length === 0 && !isLoading && (
             <p className="text-xs text-muted-foreground py-2">
               No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
             </p>
@@ -645,6 +656,12 @@ function ProductMeterRow({
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState(meter.name ?? '');
   const [busy, setBusy] = useState(false);
+
+  // Sync nameInput if the meter name changes externally (e.g. after invalidation)
+  // but only when not actively editing — don't overwrite the user's in-progress input.
+  useEffect(() => {
+    if (!editing) setNameInput(meter.name ?? '');
+  }, [meter.name, editing]);
 
   const saveName = async () => {
     if (!nameInput.trim()) { toast.error('Name required'); return; }
