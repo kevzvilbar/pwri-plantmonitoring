@@ -232,7 +232,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const plant = plants?.find(p => p.id === plantId);
 
-  const [tab, setTab] = useState<'locators' | 'wells' | 'trains'>('locators');
+  const [tab, setTab] = useState<'locators' | 'wells' | 'product' | 'trains'>('locators');
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoSaving, setInfoSaving] = useState(false);
   const [infoForm, setInfoForm] = useState({ name: '', address: '', capacity: '' });
@@ -307,81 +307,83 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-3 animate-fade-in">
-      {/* Top nav bar */}
-      <div className="flex items-center justify-between gap-2">
-        <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="h-4 w-4" /> All plants
-        </button>
-        <div className="flex items-center gap-2">
+      {/* Back nav */}
+      <button onClick={() => navigate('/plants')} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
+        <ChevronLeft className="h-4 w-4" /> All plants
+      </button>
+
+      {/* Main plant info card — gradient hero */}
+      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden relative">
+
+        {/* Top-right: Status pill + Edit + Delete */}
+        <div className="absolute top-3 right-3 flex items-center gap-2">
+          <span className={[
+            'text-xs font-semibold px-2.5 py-1 rounded-full border',
+            plant.status === 'Active'
+              ? 'bg-white/10 border-white/20 text-white'
+              : 'bg-amber-400/20 border-amber-400/30 text-amber-200',
+          ].join(' ')}>
+            Status: <span className="font-bold">{plant.status}</span>
+          </span>
           {isManager && (
-            <Button
-              size="sm"
-              variant="outline"
+            <Button size="sm" variant="ghost"
               onClick={openInfoEdit}
               data-testid="edit-plant-info-btn"
-              className="gap-1"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Edit</span>
+              className="h-8 gap-1 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs">
+              <Pencil className="h-3 w-3" />Edit
             </Button>
           )}
           {isManager && (
             <DeleteEntityMenu
-              kind="plant"
-              id={plant.id}
-              label={plant.name}
-              canSoftDelete={plant.status === 'Active'}
-              canHardDelete
-              invalidateKeys={[['plants']]}
-              onDeleted={() => navigate('/plants')}
+              kind="plant" id={plant.id} label={plant.name}
+              canSoftDelete={plant.status === 'Active'} canHardDelete
+              invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
             />
           )}
         </div>
-      </div>
 
-      {/* Main plant info card — gradient, responsive */}
-      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold leading-tight">{plant.name}</h1>
+        {/* Plant name + address */}
+        <div className="min-w-0 pr-44">
+          <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
           <p className="text-xs text-topbar-muted flex items-center gap-1 mt-0.5">
             <MapPin className="h-3 w-3 shrink-0" />
             <span className="truncate">{plant.address}</span>
           </p>
         </div>
 
-        {/* Stats — 2 cols on mobile, 3 on sm+ */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3 text-xs">
+        {/* Stats row — Capacity / RO Trains / Product Meters */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 text-xs">
           <div>
-            <div className="opacity-70">Capacity</div>
-            <div className="font-mono-num text-base">{fmtNum(plant.design_capacity_m3 ?? 0)} m³</div>
+            <div className="opacity-60 text-[11px] uppercase tracking-wide">Capacity</div>
+            <div className="font-mono-num text-lg font-semibold mt-0.5">
+              {fmtNum(plant.design_capacity_m3 ?? 0)} m³
+            </div>
           </div>
           <div>
-            <div className="opacity-70">RO Trains</div>
-            {trainCounts ? (
-              <div className="font-mono-num text-base">
-                <span className={trainCounts.active === trainCounts.total && trainCounts.total > 0 ? 'text-emerald-300' : trainCounts.active === 0 && trainCounts.total > 0 ? 'text-amber-300' : ''}>
-                  {trainCounts.active}
-                </span>
-                <span className="opacity-60 font-normal">/{trainCounts.total}</span>
-              </div>
-            ) : (
-              <div className="font-mono-num text-base">{plant.num_ro_trains ?? '—'}</div>
-            )}
-            <div className="opacity-50 text-[10px] mt-0.5">active / total</div>
+            <div className="opacity-60 text-[11px] uppercase tracking-wide">RO Trains</div>
+            <div className="font-mono-num text-lg font-semibold mt-0.5">
+              {trainCounts ? (
+                <>
+                  <span className={
+                    trainCounts.active === trainCounts.total && trainCounts.total > 0
+                      ? 'text-emerald-300'
+                      : trainCounts.active === 0 && trainCounts.total > 0
+                        ? 'text-amber-300' : ''
+                  }>{trainCounts.active}</span>
+                  <span className="opacity-50 font-normal text-base">/{trainCounts.total}</span>
+                </>
+              ) : (plant.num_ro_trains ?? '—')}
+            </div>
+            <div className="opacity-40 text-[10px]">active / total</div>
           </div>
           <div className="col-span-2 sm:col-span-1">
-            <div className="opacity-70">Status</div>
-            <div className="text-sm font-semibold">{plant.status}</div>
+            <div className="opacity-60 text-[11px] uppercase tracking-wide">Product Meters</div>
+            <ProductMetersStat plantId={plant.id} onEdit={() => setTab('product')} />
           </div>
         </div>
 
-        {/* Product Meters — compact inline list inside the hero card */}
+        {/* Energy Sources */}
         <div className="mt-4 pt-3 border-t border-white/10">
-          <ProductMetersInlineHero plant={plant} />
-        </div>
-
-        {/* Energy Sources — inside the gradient card, collapsible */}
-        <div className="mt-3 pt-3 border-t border-white/10">
           <EnergySourceInline plant={plant} isManager={isManager} qc={qc} />
         </div>
       </Card>
@@ -438,8 +440,8 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <BackwashModeCard plant={plant} />
       <PlantComponentTypeCard plant={plant} />
 
-      <div className="grid grid-cols-3 gap-1 p-1 bg-muted rounded-lg w-full">
-        {(['locators', 'wells', 'trains'] as const).map((t) => (
+      <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-lg w-full">
+        {(['locators', 'wells', 'product', 'trains'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -457,180 +459,57 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
       {tab === 'locators' && <LocatorsList plantId={plantId} />}
       {tab === 'wells' && <WellsList plantId={plantId} />}
+      {tab === 'product' && <ProductMetersCard plant={plant} />}
       {tab === 'trains' && <TrainsList plantId={plantId} />}
     </div>
   );
 }
 
-// ─── Product Meters Inline Hero (inside the teal gradient card) ──────────────
-// Compact read + manage view rendered on the dark background of the plant hero.
-
-function ProductMetersInlineHero({ plant }: { plant: any }) {
-  const qc = useQueryClient();
-  const { isManager, isAdmin, user } = useAuth();
+// ─── ProductMetersStat — tiny active/total + Edit link for hero card ────────────
+function ProductMetersStat({ plantId, onEdit }: { plantId: string; onEdit: () => void }) {
+  const { isManager, isAdmin } = useAuth();
   const canEdit = isManager || isAdmin;
-
   const { data: meters } = useQuery({
-    queryKey: ['product-meters', plant.id],
+    queryKey: ['product-meters', plantId],
     queryFn: async () => {
       const { data } = await supabase
-        .from('product_meters' as any)
-        .select('*')
-        .eq('plant_id', plant.id)
-        .order('sort_order', { ascending: true });
+        .from('product_meters' as any).select('id,name').eq('plant_id', plantId);
       return (data ?? []) as any[];
     },
   });
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
-
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [addBusy, setAddBusy] = useState(false);
-
-  const addMeter = async () => {
-    if (!newName.trim()) return;
-    setAddBusy(true);
-    const { data, error } = await supabase
-      .from('product_meters' as any)
-      .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
-      .select('id').single();
-    setAddBusy(false);
-    if (error) { toast.error(error.message); return; }
-    await logProductMeterAudit({
-      plant_id: plant.id, meter_id: (data as any)?.id ?? '',
-      meter_name: newName.trim(), old_value: null, new_value: newName.trim(),
-      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
-    });
-    toast.success(`"${newName.trim()}" added`);
-    setNewName(''); setAdding(false); invalidate();
-  };
+  // "active" = meters that have at least one reading (non-zero readings count)
+  const { data: readingCounts } = useQuery({
+    queryKey: ['product-meters-active', plantId],
+    queryFn: async () => {
+      if (!meters?.length) return {};
+      const ids = meters.map((m: any) => m.id);
+      const { data } = await supabase
+        .from('product_meter_readings' as any)
+        .select('meter_id')
+        .in('meter_id', ids);
+      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
+      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)]));
+    },
+    enabled: !!meters?.length,
+  });
+  const total = meters?.length ?? 0;
+  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs opacity-70">
-          <Gauge className="h-3.5 w-3.5" />
-          <span className="font-medium">Product Meters</span>
-          {meters && meters.length > 0 && (
-            <span className="opacity-60">({meters.length})</span>
-          )}
-        </div>
-        {canEdit && !adding && (
-          <button
-            onClick={() => setAdding(true)}
-            className="text-[11px] text-white/60 hover:text-white flex items-center gap-0.5 transition-colors"
-          >
-            <Plus className="h-3 w-3" />Add
+    <div className="mt-0.5">
+      <div className="font-mono-num text-lg font-semibold">
+        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className="opacity-50 font-normal text-base">/{total}</span>
+      </div>
+      <div className="flex items-center gap-2 mt-0.5">
+        <span className="opacity-40 text-[10px]">active / total</span>
+        {canEdit && (
+          <button onClick={onEdit}
+            className="text-[10px] text-white/50 hover:text-white underline underline-offset-2 transition-colors">
+            Edit
           </button>
         )}
       </div>
-
-      {meters && meters.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {meters.map((m: any) => (
-            <ProductMeterHeroPill key={m.id} meter={m} plantId={plant.id}
-              userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
-          ))}
-        </div>
-      )}
-
-      {meters && meters.length === 0 && !adding && (
-        <p className="text-[11px] opacity-50">
-          No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
-        </p>
-      )}
-
-      {adding && (
-        <div className="flex items-center gap-1.5 mt-1">
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. Main Line…"
-            className="h-7 text-xs bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addMeter();
-              if (e.key === 'Escape') { setAdding(false); setNewName(''); }
-            }}
-            autoFocus
-          />
-          <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()}
-            className="h-7 px-2 text-xs bg-white/20 hover:bg-white/30 text-white border-0">
-            {addBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-          </Button>
-          <button onClick={() => { setAdding(false); setNewName(''); }}
-            className="text-white/50 hover:text-white transition-colors">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProductMeterHeroPill({ meter, plantId, userId, canEdit, onChanged }: {
-  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(meter.name);
-  const [busy, setBusy] = useState(false);
-
-  const save = async () => {
-    if (!name.trim() || name === meter.name) { setEditing(false); return; }
-    setBusy(true);
-    const { error } = await supabase
-      .from('product_meters' as any).update({ name: name.trim() } as any).eq('id', meter.id);
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    await logProductMeterAudit({
-      plant_id: plantId, meter_id: meter.id, meter_name: name.trim(),
-      old_value: meter.name, new_value: name.trim(),
-      user_id: userId, timestamp: new Date().toISOString(),
-    });
-    onChanged();
-    setEditing(false);
-  };
-
-  const remove = async () => {
-    if (!confirm(`Delete meter "${meter.name}"? All its readings will be lost.`)) return;
-    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', meter.id);
-    await supabase.from('product_meters' as any).delete().eq('id', meter.id);
-    onChanged();
-  };
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <Input value={name} onChange={(e) => setName(e.target.value)}
-          className="h-6 text-xs w-28 bg-white/10 border-white/20 text-white"
-          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-          autoFocus />
-        <button onClick={save} disabled={busy}
-          className="text-[10px] text-white/70 hover:text-white px-1">
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-        </button>
-        <button onClick={() => setEditing(false)} className="text-white/40 hover:text-white">
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="group flex items-center gap-1 bg-white/10 hover:bg-white/15 rounded-full px-2.5 py-0.5 text-[11px] text-white/80 transition-colors">
-      <span>{meter.name}</span>
-      {canEdit && (
-        <>
-          <button onClick={() => setEditing(true)}
-            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity ml-0.5">
-            <Pencil className="h-2.5 w-2.5" />
-          </button>
-          <button onClick={remove}
-            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity">
-            <Trash2 className="h-2.5 w-2.5" />
-          </button>
-        </>
-      )}
     </div>
   );
 }
