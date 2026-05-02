@@ -292,20 +292,23 @@ function SignUpForm() {
     try {
       const assignedPlants = isOperator ? [plantId] : plantIds;
 
-      /** Create one account: signUp → signIn → complete_onboarding → signOut */
+      /** Create one account: signUp → (session from signUp or signIn) → complete_onboarding → signOut */
       const createAccount = async (
         acctEmail: string,
         op: { username: string; first_name: string; last_name: string; middle_name: string; suffix: string },
         acctDesignation: string,
         plants: string[],
       ) => {
-        // 1. Create auth user
-        const { error: upErr } = await supabase.auth.signUp({ email: acctEmail, password });
+        // 1. Create auth user — if email confirmation is disabled, signUp returns a session directly
+        const { data: upData, error: upErr } = await supabase.auth.signUp({ email: acctEmail, password });
         if (upErr) throw new Error(upErr.message);
 
-        // 2. Sign in to get a session so we can call RPC
-        const { error: inErr } = await supabase.auth.signInWithPassword({ email: acctEmail, password });
-        if (inErr) throw new Error(inErr.message);
+        // 2. Use the session from signUp if available; otherwise fall back to signInWithPassword.
+        //    This avoids "Invalid login credentials" when Supabase has not confirmed the email yet.
+        if (!upData.session) {
+          const { error: inErr } = await supabase.auth.signInWithPassword({ email: acctEmail, password });
+          if (inErr) throw new Error(inErr.message);
+        }
 
         // 3. Complete profile via RPC
         const { error: rpErr } = await supabase.rpc('complete_onboarding', {
