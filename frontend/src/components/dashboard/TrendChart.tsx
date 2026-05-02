@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Legend, ComposedChart, Bar, ReferenceLine, Cell,
+  Legend, ComposedChart, Bar,
 } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
@@ -174,7 +174,7 @@ export function TrendChart({
   };
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsLocReadings,
   });
   // Product meter readings — the treated-water output meters installed on
@@ -187,14 +187,14 @@ export function TrendChart({
       // Try with is_meter_replacement first; fall back gracefully if column
       // doesn't exist in this deployment (field will be undefined → false).
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
-        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
+        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement')) {
           const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
-            .select('current_reading,previous_reading,reading_datetime,plant_id')
+            .select('current_reading,previous_reading,reading_datetime')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
@@ -209,7 +209,7 @@ export function TrendChart({
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsWellReadings,
   });
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
@@ -219,7 +219,7 @@ export function TrendChart({
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
   // Production-cost rows use a date column (`cost_date`) rather than a
@@ -256,88 +256,52 @@ export function TrendChart({
         costProduction: 0,
       }).get(d);
 
-    // ── Meter-replacement-aware delta helper ────────────────────────────────
-    // Derives deltas by re-sequencing raw readings chronologically per
-    // plant_id. This is necessary because the DB's `previous_reading` field
-    // stores the value recorded at entry time — after a meter replacement the
-    // *next* reading's `previous_reading` still points to the old meter's
-    // last value, producing a false spike. By tracking the last seen
-    // current_reading per plant in JS we always diff against the true
-    // predecessor and can zero the delta for both the REPL row *and* the
-    // first reading on the new meter (where the raw diff would be huge).
-    //
-    // Rules (matching Operations table Δ column):
-    //   • REPL row itself           → delta = 0
-    //   • Reading right after REPL  → delta = 0  (new meter baseline)
-    //   • All other readings        → delta = max(0, current − lastSeen)
-    function computeSequentialDeltas(
-      readings: any[],
-      dailyVolumeField: string | null,
-    ): { r: any; delta: number }[] {
-      // Sort ascending by datetime so we can walk forward in time.
-      const sorted = [...readings].sort(
-        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()
-      );
-      // Track last current_reading and whether the previous row was a REPL,
-      // keyed by plant_id so multi-plant selections don't bleed into each other.
-      const lastReading = new Map<string, number>();   // plant_id → last current_reading
-      const afterRepl   = new Set<string>();           // plant_ids whose next row should be zeroed
-
-      return sorted.map((r) => {
-        const plantKey = r.plant_id ?? '__';
-        const isMR = !!r.is_meter_replacement;
-        let delta = 0;
-
-        if (isMR) {
-          // REPL row: zero the delta, update baseline to this meter's reading.
-          delta = 0;
-          lastReading.set(plantKey, +r.current_reading);
-          afterRepl.add(plantKey);
-        } else if (afterRepl.has(plantKey)) {
-          // First reading after a REPL: zero (new meter baseline), update last.
-          delta = 0;
-          lastReading.set(plantKey, +r.current_reading);
-          afterRepl.delete(plantKey);
-        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-          // Use pre-computed daily_volume when available (e.g. well/locator).
-          // Allow negative values through — they signal meter drift or data issues
-          // and must be visible in tooltips with a warning.
-          delta = +r[dailyVolumeField];
-          lastReading.set(plantKey, +r.current_reading);
-        } else if (lastReading.has(plantKey)) {
-          // Normal sequential diff against last seen value for this plant.
-          // Do NOT clamp: negative diff = meter went backwards (needs warning).
-          delta = +r.current_reading - lastReading.get(plantKey)!;
-          lastReading.set(plantKey, +r.current_reading);
-        } else {
-          // First reading ever for this plant in the window — no predecessor.
-          delta = 0;
-          lastReading.set(plantKey, +r.current_reading);
-        }
-
-        return { r, delta };
-      });
-    }
-
     // Raw Water = sum of well meter deltas (groundwater source meters).
-    computeSequentialDeltas(wellReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
+    // When a reading is marked as a meter replacement, the delta is zeroed
+    // (matching the Operations table display) so replacement events don't
+    // create artificial spikes on the chart.
+    (wellReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).rawwater += delta;
+      const row = ensure(key, dt.getTime());
+      const delta = r.is_meter_replacement
+        ? 0
+        : r.daily_volume != null
+          ? +r.daily_volume
+          : (r.current_reading != null && r.previous_reading != null)
+            ? Math.max(0, +r.current_reading - +r.previous_reading)
+            : 0;
+      row.rawwater += delta;
     });
-
     // Production = sum of product meter (treated-water output) deltas.
-    computeSequentialDeltas(productReadings ?? [], null).forEach(({ r, delta }) => {
+    // Meter replacement readings are zeroed to avoid artificial spikes,
+    // consistent with the Operations table's Δ column behaviour.
+    (productReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).production += delta;
+      const row = ensure(key, dt.getTime());
+      const delta = r.is_meter_replacement
+        ? 0
+        : (r.current_reading != null && r.previous_reading != null)
+          ? Math.max(0, +r.current_reading - +r.previous_reading)
+          : 0;
+      row.production += delta;
     });
-
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
-    computeSequentialDeltas(locReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
+    // Meter replacement readings are zeroed to avoid artificial spikes,
+    // consistent with the Operations table's Δ column behaviour.
+    (locReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      ensure(key, dt.getTime()).consumption += delta;
+      const row = ensure(key, dt.getTime());
+      const delta = r.is_meter_replacement
+        ? 0
+        : r.daily_volume != null
+          ? +r.daily_volume
+          : (r.current_reading != null && r.previous_reading != null)
+            ? Math.max(0, +r.current_reading - +r.previous_reading)
+            : 0;
+      row.consumption += delta;
     });
     (roReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
@@ -346,24 +310,14 @@ export function TrendChart({
       if (r.recovery_pct != null) { row.recovery += +r.recovery_pct; row.recoverySamples += 1; }
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
-    // Power = sequential delta of meter_reading_kwh, exactly like well/locator.
-    // daily_consumption_kwh is pre-computed but still uses the stale
-    // previous_reading gap after a replacement, so we re-derive it
-    // sequentially using meter_reading_kwh as the cumulative counter.
-    // Falls back to daily_consumption_kwh when meter_reading_kwh is absent.
-    computeSequentialDeltas(
-      (powerReadings ?? []).map((r: any) => ({
-        ...r,
-        // Normalise: use meter_reading_kwh as current_reading for the helper,
-        // and daily_consumption_kwh as the daily_volume pre-computed field.
-        current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
-      })),
-      'daily_consumption_kwh',
-    ).forEach(({ r, delta }) => {
+    // Power = sum of daily_consumption_kwh. Zero on meter replacement
+    // so a new meter install doesn't create an artificial energy spike.
+    (powerReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      // Allow negative kwh through — surfaced in tooltip as a warning.
-      ensure(key, dt.getTime()).kwh += delta;
+      if (!r.is_meter_replacement) {
+        ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
+      }
     });
     // Roll up daily ₱ totals across the selected plants. `cost_date` is
     // a date string (YYYY-MM-DD) — anchor it at local midnight for a
@@ -387,131 +341,18 @@ export function TrendChart({
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => {
-        const nrwTrue = calc.nrw(d.production, d.consumption);
-        const nrwRaw  = nrwTrue != null ? +nrwTrue.toFixed(1) : null;
-        return {
-          ...d,
-          recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
-          tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
-          // *Raw fields — true values, may be negative (meter drift / bad data).
-          // Shown in tooltips with a ⚠ warning when negative.
-          productionRaw:  d.production,
-          consumptionRaw: d.consumption,
-          rawwaterRaw:    d.rawwater,
-          kwhRaw:         d.kwh,
-          nrwRaw,
-          // Chart (display) fields — bars/lines for volume-type metrics are
-          // clamped to 0 so the primary axis stays clean. Tooltip always shows
-          // the true rawXxx value so operators see the real figure.
-          production:  Math.max(0, d.production),
-          rawwater:    Math.max(0, d.rawwater),
-          consumption: Math.max(0, d.consumption),
-          kwh:         Math.max(0, d.kwh),
-          // NRW % has a dedicated right y-axis with allowDataOverflow + an
-          // unrestricted domain so negative values plot correctly.
-          nrw: nrwRaw,
-          // Volume-weighted ₱/m³ — null when no production was recorded so
-          // Recharts skips the point cleanly instead of plotting Infinity.
-          unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
-        };
-      });
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => ({
+        ...d,
+        recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
+        tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
+        nrw: calc.nrw(d.production, d.consumption),
+        // Volume-weighted ₱/m³ — null when no production was recorded so
+        // Recharts skips the point cleanly instead of plotting Infinity.
+        unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
+      }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
   const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
-
-  // ── Negative-value warning banner ────────────────────────────────────────
-  // Scans chartData for any day where a tracked raw metric is negative and
-  // surfaces a persistent amber banner above the chart so operators notice
-  // data quality issues even without hovering individual points.
-  const negativeFields: Record<string, string> = {
-    productionRaw:  'Production',
-    consumptionRaw: 'Locators / Consumption',
-    rawwaterRaw:    'Raw Water',
-    kwhRaw:         'Power (kWh)',
-    nrwRaw:         'NRW %',
-  };
-  const negativeWarnings = useMemo(() => {
-    const found = new Set<string>();
-    chartData.forEach((row: any) => {
-      Object.entries(negativeFields).forEach(([field, label]) => {
-        if (typeof row[field] === 'number' && row[field] < 0) found.add(label);
-      });
-    });
-    return Array.from(found);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData]);
-
-  // ── Shared tooltip rendered across all metric charts ─────────────────────
-  // Shows the real (possibly negative) value for all tracked metrics and
-  // surfaces a ⚠ warning banner + per-row flag when any value on that day
-  // is negative (covers: Locators/Consumption, Raw Water, Power, Production,
-  // Blending/NRW %).
-  const NegativeAwareTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-    // payload[0].payload is the full data row — use it to read *Raw fields
-    // which hold true (possibly negative) values regardless of what the
-    // chart visually renders (clamped to 0 / null for bars and lines).
-    const row = payload[0]?.payload ?? {};
-
-    // Map dataKey → the raw field that holds the true (possibly negative) value.
-    // Every metric that can go negative must be listed here so the tooltip
-    // shows the real number and the ⚠ warning fires correctly.
-    const RAW_FIELD: Record<string, string> = {
-      production:  'productionRaw',   // product-meter delta
-      consumption: 'consumptionRaw',  // locator-meter delta
-      rawwater:    'rawwaterRaw',      // well-meter delta
-      kwh:         'kwhRaw',           // power-meter delta
-      nrw:         'nrwRaw',           // NRW % (derived, can go negative)
-    };
-    const UNIT_SUFFIX: Record<string, string> = {
-      nrw:       '%',
-      recovery:  '%',
-      tds:       ' ppm',
-      kwh:       ' kWh',
-      unitCost:  ' ₱/m³',
-      totalCost: ' ₱', powerCost: ' ₱', chemCost: ' ₱',
-    };
-
-    // Build display entries — each holds the true value to show
-    const entries = payload.map((p: any) => {
-      const rawField = RAW_FIELD[p.dataKey];
-      const rawVal   = rawField !== undefined ? (row[rawField] ?? p.value) : p.value;
-      return { ...p, rawVal };
-    });
-
-    const anyNegative = entries.some((e: any) => typeof e.rawVal === 'number' && e.rawVal < 0);
-
-    return (
-      <div style={{
-        background: 'hsl(var(--card))',
-        border: `1px solid ${anyNegative ? 'hsl(350 75% 50%)' : 'hsl(var(--border))'}`,
-        borderRadius: 8, fontSize: 11, padding: '8px 12px', minWidth: 190,
-      }}>
-        <p style={{ fontWeight: 600, marginBottom: 4 }}>{label}</p>
-        {anyNegative && (
-          <p style={{ color: 'hsl(350 75% 50%)', fontWeight: 600, marginBottom: 6, fontSize: 10,
-            background: 'hsl(350 75% 50% / 0.08)', borderRadius: 4, padding: '2px 6px' }}>
-            ⚠ Negative reading — check meter data
-          </p>
-        )}
-        {entries.map((e: any) => {
-          const isNeg     = typeof e.rawVal === 'number' && e.rawVal < 0;
-          const suffix    = UNIT_SUFFIX[e.dataKey] ?? '';
-          const nameLabel = isNeg ? `${e.name} ⚠` : e.name;
-          const color     = isNeg ? 'hsl(350 75% 50%)' : e.color;
-          const display   = typeof e.rawVal === 'number'
-            ? e.rawVal.toLocaleString(undefined, { maximumFractionDigits: 1 })
-            : e.rawVal;
-          return (
-            <p key={e.dataKey} style={{ color, margin: '2px 0' }}>
-              {nameLabel} : {display}{suffix}
-            </p>
-          );
-        })}
-      </div>
-    );
-  };
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
   // label doesn't eat into the chart area on narrow mobile screens.
@@ -566,17 +407,6 @@ export function TrendChart({
           )}
         </div>
       </div>
-      {negativeWarnings.length > 0 && (
-        <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-400/60 bg-amber-50/90 dark:bg-amber-950/40 dark:border-amber-700/60 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 shadow-sm">
-          <span className="shrink-0 font-bold mt-px">⚠</span>
-          <span>
-            <span className="font-semibold">Negative readings detected</span>
-            {' — '}check meter data for:{' '}
-            <span className="font-medium">{negativeWarnings.join(', ')}</span>.
-            {' '}Values below zero may indicate meter drift, a missed replacement row, or a data entry error.
-          </span>
-        </div>
-      )}
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -602,30 +432,12 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(350 75% 50%)" width={42} tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} allowDataOverflow />
-              <Tooltip content={NegativeAwareTooltip} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `${v}%`} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="vol" dataKey="production" name="Production (m³)">
-                {chartData.map((d: any, i: number) => (
-                  <Cell key={i} fill={d.productionRaw < 0 ? 'hsl(350 75% 50%)' : 'hsl(var(--chart-1))'} />
-                ))}
-              </Bar>
-              <Bar yAxisId="vol" dataKey="consumption" name="Consumption (m³)">
-                {chartData.map((d: any, i: number) => (
-                  <Cell key={i} fill={d.consumptionRaw < 0 ? 'hsl(350 75% 50%)' : 'hsl(var(--chart-2))'} />
-                ))}
-              </Bar>
-              <ReferenceLine yAxisId="vol" y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.35} />
-              <ReferenceLine yAxisId="pct" y={0} stroke="hsl(350 75% 50%)" strokeDasharray="3 3" strokeOpacity={0.5} />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(350 75% 50%)" strokeWidth={2}
-                dot={(props: any) => {
-                  const { cx, cy, payload } = props;
-                  if (payload.nrwRaw != null && payload.nrwRaw < 0) {
-                    return <circle key={cx} cx={cx} cy={cy} r={4} fill="hsl(350 75% 50%)" stroke="white" strokeWidth={1.5} />;
-                  }
-                  return <g key={cx} />;
-                }}
-                activeDot={{ r: 3 }} name="NRW %" connectNulls />
+              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
+              <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
@@ -638,7 +450,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="amt" tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={formatYAxis} width={36} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `₱${v}`} />
-              <Tooltip content={NegativeAwareTooltip} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
               <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
@@ -649,32 +461,25 @@ export function TrendChart({
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36}
-                domain={negativeWarnings.length > 0 ? ['auto', 'auto'] : [0, 'auto']}
-                allowDataOverflow
-                label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <Tooltip content={NegativeAwareTooltip} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              {/* Zero-baseline reference line — visible only when negatives exist */}
-              {negativeWarnings.length > 0 && (
-                <ReferenceLine y={0} stroke="hsl(350 75% 50%)" strokeDasharray="4 3" strokeOpacity={0.6} />
-              )}
               {metric === 'production' && (<>
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" connectNulls />
-                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" connectNulls />
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
               </>)}
               {metric === 'rawwater' && (
-                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" connectNulls />
+                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
               )}
               {metric === 'recovery' && (
-                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" connectNulls />
+                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
               )}
               {metric === 'tds' && (
-                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" connectNulls />
+                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
               )}
               {metric === 'pv' && (<>
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" connectNulls />
-                <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" connectNulls />
+                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
+                <Line type="monotone" dataKey="kwh" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (kWh)" />
               </>)}
             </LineChart>
           )}
