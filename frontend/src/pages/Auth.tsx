@@ -33,7 +33,6 @@ const blankOperator = (): OperatorEntry => ({
 type SignUpStep = 'designation' | 'count' | 'entries' | 'details' | 'plants' | 'confirm';
 
 // ─── Audit helpers ────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 function getDeviceId(): string {
   const key = 'pwri-device-id';
@@ -67,12 +66,16 @@ async function logSignUpAudit(p: {
 }
 
 // ─── Sign-In ──────────────────────────────────────────────────────────────────
+type PickEntry = { id: string; username: string; first_name: string | null; last_name: string | null; plant_assignments: string[] };
+
 function SignInForm() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pickList, setPickList] = useState<{ id: string; username: string; first_name: string | null; last_name: string | null }[]>([]);
+  // Operator picklist state
+  const [pickList, setPickList] = useState<PickEntry[]>([]);
+  const [signedInPlantId, setSignedInPlantId] = useState<string | null>(null);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,21 +88,68 @@ function SignInForm() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       void logLoginAttempt({ emailAttempted: email.trim(), success: false, errorReason: error.message });
       return;
     }
     void logLoginAttempt({ emailAttempted: email.trim(), success: true, userId: data.user?.id ?? null });
-    const { data: profile } = await supabase
-      .from('user_profiles').select('id, username, first_name, last_name, designation')
-      .eq('id', data.user!.id).maybeSingle();
-    if (profile?.designation === OPERATOR_DESIGNATION) {
-      setPickList([{ id: profile.id, username: profile.username ?? data.user!.id, first_name: profile.first_name, last_name: profile.last_name }]);
+
+    // Fetch the signed-in user's own profile
+    const { data: ownProfile } = await supabase
+      .from('user_profiles')
+      .select('id, username, first_name, last_name, designation, plant_assignments, status')
+      .eq('id', data.user!.id)
+      .maybeSingle();
+
+    setBusy(false);
+
+    if (ownProfile?.designation === OPERATOR_DESIGNATION) {
+      // Find all active Operators assigned to the same plant (RBAC: same PlantID only)
+      const plantId = ownProfile.plant_assignments?.[0] ?? null;
+      setSignedInPlantId(plantId);
+
+      if (plantId) {
+        const { data: peers } = await supabase
+          .from('user_profiles')
+          .select('id, username, first_name, last_name, plant_assignments')
+          .eq('designation', OPERATOR_DESIGNATION)
+          .eq('status', 'Active')
+          .contains('plant_assignments', [plantId]);
+
+        const list: PickEntry[] = (peers ?? []).map((p) => ({
+          id: p.id,
+          username: p.username ?? p.id,
+          first_name: p.first_name,
+          last_name: p.last_name,
+          plant_assignments: p.plant_assignments,
+        }));
+
+        if (list.length > 1) {
+          setPickList(list);
+          return; // Stay on pick screen
+        }
+      }
+      // Only one operator at plant (or no plant yet) — navigate directly
+      toast.success(`Welcome, ${ownProfile.first_name ?? ownProfile.username}!`);
+      navigate('/');
       return;
     }
+
+    // Non-operator: navigate directly
+    navigate('/');
+  };
+
+  const handlePickUsername = (u: PickEntry) => {
+    toast.success(`Welcome, ${u.first_name ?? u.username}!`);
+    void logLoginAttempt({
+      emailAttempted: email.trim(),
+      success: true,
+      username: u.username,
+      plantId: signedInPlantId,
+    });
     navigate('/');
   };
 
@@ -108,17 +158,19 @@ function SignInForm() {
       <div className="space-y-3">
         <div className="text-center">
           <Users className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-          <p className="font-medium text-sm">Choose your username</p>
-          <p className="text-xs text-muted-foreground">Select the profile you're signing in as</p>
+          <p className="font-medium text-sm">Who is signing in?</p>
+          <p className="text-xs text-muted-foreground">
+            Select your username — you are only shown Operators at your assigned plant.
+          </p>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1">
           {pickList.map((u) => (
-            <button key={u.id} onClick={() => {
-              toast.success(`Welcome, ${u.first_name ?? u.username}!`);
-              void logLoginAttempt({ emailAttempted: email.trim(), success: true, username: u.username });
-              navigate('/');
-            }} className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/60 transition-colors text-left">
-              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground font-semibold text-xs shrink-0">
+            <button
+              key={u.id}
+              onClick={() => handlePickUsername(u)}
+              className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/60 transition-colors text-left"
+            >
+              <div className="h-9 w-9 rounded-full bg-accent flex items-center justify-center text-accent-foreground font-semibold text-sm shrink-0">
                 {((u.first_name?.[0] ?? '') + (u.last_name?.[0] ?? '')).toUpperCase() || '?'}
               </div>
               <div>
@@ -128,7 +180,7 @@ function SignInForm() {
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="sm" className="w-full" onClick={() => setPickList([])}>
+        <Button variant="ghost" size="sm" className="w-full" onClick={() => { setPickList([]); setSignedInPlantId(null); }}>
           <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back
         </Button>
       </div>
@@ -137,9 +189,17 @@ function SignInForm() {
 
   return (
     <form onSubmit={handleSignIn} className="space-y-3">
-      <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-      <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-      <Button type="submit" disabled={busy} className="w-full">{busy ? 'Signing in…' : 'Sign in'}</Button>
+      <div>
+        <Label>Email</Label>
+        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+      </div>
+      <div>
+        <Label>Password</Label>
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      </div>
+      <Button type="submit" disabled={busy} className="w-full">
+        {busy ? 'Signing in…' : 'Sign in'}
+      </Button>
     </form>
   );
 }
@@ -222,47 +282,58 @@ function SignUpForm() {
   const handleSubmit = async () => {
     setBusy(true);
     try {
-      const { data: sd } = await supabase.auth.getSession();
-      const token = sd.session?.access_token;
-      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const assignedPlants = isOperator ? [plantId] : plantIds;
+
+      /** Create one account: signUp → signIn → complete_onboarding → signOut */
+      const createAccount = async (
+        acctEmail: string,
+        op: { username: string; first_name: string; last_name: string; middle_name: string; suffix: string },
+        acctDesignation: string,
+        plants: string[],
+      ) => {
+        // 1. Create auth user
+        const { error: upErr } = await supabase.auth.signUp({ email: acctEmail, password });
+        if (upErr) throw new Error(upErr.message);
+
+        // 2. Sign in to get a session so we can call RPC
+        const { error: inErr } = await supabase.auth.signInWithPassword({ email: acctEmail, password });
+        if (inErr) throw new Error(inErr.message);
+
+        // 3. Complete profile via RPC
+        const { error: rpErr } = await supabase.rpc('complete_onboarding', {
+          _username: op.username,
+          _first_name: op.first_name,
+          _middle_name: op.middle_name || null,
+          _last_name: op.last_name,
+          _suffix: op.suffix || null,
+          _designation: acctDesignation || null,
+          _plant_assignments: plants,
+        });
+        if (rpErr) throw new Error(rpErr.message);
+
+        // 4. Sign out — account stays Pending until admin approves
+        await supabase.auth.signOut();
+      };
 
       if (isOperator) {
         for (let i = 0; i < operatorCount; i++) {
           const op = operators[i];
-          const res = await fetch(`${API_BASE}/admin/users/create`, {
-            method: 'POST', headers,
-            body: JSON.stringify({
-              email: i === 0 ? email : email.replace('@', `+op${i}@`),
-              password, username: op.username, first_name: op.first_name, last_name: op.last_name,
-              middle_name: op.middle_name || null, suffix: op.suffix || null,
-              designation: OPERATOR_DESIGNATION, plant_assignments: [plantId], shared_email: email,
-            }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({ detail: res.statusText }));
-            toast.error(`Op ${i + 1}: ${typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)}`);
+          if (!op.username || !op.first_name || !op.last_name) {
+            toast.error(`Operator ${i + 1}: fill all required fields.`);
             setBusy(false); return;
           }
+          // Shared-email operators use + addressing for subsequent accounts
+          const acctEmail = i === 0 ? email : email.replace('@', `+op${i}@`);
+          await createAccount(acctEmail, op, OPERATOR_DESIGNATION, assignedPlants);
         }
-        void logSignUpAudit({ email, designation, operatorCount, plantIds: [plantId] });
+        void logSignUpAudit({ email, designation, operatorCount, plantIds: assignedPlants });
         toast.success(`${operatorCount} operator account${operatorCount > 1 ? 's' : ''} created — pending approval.`);
       } else {
-        const res = await fetch(`${API_BASE}/admin/users/create`, {
-          method: 'POST', headers,
-          body: JSON.stringify({
-            email, password, username: single.username, first_name: single.first_name,
-            last_name: single.last_name, middle_name: single.middle_name || null,
-            suffix: single.suffix || null, designation, plant_assignments: plantIds,
-          }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ detail: res.statusText }));
-          toast.error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail));
-          setBusy(false); return;
-        }
-        void logSignUpAudit({ email, designation, operatorCount: 1, plantIds });
+        await createAccount(email, single, designation, assignedPlants);
+        void logSignUpAudit({ email, designation, operatorCount: 1, plantIds: assignedPlants });
         toast.success('Account created — pending admin approval.');
       }
+
       setBusy(false);
       setStep('designation'); setEmail(''); setPassword(''); setDesignation('');
       setOperatorCount(1); setOperators([blankOperator()]); setPlantId('');
