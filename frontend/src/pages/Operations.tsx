@@ -1878,24 +1878,36 @@ function ProductMeterRow({
 
 function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: () => void }) {
   const qc = useQueryClient();
-  const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(7);
+  const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
+  const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [editRow, setEditRow] = useState<{ id: string; datetime: string; value: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const WINDOWS = [{ label: '7D', days: 7 }, { label: '14D', days: 14 }, { label: '30D', days: 30 }, { label: '60D', days: 60 }] as const;
 
-  const queryKey = ['product-meter-history', meter.id, days];
+  const queryKey = ['product-meter-history', meter.id, days, customFrom, customTo];
 
   const { data: rows, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - days);
+      let sinceIso: string;
+      let untilIso: string;
+      if (days === 'custom') {
+        sinceIso = new Date(customFrom).toISOString();
+        untilIso = new Date(customTo + 'T23:59:59').toISOString();
+      } else {
+        const since = new Date();
+        since.setDate(since.getDate() - days);
+        sinceIso = since.toISOString();
+        untilIso = new Date().toISOString();
+      }
       const { data } = await supabase
         .from('product_meter_readings' as any)
         .select('id, current_reading, previous_reading, reading_datetime')
         .eq('meter_id', meter.id)
-        .gte('reading_datetime', since.toISOString())
+        .gte('reading_datetime', sinceIso)
+        .lte('reading_datetime', untilIso)
         .order('reading_datetime', { ascending: false });
       return (data ?? []) as any[];
     },
@@ -1935,13 +1947,30 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
             <Gauge className="h-4 w-4 text-teal-600" /> {meter.name} — History
           </DialogTitle>
         </DialogHeader>
-        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          {WINDOWS.map(({ label, days: d }) => (
-            <button key={label} onClick={() => { setDays(d as any); setEditRow(null); }}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+            {WINDOWS.map(({ label, days: d }) => (
+              <button key={label} onClick={() => { setDays(d as any); setEditRow(null); }}
+                className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
+                  days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                ].join(' ')}>{label}</button>
+            ))}
+            <button onClick={() => { setDays('custom'); setEditRow(null); }}
               className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              ].join(' ')}>{label}</button>
-          ))}
+                days === 'custom' ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}>Custom</button>
+          </div>
+          {days === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customFrom} max={customTo}
+                onChange={e => { setCustomFrom(e.target.value); setEditRow(null); }}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+              <span className="text-xs text-muted-foreground">to</span>
+              <input type="date" value={customTo} min={customFrom} max={format(new Date(), 'yyyy-MM-dd')}
+                onChange={e => { setCustomTo(e.target.value); setEditRow(null); }}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+            </div>
+          )}
         </div>
 
         {editRow && (
@@ -2022,7 +2051,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
           )}
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Showing up to {days} days · {rows?.length ?? 0} records
+          {days === 'custom' ? `Showing ${customFrom} → ${customTo}` : `Showing up to ${days} days`} · {rows?.length ?? 0} records
         </p>
       </DialogContent>
     </Dialog>
@@ -2346,19 +2375,29 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [days, setDays] = useState<7 | 14 | 30 | 60>(7);
+  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(7);
+  const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
+  const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const queryKey = ['reading-history', module, entityId, days];
+  const queryKey = ['reading-history', module, entityId, days, customFrom, customTo];
 
   const { data: rows, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - days);
-      const sinceIso = since.toISOString();
+      let sinceIso: string;
+      let untilIso: string;
+      if (days === 'custom') {
+        sinceIso = new Date(customFrom).toISOString();
+        untilIso = new Date(customTo + 'T23:59:59').toISOString();
+      } else {
+        const since = new Date();
+        since.setDate(since.getDate() - days);
+        sinceIso = since.toISOString();
+        untilIso = new Date().toISOString();
+      }
 
       if (module === 'locator') {
         const { data } = await supabase
@@ -2366,6 +2405,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           .select('id, current_reading, previous_reading, reading_datetime, off_location_flag')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceIso)
+          .lte('reading_datetime', untilIso)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
@@ -2375,6 +2415,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceIso)
+          .lte('reading_datetime', untilIso)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
@@ -2384,13 +2425,17 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
+          .lte('reading_datetime', untilIso)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
       if (module === 'blending') {
         try {
+          const daysParam = days === 'custom'
+            ? Math.ceil((new Date(customTo).getTime() - new Date(customFrom).getTime()) / 86400000) + 1
+            : days;
           const res = await fetch(
-            `${BASE}/api/blending/history?well_id=${encodeURIComponent(entityId)}&days=${days}`
+            `${BASE}/api/blending/history?well_id=${encodeURIComponent(entityId)}&days=${daysParam}`
           );
           if (!res.ok) return [];
           const json = await res.json();
@@ -2472,19 +2517,50 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         </DialogHeader>
 
         {/* Window selector */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-          {HISTORY_WINDOWS.map(({ label, days: d }) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+            {HISTORY_WINDOWS.map(({ label, days: d }) => (
+              <button
+                key={label}
+                onClick={() => { setDays(d as any); setEditRow(null); }}
+                className={[
+                  'px-3 py-1 text-xs font-medium rounded-md transition-all',
+                  days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
             <button
-              key={label}
-              onClick={() => { setDays(d as any); setEditRow(null); }}
+              onClick={() => { setDays('custom'); setEditRow(null); }}
               className={[
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                days === 'custom' ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >
-              {label}
+              Custom
             </button>
-          ))}
+          </div>
+          {days === 'custom' && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo}
+                onChange={e => { setCustomFrom(e.target.value); setEditRow(null); }}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom}
+                max={format(new Date(), 'yyyy-MM-dd')}
+                onChange={e => { setCustomTo(e.target.value); setEditRow(null); }}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          )}
         </div>
 
         {/* Inline edit form */}
@@ -2643,7 +2719,10 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          Showing up to {days} days of history · {rows?.length ?? 0} records
+          {days === 'custom'
+            ? `Showing ${customFrom} → ${customTo}`
+            : `Showing up to ${days} days of history`
+          } · {rows?.length ?? 0} records
         </p>
       </DialogContent>
     </Dialog>
