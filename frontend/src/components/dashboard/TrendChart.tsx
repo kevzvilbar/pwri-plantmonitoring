@@ -175,7 +175,7 @@ export function TrendChart({
 
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('locator_readings', 'locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsLocReadings,
   });
 
@@ -189,7 +189,7 @@ export function TrendChart({
       // Try with is_meter_replacement first; fall back gracefully if column
       // doesn't exist in this deployment (field will be undefined → false).
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
-        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
+        .select('meter_id,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
@@ -216,7 +216,7 @@ export function TrendChart({
   // (current_reading − previous_reading) per well per day, excluding rows
   // flagged is_meter_replacement and the first reading after a replacement.
   // Fetching well_id here (instead of relying on plant_id alone) lets
-  // computeWellDeltas group correctly by individual meter rather than by
+  // computeEntityDeltas group correctly by individual meter rather than by
   // plant, preventing cross-well subtraction that produced the -4,853,089 bug.
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
@@ -280,116 +280,77 @@ export function TrendChart({
         _rawKwh: null as number | null,
       }).get(d);
 
-    // ── Generic meter-replacement-aware delta helper ────────────────────────
-    // Used for locator, product meter, and power readings where `entityKey`
-    // is plant_id (one meter per plant).
-    // Returns both `delta` (clamped ≥ 0, used for chart) and `rawDelta`
-    // (unclamped, null when no predecessor exists so we don't false-flag
-    // the first reading in the window).
-    function computeSequentialDeltas(
-      readings: any[],
-      dailyVolumeField: string | null,
-    ): { r: any; delta: number; rawDelta: number | null }[] {
-      const sorted = [...readings].sort(
-        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()
-      );
-      const lastReading = new Map<string, number>();
-      const afterRepl   = new Set<string>();
-
-      return sorted.map((r) => {
-        const plantKey = r.plant_id ?? '__';
-        const isMR = !!r.is_meter_replacement;
-        let delta = 0;
-        let rawDelta: number | null = null;
-
-        if (isMR) {
-          // REPL row: zero the delta, update baseline to this meter's reading.
-          lastReading.set(plantKey, +r.current_reading);
-          afterRepl.add(plantKey);
-        } else if (afterRepl.has(plantKey)) {
-          // First reading after a REPL: zero (new meter baseline), update last.
-          lastReading.set(plantKey, +r.current_reading);
-          afterRepl.delete(plantKey);
-        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-          // Use pre-computed daily_volume when available (e.g. locator).
-          rawDelta = +r[dailyVolumeField];
-          delta = Math.max(0, rawDelta);
-          lastReading.set(plantKey, +r.current_reading);
-        } else if (lastReading.has(plantKey)) {
-          // Normal sequential diff against last seen value for this plant.
-          rawDelta = +r.current_reading - lastReading.get(plantKey)!;
-          delta = Math.max(0, rawDelta);
-          lastReading.set(plantKey, +r.current_reading);
-        } else {
-          // First reading ever for this plant in the window — no predecessor.
-          lastReading.set(plantKey, +r.current_reading);
-        }
-
-        return { r, delta, rawDelta };
-      });
-    }
-
-    // ── Well-specific delta computation (Raw Water) ─────────────────────────
-    // Keyed by well_id (not plant_id) so readings from different wells never
-    // bleed into each other's diff. Algorithm mirrors computeSequentialDeltas
-    // but uses well_id as the entity key.
+    // ── Unified meter-replacement-aware delta helper ────────────────────────
+    // Used for ALL meter types: wells, locators, product meters, power.
+    //
+    // entityKeyField: the column that uniquely identifies an individual meter.
+    //   • well_readings          → 'well_id'
+    //   • locator_readings       → 'locator_id'
+    //   • product_meter_readings → 'meter_id'
+    //   • power_readings         → 'plant_id'  (one power meter per plant)
+    //
+    // Keying by the individual meter ID (not plant_id) prevents readings from
+    // different meters at the same plant bleeding into each other's diff —
+    // the root cause of the -4,853,089 / +885,406 spikes seen in Raw Water.
+    //
+    // dailyVolumeField: if the table stores a pre-computed daily volume column
+    // (e.g. locator_readings.daily_volume), use it directly when present.
+    // Wells and product meters don't have this column so pass null.
     //
     // Meter-replacement handling (matches Operations.tsx display logic):
     //   • REPL row (is_meter_replacement = true):
-    //       delta = 0, new baseline = current_reading, mark well as "afterRepl"
+    //       delta = 0, new baseline = current_reading, flag entity as "afterRepl"
     //   • First non-REPL row after a REPL:
-    //       delta = 0 (new meter baseline — no valid predecessor), clear flag
-    //   • All subsequent rows: delta = current_reading − last seen current_reading
+    //       delta = 0 (new meter has no valid predecessor yet), clear flag
+    //   • All subsequent rows:
+    //       delta = current_reading − last seen current_reading for that entity
     //
-    // Why NOT use stored previous_reading from the DB row:
-    //   The row saved at Feb 19 06:00 has previous_reading = 114,586 (old meter).
-    //   The REPL row at 07:00 sets current_reading = 999,998 (new meter start).
-    //   The 08:00 row then has previous_reading = 999,998 — all fine in isolation.
-    //   But the 06:00 row's stored previous_reading pre-dates the replacement and
-    //   can produce a massive positive delta (999,998 − 114,592 = +885,406) when
-    //   the REPL row is processed out-of-order or when multiple same-day entries
-    //   are present. Sequential in-memory tracking avoids this entirely.
-    function computeWellDeltas(
+    // rawDelta is null when there is no predecessor (first reading in window,
+    // or first after replacement) so the tooltip doesn't false-flag those as
+    // negative readings.
+    function computeEntityDeltas(
       readings: any[],
+      entityKeyField: string,
+      dailyVolumeField: string | null,
     ): { r: any; delta: number; rawDelta: number | null }[] {
-      // Sort all readings chronologically across all wells in one pass.
       const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
 
-      // Per-well state: last seen current_reading, and whether the next
-      // non-REPL row should be zeroed (first reading after a replacement).
-      const lastReading = new Map<string, number>(); // well_id → last current_reading
-      const afterRepl   = new Set<string>();          // well_ids whose next row is zeroed
+      const lastReading = new Map<string, number>(); // entityKey → last current_reading
+      const afterRepl   = new Set<string>();          // entities whose next row is zeroed
 
       return sorted.map((r) => {
-        const wellKey = r.well_id ?? r.plant_id ?? '__';
-        const isMR    = !!r.is_meter_replacement;
+        const entityKey = r[entityKeyField] ?? r.plant_id ?? '__';
+        const isMR      = !!r.is_meter_replacement;
 
         if (isMR) {
-          // Replacement row: zero delta, reset baseline to new meter start.
-          lastReading.set(wellKey, +r.current_reading);
-          afterRepl.add(wellKey);
+          lastReading.set(entityKey, +r.current_reading);
+          afterRepl.add(entityKey);
           return { r, delta: 0, rawDelta: null };
         }
 
-        if (afterRepl.has(wellKey)) {
-          // First reading after a replacement: no valid predecessor → zero delta.
-          lastReading.set(wellKey, +r.current_reading);
-          afterRepl.delete(wellKey);
+        if (afterRepl.has(entityKey)) {
+          lastReading.set(entityKey, +r.current_reading);
+          afterRepl.delete(entityKey);
           return { r, delta: 0, rawDelta: null };
         }
 
-        if (!lastReading.has(wellKey)) {
-          // First ever reading for this well in the window — no predecessor.
-          lastReading.set(wellKey, +r.current_reading);
+        if (dailyVolumeField && r[dailyVolumeField] != null) {
+          const rawDelta = +r[dailyVolumeField];
+          const delta    = Math.max(0, rawDelta);
+          lastReading.set(entityKey, +r.current_reading);
+          return { r, delta, rawDelta };
+        }
+
+        if (!lastReading.has(entityKey)) {
+          lastReading.set(entityKey, +r.current_reading);
           return { r, delta: 0, rawDelta: null };
         }
 
-        // Normal case: diff against last seen reading for this specific well.
-        const rawDelta = +r.current_reading - lastReading.get(wellKey)!;
+        const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
         const delta    = Math.max(0, rawDelta);
-        lastReading.set(wellKey, +r.current_reading);
+        lastReading.set(entityKey, +r.current_reading);
         return { r, delta, rawDelta };
       });
     }
@@ -404,10 +365,10 @@ export function TrendChart({
     };
 
     // ── Raw Water = sum of per-well (current − previous) deltas ────────────
-    // Uses computeWellDeltas which relies on the stored previous_reading
-    // column rather than in-memory sequential diff, preventing cross-well
-    // contamination and multi-reading-per-day order issues.
-    computeWellDeltas(wellReadings ?? []).forEach(({ r, delta, rawDelta }) => {
+    // Uses computeEntityDeltas keyed by well_id for correct per-well scoping.
+
+
+    computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -416,7 +377,7 @@ export function TrendChart({
     });
 
     // Production = sum of product meter (treated-water output) deltas.
-    computeSequentialDeltas(productReadings ?? [], null).forEach(({ r, delta, rawDelta }) => {
+    computeEntityDeltas(productReadings ?? [], 'meter_id', null).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -425,7 +386,7 @@ export function TrendChart({
     });
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
-    computeSequentialDeltas(locReadings ?? [], 'daily_volume').forEach(({ r, delta, rawDelta }) => {
+    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume').forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -442,11 +403,12 @@ export function TrendChart({
     });
 
     // Power = sequential delta of meter_reading_kwh, exactly like locator.
-    computeSequentialDeltas(
+    computeEntityDeltas(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
         current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
       })),
+      'plant_id',
       'daily_consumption_kwh',
     ).forEach(({ r, delta, rawDelta }) => {
       const dt = new Date(r.reading_datetime);
