@@ -576,7 +576,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
   };
 
   return (
-    <Card className="p-3 space-y-2" data-testid="product-meters-card">
+    <Card className="p-3" data-testid="product-meters-card">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Gauge className="h-4 w-4 text-teal-600" />
@@ -611,9 +611,11 @@ function ProductMetersCard({ plant }: { plant: any }) {
       {/* Always render the list whenever data exists — even during refetch */}
       {meters && (
         <div className="space-y-1">
-          {meters.map((m: any) => (
-            <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
-          ))}
+          <div className="mt-2">
+            {meters.map((m: any) => (
+              <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
+            ))}
+          </div>
           {meters.length === 0 && !isLoading && (
             <p className="text-xs text-muted-foreground py-2">
               No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
@@ -711,64 +713,73 @@ function ProductMeterRow({
 
   return (
     <div
-      className="group flex items-center gap-3 py-2 px-3 rounded-lg border border-transparent
-        hover:border-teal-200 hover:bg-teal-50/60
-        dark:hover:border-teal-800 dark:hover:bg-teal-950/30
-        transition-all duration-150 cursor-default"
+      className="flex items-center gap-3 py-2.5 px-1 border-b border-border/50 last:border-0"
       data-testid={`plant-product-meter-${meter.id}`}
     >
-      {/* Icon */}
-      <div className="shrink-0 h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-900/40
-        flex items-center justify-center
-        group-hover:bg-teal-200 dark:group-hover:bg-teal-800/60 transition-colors">
-        <Gauge className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-      </div>
+      {/* Gauge icon — small, teal, matches Image 2 */}
+      <Gauge className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
 
       {editing ? (
+        /* ── Inline rename form ── */
         <>
           <Input
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
             className="h-8 text-sm flex-1"
-            onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveName();
+              if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name ?? ''); }
+            }}
             autoFocus
           />
-          <Button size="sm" className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs" onClick={saveName} disabled={busy}>
+          <Button
+            size="sm"
+            className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs shrink-0"
+            onClick={saveName}
+            disabled={busy}
+          >
             {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
+          <Button
+            size="sm" variant="ghost"
+            className="h-8 w-8 p-0 shrink-0"
+            onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}
+          >
             <X className="h-3.5 w-3.5" />
           </Button>
         </>
       ) : (
+        /* ── Read mode ── */
         <>
-          {/* Name — always readable, fallback for blank */}
-          <div className="flex-1 min-w-0">
-            <span className={[
-              'text-sm font-medium leading-tight block truncate',
-              isUnnamed ? 'text-muted-foreground italic' : 'text-foreground',
-            ].join(' ')}>
-              {displayName}
-            </span>
-          </div>
+          <span className={[
+            'flex-1 min-w-0 text-sm truncate',
+            isUnnamed ? 'text-muted-foreground italic' : 'text-foreground font-medium',
+          ].join(' ')}>
+            {displayName}
+          </span>
 
-          {/* Action buttons — visible on hover */}
+          {/* Always-visible action icons (pencil + red trash) */}
           {canEdit && (
-            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 shrink-0">
               <Button
                 size="sm" variant="ghost"
-                className="h-7 w-7 p-0 text-teal-600 hover:text-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/40"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
                 title="Rename"
                 onClick={() => { setNameInput(meter.name ?? ''); setEditing(true); }}
+                disabled={busy}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
                 size="sm" variant="ghost"
-                className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                title="Delete" onClick={deleteMeter} disabled={busy}
+                className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                title="Delete"
+                onClick={deleteMeter}
+                disabled={busy}
               >
-                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {busy
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Trash2 className="h-3.5 w-3.5" />}
               </Button>
             </div>
           )}
