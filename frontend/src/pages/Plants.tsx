@@ -225,41 +225,6 @@ export default function Plants() {
   );
 }
 
-// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
-function ProductMetersStat({ plantId }: { plantId: string }) {
-  const { data: meters } = useQuery({
-    queryKey: ['product-meters', plantId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('product_meters' as any).select('id').eq('plant_id', plantId);
-      return (data ?? []) as any[];
-    },
-  });
-  const { data: readingCounts } = useQuery({
-    queryKey: ['product-meters-active', plantId],
-    queryFn: async () => {
-      if (!meters?.length) return {} as Record<string, boolean>;
-      const ids = meters.map((m: any) => m.id);
-      const { data } = await supabase
-        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
-      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
-      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
-    },
-    enabled: !!meters?.length,
-  });
-  const total = meters?.length ?? 0;
-  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
-  return (
-    <div>
-      <div className="font-mono-num text-lg font-bold">
-        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
-        <span className="opacity-40 font-normal text-base">/{total}</span>
-      </div>
-      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
-    </div>
-  );
-}
-
 function PlantDetail({ plantId }: { plantId: string }) {
   const navigate = useNavigate();
   const { data: plants } = usePlants();
@@ -501,6 +466,40 @@ function PlantDetail({ plantId }: { plantId: string }) {
   );
 }
 
+// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
+function ProductMetersStat({ plantId }: { plantId: string }) {
+  const { data: meters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_meters' as any).select('id').eq('plant_id', plantId);
+      return (data ?? []) as any[];
+    },
+  });
+  const { data: readingCounts } = useQuery({
+    queryKey: ['product-meters-active', plantId],
+    queryFn: async () => {
+      if (!meters?.length) return {} as Record<string, boolean>;
+      const ids = meters.map((m: any) => m.id);
+      const { data } = await supabase
+        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
+      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
+      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
+    },
+    enabled: !!meters?.length,
+  });
+  const total = meters?.length ?? 0;
+  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
+  return (
+    <div>
+      <div className="font-mono-num text-lg font-bold">
+        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className="opacity-40 font-normal text-base">/{total}</span>
+      </div>
+      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+    </div>
+  );
+}
 
 // ─── Product Meters Card ──────────────────────────────────────────────────────
 // Manager/Admin can add, rename, and remove product meters per plant.
@@ -528,11 +527,19 @@ function ProductMetersCard({ plant }: { plant: any }) {
   const { data: meters, isLoading } = useQuery({
     queryKey: ['product-meters', plant.id],
     queryFn: async () => {
-      const { data } = await supabase
+      // Try with sort_order first; fall back to created_at if column missing
+      let { data, error } = await supabase
         .from('product_meters' as any)
-        .select('*')
+        .select('id, name, sort_order, created_at')
         .eq('plant_id', plant.id)
         .order('sort_order', { ascending: true });
+      if (error?.message?.includes('sort_order')) {
+        ({ data } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, created_at')
+          .eq('plant_id', plant.id)
+          .order('created_at', { ascending: true }));
+      }
       return (data ?? []) as any[];
     },
   });
@@ -592,12 +599,14 @@ function ProductMetersCard({ plant }: { plant: any }) {
       )}
 
       {!isLoading && meters && (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {meters.map((m: any) => (
             <ProductMeterRow key={m.id} meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
           ))}
           {meters.length === 0 && (
-            <p className="text-xs text-muted-foreground">No product meters yet.{canEdit ? ' Click Add to create one.' : ''}</p>
+            <p className="text-xs text-muted-foreground py-2">
+              No product meters yet.{canEdit ? ' Click + Add to create one.' : ''}
+            </p>
           )}
         </div>
       )}
@@ -680,40 +689,69 @@ function ProductMeterRow({
     onChanged();
   };
 
+  const displayName = meter.name?.trim() || '(unnamed meter)';
+  const isUnnamed = !meter.name?.trim();
+
   return (
-    <div className="flex items-center gap-2 py-1 px-1 rounded-md hover:bg-muted/40" data-testid={`plant-product-meter-${meter.id}`}>
-      <Gauge className="h-3.5 w-3.5 text-teal-500 shrink-0" />
+    <div
+      className="group flex items-center gap-3 py-2 px-3 rounded-lg border border-transparent
+        hover:border-teal-200 hover:bg-teal-50/60
+        dark:hover:border-teal-800 dark:hover:bg-teal-950/30
+        transition-all duration-150 cursor-default"
+      data-testid={`plant-product-meter-${meter.id}`}
+    >
+      {/* Icon */}
+      <div className="shrink-0 h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-900/40
+        flex items-center justify-center
+        group-hover:bg-teal-200 dark:group-hover:bg-teal-800/60 transition-colors">
+        <Gauge className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+      </div>
+
       {editing ? (
         <>
           <Input
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
-            className="h-7 text-sm flex-1"
+            className="h-8 text-sm flex-1"
             onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
             autoFocus
           />
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={saveName} disabled={busy}>
+          <Button size="sm" className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs" onClick={saveName} disabled={busy}>
             {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name); }}>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </>
       ) : (
         <>
-          <span className="text-sm flex-1 truncate">{meter.name}</span>
+          {/* Name — always readable, fallback for blank */}
+          <div className="flex-1 min-w-0">
+            <span className={[
+              'text-sm font-medium leading-tight block truncate',
+              isUnnamed ? 'text-muted-foreground italic' : 'text-foreground',
+            ].join(' ')}>
+              {displayName}
+            </span>
+          </div>
+
+          {/* Action buttons — visible on hover */}
           {canEdit && (
-            <div className="flex items-center gap-0.5 shrink-0">
-              <Button size="sm" variant="ghost"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm" variant="ghost"
+                className="h-7 w-7 p-0 text-teal-600 hover:text-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/40"
                 title="Rename"
-                onClick={() => { setNameInput(meter.name); setEditing(true); }}>
+                onClick={() => { setNameInput(meter.name ?? ''); setEditing(true); }}
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
-              <Button size="sm" variant="ghost"
-                className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
-                title="Delete" onClick={deleteMeter} disabled={busy}>
-                <Trash2 className="h-3.5 w-3.5" />
+              <Button
+                size="sm" variant="ghost"
+                className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                title="Delete" onClick={deleteMeter} disabled={busy}
+              >
+                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               </Button>
             </div>
           )}
