@@ -174,7 +174,7 @@ export function TrendChart({
   };
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
+    queryFn: () => supaSelect<any>('locator_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsLocReadings,
   });
   // Product meter readings — the treated-water output meters installed on
@@ -187,14 +187,14 @@ export function TrendChart({
       // Try with is_meter_replacement first; fall back gracefully if column
       // doesn't exist in this deployment (field will be undefined → false).
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
-        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement')) {
           const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
-            .select('current_reading,previous_reading,reading_datetime')
+            .select('current_reading,previous_reading,reading_datetime,plant_id')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
@@ -209,7 +209,7 @@ export function TrendChart({
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement'),
+    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsWellReadings,
   });
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
@@ -219,7 +219,7 @@ export function TrendChart({
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement'),
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
   // Production-cost rows use a date column (`cost_date`) rather than a
@@ -256,52 +256,85 @@ export function TrendChart({
         costProduction: 0,
       }).get(d);
 
+    // ── Meter-replacement-aware delta helper ────────────────────────────────
+    // Derives deltas by re-sequencing raw readings chronologically per
+    // plant_id. This is necessary because the DB's `previous_reading` field
+    // stores the value recorded at entry time — after a meter replacement the
+    // *next* reading's `previous_reading` still points to the old meter's
+    // last value, producing a false spike. By tracking the last seen
+    // current_reading per plant in JS we always diff against the true
+    // predecessor and can zero the delta for both the REPL row *and* the
+    // first reading on the new meter (where the raw diff would be huge).
+    //
+    // Rules (matching Operations table Δ column):
+    //   • REPL row itself           → delta = 0
+    //   • Reading right after REPL  → delta = 0  (new meter baseline)
+    //   • All other readings        → delta = max(0, current − lastSeen)
+    function computeSequentialDeltas(
+      readings: any[],
+      dailyVolumeField: string | null,
+    ): { r: any; delta: number }[] {
+      // Sort ascending by datetime so we can walk forward in time.
+      const sorted = [...readings].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()
+      );
+      // Track last current_reading and whether the previous row was a REPL,
+      // keyed by plant_id so multi-plant selections don't bleed into each other.
+      const lastReading = new Map<string, number>();   // plant_id → last current_reading
+      const afterRepl   = new Set<string>();           // plant_ids whose next row should be zeroed
+
+      return sorted.map((r) => {
+        const plantKey = r.plant_id ?? '__';
+        const isMR = !!r.is_meter_replacement;
+        let delta = 0;
+
+        if (isMR) {
+          // REPL row: zero the delta, update baseline to this meter's reading.
+          delta = 0;
+          lastReading.set(plantKey, +r.current_reading);
+          afterRepl.add(plantKey);
+        } else if (afterRepl.has(plantKey)) {
+          // First reading after a REPL: zero (new meter baseline), update last.
+          delta = 0;
+          lastReading.set(plantKey, +r.current_reading);
+          afterRepl.delete(plantKey);
+        } else if (dailyVolumeField && r[dailyVolumeField] != null) {
+          // Use pre-computed daily_volume when available (e.g. well/locator).
+          delta = Math.max(0, +r[dailyVolumeField]);
+          lastReading.set(plantKey, +r.current_reading);
+        } else if (lastReading.has(plantKey)) {
+          // Normal sequential diff against last seen value for this plant.
+          delta = Math.max(0, +r.current_reading - lastReading.get(plantKey)!);
+          lastReading.set(plantKey, +r.current_reading);
+        } else {
+          // First reading ever for this plant in the window — no predecessor.
+          delta = 0;
+          lastReading.set(plantKey, +r.current_reading);
+        }
+
+        return { r, delta };
+      });
+    }
+
     // Raw Water = sum of well meter deltas (groundwater source meters).
-    // When a reading is marked as a meter replacement, the delta is zeroed
-    // (matching the Operations table display) so replacement events don't
-    // create artificial spikes on the chart.
-    (wellReadings ?? []).forEach((r: any) => {
+    computeSequentialDeltas(wellReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      const row = ensure(key, dt.getTime());
-      const delta = r.is_meter_replacement
-        ? 0
-        : r.daily_volume != null
-          ? +r.daily_volume
-          : (r.current_reading != null && r.previous_reading != null)
-            ? Math.max(0, +r.current_reading - +r.previous_reading)
-            : 0;
-      row.rawwater += delta;
+      ensure(key, dt.getTime()).rawwater += delta;
     });
+
     // Production = sum of product meter (treated-water output) deltas.
-    // Meter replacement readings are zeroed to avoid artificial spikes,
-    // consistent with the Operations table's Δ column behaviour.
-    (productReadings ?? []).forEach((r: any) => {
+    computeSequentialDeltas(productReadings ?? [], null).forEach(({ r, delta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      const row = ensure(key, dt.getTime());
-      const delta = r.is_meter_replacement
-        ? 0
-        : (r.current_reading != null && r.previous_reading != null)
-          ? Math.max(0, +r.current_reading - +r.previous_reading)
-          : 0;
-      row.production += delta;
+      ensure(key, dt.getTime()).production += delta;
     });
+
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
-    // Meter replacement readings are zeroed to avoid artificial spikes,
-    // consistent with the Operations table's Δ column behaviour.
-    (locReadings ?? []).forEach((r: any) => {
+    computeSequentialDeltas(locReadings ?? [], 'daily_volume').forEach(({ r, delta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      const row = ensure(key, dt.getTime());
-      const delta = r.is_meter_replacement
-        ? 0
-        : r.daily_volume != null
-          ? +r.daily_volume
-          : (r.current_reading != null && r.previous_reading != null)
-            ? Math.max(0, +r.current_reading - +r.previous_reading)
-            : 0;
-      row.consumption += delta;
+      ensure(key, dt.getTime()).consumption += delta;
     });
     (roReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
@@ -310,14 +343,23 @@ export function TrendChart({
       if (r.recovery_pct != null) { row.recovery += +r.recovery_pct; row.recoverySamples += 1; }
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
-    // Power = sum of daily_consumption_kwh. Zero on meter replacement
-    // so a new meter install doesn't create an artificial energy spike.
-    (powerReadings ?? []).forEach((r: any) => {
+    // Power = sequential delta of meter_reading_kwh, exactly like well/locator.
+    // daily_consumption_kwh is pre-computed but still uses the stale
+    // previous_reading gap after a replacement, so we re-derive it
+    // sequentially using meter_reading_kwh as the cumulative counter.
+    // Falls back to daily_consumption_kwh when meter_reading_kwh is absent.
+    computeSequentialDeltas(
+      (powerReadings ?? []).map((r: any) => ({
+        ...r,
+        // Normalise: use meter_reading_kwh as current_reading for the helper,
+        // and daily_consumption_kwh as the daily_volume pre-computed field.
+        current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
+      })),
+      'daily_consumption_kwh',
+    ).forEach(({ r, delta }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
-      if (!r.is_meter_replacement) {
-        ensure(key, dt.getTime()).kwh += +r.daily_consumption_kwh || 0;
-      }
+      ensure(key, dt.getTime()).kwh += delta;
     });
     // Roll up daily ₱ totals across the selected plants. `cost_date` is
     // a date string (YYYY-MM-DD) — anchor it at local midnight for a
