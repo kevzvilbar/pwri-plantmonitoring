@@ -178,7 +178,7 @@ export function TrendChart({
   });
   const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,reading_datetime'),
+    queryFn: () => supaSelect<any>('well_readings', 'daily_volume,current_reading,previous_reading,reading_datetime'),
     enabled: plantIds.length > 0 && needsWellReadings,
   });
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
@@ -229,8 +229,17 @@ export function TrendChart({
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      row.production += r.daily_volume ?? 0;
-      row.rawwater += r.daily_volume ?? 0;
+      // Prefer the stored daily_volume; fall back to meter delta
+      // (current_reading − previous_reading) for wells where daily_volume
+      // was not explicitly saved. Negative deltas (meter reset / correction)
+      // are clamped to 0 so they don't drag down the chart.
+      const delta = r.daily_volume != null
+        ? +r.daily_volume
+        : (r.current_reading != null && r.previous_reading != null)
+          ? Math.max(0, +r.current_reading - +r.previous_reading)
+          : 0;
+      row.production += delta;
+      row.rawwater += delta;
     });
     (locReadings ?? []).forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
