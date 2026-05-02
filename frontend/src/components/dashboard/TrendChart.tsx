@@ -394,70 +394,118 @@ export function TrendChart({
       }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings]);
 
-  // ── Negative-value detection ────────────────────────────────────────────
-  // Scan raw readings for negative values and collect the affected field
-  // names so a small inline warning can be shown inside the chart card.
-  // This intentionally checks the raw source readings (not chartData which
-  // has Math.max(0,…) applied) so we catch data-quality issues even when
-  // the chart line itself appears fine.
-  const negativeFields = useMemo<string[]>(() => {
-    const flagged: string[] = [];
+  const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
 
-    const hasNegative = (rows: any[] | undefined, field: string) =>
-      (rows ?? []).some((r) => r[field] != null && +r[field] < 0);
+  // ── Per-day negative-reading index ─────────────────────────────────────
+  // Maps "MMM d" date keys to the list of field labels that had a negative
+  // (or suspicious zero-after-non-zero) raw reading on that day. Used by
+  // the custom tooltip to show an inline warning only on affected dates.
+  const negativeByDate = useMemo<Map<string, string[]>>(() => {
+    const map = new Map<string, string[]>();
+    const flag = (key: string, label: string) => {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(label);
+    };
 
-    // Locator meters → consumption
-    if (
-      hasNegative(locReadings, 'daily_volume') ||
-      (locReadings ?? []).some((r) => {
-        const cur = +r.current_reading, prev = +r.previous_reading;
-        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
-      })
-    ) flagged.push('Locators');
+    const checkDelta = (
+      readings: any[] | undefined,
+      dailyVolumeField: string | null,
+      label: string,
+    ) => {
+      const sorted = [...(readings ?? [])].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+      const lastReading = new Map<string, number>();
+      sorted.forEach((r) => {
+        const plantKey = r.plant_id ?? '__';
+        const isMR = !!r.is_meter_replacement;
+        const dt = new Date(r.reading_datetime);
+        const key = format(dt, 'MMM d');
+        if (isMR) {
+          lastReading.set(plantKey, +r.current_reading);
+          return;
+        }
+        if (dailyVolumeField && r[dailyVolumeField] != null) {
+          if (+r[dailyVolumeField] < 0) flag(key, label);
+          lastReading.set(plantKey, +r.current_reading);
+          return;
+        }
+        if (lastReading.has(plantKey)) {
+          const delta = +r.current_reading - lastReading.get(plantKey)!;
+          if (delta < 0) flag(key, label);
+        }
+        lastReading.set(plantKey, +r.current_reading);
+      });
+    };
 
-    // Well meters → raw water
-    if (
-      hasNegative(wellReadings, 'daily_volume') ||
-      (wellReadings ?? []).some((r) => {
-        const cur = +r.current_reading, prev = +r.previous_reading;
-        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
-      })
-    ) flagged.push('Raw Water');
+    checkDelta(wellReadings,    'daily_volume',        'Raw Water');
+    checkDelta(locReadings,     'daily_volume',        'Locators');
+    checkDelta(productReadings, null,                  'Production');
+    checkDelta(
+      (powerReadings ?? []).map((r: any) => ({
+        ...r,
+        current_reading: r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0,
+      })),
+      'daily_consumption_kwh',
+      'Power',
+    );
 
-    // Product meters → production
-    if (
-      (productReadings ?? []).some((r) => {
-        const cur = +r.current_reading, prev = +r.previous_reading;
-        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
-      })
-    ) flagged.push('Production');
+    (roReadings ?? []).forEach((r: any) => {
+      const key = format(new Date(r.reading_datetime), 'MMM d');
+      if (r.recovery_pct != null && +r.recovery_pct < 0) flag(key, 'Recovery');
+      if (r.permeate_tds  != null && +r.permeate_tds  < 0) flag(key, 'TDS');
+      if (r.blend_ratio   != null && +r.blend_ratio   < 0) flag(key, 'Blending');
+    });
 
-    // Power meters → kWh
-    if (
-      hasNegative(powerReadings, 'daily_consumption_kwh') ||
-      (powerReadings ?? []).some((r) => {
-        const cur = +(r.meter_reading_kwh ?? r.daily_consumption_kwh ?? 0);
-        const prev = +(r.previous_reading ?? NaN);
-        return !r.is_meter_replacement && !isNaN(cur - prev) && cur - prev < 0;
-      })
-    ) flagged.push('Power');
+    (costReadings ?? []).forEach((r: any) => {
+      const key = format(new Date(`${r.cost_date}T00:00:00`), 'MMM d');
+      if ((r.power_cost != null && +r.power_cost < 0) ||
+          (r.chem_cost  != null && +r.chem_cost  < 0) ||
+          (r.total_cost != null && +r.total_cost  < 0)) flag(key, 'Cost');
+    });
 
-    // RO train readings → recovery / TDS / blending
-    if (hasNegative(roReadings, 'recovery_pct'))  flagged.push('Recovery');
-    if (hasNegative(roReadings, 'permeate_tds'))  flagged.push('TDS');
-    if (hasNegative(roReadings, 'blend_ratio'))   flagged.push('Blending');
-
-    // Production costs
-    if (
-      hasNegative(costReadings, 'power_cost') ||
-      hasNegative(costReadings, 'chem_cost')  ||
-      hasNegative(costReadings, 'total_cost')
-    ) flagged.push('Cost');
-
-    return flagged;
+    return map;
   }, [locReadings, wellReadings, productReadings, powerReadings, roReadings, costReadings]);
 
-  const chartHeight = compact ? 'h-[200px]' : 'h-[340px]';
+  // Custom tooltip that mirrors Recharts' default style but appends an
+  // amber warning line when the hovered date has negative raw readings.
+  const NegativeAwareTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const warnings = negativeByDate.get(label as string) ?? [];
+    return (
+      <div style={{
+        background: 'hsl(var(--card))',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: 8,
+        fontSize: 11,
+        padding: '8px 10px',
+        minWidth: 140,
+      }}>
+        <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
+        {payload.map((entry: any) => (
+          <p key={entry.dataKey} style={{ margin: '1px 0', color: entry.color ?? entry.stroke }}>
+            {entry.name}: {entry.value != null ? entry.value.toLocaleString() : '—'}
+          </p>
+        ))}
+        {warnings.length > 0 && (
+          <div style={{
+            marginTop: 6,
+            paddingTop: 5,
+            borderTop: '1px solid hsl(var(--border))',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 4,
+            color: '#b45309',
+          }}>
+            <span style={{ fontSize: 11, lineHeight: 1.3 }}>⚠️</span>
+            <span style={{ fontSize: 10, lineHeight: 1.3 }}>
+              Negative reading: {warnings.join(', ')}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
   // label doesn't eat into the chart area on narrow mobile screens.
@@ -512,39 +560,6 @@ export function TrendChart({
           )}
         </div>
       </div>
-      {/* Inline negative-value warning — shown inside the card, not above it */}
-      {negativeFields.length > 0 && (
-        <div
-          className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-2.5 py-1.5 mb-2 text-[11px] text-amber-800 dark:text-amber-300"
-          data-testid={`negative-warning-${metric}`}
-        >
-          {/* Warning icon */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="w-3.5 h-3.5 mt-[1px] shrink-0 text-amber-500 dark:text-amber-400"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span>
-            <span className="font-semibold">Negative readings detected</span>
-            {' — check meter data for: '}
-            {negativeFields.map((f, i) => (
-              <span key={f}>
-                <span className="font-medium text-amber-900 dark:text-amber-200">{f}</span>
-                {i < negativeFields.length - 1 && ', '}
-              </span>
-            ))}
-            {'. Values below zero may indicate meter drift, a missed replacement row, or a data entry error.'}
-          </span>
-        </div>
-      )}
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -571,7 +586,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `${v}%`} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
@@ -588,7 +603,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="amt" tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={formatYAxis} width={36} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `₱${v}`} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
               <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
@@ -600,7 +615,7 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }} />
+              <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {metric === 'production' && (<>
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
