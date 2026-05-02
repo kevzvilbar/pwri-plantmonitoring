@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { usePlants } from '@/hooks/usePlants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -206,7 +205,16 @@ function SignInForm() {
 
 // ─── Sign-Up (multi-step) ─────────────────────────────────────────────────────
 function SignUpForm() {
-  const { data: plants } = usePlants();
+  // Fetch plants directly — usePlants() relies on an authenticated session,
+  // but sign-up runs before auth so we query with the anon key directly.
+  const [plants, setPlants] = useState<{ id: string; name: string; address?: string }[]>([]);
+  useEffect(() => {
+    supabase
+      .from('plants' as any)
+      .select('id, name, address')
+      .order('name')
+      .then(({ data }) => { if (data) setPlants(data as any[]); });
+  }, []);
   const [step, setStep] = useState<SignUpStep>('designation');
   const [busy, setBusy] = useState(false);
   // Credentials
@@ -264,8 +272,8 @@ function SignUpForm() {
       setStep('plants'); return;
     }
     if (step === 'plants') {
-      if (isOperator && !plantId) { toast.error('Select a plant'); return; }
-      if (!isOperator && plantIds.length === 0) { toast.error('Assign at least one plant'); return; }
+      if (plants.length > 0 && isOperator && !plantId) { toast.error('Select a plant'); return; }
+      if (plants.length > 0 && !isOperator && plantIds.length === 0) { toast.error('Assign at least one plant'); return; }
       setStep('confirm'); return;
     }
   };
