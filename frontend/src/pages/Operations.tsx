@@ -445,8 +445,9 @@ async function insertBlendingReadings(
 }
 
 // Power readings:
-// meter_reading_kwh*, reading_datetime*, daily_solar_kwh, daily_grid_kwh
-const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), daily_solar_kwh, daily_grid_kwh';
+// meter_reading_kwh*, reading_datetime* — solar/grid columns optional and only needed
+// if the energy migration (20260427) has been run on this Supabase instance.
+const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), daily_solar_kwh (optional), daily_grid_kwh (optional)';
 const POWER_TEMPLATE_ROW = {
   meter_reading_kwh: '12345.6',
   reading_datetime: '2024-06-15T08:30',
@@ -475,16 +476,33 @@ async function insertPowerReadings(
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
-    const { error } = await supabase.from('power_readings').insert({
+    // Build base payload — never include solar/grid columns unless they have a value.
+    // This prevents "column not found in schema cache" on DBs that haven't run the
+    // energy migration yet.
+    const payload: Record<string, any> = {
       plant_id: plantId,
       meter_reading_kwh: +r.meter_reading_kwh,
       reading_datetime: new Date(r.reading_datetime).toISOString(),
-      daily_solar_kwh: r.daily_solar_kwh ? +r.daily_solar_kwh : 0,
-      daily_grid_kwh: r.daily_grid_kwh ? +r.daily_grid_kwh : 0,
       recorded_by: userId,
-    });
-    if (error) errors.push(error.message);
-    else count++;
+    };
+    // Only attach solar/grid if the CSV row actually supplied them
+    if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
+    if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
+
+    const { error } = await supabase.from('power_readings').insert(payload);
+    if (error) {
+      // If the column doesn't exist yet, retry without it so the row still saves
+      if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
+        delete payload.daily_solar_kwh;
+        delete payload.daily_grid_kwh;
+        const { error: e2 } = await supabase.from('power_readings').insert(payload);
+        if (e2) errors.push(e2.message); else count++;
+      } else {
+        errors.push(error.message);
+      }
+    } else {
+      count++;
+    }
   }
   return { count, errors };
 }
@@ -1838,7 +1856,9 @@ function PowerForm() {
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
     queryFn: async () => plantId
-      ? (await supabase.from('power_readings').select('*').eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? []
+      ? (await supabase.from('power_readings')
+          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,multiplier,recorded_by')
+          .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? []
       : [],
     enabled: !!plantId,
   });
@@ -1864,13 +1884,20 @@ function PowerForm() {
       meter_reading_kwh: +reading, recorded_by: user?.id,
       multiplier: effectiveMultiplier,
     };
-    if (showSolar || showGrid) {
-      payload.daily_solar_kwh = solarKwh ? +solarKwh : 0;
-      payload.daily_grid_kwh  = gridKwh  ? +gridKwh  : 0;
+    if (showSolar && solarKwh) payload.daily_solar_kwh = +solarKwh;
+    if ((showSolar || showGrid) && gridKwh) payload.daily_grid_kwh = +gridKwh;
+
+    const runQuery = () => editingId
+      ? supabase.from('power_readings').update(payload).eq('id', editingId)
+      : supabase.from('power_readings').insert(payload);
+
+    let { error } = await runQuery();
+    // If solar/grid columns don't exist in DB yet, retry without them
+    if (error && (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh'))) {
+      delete payload.daily_solar_kwh;
+      delete payload.daily_grid_kwh;
+      ({ error } = await runQuery());
     }
-    const { error } = editingId
-      ? await supabase.from('power_readings').update(payload).eq('id', editingId)
-      : await supabase.from('power_readings').insert(payload);
     if (error) { toast.error(error.message); return; }
     toast.success(editingId ? 'Updated' : 'Power reading saved');
     setReading(''); setSolarKwh(''); setGridKwh(''); setEditingId(null);
@@ -1880,7 +1907,7 @@ function PowerForm() {
   const startEdit = (r: any) => {
     setReading(String(r.meter_reading_kwh));
     setSolarKwh(r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '');
-    setGridKwh(r.daily_grid_kwh  != null ? String(r.daily_grid_kwh)  : '');
+    setGridKwh(r.daily_grid_kwh   != null ? String(r.daily_grid_kwh)  : '');
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
@@ -2032,7 +2059,7 @@ function PowerForm() {
           <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
             <span className="flex-1">{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
             <span className="font-mono-num mr-2">{fmtNum(r.daily_consumption_kwh ?? 0)} kWh</span>
-            {(r.daily_solar_kwh > 0 || r.daily_grid_kwh > 0) && (
+            {((r.daily_solar_kwh ?? 0) > 0 || (r.daily_grid_kwh ?? 0) > 0) && (
               <span className="font-mono-num mr-2 text-[10px] text-muted-foreground">
                 ☀{fmtNum(r.daily_solar_kwh ?? 0)} · ⚡{fmtNum(r.daily_grid_kwh ?? 0)}
               </span>
@@ -2118,7 +2145,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'power') {
         const { data } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
           .order('reading_datetime', { ascending: false });
