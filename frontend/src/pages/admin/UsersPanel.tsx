@@ -1,30 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { usePlants } from '@/hooks/usePlants';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { PlantAssignmentEditor } from '@/components/PlantAssignmentEditor';
 import {
-  DesignationCombobox, accessLevelFromRoles,
+  DesignationCombobox, accessLevelFromRoles, OPERATOR_DESIGNATION,
 } from '@/components/DesignationCombobox';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { Search, Hourglass, UserPlus } from 'lucide-react';
@@ -34,16 +28,9 @@ type AppRole = typeof ALL_ROLES[number];
 
 // ── Role selector ─────────────────────────────────────────────────────────────
 
-function RoleSelector({
-  userId,
-  currentRoles,
-  onChanged,
-}: {
-  userId: string;
-  currentRoles: string[];
-  onChanged: () => void;
+function RoleSelector({ userId, currentRoles, onChanged }: {
+  userId: string; currentRoles: string[]; onChanged: () => void;
 }) {
-  // Show the highest role as the "primary" role
   const primaryRole: AppRole = (() => {
     const r = new Set(currentRoles);
     for (const role of ['Admin', 'Manager', 'Supervisor', 'Technician', 'Operator'] as AppRole[]) {
@@ -54,31 +41,19 @@ function RoleSelector({
 
   const handleChange = async (newRole: AppRole) => {
     if (newRole === primaryRole) return;
-    // Remove all existing roles then insert the new one
-    const { error: delError } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId);
+    const { error: delError } = await supabase.from('user_roles').delete().eq('user_id', userId);
     if (delError) { toast.error(delError.message); return; }
-
-    const { error: insError } = await supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role: newRole });
+    const { error: insError } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
     if (insError) { toast.error(insError.message); return; }
-
     toast.success(`Role updated to ${newRole}`);
     onChanged();
   };
 
   return (
     <Select value={primaryRole} onValueChange={(v) => handleChange(v as AppRole)}>
-      <SelectTrigger className="h-7 text-xs w-32">
-        <SelectValue />
-      </SelectTrigger>
+      <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
       <SelectContent>
-        {ALL_ROLES.map((r) => (
-          <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
-        ))}
+        {ALL_ROLES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}
       </SelectContent>
     </Select>
   );
@@ -86,111 +61,73 @@ function RoleSelector({
 
 // ── Create-user dialog ────────────────────────────────────────────────────────
 
-function CreateUserDialog({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void;
+function CreateUserDialog({ open, onClose, onCreated }: {
+  open: boolean; onClose: () => void; onCreated: () => void;
 }) {
+  const { data: plants } = usePlants();
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
-    email: '',
-    password: '',
-    first_name: '',
-    last_name: '',
-    middle_name: '',
-    suffix: '',
-    username: '',
-    designation: '',
+    email: '', password: '', first_name: '', last_name: '',
+    middle_name: '', suffix: '', username: '', designation: '',
   });
+  // Plant assignment inside dialog
+  const [plantId, setPlantId] = useState('');        // single plant (Operator)
+  const [plantIds, setPlantIds] = useState<string[]>([]); // multi-plant (others)
+
+  const isOperator = form.designation === OPERATOR_DESIGNATION;
 
   const field = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const reset = () => {
     setForm({ email: '', password: '', first_name: '', last_name: '', middle_name: '', suffix: '', username: '', designation: '' });
-    setBusy(false);
+    setPlantId(''); setPlantIds([]); setBusy(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
 
   const handleSubmit = async () => {
     if (!form.email || !form.password || !form.first_name || !form.last_name || !form.username) {
-      toast.error('Email, password, username, first name and last name are required.');
-      return;
+      toast.error('Email, password, username, first name and last name are required.'); return;
     }
-    if (form.password.length < 6) {
-      toast.error('Password must be at least 6 characters.');
-      return;
-    }
-    setBusy(true);
+    if (form.password.length < 6) { toast.error('Password must be at least 6 characters.'); return; }
+    if (isOperator && !plantId) { toast.error('Select a plant for this Operator.'); return; }
+    if (!isOperator && plantIds.length === 0) { toast.error('Assign at least one plant.'); return; }
 
-    // Use the backend Admin API instead of supabase.auth.signUp().
-    //
-    // supabase.auth.signUp() is a *public self-registration* endpoint. When the
-    // email already exists it either silently returns the existing user (if email
-    // confirmation is OFF) or sends a confirmation email and returns a fake
-    // obfuscated response (if email confirmation is ON) — in both cases the new
-    // account never appears in the pending queue and no real error is shown.
-    //
-    // The backend endpoint uses the service-role Admin API which:
-    //   - Does NOT send a confirmation email.
-    //   - Returns a real 422 error when the email already exists.
-    //   - Creates the profile row and sets profile_complete=true immediately.
+    setBusy(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-
       const res = await fetch(
         `${import.meta.env.VITE_API_URL ?? ''}/admin/users/create`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({
-            email:       form.email,
-            password:    form.password,
-            username:    form.username,
-            first_name:  form.first_name,
-            last_name:   form.last_name,
-            middle_name: form.middle_name || null,
-            suffix:      form.suffix || null,
+            email: form.email, password: form.password, username: form.username,
+            first_name: form.first_name, last_name: form.last_name,
+            middle_name: form.middle_name || null, suffix: form.suffix || null,
             designation: form.designation || null,
+            plant_assignments: isOperator ? [plantId] : plantIds,
           }),
         },
       );
-
       if (!res.ok) {
         const body = await res.json().catch(() => ({ detail: res.statusText }));
-        const msg: string = typeof body.detail === 'string'
-          ? body.detail
-          : JSON.stringify(body.detail);
-        toast.error(msg);
-        setBusy(false);
-        return;
+        const msg = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+        toast.error(msg); setBusy(false); return;
       }
-
       toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
-      setBusy(false);
-      onCreated();
-      handleClose();
+      setBusy(false); onCreated(); handleClose();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Unexpected error creating user.');
-      setBusy(false);
+      toast.error(err?.message ?? 'Unexpected error creating user.'); setBusy(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Create new user</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>Create new user</DialogTitle></DialogHeader>
         <div className="space-y-3 py-1">
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Login credentials</p>
@@ -208,16 +145,42 @@ function CreateUserDialog({
             </div>
             <div>
               <Label>Designation</Label>
-              <DesignationCombobox
-                value={form.designation}
-                onChange={(v) => setForm((f) => ({ ...f, designation: v }))}
-                placeholder="Select or type a designation…"
-              />
+              <DesignationCombobox value={form.designation} onChange={(v) => { setForm((f) => ({ ...f, designation: v })); setPlantId(''); setPlantIds([]); }} placeholder="Select or type a designation…" />
             </div>
           </div>
+
+          {/* Plant assignment — conditional on designation */}
+          {form.designation && (
+            <div className="space-y-2 pt-1 border-t">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Plant assignment {isOperator ? '(single plant)' : '(multi-plant)'}
+              </p>
+              {isOperator ? (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {(plants ?? []).map((p) => (
+                    <label key={p.id} className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/40'}`}>
+                      <input type="radio" name="create-plant" value={p.id} checked={plantId === p.id} onChange={() => setPlantId(p.id)} className="accent-accent" />
+                      <span className="text-sm">{p.name}</span>
+                    </label>
+                  ))}
+                  {!(plants ?? []).length && <p className="text-xs text-muted-foreground">No plants available.</p>}
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {(plants ?? []).map((p) => (
+                    <label key={p.id} className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/40'}`}>
+                      <Checkbox checked={plantIds.includes(p.id)} onCheckedChange={() => setPlantIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])} />
+                      <span className="text-sm">{p.name}</span>
+                    </label>
+                  ))}
+                  {!(plants ?? []).length && <p className="text-xs text-muted-foreground">No plants available.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
             Created with <strong>Operator</strong> role, placed in the approval queue.
-            Share the credentials with them — they can change their password after logging in.
           </p>
         </div>
         <DialogFooter>
@@ -233,23 +196,24 @@ function CreateUserDialog({
 
 export function UsersPanel() {
   const qc = useQueryClient();
+  const { data: plants } = usePlants();
   const [query, setQuery] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
-    queryFn: async () =>
-      (await supabase.from('user_profiles').select('*').order('last_name')).data ?? [],
+    queryFn: async () => (await supabase.from('user_profiles').select('*').order('last_name')).data ?? [],
   });
   const { data: roles } = useQuery({
     queryKey: ['admin-user-roles'],
-    queryFn: async () =>
-      (await supabase.from('user_roles').select('user_id, role')).data ?? [],
+    queryFn: async () => (await supabase.from('user_roles').select('user_id, role')).data ?? [],
   });
 
   const rolesOf = (uid: string): string[] =>
     (roles ?? []).filter((r: any) => r.user_id === uid).map((r: any) => r.role as string);
+
+  const plantName = (id: string) => (plants ?? []).find((p) => p.id === id)?.name ?? id;
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-users'] });
@@ -265,10 +229,7 @@ export function UsersPanel() {
   };
 
   const approveUser = async (uid: string, label: string) => {
-    const { error } = await supabase.rpc('approve_user' as any, {
-      _user_id: uid,
-      _approve: true,
-    } as any);
+    const { error } = await supabase.rpc('approve_user' as any, { _user_id: uid, _approve: true } as any);
     if (error) { toast.error(error.message); return; }
     toast.success(`${label || 'User'} approved`);
     invalidate();
@@ -290,9 +251,7 @@ export function UsersPanel() {
     const q = query.trim().toLowerCase();
     if (!q) return list;
     return list.filter((s) =>
-      [s.first_name, s.last_name, s.username, s.designation]
-        .filter(Boolean)
-        .some((v: string) => v.toLowerCase().includes(q)),
+      [s.first_name, s.last_name, s.username, s.designation].filter(Boolean).some((v: string) => v.toLowerCase().includes(q)),
     );
   }, [staff, query, pendingOnly]);
 
@@ -301,26 +260,13 @@ export function UsersPanel() {
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
           <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, username, designation…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="pl-8"
-            data-testid="admin-users-search"
-          />
+          <Input placeholder="Search by name, username, designation…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8" data-testid="admin-users-search" />
         </div>
-        <Button
-          size="sm"
-          variant={pendingOnly ? 'default' : 'outline'}
-          onClick={() => setPendingOnly((v) => !v)}
-          data-testid="admin-users-pending-filter"
-        >
-          <Hourglass className="h-3 w-3 mr-1" />
-          Pending {pendingCount > 0 && `· ${pendingCount}`}
+        <Button size="sm" variant={pendingOnly ? 'default' : 'outline'} onClick={() => setPendingOnly((v) => !v)} data-testid="admin-users-pending-filter">
+          <Hourglass className="h-3 w-3 mr-1" /> Pending {pendingCount > 0 && `· ${pendingCount}`}
         </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="admin-create-user-btn">
-          <UserPlus className="h-3 w-3 mr-1" />
-          Add user
+          <UserPlus className="h-3 w-3 mr-1" /> Add user
         </Button>
       </div>
 
@@ -328,6 +274,8 @@ export function UsersPanel() {
         const userRoles = rolesOf(s.id);
         const access = accessLevelFromRoles(userRoles);
         const awaiting = s.confirmed === false || s.status === 'Pending';
+        const isOperator = s.designation === OPERATOR_DESIGNATION;
+        const assignments: string[] = s.plant_assignments ?? [];
         return (
           <Card key={s.id} className="p-3 space-y-2" data-testid={`admin-user-card-${s.id}`}>
             <div className="flex justify-between items-start gap-2">
@@ -343,33 +291,34 @@ export function UsersPanel() {
                 <div className="text-xs text-muted-foreground truncate">@{s.username ?? '—'}</div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {userRoles.length === 0 && <Badge variant="secondary" className="text-[10px]">No role</Badge>}
-                  {userRoles.map((r) => (
-                    <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>
-                  ))}
+                  {userRoles.map((r) => <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>)}
                   <StatusPill tone={access.tone}>{access.label}</StatusPill>
                 </div>
+                {/* Plant assignments display */}
+                {assignments.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-muted-foreground">Plants:</span>
+                    {assignments.map((id) => (
+                      <Badge key={id} variant="secondary" className="text-[10px]">{plantName(id)}</Badge>
+                    ))}
+                    {isOperator && assignments.length > 1 && (
+                      <Badge variant="destructive" className="text-[10px]">⚠ Multiple plants (Operator should have 1)</Badge>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {awaiting && (
-                  <Button
-                    size="sm"
-                    onClick={() => approveUser(s.id, `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user'))}
-                    data-testid={`approve-user-${s.id}`}
-                  >
+                  <Button size="sm" onClick={() => approveUser(s.id, `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user'))} data-testid={`approve-user-${s.id}`}>
                     Approve
                   </Button>
                 )}
-                <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>
-                  {s.status}
-                </StatusPill>
+                <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>{s.status}</StatusPill>
                 <DeleteEntityMenu
-                  kind="user"
-                  id={s.id}
+                  kind="user" id={s.id}
                   label={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user')}
-                  canSoftDelete={s.status === 'Active'}
-                  canHardDelete
-                  invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]}
-                  compact
+                  canSoftDelete={s.status === 'Active'} canHardDelete
+                  invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]} compact
                 />
               </div>
             </div>
@@ -378,31 +327,24 @@ export function UsersPanel() {
             <div className="grid grid-cols-2 gap-2 items-center pt-1 border-t">
               <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                 <span className="text-xs text-muted-foreground">Designation</span>
-                <DesignationCombobox
-                  value={s.designation ?? ''}
-                  onChange={(v) => updateDesignation(s.id, v)}
-                  extraOptions={existingDesignations}
-                  data-testid={`admin-designation-${s.id}`}
-                />
+                <DesignationCombobox value={s.designation ?? ''} onChange={(v) => updateDesignation(s.id, v)} extraOptions={existingDesignations} data-testid={`admin-designation-${s.id}`} />
               </div>
               <div className="flex items-center gap-2 justify-end">
                 <span className="text-xs text-muted-foreground">Role</span>
-                <RoleSelector
-                  userId={s.id}
-                  currentRoles={userRoles}
-                  onChanged={invalidate}
-                />
+                <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
               </div>
             </div>
 
             <div className="flex items-center justify-between gap-2 text-xs pt-1">
               <span className="text-muted-foreground">
-                {(s.plant_assignments ?? []).length} plant{(s.plant_assignments ?? []).length === 1 ? '' : 's'} assigned
+                {assignments.length} plant{assignments.length === 1 ? '' : 's'} assigned
+                {isOperator && <span className="text-amber-600 ml-1">(Operator: single plant only)</span>}
               </span>
               <PlantAssignmentEditor
                 userId={s.id}
                 userLabel={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user')}
-                currentPlantIds={s.plant_assignments ?? []}
+                currentPlantIds={assignments}
+                singlePlantOnly={isOperator}
                 invalidateKeys={[['admin-users'], ['staff']]}
               />
             </div>
@@ -416,11 +358,6 @@ export function UsersPanel() {
         </Card>
       )}
 
-      <CreateUserDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={invalidate}
-      />
+      <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={invalidate} />
     </div>
   );
-}
