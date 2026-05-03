@@ -953,57 +953,61 @@ function LocatorRow({
   };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2">
-      <div className="min-w-0 flex-1 basis-[140px]">
-        <div className="flex items-center gap-1.5">
-          <div className="text-sm font-medium truncate">{locator.name}</div>
-          {lastToday?.off_location_flag && <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off</StatusPill>}
-          {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
+    <div className="p-3 space-y-2">
+      {/* Row 1: Name/info on left, datetime on right */}
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <div className="text-sm font-medium truncate">{locator.name}</div>
+            {lastToday?.off_location_flag && <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off</StatusPill>}
+            {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
+          </div>
+          <div className="text-xs text-muted-foreground truncate">
+            prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
+            {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
+            <span className="mx-1">·</span>
+            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground truncate">
-          prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
-          {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
-          <span className="mx-1">·</span>
-          <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
-        </div>
+        <Input
+          type="datetime-local" value={customDt}
+          onChange={e => setCustomDt(e.target.value)}
+          className="shrink-0 w-44 text-xs h-9"
+          title="Reading date & time"
+        />
       </div>
 
-      <Input
-        type="datetime-local" value={customDt}
-        onChange={e => setCustomDt(e.target.value)}
-        className="w-44 shrink-0 text-xs h-9"
-        title="Reading date & time"
-      />
-
-      <Input
-        type="number" step="any" inputMode="decimal"
-        value={reading} onChange={(e) => setReading(e.target.value)}
-        placeholder="Reading" className="w-28 sm:w-32 shrink-0"
-      />
-
-      <Button onClick={save} disabled={saving || !reading || atLimit} size="sm" className="shrink-0">
-        {saving ? '...' : editingId ? 'Update' : 'Save'}
-      </Button>
-
-      {lastToday && !editingId && (
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
-          onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
-          title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
-          <Pencil className="h-3.5 w-3.5" />
+      {/* Row 2: Reading input (expanded) + Save + action buttons on right */}
+      <div className="flex items-center gap-2">
+        <Input
+          type="number" step="any" inputMode="decimal"
+          value={reading} onChange={(e) => setReading(e.target.value)}
+          placeholder="Reading" className="flex-1 min-w-0"
+        />
+        <Button onClick={save} disabled={saving || !reading || atLimit} size="sm" className="shrink-0">
+          {saving ? '...' : editingId ? 'Update' : 'Save'}
         </Button>
-      )}
-      {editingId && (
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
-          onClick={() => { setEditingId(null); setReading(''); }} title="Cancel edit">
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {isManagerOrAdmin && (
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 text-muted-foreground"
-          onClick={() => setShowHistory(true)} title="View reading history">
-          <History className="h-3.5 w-3.5" />
-        </Button>
-      )}
+        {lastToday && !editingId && (
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+            onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
+            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {editingId && (
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+            onClick={() => { setEditingId(null); setReading(''); }} title="Cancel edit">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {isManagerOrAdmin && (
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 text-muted-foreground"
+            onClick={() => setShowHistory(true)} title="View reading history">
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
       {showHistory && (
         <ReadingHistoryDialog
           entityName={locator.name}
@@ -1851,22 +1855,22 @@ function ProductMeterRow({
   };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`product-meter-row-${meter.id}`}>
-      {/* Name + rename button */}
-      <div className="min-w-0 flex-1 basis-[160px]">
+    <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
+      {/* Row 1: Name + rename */}
+      <div className="min-w-0">
         {editingName ? (
           <div className="flex items-center gap-1.5">
             <Input
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
-              className="h-7 text-sm w-36"
+              className="h-7 text-sm flex-1 min-w-0"
               onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
               autoFocus
             />
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={saveName} disabled={nameSaving}>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs shrink-0" onClick={saveName} disabled={nameSaving}>
               {nameSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingName(false); setNameInput(meter.name); }}>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => { setEditingName(false); setNameInput(meter.name); }}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -1900,37 +1904,37 @@ function ProductMeterRow({
         </div>
       </div>
 
-      {/* Reading input */}
+      {/* Row 2: datetime full width */}
       <Input type="datetime-local" value={customDt}
         onChange={e => setCustomDt(e.target.value)}
-        className="h-9 w-44 shrink-0 text-xs"
+        className="h-9 w-full text-xs"
         title="Reading date & time" />
-      <div className="relative shrink-0">
-        <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
-        <Input
-          type="number" step="any" inputMode="decimal"
-          value={reading}
-          onChange={(e) => setReading(e.target.value)}
-          placeholder="Product Reading"
-          className="h-9 pl-7 w-36 border-teal-300 focus-visible:ring-teal-300 bg-teal-50/40 dark:bg-teal-950/20"
-          data-testid={`product-meter-input-${meter.id}`}
-        />
-      </div>
 
-      {/* Save + History */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      {/* Row 3: reading input + save + history */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
+          <Input
+            type="number" step="any" inputMode="decimal"
+            value={reading}
+            onChange={(e) => setReading(e.target.value)}
+            placeholder="Product Reading"
+            className="h-9 pl-7 w-full border-teal-300 focus-visible:ring-teal-300 bg-teal-50/40 dark:bg-teal-950/20"
+            data-testid={`product-meter-input-${meter.id}`}
+          />
+        </div>
         <Button
           onClick={save}
           disabled={saving || !reading}
           size="sm"
-          className="h-9 px-3 text-xs"
+          className="h-9 px-3 text-xs shrink-0"
           data-testid={`product-meter-save-${meter.id}`}
         >
           {saving ? '…' : 'Save'}
         </Button>
         {canEdit && (
           <Button
-            variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground"
+            variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground shrink-0"
             onClick={() => setShowHistory(true)} title="View history"
           >
             <History className="h-3.5 w-3.5" />
@@ -2459,14 +2463,14 @@ function PowerForm() {
               </div>
 
               {/* ③ Multiplier */}
-              <div className="w-28">
-                <Label className="flex items-center gap-1">
+              <div className="w-20 min-w-[5rem]">
+                <Label className="flex flex-wrap items-center gap-x-1 gap-y-0 text-xs leading-tight">
                   Multiplier
                   {plantId && !billLoading && (
                     billMultiplier !== null
-                      ? <span className="text-[10px] text-muted-foreground font-normal">(from bill)</span>
+                      ? <span className="text-[9px] text-muted-foreground font-normal whitespace-nowrap">(from bill)</span>
                       : isAdmin
-                        ? <span className="text-[10px] text-amber-600 font-normal">(no bill yet)</span>
+                        ? <span className="text-[9px] text-amber-600 font-normal whitespace-nowrap">(no bill yet)</span>
                         : null
                   )}
                 </Label>
@@ -2476,7 +2480,7 @@ function PowerForm() {
                   onChange={e => multiplierEditable && setMultiplierInput(e.target.value)}
                   readOnly={!multiplierEditable}
                   placeholder={billLoading ? '…' : '1'}
-                  className={['text-center font-mono-num', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
+                  className={['text-center font-mono-num text-sm px-1', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
                   title={billMultiplier !== null ? `CT multiplier from latest bill (×${billMultiplier}). Update via Costs → Power bill.` : isAdmin ? 'No bill saved yet — enter multiplier manually.' : 'Multiplier is set by the latest electric bill.'}
                   data-testid="power-multiplier-input"
                 />
@@ -2513,14 +2517,14 @@ function PowerForm() {
                 <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
                   placeholder="Plant Power Reading" data-testid="power-meter-input" />
               </div>
-              <div className="w-28">
-                <Label className="flex items-center gap-1">
+              <div className="w-20 min-w-[5rem]">
+                <Label className="flex flex-wrap items-center gap-x-1 gap-y-0 text-xs leading-tight">
                   Multiplier
                   {plantId && !billLoading && (
                     billMultiplier !== null
-                      ? <span className="text-[10px] text-muted-foreground font-normal">(from bill)</span>
+                      ? <span className="text-[9px] text-muted-foreground font-normal whitespace-nowrap">(from bill)</span>
                       : isAdmin
-                        ? <span className="text-[10px] text-amber-600 font-normal">(no bill yet)</span>
+                        ? <span className="text-[9px] text-amber-600 font-normal whitespace-nowrap">(no bill yet)</span>
                         : null
                   )}
                 </Label>
@@ -2530,7 +2534,7 @@ function PowerForm() {
                   onChange={e => multiplierEditable && setMultiplierInput(e.target.value)}
                   readOnly={!multiplierEditable}
                   placeholder={billLoading ? '…' : '1'}
-                  className={['text-center font-mono-num', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
+                  className={['text-center font-mono-num text-sm px-1', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
                   title={billMultiplier !== null ? `CT multiplier from latest bill (×${billMultiplier}). Update via Costs → Power bill.` : isAdmin ? 'No bill saved yet — enter multiplier manually. Save a bill in Costs to lock it.' : 'Multiplier is set by the latest electric bill.'}
                   data-testid="power-multiplier-input"
                 />
@@ -2618,7 +2622,7 @@ function PowerForm() {
               </div>
             )}
           </div>
-        )) : <p className="text-xs text-muted-foreground">No readings</p>}
+        )) : <p className="text-xs text-muted-foreground">{plantId ? 'No readings yet' : 'Select a plant to view readings'}</p>}
       </Card>
 
       {importOpen && (
@@ -2831,6 +2835,10 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     toast.success('Reading updated');
     setEditRow(null);
     qc.invalidateQueries({ queryKey });
+    // Also invalidate the parent form queries so "Last 7 readings" refreshes
+    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
+    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
+    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
     qc.invalidateQueries();
   };
 
@@ -2845,6 +2853,10 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     if (error) { toast.error(error.message); return; }
     toast.success('Reading deleted');
     qc.invalidateQueries({ queryKey });
+    // Also invalidate the parent form queries so "Last 7 readings" refreshes
+    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
+    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
+    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
     qc.invalidateQueries();
   };
 
