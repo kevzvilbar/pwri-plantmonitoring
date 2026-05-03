@@ -344,7 +344,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <div className="[&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white sm:[&>button>span]:inline [&>button>span]:hidden [&>button]:sm:w-auto [&>button]:w-8 [&>button]:px-0 [&>button]:sm:px-3">
+            <div className="[&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:text-[0px] [&>button]:sm:text-xs [&>button]:w-8 [&>button]:px-0 [&>button]:sm:w-auto [&>button]:sm:px-3 [&_svg]:text-[16px]">
               <DeleteEntityMenu
                 kind="plant" id={plant.id} label={plant.name}
                 canSoftDelete={plant.status === 'Active'} canHardDelete
