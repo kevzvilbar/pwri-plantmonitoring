@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
+import { cn } from '@/lib/utils';
 
 export default function ROTrains() {
   return (
@@ -137,10 +138,16 @@ function PretreatmentAndROLog() {
   // RO Train readings
   const [roValues, setRoValues] = useState({
     feed_pressure_psi: '', reject_pressure_psi: '',
-    feed_flow: '', permeate_flow: '',
+    feed_flow: '', permeate_flow: '', reject_flow: '',
     feed_tds: '', permeate_tds: '', reject_tds: '',
     feed_ph: '', permeate_ph: '', reject_ph: '',
     turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+    feed_meter_prev: '', feed_meter_curr: '',
+    permeate_meter_prev: '', permeate_meter_curr: '',
+    reject_meter_prev: '', reject_meter_curr: '',
+    meter_duration_min: '',
+    power_meter_prev: '', power_meter_curr: '',
+    power_duration_min: '',
   });
 
   // One-shot seed: when the global selectedPlantId resolves and this
@@ -191,10 +198,16 @@ function PretreatmentAndROLog() {
     setSyncMeterStart(''); setSyncMeterEnd('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
-      feed_flow: '', permeate_flow: '',
+      feed_flow: '', permeate_flow: '', reject_flow: '',
       feed_tds: '', permeate_tds: '', reject_tds: '',
       feed_ph: '', permeate_ph: '', reject_ph: '',
       turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+      feed_meter_prev: '', feed_meter_curr: '',
+      permeate_meter_prev: '', permeate_meter_curr: '',
+      reject_meter_prev: '', reject_meter_curr: '',
+      meter_duration_min: '',
+      power_meter_prev: '', power_meter_curr: '',
+      power_duration_min: '',
     });
   }, [trainId]);
 
@@ -223,14 +236,62 @@ function PretreatmentAndROLog() {
   // RO calculations
   const num = (s: string) => s ? +s : NaN;
   const dp = calc.pressureDiff(num(roValues.feed_pressure_psi), num(roValues.reject_pressure_psi));
-  const recovery = calc.recovery(num(roValues.permeate_flow), num(roValues.feed_flow));
-  const rejection = calc.rejection(num(roValues.permeate_tds), num(roValues.reject_tds));
+
+  // ── Water meter derived flow rates (m³/hr) ──────────────────────────────
+  const mDur = num(roValues.meter_duration_min);   // minutes
+  const mDurHr = !isNaN(mDur) && mDur > 0 ? mDur / 60 : null;
+
+  const feedDelta  = !isNaN(num(roValues.feed_meter_curr))  && !isNaN(num(roValues.feed_meter_prev))  ? num(roValues.feed_meter_curr)  - num(roValues.feed_meter_prev)  : null;
+  const permDelta  = !isNaN(num(roValues.permeate_meter_curr)) && !isNaN(num(roValues.permeate_meter_prev)) ? num(roValues.permeate_meter_curr) - num(roValues.permeate_meter_prev) : null;
+  const rejDelta   = !isNaN(num(roValues.reject_meter_curr))  && !isNaN(num(roValues.reject_meter_prev))  ? num(roValues.reject_meter_curr)  - num(roValues.reject_meter_prev)  : null;
+
+  // Dynamic filling: any one missing = sum/diff of the other two (requires at least two streams entered)
+  const feedVol  = feedDelta  ?? (permDelta !== null && rejDelta  !== null ? +(permDelta  + rejDelta ).toFixed(3) : null);
+  const permVol  = permDelta  ?? (feedDelta !== null && rejDelta  !== null ? +(feedDelta  - rejDelta ).toFixed(3) : null);
+  const rejVol   = rejDelta   ?? (feedDelta !== null && permDelta !== null ? +(feedDelta  - permDelta).toFixed(3) : null);
+
+  const feedFlowMeter  = feedVol  !== null && mDurHr ? +(feedVol  / mDurHr).toFixed(2) : null;
+  const permFlowMeter  = permVol  !== null && mDurHr ? +(permVol  / mDurHr).toFixed(2) : null;
+  const rejFlowMeter   = rejVol   !== null && mDurHr ? +(rejVol   / mDurHr).toFixed(2) : null;
+
+  // True if the volume was inferred (not directly entered)
+  const feedInferred = feedDelta === null && feedVol !== null;
+  const permInferred = permDelta === null && permVol !== null;
+  const rejInferred  = rejDelta  === null && rejVol  !== null;
+
+  // ── Effective flow values: EM takes priority, then meter-derived ─────────
+  // EM inputs (feed_flow, permeate_flow, reject_flow) allow direct override.
+  // If EM not provided, fall back to meter-derived rate.
+  const emFeedFlow  = roValues.feed_flow     ? num(roValues.feed_flow)     : null;
+  const emPermFlow  = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
+  const emRejFlow   = roValues.reject_flow   ? num(roValues.reject_flow)   : null;
+
+  const effFeedFlow = emFeedFlow  ?? feedFlowMeter;
+  const effPermFlow = emPermFlow  ?? permFlowMeter;
+  const effRejFlow  = emRejFlow   ?? rejFlowMeter ?? (effFeedFlow !== null && effPermFlow !== null ? +(effFeedFlow - effPermFlow).toFixed(2) : null);
+
+  // Recovery uses effective flows (EM > meter-derived)
+  const recovery    = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
+    ? +((effPermFlow / effFeedFlow) * 100).toFixed(1) : null;
+  const rejection   = calc.rejection(num(roValues.permeate_tds), num(roValues.reject_tds));
   const saltPassage = calc.saltPassage(num(roValues.permeate_tds), num(roValues.reject_tds));
-  const rejectFlow = calc.rejectFlow(num(roValues.feed_flow), num(roValues.permeate_flow));
+  // rejectFlow shown in EM section: if user typed it, show as-is; else compute
+  const rejectFlow  = effRejFlow;
 
   const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
   const recWarn = recovery != null && (recovery < 65 || recovery > 75);
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
+
+  // ── Power meter ──────────────────────────────────────────────────────────
+  const pwrDur   = num(roValues.power_duration_min);
+  const pwrDurHr = !isNaN(pwrDur) && pwrDur > 0 ? pwrDur / 60 : null;
+  const pwrDelta = !isNaN(num(roValues.power_meter_curr)) && !isNaN(num(roValues.power_meter_prev))
+    ? +(num(roValues.power_meter_curr) - num(roValues.power_meter_prev)).toFixed(3)
+    : null;
+  const pwrKw    = pwrDelta !== null && pwrDurHr ? +(pwrDelta / pwrDurHr).toFixed(2) : null;  // avg kW
+  // Specific energy uses effective permeate volume (meter-derived preferred for volumetric accuracy)
+  const secEnergy = pwrDelta !== null && permVol && permVol > 0                               // kWh/m³
+    ? +(pwrDelta / permVol).toFixed(3) : null;
 
   const submit = async () => {
     if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
@@ -249,7 +310,8 @@ function PretreatmentAndROLog() {
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       ...Object.fromEntries(Object.entries(roValues).map(([k, val]) => [k, val ? +val : null])),
-      reject_flow: rejectFlow, dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
+      reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
+      dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
       recorded_by: user?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
@@ -324,10 +386,16 @@ function PretreatmentAndROLog() {
     setHppTarget(''); setBagsChanged('0'); setRemarks('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
-      feed_flow: '', permeate_flow: '',
+      feed_flow: '', permeate_flow: '', reject_flow: '',
       feed_tds: '', permeate_tds: '', reject_tds: '',
       feed_ph: '', permeate_ph: '', reject_ph: '',
       turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+      feed_meter_prev: '', feed_meter_curr: '',
+      permeate_meter_prev: '', permeate_meter_curr: '',
+      reject_meter_prev: '', reject_meter_curr: '',
+      meter_duration_min: '',
+      power_meter_prev: '', power_meter_curr: '',
+      power_duration_min: '',
     });
     qc.invalidateQueries();
   };
@@ -567,28 +635,204 @@ function PretreatmentAndROLog() {
             </Card>
           )}
 
-          {/* RO Vessel Section */}
+          {/* RO Vessel Section — tri-column process flow: Feed → Permeate → Reject */}
+          <Card className="p-3 space-y-3">
+            <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">RO Vessel</h4>
+
+            {/* Column headers */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Feed / Raw</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Permeate / Product</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Reject / Concentrate</span>
+              </div>
+            </div>
+
+            {/* ── Water Meter ─────────────────────────────────────────────── */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter (m³)</p>
+                <p className="text-[10px] text-muted-foreground/60 italic">Leave one stream blank — it will be inferred</p>
+              </div>
+              {/* Shared duration */}
+              <div className="flex items-center gap-2 mb-1">
+                <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
+                <Input type="number" step="any" className="h-7 text-xs w-24" {...f('meter_duration_min')} placeholder="e.g. 60" />
+              </div>
+              {/* prev / current / Δ / flow columns */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Feed */}
+                <div className="space-y-1">
+                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('feed_meter_prev')} placeholder="m³" /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      Δ Volume{feedInferred ? ' (inferred)' : ''}
+                    </Label>
+                    <ComputedInput value={feedVol != null ? `${feedVol} m³` : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
+                    <ComputedInput value={feedFlowMeter ?? ''} />
+                  </div>
+                </div>
+                {/* Permeate */}
+                <div className="space-y-1">
+                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('permeate_meter_prev')} placeholder="m³" /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      Δ Volume{permInferred ? ' (inferred)' : ''}
+                    </Label>
+                    <ComputedInput value={permVol != null ? `${permVol} m³` : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
+                    <ComputedInput value={permFlowMeter ?? ''} />
+                  </div>
+                </div>
+                {/* Reject */}
+                <div className="space-y-1">
+                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('reject_meter_prev')} placeholder="m³" /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      Δ Volume{rejInferred ? ' (inferred)' : ''}
+                    </Label>
+                    <ComputedInput value={rejVol != null ? `${rejVol} m³` : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
+                    <ComputedInput value={rejFlowMeter ?? ''} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Pressure row ────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Pressure (psi)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <div><Label className="text-[11px] text-muted-foreground">Suction</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Feed</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
+                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <Label className="text-[11px] text-muted-foreground">Reject</Label>
+                  <Input type="number" step="any" {...f('reject_pressure_psi')} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── EM flow override ────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">
+                Electromagnetic Flowmeter (m³/hr) <span className="normal-case font-normal">— enter direct reading if available; otherwise meter-derived rate is used</span>
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Feed flow</Label>
+                  <Input type="number" step="any" {...f('feed_flow')}
+                    placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'} />
+                </div>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Permeate flow</Label>
+                  <Input type="number" step="any" {...f('permeate_flow')}
+                    placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'} />
+                  <div className="mt-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Recovery %</Label>
+                    <ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Reject flow</Label>
+                  <Input type="number" step="any" {...f('reject_flow')}
+                    placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM or computed'} />
+                  {rejectFlow !== null && !roValues.reject_flow && (
+                    <div className="mt-1">
+                      <ComputedInput value={`${rejectFlow} m³/hr`} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── TDS row ──────────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">TDS (ppm)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
+              </div>
+              {/* Rejection + Salt Passage in their own row below TDS inputs */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Rejection %</Label>
+                  <ComputedInput value={rejection ?? ''} />
+                </div>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Salt Passage %</Label>
+                  <ComputedInput value={saltPassage ?? ''} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── pH row ───────────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">pH</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
+              </div>
+            </div>
+
+            {/* ── Product quality / ambient ────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Product Quality</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
+              </div>
+            </div>
+          </Card>
+
+          {/* ── Power Meter ──────────────────────────────────────────────────── */}
           <Card className="p-3 space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-muted-foreground">RO Vessel</h4>
+            <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter</h4>
+            <div className="flex items-center gap-2">
+              <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
+              <Input type="number" step="any" className="h-7 text-xs w-24" {...f('power_duration_min')} placeholder="e.g. 60" />
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Suction Pressure (psi)</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
-              <div><Label className="text-xs">Feed Pressure (psi)</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
-              <div><Label className="text-xs">Reject Pressure (psi)</Label><Input type="number" step="any" {...f('reject_pressure_psi')} /></div>
-              <div><Label className="text-xs">ΔPressure (psi)</Label><ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} /></div>
-              <div><Label className="text-xs">Feed Flow</Label><Input type="number" step="any" {...f('feed_flow')} /></div>
-              <div><Label className="text-xs">Permeate Flow</Label><Input type="number" step="any" {...f('permeate_flow')} /></div>
-              <div><Label className="text-xs">Reject Flow</Label><ComputedInput value={rejectFlow ?? ''} /></div>
-              <div><Label className="text-xs">Recovery %</Label><ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} /></div>
-              <div><Label className="text-xs">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
-              <div><Label className="text-xs">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
-              <div><Label className="text-xs">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
-              <div><Label className="text-xs">Rejection %</Label><ComputedInput value={rejection ?? ''} /></div>
-              <div><Label className="text-xs">Salt Pass %</Label><ComputedInput value={saltPassage ?? ''} /></div>
-              <div><Label className="text-xs">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
-              <div><Label className="text-xs">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
-              <div><Label className="text-xs">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
-              <div><Label className="text-xs">Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
-              <div><Label className="text-xs">Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
+              <div><Label className="text-[11px] text-muted-foreground">Prev reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_prev')} /></div>
+              <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Δ Consumption (kWh)</Label>
+                <ComputedInput value={pwrDelta ?? ''} />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Avg power (kW)</Label>
+                <ComputedInput value={pwrKw ?? ''} />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Specific energy (kWh/m³)</Label>
+                <ComputedInput value={secEnergy ?? ''} />
+              </div>
             </div>
           </Card>
 
