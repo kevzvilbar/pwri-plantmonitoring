@@ -2199,11 +2199,29 @@ function PowerForm() {
 
   const { data: history } = useQuery({
     queryKey: ['op-power', plantId],
-    queryFn: async () => plantId
-      ? (await supabase.from('power_readings')
-          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by')
-          .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8)).data ?? []
-      : [],
+    queryFn: async () => {
+      if (!plantId) return [];
+      // Try full select first (includes optional columns added by the energy migration).
+      // If the DB hasn't run that migration yet, Supabase returns an error and data is null —
+      // fall back to the base columns so the Last 7 readings card always shows data.
+      const fullSelect = 'id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by';
+      const baseSelect = 'id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by';
+      const { data, error } = await supabase
+        .from('power_readings')
+        .select(fullSelect)
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(8);
+      if (!error) return data ?? [];
+      // Optional columns not present — retry with base columns only
+      const { data: fallback } = await supabase
+        .from('power_readings')
+        .select(baseSelect)
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(8);
+      return fallback ?? [];
+    },
     enabled: !!plantId,
   });
 
@@ -2690,14 +2708,23 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         return data ?? [];
       }
       if (module === 'power') {
-        const { data } = await supabase
+        // Try full select (optional columns from energy migration); fall back if columns missing
+        const { data, error } = await supabase
           .from('power_readings')
           .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
           .lte('reading_datetime', untilIso)
           .order('reading_datetime', { ascending: false });
-        return data ?? [];
+        if (!error) return data ?? [];
+        const { data: fallback } = await supabase
+          .from('power_readings')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime, is_meter_replacement')
+          .eq('plant_id', entityId)
+          .gte('reading_datetime', sinceIso)
+          .lte('reading_datetime', untilIso)
+          .order('reading_datetime', { ascending: false });
+        return fallback ?? [];
       }
       if (module === 'blending') {
         try {
