@@ -20,11 +20,12 @@ import { Loader2, Pencil, ShieldCheck, Building2, MapPin } from 'lucide-react';
 export default function Profile() {
   const { user, profile, activeOperator, roles, refreshProfile, loading } = useAuth();
   const { data: plants } = usePlants();
-  const { selectedPlantId, setSelectedPlantId, activeOperatorId } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId } = useAppStore();
 
-  // When an operator is switched, show their profile; otherwise show own
-  const isOverride = !!activeOperatorId && activeOperatorId !== user?.id;
-  const displayProfile = isOverride ? activeOperator : profile;
+  // activeOperator falls back to profile when no override is set (see useAuth)
+  // so we detect an override by comparing ids
+  const isOverride = !!activeOperator && !!profile && activeOperator.id !== profile.id;
+  const displayProfile = activeOperator; // already equals profile when no override
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
