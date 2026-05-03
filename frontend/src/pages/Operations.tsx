@@ -1807,9 +1807,6 @@ function ProductMeterRow({
 }) {
   const [reading, setReading] = useState('');
   const [saving, setSaving] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(meter.name ?? '');
-  const [nameSaving, setNameSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
@@ -1848,76 +1845,23 @@ function ProductMeterRow({
     setReading(''); setSaving(false); onSaved();
   };
 
-  const saveName = async () => {
-    if (!nameInput.trim()) { toast.error('Name required'); return; }
-    setNameSaving(true);
-    const { error } = await supabase
-      .from('product_meters' as any)
-      .update({ name: nameInput.trim() } as any)
-      .eq('id', meter.id);
-    setNameSaving(false);
-    if (error) { toast.error(error.message); return; }
-
-    // Audit name change
-    await logProductMeterChange({
-      plant_id: plantId,
-      meter_id: meter.id,
-      meter_name: nameInput.trim(),
-      old_value: null,
-      new_value: null,
-      user_id: userId,
-      timestamp: new Date().toISOString(),
-    });
-
-    toast.success('Meter name updated');
-    setEditingName(false);
-    onSaved();
-  };
 
   return (
     <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
-      {/* Row 1: Name + rename | date on right */}
+      {/* Row 1: Name | date on right */}
       <div className="min-w-0">
-        {editingName ? (
-          <div className="flex items-center gap-1.5">
-            <Input
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              className="h-7 text-sm flex-1 min-w-0"
-              onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
-              autoFocus
-            />
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs shrink-0" onClick={saveName} disabled={nameSaving}>
-              {nameSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => { setEditingName(false); setNameInput(meter.name); }}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
+        <div className="flex items-center gap-1.5">
+          <div className="text-sm font-medium truncate flex items-center gap-1.5">
+            <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+            {meter.name}
           </div>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <div className="text-sm font-medium truncate flex items-center gap-1.5">
-              <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-              {meter.name}
-            </div>
-            {canEdit && (
-              <Button
-                size="sm" variant="ghost"
-                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
-                onClick={() => { setNameInput(meter.name); setEditingName(true); }}
-                title="Rename meter"
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-            )}
-            <Input
-              type="datetime-local" value={customDt}
-              onChange={e => setCustomDt(e.target.value)}
-              className="ml-auto shrink-0 w-44 text-xs h-7 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
-              title="Reading date & time"
-            />
-          </div>
-        )}
+          <Input
+            type="datetime-local" value={customDt}
+            onChange={e => setCustomDt(e.target.value)}
+            className="ml-auto shrink-0 w-44 text-xs h-7 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+            title="Reading date & time"
+          />
+        </div>
         <div className="text-xs text-muted-foreground mt-0.5">
           prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
           {productionVolume != null && (
