@@ -694,19 +694,39 @@ async function insertPowerReadings(
   return { count, errors };
 }
 
-// ─── Blending wells list (Mongo-backed) ─────────────────────────────────────
+// ─── Blending wells list (Mongo-backed with Supabase fallback) ───────────────
 function useBlendingWells(plantId: string) {
   return useQuery<{ wells: { well_id: string }[] }>({
     queryKey: ['blending-wells', plantId],
     queryFn: async () => {
+      // 1. Try the backend API first (Mongo-backed)
       try {
         const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
         const res = await fetch(`${BASE}/api/blending/wells${qs}`);
-        if (!res.ok) return { wells: [] };
-        return res.json();
+        if (res.ok) {
+          const json = await res.json();
+          // Only trust the result if it actually returned wells data
+          if (Array.isArray(json?.wells)) return json;
+        }
       } catch {
-        return { wells: [] };
+        // API unavailable — fall through to Supabase
       }
+
+      // 2. Fallback: read directly from the well_blending Supabase table
+      // (same source Plants.tsx uses for the blending checkbox)
+      try {
+        const { data, error } = await supabase
+          .from('well_blending' as any)
+          .select('well_id')
+          .eq('plant_id', plantId);
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return { wells: (data as any[]).map((r) => ({ well_id: r.well_id })) };
+        }
+      } catch {
+        // Table may not exist yet
+      }
+
+      return { wells: [] };
     },
     enabled: !!plantId,
     retry: false,
@@ -972,7 +992,7 @@ function LocatorRow({
         <Input
           type="datetime-local" value={customDt}
           onChange={e => setCustomDt(e.target.value)}
-          className="shrink-0 w-44 text-xs h-9"
+          className="shrink-0 w-44 text-xs h-9 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
           title="Reading date & time"
         />
       </div>
@@ -1252,7 +1272,7 @@ function WellRow({
       <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         <Input type="datetime-local" value={customDt}
           onChange={e => setCustomDt(e.target.value)}
-          className="shrink-0 text-xs h-9 w-44"
+          className="shrink-0 text-xs h-9 w-44 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
           title="Reading date & time" />
         <div className="relative flex-1 sm:flex-initial sm:w-32">
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
@@ -1904,14 +1924,14 @@ function ProductMeterRow({
         </div>
       </div>
 
-      {/* Row 2: datetime full width */}
-      <Input type="datetime-local" value={customDt}
-        onChange={e => setCustomDt(e.target.value)}
-        className="h-9 w-full text-xs"
-        title="Reading date & time" />
-
-      {/* Row 3: reading input + save + history */}
-      <div className="flex items-center gap-2">
+      {/* Row 2: reading input + save + history | date inline on right */}
+      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <Input
+          type="datetime-local" value={customDt}
+          onChange={e => setCustomDt(e.target.value)}
+          className="shrink-0 w-44 text-xs h-9 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+          title="Reading date & time"
+        />
         <div className="relative flex-1 min-w-0">
           <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
           <Input
@@ -2422,7 +2442,7 @@ function PowerForm() {
         <div>
           <Label>Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left" />
+            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400" />
         </div>
 
         {/* Meter Reading(s) + Multiplier */}
@@ -2882,8 +2902,6 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       ({ error } = await supabase.from('locator_readings').delete().in('id', ids));
     else if (module === 'power')
       ({ error } = await supabase.from('power_readings').delete().in('id', ids));
-    else if (module === 'blending')
-      ({ error } = await supabase.from('blending_events').delete().in('id', ids));
     setBulkDeleting(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`${ids.length} reading(s) deleted`);
@@ -2950,8 +2968,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   };
 
   const title = module === 'power' ? `Power — ${entityName}` : `${entityName} — History`;
-  const canEditDelete = true; // all modules support checkbox selection + bulk delete
-  const canInlineEdit = module !== 'blending'; // blending rows have no inline edit/single-delete
+  const canEditDelete = module !== 'blending';
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -3136,12 +3153,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   {module === 'power' && <>
                     <th className="px-3 py-2 font-medium text-right">Grid Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Grid (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center text-blue-600" title="Mark as grid meter replacement — zeroes Δ Grid">Grid Repl.</th>
+                    <th className="px-2 py-2 font-medium text-center text-blue-600">Grid Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Solar Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Solar (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center text-yellow-600" title="Mark as solar meter replacement — zeroes Δ Solar">Solar Repl.</th>
+                    <th className="px-2 py-2 font-medium text-center text-yellow-600">Solar Repl.</th>
                   </>}
-                  {canInlineEdit && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
+                  {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -3231,80 +3248,35 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0)}</td>
                       </>}
 
-                      {module === 'power' && (() => {
-                        const isGridRepl  = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
-                        const isSolarRepl = !!(r.is_solar_replacement ?? false);
-                        const isTogglingGrid  = togglingGridId  === r.id;
-                        const isTogglingSolar = togglingSolarId === r.id;
-                        return <>
-                          {/* Grid meter reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
-                            {fmtNum(r.meter_reading_kwh)}
-                          </td>
-                          {/* Δ Grid */}
-                          <td className="px-3 py-1.5 text-right font-mono-num">
-                            {isGridRepl
-                              ? <span className="text-orange-500 font-medium">0</span>
-                              : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
-                            }
-                          </td>
-                          {/* Grid Repl. toggle */}
-                          <td className="px-2 py-1.5 text-center">
-                            <button
-                              title={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
-                              disabled={isDeleting || isTogglingGrid}
-                              onClick={() => toggleGridReplacement(r)}
-                              className={[
-                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                                'disabled:opacity-40 disabled:cursor-not-allowed',
-                                isGridRepl
-                                  ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600'
-                                  : 'border-input bg-background hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20',
-                              ].join(' ')}
-                            >
-                              {isTogglingGrid
-                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                : isGridRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
-                              }
-                            </button>
-                          </td>
-                          {/* Solar meter reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
-                            {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
-                          </td>
-                          {/* Δ Solar */}
-                          <td className="px-3 py-1.5 text-right font-mono-num">
-                            {isSolarRepl
-                              ? <span className="text-orange-500 font-medium">0</span>
-                              : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                                ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
-                                : '—'
-                            }
-                          </td>
-                          {/* Solar Repl. toggle */}
-                          <td className="px-2 py-1.5 text-center">
-                            <button
-                              title={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
-                              disabled={isDeleting || isTogglingSolar}
-                              onClick={() => toggleSolarReplacement(r)}
-                              className={[
-                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                                'disabled:opacity-40 disabled:cursor-not-allowed',
-                                isSolarRepl
-                                  ? 'bg-yellow-500 border-yellow-500 text-white hover:bg-yellow-600'
-                                  : 'border-input bg-background hover:border-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20',
-                              ].join(' ')}
-                            >
-                              {isTogglingSolar
-                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                : isSolarRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
-                              }
-                            </button>
-                          </td>
-                        </>;
-                      })()}
+                      {module === 'power' && <>
+                        {/* Grid meter reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
+                          {fmtNum(r.meter_reading_kwh)}
+                        </td>
+                        {/* Δ Grid = current - previous meter_reading_kwh */}
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {isMeterReplacement
+                            ? <span className="text-orange-500 font-medium">0</span>
+                            : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
+                          }
+                        </td>
+                        {/* Solar meter reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
+                          {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                        </td>
+                        {/* Δ Solar = current - previous solar_meter_reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {isMeterReplacement
+                            ? <span className="text-orange-500 font-medium">0</span>
+                            : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                              ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
+                              : '—'
+                          }
+                        </td>
+                        {replCell}
+                      </>}
 
-                      {canInlineEdit && (
+                      {canEditDelete && (
                         <td className="px-2 py-1 text-center">
                           <div className="flex items-center justify-center gap-0.5">
                             <button
