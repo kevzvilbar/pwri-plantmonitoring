@@ -2339,6 +2339,14 @@ function PowerForm() {
   const [gridMeterCount, setGridMeterCount]   = useState(1);
   const [solarMeterNames, setSolarMeterNames] = useState(['Solar 1', 'Solar 2', 'Solar 3']);
   const [gridMeterNames, setGridMeterNames]   = useState(['Grid 1', 'Grid 2', 'Grid 3']);
+  // Per-meter reading inputs: indexed arrays (index 0 = meter 1, etc.)
+  const [gridMeterReadings, setGridMeterReadings]   = useState<string[]>(['', '', '', '', '']);
+  const [solarMeterReadings, setSolarMeterReadings] = useState<string[]>(['', '', '', '', '']);
+
+  const setGridMeterReading = (idx: number, val: string) =>
+    setGridMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
+  const setSolarMeterReading = (idx: number, val: string) =>
+    setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
 
   const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const showSolar = !!plant?.has_solar;
@@ -2461,12 +2469,17 @@ function PowerForm() {
     if (error) { toast.error(error.message); return; }
     toast.success(editingId ? 'Updated' : 'Power reading saved');
     setReading(''); setSolarReading(''); setEditingId(null);
+    setGridMeterReadings(['', '', '', '', '']);
+    setSolarMeterReadings(['', '', '', '', '']);
     qc.invalidateQueries();
   };
 
   const startEdit = (r: any) => {
     setReading(String(r.meter_reading_kwh));
     setSolarReading(r.solar_meter_reading != null ? String(r.solar_meter_reading) : '');
+    // Sync per-meter arrays: grid meter 0 = primary reading
+    setGridMeterReadings(prev => { const next = [...prev]; next[0] = String(r.meter_reading_kwh); return next; });
+    setSolarMeterReadings(prev => { const next = [...prev]; next[0] = r.solar_meter_reading != null ? String(r.solar_meter_reading) : ''; return next; });
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
@@ -2598,71 +2611,21 @@ function PowerForm() {
           )}
         </div>
 
-        <div>
-          <Label>Date &amp; Time</Label>
-          <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-            className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400" />
-        </div>
-
-        {/* Meter Reading(s) + Multiplier */}
+        {/* Meter Reading(s) + Grid Power Multiplier — shown inline with Date & Time */}
         {showSolar ? (
           // ── Solar plant ────────────────────────────────────────────────────────
           <div className="space-y-3">
 
-            {/* Row: Solar | Grid | Multiplier */}
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-start">
-
-              {/* ① Solar meter reading — FIRST */}
+            {/* Date & Time + Grid Power Multiplier on the same row */}
+            <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label className="flex items-center gap-1.5">
-                  <span className="text-yellow-500 text-sm leading-none">☀</span>
-                  Solar Power Reading
-                  {editingId && <span className="text-xs text-amber-600 ml-1">(editing)</span>}
-                </Label>
-                <Input type="number" step="any" value={solarReading}
-                  onChange={e => setSolarReading(e.target.value)}
-                  placeholder="Solar meter reading"
-                  className="border-yellow-300 focus-visible:ring-yellow-300"
-                  data-testid="power-solar-input" />
-                {prevSolar != null && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
-                    {deltaSolar != null && (
-                      <> · <span className={`font-mono-num font-medium ${deltaSolar >= 0 ? 'text-yellow-600' : 'text-destructive'}`}>
-                        Δ {fmtNum(deltaSolar)} kWh
-                      </span></>
-                    )}
-                  </p>
-                )}
+                <Label>Date &amp; Time</Label>
+                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400" />
               </div>
-
-              {/* ② Grid meter reading — SECOND */}
-              <div>
-                <Label className="flex items-center gap-1.5">
-                  <Zap className="h-3 w-3 text-blue-500" />
-                  Grid Power Reading
-                </Label>
-                <Input type="number" step="any" value={reading}
-                  onChange={e => setReading(e.target.value)}
-                  placeholder="Grid meter reading"
-                  className="border-blue-300 focus-visible:ring-blue-300"
-                  data-testid="power-meter-input" />
-                {prevGrid != null && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    prev: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
-                    {deltaGrid != null && (
-                      <> · <span className={`font-mono-num font-medium ${deltaGrid >= 0 ? 'text-blue-600' : 'text-destructive'}`}>
-                        Δ {fmtNum(deltaGrid)} kWh
-                      </span></>
-                    )}
-                  </p>
-                )}
-              </div>
-
-              {/* ③ Multiplier */}
-              <div className="w-20 min-w-[5rem]">
+              <div className="min-w-[130px]">
                 <Label className="flex flex-wrap items-center gap-x-1 gap-y-0 text-xs leading-tight">
-                  Multiplier
+                  Grid Power Multiplier
                   {plantId && !billLoading && (
                     billMultiplier !== null
                       ? <span className="text-[9px] text-muted-foreground font-normal whitespace-nowrap">(from bill)</span>
@@ -2683,6 +2646,81 @@ function PowerForm() {
                 />
               </div>
             </div>
+
+            {/* Solar meter rows — one per solarMeterCount */}
+            {Array.from({ length: solarMeterCount }).map((_, idx) => {
+              const meterLabel = solarMeterCount === 1
+                ? 'Solar Power Reading'
+                : (solarMeterNames[idx] ?? `Solar Meter ${idx + 1}`);
+              const val = solarMeterReadings[idx] ?? '';
+              const isFirst = idx === 0;
+              // sync first solar meter to legacy solarReading for submit
+              const handleChange = (v: string) => {
+                setSolarMeterReading(idx, v);
+                if (isFirst) setSolarReading(v);
+              };
+              return (
+                <div key={`solar-${idx}`}>
+                  <Label className="flex items-center gap-1.5">
+                    <span className="text-yellow-500 text-sm leading-none">☀</span>
+                    {meterLabel}
+                    {isFirst && editingId && <span className="text-xs text-amber-600 ml-1">(editing)</span>}
+                  </Label>
+                  <Input type="number" step="any" value={val}
+                    onChange={e => handleChange(e.target.value)}
+                    placeholder="Solar meter reading"
+                    className="border-yellow-300 focus-visible:ring-yellow-300"
+                    data-testid={`power-solar-input-${idx}`} />
+                  {isFirst && prevSolar != null && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
+                      {deltaSolar != null && (
+                        <> · <span className={`font-mono-num font-medium ${deltaSolar >= 0 ? 'text-yellow-600' : 'text-destructive'}`}>
+                          Δ {fmtNum(deltaSolar)} kWh
+                        </span></>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Grid meter rows — one per gridMeterCount */}
+            {Array.from({ length: gridMeterCount }).map((_, idx) => {
+              const meterLabel = gridMeterCount === 1
+                ? 'Grid Power Reading'
+                : (gridMeterNames[idx] ?? `Grid Meter ${idx + 1}`);
+              const val = gridMeterReadings[idx] ?? '';
+              const isFirst = idx === 0;
+              // sync first grid meter to legacy reading for submit
+              const handleChange = (v: string) => {
+                setGridMeterReading(idx, v);
+                if (isFirst) setReading(v);
+              };
+              return (
+                <div key={`grid-${idx}`}>
+                  <Label className="flex items-center gap-1.5">
+                    <Zap className="h-3 w-3 text-blue-500" />
+                    {meterLabel}
+                  </Label>
+                  <Input type="number" step="any" value={val}
+                    onChange={e => handleChange(e.target.value)}
+                    placeholder="Grid meter reading"
+                    className="border-blue-300 focus-visible:ring-blue-300"
+                    data-testid={`power-meter-input-${idx}`} />
+                  {isFirst && prevGrid != null && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      prev: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
+                      {deltaGrid != null && (
+                        <> · <span className={`font-mono-num font-medium ${deltaGrid >= 0 ? 'text-blue-600' : 'text-destructive'}`}>
+                          Δ {fmtNum(deltaGrid)} kWh
+                        </span></>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
 
             {/* Energy Source Breakdown — compact inline strip */}
             <div className="flex items-center gap-1.5 rounded border bg-muted/20 px-2.5 py-1.5 text-[11px]">
@@ -2706,17 +2744,18 @@ function PowerForm() {
             </div>
           </div>
         ) : (
-          // Non-solar plant: single combined meter + multiplier
-          <div className="space-y-1">
-            <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
+          // Non-solar plant: Date & Time + Grid Power Multiplier inline, then dynamic grid meter rows
+          <div className="space-y-3">
+            {/* Date & Time + Grid Power Multiplier on the same row */}
+            <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-                <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
-                  placeholder="Plant Power Reading" data-testid="power-meter-input" />
+                <Label>Date &amp; Time</Label>
+                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400" />
               </div>
-              <div className="w-20 min-w-[5rem]">
+              <div className="min-w-[130px]">
                 <Label className="flex flex-wrap items-center gap-x-1 gap-y-0 text-xs leading-tight">
-                  Multiplier
+                  Grid Power Multiplier
                   {plantId && !billLoading && (
                     billMultiplier !== null
                       ? <span className="text-[9px] text-muted-foreground font-normal whitespace-nowrap">(from bill)</span>
@@ -2737,30 +2776,57 @@ function PowerForm() {
                 />
               </div>
             </div>
-            {prevGrid != null && (
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                <span>
-                  Previous: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
-                  {daily != null && <> · Δ <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
-                </span>
-                {dailyEffective != null && effectiveMultiplier !== 1 && (
-                  <div className="inline-flex items-center gap-1.5 ml-2 rounded bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-2 py-0.5">
-                    <Zap className="h-3 w-3 text-amber-500 shrink-0" />
-                    <span className="font-mono-num font-medium text-amber-700 dark:text-amber-300">
-                      {fmtNum(dailyEffective, 2)} kWh
-                    </span>
-                    <span className="text-amber-600/70 dark:text-amber-400/60">effective (×{effectiveMultiplier})</span>
-                  </div>
-                )}
-              </div>
-            )}
+
+            {/* Dynamic grid meter rows */}
+            {Array.from({ length: gridMeterCount }).map((_, idx) => {
+              const meterLabel = gridMeterCount === 1
+                ? 'Meter Reading'
+                : (gridMeterNames[idx] ?? `Grid Meter ${idx + 1}`);
+              const val = gridMeterReadings[idx] ?? '';
+              const isFirst = idx === 0;
+              const handleChange = (v: string) => {
+                setGridMeterReading(idx, v);
+                if (isFirst) setReading(v);
+              };
+              return (
+                <div key={`grid-ns-${idx}`}>
+                  <Label className="flex items-center gap-1.5">
+                    <Zap className="h-3 w-3 text-blue-500" />
+                    {meterLabel}
+                    {isFirst && editingId && <span className="text-xs text-highlight ml-1">(editing)</span>}
+                  </Label>
+                  <Input type="number" step="any" value={val}
+                    onChange={e => handleChange(e.target.value)}
+                    placeholder="Grid meter reading"
+                    className="border-blue-300 focus-visible:ring-blue-300"
+                    data-testid={`power-meter-input-${idx}`} />
+                  {isFirst && prevGrid != null && (
+                    <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
+                      <span>
+                        Previous: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
+                        {daily != null && <> · Δ <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
+                      </span>
+                      {dailyEffective != null && effectiveMultiplier !== 1 && (
+                        <div className="inline-flex items-center gap-1.5 ml-2 rounded bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-2 py-0.5">
+                          <Zap className="h-3 w-3 text-amber-500 shrink-0" />
+                          <span className="font-mono-num font-medium text-amber-700 dark:text-amber-300">
+                            {fmtNum(dailyEffective, 2)} kWh
+                          </span>
+                          <span className="text-amber-600/70 dark:text-amber-400/60">effective (×{effectiveMultiplier})</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
         <div className="flex gap-2">
           <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
           {editingId && (
-            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); setGridMeterReadings(['', '', '', '', '']); setSolarMeterReadings(['', '', '', '', '']); }}>Cancel</Button>
           )}
         </div>
       </Card>
