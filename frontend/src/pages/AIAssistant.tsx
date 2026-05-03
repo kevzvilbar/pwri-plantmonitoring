@@ -43,8 +43,8 @@ type Anomaly = {
 // ---------------------------------------------------------------------------
 
 const GEMINI_API_KEY = 'AIzaSyCa4T025UrRWQxM7hj4pxoLKp68PfD0Bm0';
-const GEMINI_MODEL = 'gemini-1.5-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_MODEL = 'gemini-1.5-flash-latest';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 const SYSTEM_PROMPT = `You are an AI assistant for PWRI Monitoring, a multi-plant water operations management system.
 You help operators, supervisors, and managers analyze water plant data including:
