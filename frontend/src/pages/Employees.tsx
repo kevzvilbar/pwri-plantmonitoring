@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  MessageSquare, X, Send, Loader2, ChevronLeft, Clock,
+  MessageSquare, X, Send, Loader2, Clock,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -75,7 +75,7 @@ function ChatWindow({
   const { data: messages = [], refetch } = useQuery<ChatMsg[]>({
     queryKey: ['chat', currentUserId, peer.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
         .from('chat_messages')
         .select('*')
         .or(
@@ -113,7 +113,7 @@ function ChatWindow({
     setInput('');
     setSending(true);
     try {
-      await supabase.from('chat_messages').insert({
+      await (supabase as any).from('chat_messages').insert({
         sender_id: currentUserId,
         recipient_id: peer.id,
         body,
