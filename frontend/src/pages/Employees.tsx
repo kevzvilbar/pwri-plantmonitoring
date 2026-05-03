@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare, X, Send, Loader2, Clock,
   Building2, User, ShieldCheck, MapPin, ChevronRight,
+  Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
+  BarChart3, GitBranch, ClipboardList,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,7 +44,7 @@ type StaffMember = {
 };
 
 // ---------------------------------------------------------------------------
-// Presence helpers (uses updated_at as activity proxy)
+// Presence helpers
 // ---------------------------------------------------------------------------
 
 type PresenceState = 'active' | 'idle' | 'away' | 'offline';
@@ -360,7 +362,6 @@ function Staff() {
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
-  // Fetch ALL profiles — no plant filter so every registered user shows up
   const { data: staff = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -409,22 +410,340 @@ function Staff() {
 }
 
 // ---------------------------------------------------------------------------
-// Register Info tab
+// Org Chart Node (recursive)
+// ---------------------------------------------------------------------------
+
+function OrgNode({ member, allStaff, roles, depth = 0 }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[]; depth?: number;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const children = allStaff.filter((s) => s.immediate_head_id === member.id);
+  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
+  const hasChildren = children.length > 0;
+
+  return (
+    <div className={cn('flex flex-col', depth > 0 && 'ml-5 border-l border-dashed border-muted-foreground/30 pl-4 mt-1')}>
+      <div
+        className={cn(
+          'flex items-center gap-2 py-1.5 px-2 rounded-md group',
+          hasChildren && 'cursor-pointer hover:bg-muted/50',
+        )}
+        onClick={() => hasChildren && setExpanded((p) => !p)}
+      >
+        <div className={cn('h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(member.id))}>
+          {initials(member)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium leading-none truncate">{fullName(member)}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            {member.designation ?? memberRole}
+          </div>
+        </div>
+        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">{memberRole}</span>
+        {hasChildren && (
+          <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform', expanded && 'rotate-180')} />
+        )}
+      </div>
+      {expanded && hasChildren && children.map((child) => (
+        <OrgNode key={child.id} member={child} allStaff={allStaff} roles={roles} depth={depth + 1} />
+      ))}
+    </div>
+  );
+}
+
+function OrgChart({ staff, roles }: { staff: StaffMember[]; roles: any[] }) {
+  // Root members = those with no immediate_head_id, or whose head_id doesn't exist in the list
+  const staffIds = new Set(staff.map((s) => s.id));
+  const roots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
+
+  if (roots.length === 0) {
+    return <p className="text-xs text-muted-foreground text-center py-4">No reporting relationships configured.</p>;
+  }
+
+  return (
+    <div className="space-y-1">
+      {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} depth={0} />)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Staff Directory Stats
+// ---------------------------------------------------------------------------
+
+const ROLES = ['Admin', 'Manager', 'Technician', 'Operator'] as const;
+
+function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
+  const activeCount = staff.filter((s) => s.status === 'Active').length;
+
+  const roleCounts = ROLES.map((role) => ({
+    role,
+    count: (roles as any[]).filter((r) => r.role === role).length,
+  }));
+
+  const coveredPlantIds = new Set(staff.flatMap((s) => s.plant_assignments ?? []));
+  const plantsCount = plants.filter((p) => coveredPlantIds.has(p.id)).length;
+
+  const statItems = [
+    { label: 'Total Staff', value: staff.length, icon: <Users className="h-4 w-4" />, color: 'text-sky-600' },
+    { label: 'Active', value: activeCount, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600' },
+    { label: 'Plants Covered', value: plantsCount, icon: <Building2 className="h-4 w-4" />, color: 'text-violet-600' },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {/* Summary row */}
+      <div className="grid grid-cols-3 gap-2">
+        {statItems.map((s) => (
+          <div key={s.label} className="flex flex-col items-center bg-muted/50 rounded-lg py-3 px-2 text-center gap-1">
+            <span className={s.color}>{s.icon}</span>
+            <span className="text-xl font-bold leading-none">{s.value}</span>
+            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+      </div>
+      {/* Role breakdown */}
+      <div className="grid grid-cols-2 gap-2">
+        {roleCounts.map(({ role, count }) => (
+          <div key={role} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
+            <span className="text-xs text-muted-foreground">{role}</span>
+            <span className="text-sm font-semibold">{count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pending Approvals (admin only)
+// ---------------------------------------------------------------------------
+
+function PendingApprovals({ staff }: { staff: StaffMember[] }) {
+  const queryClient = useQueryClient();
+  const [approving, setApproving] = useState<string | null>(null);
+
+  const pending = staff.filter((s) => s.status === 'Pending');
+
+  const approve = useCallback(async (id: string) => {
+    setApproving(id);
+    try {
+      // Set confirmed = true in user_profiles; adjust field name to match your schema
+      await (supabase as any)
+        .from('user_profiles')
+        .update({ confirmed: true, status: 'Active' })
+        .eq('id', id);
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+    } finally {
+      setApproving(null);
+    }
+  }, [queryClient]);
+
+  if (pending.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+        No pending approvals. All accounts are active.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {pending.map((s) => (
+        <div key={s.id} className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(s.id))}>
+            {initials(s)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">{fullName(s)}</div>
+            <div className="text-[11px] text-muted-foreground">@{s.username ?? '—'} · {s.designation ?? 'No designation'}</div>
+          </div>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 px-2 text-[11px] text-emerald-700 border-emerald-300 hover:bg-emerald-50 shrink-0"
+            disabled={approving === s.id}
+            onClick={() => approve(s.id)}
+          >
+            {approving === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// App Manual
+// ---------------------------------------------------------------------------
+
+type ManualSection = { title: string; icon: React.ReactNode; content: React.ReactNode };
+
+const MANUAL_SECTIONS: ManualSection[] = [
+  {
+    title: 'Getting Started',
+    icon: <BookOpen className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>New staff sign up on the login page using their email and password. After email confirmation, they complete a profile setup (plants, designation, etc.).</p>
+        <p>An <strong className="text-foreground">Admin</strong> must then review and approve the account. New users default to <strong className="text-foreground">Pending</strong> status and cannot access the app until approved.</p>
+      </div>
+    ),
+  },
+  {
+    title: 'Roles & Permissions',
+    icon: <ShieldCheck className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-1.5 text-xs">
+        {[
+          { role: 'Admin', desc: 'Full access — manage staff, approve accounts, configure plants, access all data and exports.' },
+          { role: 'Manager', desc: 'View and manage operations, maintenance, compliance, and incidents across assigned plants.' },
+          { role: 'Technician', desc: 'Log readings, submit maintenance records, and manage incidents for assigned plants.' },
+          { role: 'Operator', desc: 'View-only access to operations and dashboard. Can chat with colleagues.' },
+        ].map(({ role, desc }) => (
+          <div key={role} className="flex gap-2">
+            <span className="font-semibold text-foreground w-20 shrink-0">{role}</span>
+            <span className="text-muted-foreground">{desc}</span>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    title: 'Staff Directory',
+    icon: <Users className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>The <strong className="text-foreground">Staff</strong> tab lists all registered users. Click any tile to view their full profile — designation, role, plant assignments, and who they report to.</p>
+        <p>Use the <strong className="text-foreground">Chat</strong> button to send ephemeral messages (auto-deleted after 8 hours). Admins can suspend or delete accounts from the detail drawer.</p>
+      </div>
+    ),
+  },
+  {
+    title: 'Org Chart',
+    icon: <GitBranch className="h-3.5 w-3.5" />,
+    content: (
+      <div className="text-xs text-muted-foreground">
+        <p>The reporting tree is built from the <strong className="text-foreground">immediate_head_id</strong> field on each profile. During onboarding or via the Admin Console, each user's direct supervisor can be set. The chart auto-nests and is collapsible at each level.</p>
+      </div>
+    ),
+  },
+  {
+    title: 'Plants & Operations',
+    icon: <Building2 className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>Each plant has its own wells, locators, RO trains, and chemical dosing configuration. Staff are assigned to plants; their access is scoped accordingly.</p>
+        <p>Daily readings (flow, pressure, energy, pH) are logged under each plant. Data is queryable through the AI Assistant and exportable via <strong className="text-foreground">Data Exports</strong>.</p>
+      </div>
+    ),
+  },
+  {
+    title: 'Maintenance & Incidents',
+    icon: <ClipboardList className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p><strong className="text-foreground">PM Schedule</strong> tracks preventive maintenance tasks with due dates and completion status. Overdue items are flagged automatically.</p>
+        <p><strong className="text-foreground">Incidents</strong> records downtime events, equipment failures, and safety observations. Each incident can be linked to a specific plant and tagged with a severity level.</p>
+      </div>
+    ),
+  },
+];
+
+function AppManual() {
+  const [open, setOpen] = useState<number | null>(0);
+  return (
+    <div className="space-y-1.5">
+      {MANUAL_SECTIONS.map((s, i) => (
+        <div key={i} className="border rounded-lg overflow-hidden">
+          <button
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+            onClick={() => setOpen((p) => (p === i ? null : i))}
+          >
+            <span className="text-muted-foreground">{s.icon}</span>
+            <span className="text-sm font-medium flex-1">{s.title}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', open === i && 'rotate-180')} />
+          </button>
+          {open === i && (
+            <div className="px-4 pb-3 pt-1 border-t bg-muted/20">
+              {s.content}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Info Tab (enhanced)
 // ---------------------------------------------------------------------------
 
 function RegisterInfo() {
+  const { isAdmin } = useAuth();
+  const { data: plants = [] } = usePlants();
+
+  const { data: staff = [] } = useQuery<StaffMember[]>({
+    queryKey: ['staff'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
+      if (error) throw error;
+      return (data ?? []) as StaffMember[];
+    },
+  });
+
+  const { data: roles = [] } = useQuery({
+    queryKey: ['all-roles'],
+    queryFn: async () => (await supabase.from('user_roles').select('*')).data ?? [],
+  });
+
   return (
-    <Card className="p-4 text-sm space-y-2">
-      <h3 className="font-semibold">How to register new staff</h3>
-      <p className="text-muted-foreground">
-        New users sign up themselves on the login page using their email + password. After confirming,
-        they will be guided through a profile setup flow where they select their plants, designation, etc.
-      </p>
-      <p className="text-muted-foreground">
-        An <strong>Admin</strong> must then set their role from the Staff tab. New users default to{' '}
-        <strong>Operator</strong>.
-      </p>
-    </Card>
+    <div className="space-y-4">
+
+      {/* 1. Staff Directory Stats */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Directory Overview</h3>
+        </div>
+        <DirectoryStats staff={staff} roles={roles} plants={plants} />
+      </Card>
+
+      {/* 2. Org Chart */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <GitBranch className="h-4 w-4 text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Reporting Tree</h3>
+        </div>
+        <OrgChart staff={staff} roles={roles} />
+      </Card>
+
+      {/* 3. Pending Approvals — admin only */}
+      {isAdmin && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <h3 className="font-semibold text-sm">Pending Approvals</h3>
+            {staff.filter((s) => s.status === 'Pending').length > 0 && (
+              <span className="ml-auto text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                {staff.filter((s) => s.status === 'Pending').length} pending
+              </span>
+            )}
+          </div>
+          <PendingApprovals staff={staff} />
+        </Card>
+      )}
+
+      {/* 4. App Manual */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          <h3 className="font-semibold text-sm">App Manual</h3>
+        </div>
+        <AppManual />
+      </Card>
+
+    </div>
   );
 }
 
