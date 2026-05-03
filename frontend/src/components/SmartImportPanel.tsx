@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle,
   Droplet, Zap, FlaskConical, Gauge, Waves, Thermometer,
-  ChevronRight, Download, RefreshCw, X, Info, CircleDot,
+  ChevronRight, Download, RefreshCw, X, Info, CircleDot, Menu,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,7 +11,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -404,44 +403,48 @@ function DropZone({
 function ColumnReference({ config }: { config: ImportTypeConfig }) {
   return (
     <div className="rounded-lg border bg-muted/30 overflow-hidden">
-      <div className="px-3 py-2 border-b bg-muted/50 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      {/* header */}
+      <div className="px-3 py-1.5 border-b bg-muted/50 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Expected Columns
         </span>
         <button
           onClick={() => downloadTemplate(config)}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+          className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
         >
           <Download className="h-3 w-3" /> CSV Template
         </button>
       </div>
+      {/* compact single-line rows */}
       <div className="divide-y">
         {config.columns.map(col => (
-          <div key={col.key} className="flex items-start gap-3 px-3 py-2">
-            <code className="text-[11px] font-mono bg-background border rounded px-1.5 py-0.5 shrink-0 mt-0.5">
+          <div key={col.key} className="flex items-center gap-2 px-3 py-[5px]">
+            <code className="text-[10px] font-mono bg-background border rounded px-1.5 py-px shrink-0 whitespace-nowrap leading-tight">
               {col.key}
             </code>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-medium">{col.label}</span>
-                {col.required && (
-                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-rose-300 text-rose-600 dark:text-rose-400">
-                    required
-                  </Badge>
-                )}
-                <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">
-                  {col.type}
+            <span className="text-[11px] font-medium flex-1 min-w-0 truncate leading-tight" title={col.label}>
+              {col.label}
+            </span>
+            <span className="flex items-center gap-1 shrink-0">
+              {col.required && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-rose-300 text-rose-600 dark:text-rose-400 leading-none">
+                  req
                 </Badge>
-              </div>
+              )}
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground leading-none">
+                {col.type}
+              </Badge>
               {col.hint && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">{col.hint}</p>
+                <span className="text-[9px] text-muted-foreground/55 italic hidden sm:inline max-w-[80px] truncate" title={col.hint}>
+                  {col.hint}
+                </span>
               )}
               {col.type === 'select' && col.selectOptions && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Options: {col.selectOptions.join(', ')}
-                </p>
+                <span className="text-[9px] text-muted-foreground/55 italic hidden sm:inline max-w-[100px] truncate" title={col.selectOptions.join(', ')}>
+                  {col.selectOptions.join('/')}
+                </span>
               )}
-            </div>
+            </span>
           </div>
         ))}
       </div>
@@ -515,10 +518,11 @@ function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeC
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SmartImportPanel() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const { data: plants } = usePlants();
 
   const [selected, setSelected] = useState<ImportType>('tds_readings');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [plantId, setPlantId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -577,6 +581,7 @@ export default function SmartImportPanel() {
   // ── Select type → reset ────────────────────────────────────────────────────
   const handleSelectType = useCallback((t: ImportType) => {
     setSelected(t);
+    setSidebarOpen(false);
     handleClear();
   }, [handleClear]);
 
@@ -628,7 +633,7 @@ export default function SmartImportPanel() {
     const errs = log.filter(l => l.startsWith('❌')).length;
     if (errs === 0) toast.success(`${rows.length} row(s) imported to ${config.label}`);
     else toast.warning(`Import done — ${errs} batch(es) had errors`);
-  }, [plantId, parsedRows, skipInvalid, config, user]);
+  }, [plantId, parsedRows, skipInvalid, config]);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const validCount = parsedRows.filter(r => r.valid).length;
@@ -639,17 +644,63 @@ export default function SmartImportPanel() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Smart Import</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Import plant data by category — select a type, upload a CSV, review, then sync.
-        </p>
+      {/* Header row — includes mobile menu toggle */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Smart Import</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Select a type, upload a CSV, review, then sync.
+          </p>
+        </div>
+        {/* Mobile-only: hamburger to open sidebar drawer */}
+        <button
+          className="lg:hidden mt-1 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors shrink-0"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu className="h-3.5 w-3.5" />
+          <span className={cn('flex h-4 w-4 items-center justify-center rounded-sm shrink-0', config.accent)}>
+            <config.icon className={cn('h-2.5 w-2.5', config.color)} />
+          </span>
+          <span className="truncate max-w-[100px]">{config.label}</span>
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 items-start">
-        {/* ── Left: type selector ─────────────────────────────────────────── */}
-        <Card className="p-3">
+      {/* ── Mobile sidebar drawer overlay ────────────────────────────────── */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          {/* backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+          {/* drawer panel */}
+          <div className="relative z-10 flex flex-col w-72 max-w-[85vw] h-full bg-background border-r shadow-xl animate-in slide-in-from-left-4 duration-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Import Type</span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="rounded p-1 hover:bg-muted transition-colors"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {IMPORT_CONFIGS.map(c => (
+                <ImportTypeCard
+                  key={c.id}
+                  config={c}
+                  selected={selected === c.id}
+                  onClick={() => handleSelectType(c.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[256px_1fr] gap-4 items-start">
+        {/* ── Left: type selector (desktop only) ──────────────────────────── */}
+        <Card className="p-3 hidden lg:block">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5 mb-2">
             Import Type
           </p>
@@ -666,28 +717,28 @@ export default function SmartImportPanel() {
         </Card>
 
         {/* ── Right: main panel ───────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Config card */}
-          <Card className="p-4 space-y-4">
+          <Card className="p-4 space-y-3">
             {/* Type header */}
             <div className="flex items-center gap-3">
-              <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', config.accent)}>
-                <config.icon className={cn('h-5 w-5', config.color)} />
+              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', config.accent)}>
+                <config.icon className={cn('h-4 w-4', config.color)} />
               </span>
               <div>
-                <h2 className="text-base font-semibold">{config.label}</h2>
+                <h2 className="text-sm font-semibold">{config.label}</h2>
                 <p className="text-xs text-muted-foreground">{config.description}</p>
               </div>
             </div>
 
-            {/* Plant selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            {/* Plant + toggle in one row */}
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1 flex-1 min-w-[160px]">
                 <Label className="text-xs">
                   Target Plant <span className="text-rose-500">*</span>
                 </Label>
                 <Select value={plantId} onValueChange={setPlantId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Pick a plant…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -698,40 +749,31 @@ export default function SmartImportPanel() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Skip invalid rows</Label>
-                <div className="flex items-center gap-2 h-9">
-                  <button
-                    role="switch"
-                    aria-checked={skipInvalid}
-                    onClick={() => setSkipInvalid(v => !v)}
-                    className={cn(
-                      'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                      skipInvalid ? 'bg-primary' : 'bg-input',
-                    )}
-                  >
-                    <span className={cn(
-                      'pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform',
-                      skipInvalid ? 'translate-x-4' : 'translate-x-0',
-                    )} />
-                  </button>
-                  <span className="text-xs text-muted-foreground">
-                    {skipInvalid ? 'Invalid rows will be skipped' : 'All rows imported (errors may fail)'}
-                  </span>
-                </div>
+              <div className="flex items-center gap-2 pb-px shrink-0">
+                <button
+                  role="switch"
+                  aria-checked={skipInvalid}
+                  onClick={() => setSkipInvalid(v => !v)}
+                  className={cn(
+                    'relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                    skipInvalid ? 'bg-primary' : 'bg-input',
+                  )}
+                >
+                  <span className={cn(
+                    'pointer-events-none block h-3 w-3 rounded-full bg-white shadow ring-0 transition-transform',
+                    skipInvalid ? 'translate-x-4' : 'translate-x-0',
+                  )} />
+                </button>
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">Skip invalid</span>
               </div>
             </div>
 
             {/* Drop zone */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label className="text-xs">CSV File</Label>
-              <DropZone
-                file={file}
-                onFile={handleFile}
-                onClear={handleClear}
-              />
+              <DropZone file={file} onFile={handleFile} onClear={handleClear} />
               {status === 'parsing' && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <RefreshCw className="h-3 w-3 animate-spin" /> Parsing…
                 </div>
               )}
@@ -744,14 +786,13 @@ export default function SmartImportPanel() {
           {/* Preview */}
           {status === 'preview' && parsedRows.length > 0 && (
             <Card className="p-4 space-y-3">
-              {/* Stats row */}
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">Preview</span>
-                <Badge variant="outline" className="text-emerald-700 border-emerald-300 dark:text-emerald-400 gap-1">
+                <Badge variant="outline" className="text-emerald-700 border-emerald-300 dark:text-emerald-400 gap-1 text-[11px] px-1.5 py-0">
                   <CheckCircle2 className="h-3 w-3" /> {validCount} valid
                 </Badge>
                 {invalidCount > 0 && (
-                  <Badge variant="outline" className="text-rose-600 border-rose-300 dark:text-rose-400 gap-1">
+                  <Badge variant="outline" className="text-rose-600 border-rose-300 dark:text-rose-400 gap-1 text-[11px] px-1.5 py-0">
                     <XCircle className="h-3 w-3" /> {invalidCount} invalid
                   </Badge>
                 )}
@@ -760,21 +801,17 @@ export default function SmartImportPanel() {
                 </span>
               </div>
 
-              {/* Warning banner */}
               {invalidCount > 0 && skipInvalid && (
                 <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                   <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  {invalidCount} row(s) will be skipped. Hover the error icon in the Status column to see details.
+                  {invalidCount} row(s) will be skipped. Hover the error badge for details.
                 </div>
               )}
 
               <PreviewTable rows={parsedRows} config={config} />
 
-              {/* Actions */}
               <div className="flex justify-end gap-2 pt-1">
-                <Button variant="outline" size="sm" onClick={handleClear}>
-                  Cancel
-                </Button>
+                <Button variant="outline" size="sm" onClick={handleClear}>Cancel</Button>
                 <Button
                   size="sm"
                   onClick={runImport}
@@ -799,22 +836,14 @@ export default function SmartImportPanel() {
               <Progress value={importProgress} className="h-1.5" />
               <div className="max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 space-y-0.5">
                 {importLog.map((line, i) => (
-                  <p
-                    key={i}
-                    className={cn(
-                      'text-[11px] font-mono',
-                      line.startsWith('❌') ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground',
-                    )}
-                  >
+                  <p key={i} className={cn('text-[11px] font-mono', line.startsWith('❌') ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
                     {line}
                   </p>
                 ))}
               </div>
               {status === 'done' && (
                 <div className="flex justify-end">
-                  <Button variant="outline" size="sm" onClick={handleClear}>
-                    Import Another File
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleClear}>Import Another File</Button>
                 </div>
               )}
             </Card>
@@ -828,47 +857,28 @@ export default function SmartImportPanel() {
                 <span className="text-sm font-medium">Parse failed — check file format</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1.5">
-                The file could not be parsed. Make sure it's a valid CSV with the expected headers.{' '}
-                <button
-                  onClick={() => downloadTemplate(config)}
-                  className="text-primary underline underline-offset-2"
-                >
+                Make sure it's a valid CSV with the expected headers.{' '}
+                <button onClick={() => downloadTemplate(config)} className="text-primary underline underline-offset-2">
                   Download a template
                 </button>{' '}
                 to see the exact format.
               </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={handleClear}>
-                Try again
-              </Button>
+              <Button variant="outline" size="sm" className="mt-3" onClick={handleClear}>Try again</Button>
             </Card>
           )}
 
-          {/* Empty state */}
+          {/* Empty / how-to */}
           {status === 'idle' && (
-            <Card className="p-4">
-              <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium text-foreground mb-0.5">How to use</p>
-                  <ol className="space-y-0.5 list-decimal list-inside">
-                    <li>Select an import type from the left panel.</li>
-                    <li>Pick the target plant.</li>
-                    <li>Upload or drag-in a CSV file matching the column reference above.</li>
-                    <li>Review the preview, then click Import.</li>
-                  </ol>
-                  <p className="mt-2">
-                    Need the exact column format?{' '}
-                    <button
-                      onClick={() => downloadTemplate(config)}
-                      className="text-primary underline underline-offset-2"
-                    >
-                      Download a CSV template
-                    </button>{' '}
-                    for <span className="font-medium">{config.label}</span>.
-                  </p>
-                </div>
-              </div>
-            </Card>
+            <div className="flex items-start gap-2 rounded-lg border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                Pick an import type, select a plant, then drop a CSV that matches the columns above.{' '}
+                <button onClick={() => downloadTemplate(config)} className="text-primary underline underline-offset-2">
+                  Download a template
+                </button>{' '}
+                for <span className="font-medium text-foreground">{config.label}</span>.
+              </span>
+            </div>
           )}
         </div>
       </div>
