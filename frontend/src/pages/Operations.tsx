@@ -1967,7 +1967,7 @@ function ProductMeterRow({
 
 function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: () => void }) {
   const qc = useQueryClient();
-  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(7);
+  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [appliedFrom, setAppliedFrom] = useState(customFrom);
@@ -2106,7 +2106,11 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : !rows?.length ? (
-            <p className="p-4 text-center text-muted-foreground">No readings in the last {days} days</p>
+            <p className="p-4 text-center text-muted-foreground">
+              {days === 'custom'
+                ? `No readings from ${appliedFrom} → ${appliedTo}`
+                : `No readings in the last ${days} days`}
+            </p>
           ) : (
             <table className="w-full text-left">
               <thead className="bg-muted sticky top-0">
@@ -2680,7 +2684,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(7);
+  const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   // appliedFrom/To only update when user clicks Apply — prevents mid-typing refetches
@@ -2985,7 +2989,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : !rows?.length ? (
-            <p className="p-4 text-center text-muted-foreground">No readings in the last {days} days</p>
+            <p className="p-4 text-center text-muted-foreground">
+              {days === 'custom'
+                ? `No readings from ${appliedFrom} → ${appliedTo}`
+                : `No readings in the last ${days} days`}
+            </p>
           ) : (
             <table className="w-full text-left">
               <thead className="bg-muted sticky top-0">
