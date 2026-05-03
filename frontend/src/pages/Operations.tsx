@@ -2334,11 +2334,6 @@ function PowerForm() {
   const [importOpen, setImportOpen]   = useState(false);
   // Multiplier: auto-populated from latest saved electric bill; editable by admin only when no bill exists
   const [multiplierInput, setMultiplierInput] = useState('');
-  // Meter count configuration (shown between plant selector and Import)
-  const [solarMeterCount, setSolarMeterCount] = useState(1);
-  const [gridMeterCount, setGridMeterCount]   = useState(1);
-  const [solarMeterNames, setSolarMeterNames] = useState(['Solar 1', 'Solar 2', 'Solar 3']);
-  const [gridMeterNames, setGridMeterNames]   = useState(['Grid 1', 'Grid 2', 'Grid 3']);
   // Per-meter reading inputs: indexed arrays (index 0 = meter 1, etc.)
   const [gridMeterReadings, setGridMeterReadings]   = useState<string[]>(['', '', '', '', '']);
   const [solarMeterReadings, setSolarMeterReadings] = useState<string[]>(['', '', '', '', '']);
@@ -2351,6 +2346,34 @@ function PowerForm() {
   const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const showSolar = !!plant?.has_solar;
   const showGrid  = plant?.has_grid !== false;
+
+  // Load meter config from plant_power_config (set in Plant → Power tab)
+  const { data: powerConfig } = useQuery({
+    queryKey: ['plant-power-config', plantId],
+    queryFn: async () => {
+      if (!plantId) return null;
+      try {
+        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
+          .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names')
+          .eq('plant_id', plantId).maybeSingle();
+        if (!error && data) return data as any;
+      } catch { /* table may not exist */ }
+      try {
+        const raw = localStorage.getItem(`power_config_${plantId}`);
+        if (raw) return JSON.parse(raw);
+      } catch { /* ignore */ }
+      return null;
+    },
+    enabled: !!plantId,
+  });
+
+  const solarMeterCount = (powerConfig?.solar_meter_count as number) ?? 1;
+  const gridMeterCount  = (powerConfig?.grid_meter_count  as number) ?? 1;
+  const solarMeterNames: string[] = powerConfig?.solar_meter_names ?? [];
+  const gridMeterNames:  string[] = powerConfig?.grid_meter_names  ?? [];
+
+  const getSolarLabel = (idx: number) => solarMeterNames[idx] ?? (solarMeterCount === 1 ? 'Solar Power Reading' : `Solar Meter ${idx + 1}`);
+  const getGridLabel  = (idx: number) => gridMeterNames[idx]  ?? (gridMeterCount  === 1 ? 'Grid Power Reading'  : `Grid Meter ${idx + 1}`);
 
   // Fetch latest electric bill to get the saved multiplier
   const { data: latestBill, isLoading: billLoading } = useQuery({
@@ -2527,87 +2550,11 @@ function PowerForm() {
             )}
           </div>
 
-          {/* ── Compact meter count config (shown when a plant is selected) ── */}
-          {plantId && showSolar && (
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 items-start">
-              {/* Solar meter count */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-yellow-500 text-xs">☀</span>
-                  <span className="text-[11px] font-medium text-muted-foreground">Solar meters</span>
-                  <div className="flex rounded border overflow-hidden text-[11px]">
-                    {[1,2,3].map(n => (
-                      <button key={n} onClick={() => setSolarMeterCount(n)}
-                        className={['px-2 py-0.5 transition-colors', solarMeterCount === n ? 'bg-yellow-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground'].join(' ')}>
-                        {n}
-                      </button>
-                    ))}
-                    {/* Custom count input */}
-                    <input
-                      type="number" min="1" max="20"
-                      value={solarMeterCount > 3 ? solarMeterCount : ''}
-                      onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setSolarMeterCount(v); }}
-                      placeholder="…"
-                      title="Custom count"
-                      className={[
-                        'w-10 px-1 py-0.5 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-yellow-400',
-                        solarMeterCount > 3 ? 'bg-yellow-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted',
-                      ].join(' ')}
-                    />
-                  </div>
-                </div>
-                {/* Solar meter name chips — manager/admin only */}
-                {solarMeterCount >= 2 && (isAdmin || isManager) && (
-                  <MeterNameList
-                    count={solarMeterCount}
-                    names={solarMeterNames}
-                    accentColor="yellow"
-                    defaultPrefix="Solar"
-                    onSave={names => setSolarMeterNames(names)}
-                    onRemoveLast={() => setSolarMeterCount(c => Math.max(1, c - 1))}
-                  />
-                )}
-              </div>
-
-              {/* Grid meter count */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="h-3 w-3 text-blue-500" />
-                  <span className="text-[11px] font-medium text-muted-foreground">Grid meters</span>
-                  <div className="flex rounded border overflow-hidden text-[11px]">
-                    {[1,2,3].map(n => (
-                      <button key={n} onClick={() => setGridMeterCount(n)}
-                        className={['px-2 py-0.5 transition-colors', gridMeterCount === n ? 'bg-blue-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground'].join(' ')}>
-                        {n}
-                      </button>
-                    ))}
-                    {/* Custom count input */}
-                    <input
-                      type="number" min="1" max="20"
-                      value={gridMeterCount > 3 ? gridMeterCount : ''}
-                      onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setGridMeterCount(v); }}
-                      placeholder="…"
-                      title="Custom count"
-                      className={[
-                        'w-10 px-1 py-0.5 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-blue-400',
-                        gridMeterCount > 3 ? 'bg-blue-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted',
-                      ].join(' ')}
-                    />
-                  </div>
-                </div>
-                {/* Grid meter name chips — manager/admin only */}
-                {gridMeterCount >= 2 && (isAdmin || isManager) && (
-                  <MeterNameList
-                    count={gridMeterCount}
-                    names={gridMeterNames}
-                    accentColor="blue"
-                    defaultPrefix="Grid"
-                    onSave={names => setGridMeterNames(names)}
-                    onRemoveLast={() => setGridMeterCount(c => Math.max(1, c - 1))}
-                  />
-                )}
-              </div>
-            </div>
+          {/* ── Meter config hint ── */}
+          {plantId && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Meter count &amp; names are configured in <strong>Plants → Power</strong>.
+            </p>
           )}
         </div>
 
@@ -2649,9 +2596,7 @@ function PowerForm() {
 
             {/* Solar meter rows — one per solarMeterCount */}
             {Array.from({ length: solarMeterCount }).map((_, idx) => {
-              const meterLabel = solarMeterCount === 1
-                ? 'Solar Power Reading'
-                : (solarMeterNames[idx] ?? `Solar Meter ${idx + 1}`);
+              const meterLabel = getSolarLabel(idx);
               const val = solarMeterReadings[idx] ?? '';
               const isFirst = idx === 0;
               // sync first solar meter to legacy solarReading for submit
@@ -2687,9 +2632,7 @@ function PowerForm() {
 
             {/* Grid meter rows — one per gridMeterCount */}
             {Array.from({ length: gridMeterCount }).map((_, idx) => {
-              const meterLabel = gridMeterCount === 1
-                ? 'Grid Power Reading'
-                : (gridMeterNames[idx] ?? `Grid Meter ${idx + 1}`);
+              const meterLabel = getGridLabel(idx);
               const val = gridMeterReadings[idx] ?? '';
               const isFirst = idx === 0;
               // sync first grid meter to legacy reading for submit
@@ -2779,9 +2722,7 @@ function PowerForm() {
 
             {/* Dynamic grid meter rows */}
             {Array.from({ length: gridMeterCount }).map((_, idx) => {
-              const meterLabel = gridMeterCount === 1
-                ? 'Meter Reading'
-                : (gridMeterNames[idx] ?? `Grid Meter ${idx + 1}`);
+              const meterLabel = getGridLabel(idx);
               const val = gridMeterReadings[idx] ?? '';
               const isFirst = idx === 0;
               const handleChange = (v: string) => {
