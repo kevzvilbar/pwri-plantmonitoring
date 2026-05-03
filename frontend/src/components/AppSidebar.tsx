@@ -56,9 +56,16 @@ const adminGroup: SidebarGroup = {
   label: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-    { to: '/employees', label: 'Employees', icon: Users },
     { to: '/exports', label: 'Data Exports', icon: Download },
     { to: '/import', label: 'Smart Import', icon: Upload },
+  ],
+};
+
+// Visible to every authenticated user (not just admins)
+const sharedGroup: SidebarGroup = {
+  label: 'Team',
+  items: [
+    { to: '/employees', label: 'Employees', icon: Users },
   ],
 };
 
@@ -68,7 +75,9 @@ export function AppSidebar() {
   const { pathname } = useLocation();
   const { isAdmin } = useAuth();
 
-  const visibleGroups = isAdmin ? [...groups, adminGroup] : groups;
+  const visibleGroups = isAdmin
+    ? [...groups, sharedGroup, adminGroup]
+    : [...groups, sharedGroup];
 
   return (
     <Sidebar collapsible="icon">
