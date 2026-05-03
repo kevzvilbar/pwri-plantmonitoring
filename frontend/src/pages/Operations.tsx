@@ -2928,6 +2928,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
     qc.invalidateQueries();
   };
+
+  const saveEdit = async () => {
     if (!editRow) return;
     setSaving(true);
     let error: any = null;
