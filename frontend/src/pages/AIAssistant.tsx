@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bot, Send, Plus, Trash2, Loader2, Sparkles, Activity, Droplet,
-  AlertTriangle, Calendar, RefreshCcw,
+  AlertTriangle, Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
@@ -26,8 +25,7 @@ import { DataState } from '@/components/DataState';
 // Types
 // ---------------------------------------------------------------------------
 
-type Msg = { role: 'user' | 'assistant'; content: string; created_at?: string };
-type SessionPreview = { session_id: string; updated_at: string; preview: string };
+type Msg = { role: 'user' | 'assistant'; content: string };
 
 type Anomaly = {
   well: string;
@@ -40,23 +38,100 @@ type Anomaly = {
   suggested_action: string;
 };
 
-const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+// ---------------------------------------------------------------------------
+// Anthropic API helpers
+// ---------------------------------------------------------------------------
 
-async function api<T>(path: string, init?: RequestInit & { userId?: string }): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(init?.headers as Record<string, string> ?? {}),
-  };
-  if (init?.userId) headers['x-user-id'] = init.userId;
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+
+const SYSTEM_PROMPT = `You are an AI assistant for PWRI Monitoring, a multi-plant water operations management system.
+You help operators, supervisors, and managers analyze water plant data including:
+- Well meter readings and daily volumes
+- RO train status and performance
+- Locator meter readings
+- Chemical usage and costs
+- Downtime events and maintenance records
+- NRW (Non-Revenue Water) analysis
+- Anomaly detection in consumption patterns
+
+Be concise, data-focused, and professional. When data is provided in the conversation, analyze it directly.
+If asked about specific data you don't have, explain what data would be needed and how to find it in the system.`;
+
+async function callClaude(messages: Msg[]): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 1000,
+      system: SYSTEM_PROMPT,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    }),
+  });
+
   if (!res.ok) {
-    const t = await res.text();
-    let msg = `HTTP ${res.status}`;
-    try { msg = JSON.parse(t).detail || msg; } catch { /* ignore */ }
-    throw new Error(msg);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
   }
-  return res.json();
+
+  const data = await res.json();
+  return data.content?.map((b: any) => b.text ?? '').join('') ?? '';
 }
+
+async function callClaudeForAnomalies(readings: any[]): Promise<{ anomalies: Anomaly[]; summary: string }> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 1000,
+      system: `You are a water operations anomaly detection expert. Analyze well meter readings and identify anomalies.
+Return ONLY valid JSON in this exact format, no markdown, no explanation outside the JSON:
+{
+  "summary": "Brief plain-text summary of findings",
+  "anomalies": [
+    {
+      "well": "well name",
+      "date": "YYYY-MM-DD",
+      "type": "spike|drop|zero_reading|off_location|negative_delta",
+      "severity": "low|medium|high",
+      "value": 123.4,
+      "baseline": 100.0,
+      "message": "Short description of the anomaly",
+      "suggested_action": "Recommended action"
+    }
+  ]
+}`,
+      messages: [{
+        role: 'user',
+        content: `Analyze these well meter readings for anomalies. Look for: sudden spikes or drops (>50% from baseline), zero readings, negative deltas, off-location flags.\n\nReadings:\n${JSON.stringify(readings, null, 2)}`,
+      }],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.content?.map((b: any) => b.text ?? '').join('') ?? '{}';
+
+  try {
+    const clean = text.replace(/```json|```/g, '').trim();
+    return JSON.parse(clean);
+  } catch {
+    return { summary: text, anomalies: [] };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Local session storage (in-memory per page load)
+// ---------------------------------------------------------------------------
+
+type Session = { id: string; messages: Msg[]; preview: string; updatedAt: string };
+
+function makeId() { return crypto.randomUUID(); }
 
 const SUGGESTIONS = [
   'List the top 3 abnormal consumption days this month across all plants.',
@@ -74,83 +149,73 @@ export default function AIAssistant() {
 
   const [tab, setTab] = useState<'chat' | 'anomalies'>('chat');
 
-  // --- Chat state ---------------------------------------------------------
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // --- Chat state -----------------------------------------------------------
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: sessions, refetch: refetchSessions } = useQuery<SessionPreview[]>({
-    queryKey: ['ai-sessions', user?.id],
-    queryFn: async () => {
-      try {
-        return await api<SessionPreview[]>('/api/ai/sessions', { userId: user?.id });
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 10_000,
-    retry: false,
-    meta: { silent: true },
-  });
-
-  const loadSession = useCallback(async (sid: string) => {
-    setSessionId(sid);
-    try {
-      const res = await api<{ session_id: string; messages: Msg[] }>(`/api/ai/sessions/${sid}`);
-      setMessages(res.messages ?? []);
-    } catch (e: any) {
-      const isOffline = /fetch|network|connect/i.test(e.message);
-      if (!isOffline) toast.error(`Failed to load session: ${e.message}`);
-    }
-  }, []);
-
   const newChat = useCallback(() => {
-    setSessionId(null);
+    setActiveSessionId(null);
     setMessages([]);
     setInput('');
   }, []);
+
+  const loadSession = useCallback((s: Session) => {
+    setActiveSessionId(s.id);
+    setMessages(s.messages);
+  }, []);
+
+  const deleteSession = useCallback((id: string) => {
+    setSessions(prev => prev.filter(s => s.id !== id));
+    if (activeSessionId === id) newChat();
+    toast.success('Conversation deleted');
+  }, [activeSessionId, newChat]);
 
   const sendMessage = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg) return;
     setInput('');
-    setMessages((m) => [...m, { role: 'user', content: msg }]);
+
+    const userMsg: Msg = { role: 'user', content: msg };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setSending(true);
+
     try {
-      const res = await api<{ session_id: string; reply: string; created_at: string }>(
-        '/api/ai/chat', {
-          method: 'POST',
-          body: JSON.stringify({ message: msg, session_id: sessionId }),
-          userId: user?.id,
-        },
-      );
-      setSessionId(res.session_id);
-      setMessages((m) => [...m, { role: 'assistant', content: res.reply, created_at: res.created_at }]);
-      refetchSessions();
+      const reply = await callClaude(nextMessages);
+      const assistantMsg: Msg = { role: 'assistant', content: reply };
+      const finalMessages = [...nextMessages, assistantMsg];
+      setMessages(finalMessages);
+
+      // Persist session in memory
+      const now = new Date().toISOString();
+      const preview = msg.slice(0, 60) + (msg.length > 60 ? '…' : '');
+
+      if (activeSessionId) {
+        setSessions(prev => prev.map(s =>
+          s.id === activeSessionId
+            ? { ...s, messages: finalMessages, preview, updatedAt: now }
+            : s
+        ));
+      } else {
+        const newId = makeId();
+        const newSession: Session = { id: newId, messages: finalMessages, preview, updatedAt: now };
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(newId);
+      }
     } catch (e: any) {
-      const isOffline = /fetch|network|connect/i.test(e.message);
-      const friendly = isOffline
-        ? 'The AI backend is not reachable. Please ensure the server is running.'
+      const friendly = e.message.includes('fetch') || e.message.includes('network')
+        ? 'Could not reach the AI. Check your connection.'
         : e.message;
-      setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${friendly}` }]);
-      if (!isOffline) toast.error(`AI error: ${friendly}`);
+      setMessages(m => [...m, { role: 'assistant', content: `⚠ ${friendly}` }]);
+      toast.error(`AI error: ${friendly}`);
     } finally {
       setSending(false);
     }
-  }, [input, sessionId, user?.id, refetchSessions]);
-
-  const deleteSession = useCallback(async (sid: string) => {
-    try {
-      await api(`/api/ai/sessions/${sid}`, { method: 'DELETE' });
-      if (sid === sessionId) newChat();
-      refetchSessions();
-      toast.success('Conversation deleted');
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  }, [sessionId, newChat, refetchSessions]);
+  }, [input, messages, activeSessionId]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -193,6 +258,7 @@ export default function AIAssistant() {
         .order('reading_datetime', { ascending: true })
         .limit(1500);
       if (scanWellId !== 'all') q = q.eq('well_id', scanWellId);
+
       const { data, error } = await q;
       if (error) throw error;
       if (!data || data.length === 0) {
@@ -200,7 +266,7 @@ export default function AIAssistant() {
         setScanResult({ anomalies: [], summary: 'No readings to analyze in the selected window.' });
         return;
       }
-      // Reshape for AI
+
       const readings = data.map((r: any) => ({
         well: r.wells?.name ?? r.well_id,
         date: (r.reading_datetime ?? '').slice(0, 10),
@@ -209,18 +275,12 @@ export default function AIAssistant() {
         volume: r.daily_volume,
         flags: r.off_location_flag ? ['off_location'] : [],
       }));
-      const res = await api<{ anomalies: Anomaly[]; summary: string }>(
-        '/api/ai/anomalies', { method: 'POST', body: JSON.stringify({ readings }) },
-      );
+
+      const res = await callClaudeForAnomalies(readings);
       setScanResult(res);
       toast.success(`Found ${res.anomalies.length} anomaly(ies)`);
     } catch (e: any) {
-      const isOffline = /fetch|network|connect/i.test(e.message);
-      if (isOffline) {
-        toast.error('AI backend is not reachable. Ensure the server is running.');
-      } else {
-        toast.error(`Scan failed: ${e.message}`);
-      }
+      toast.error(`Scan failed: ${e.message}`);
     } finally {
       setScanning(false);
     }
@@ -266,28 +326,26 @@ export default function AIAssistant() {
                 Recent
               </div>
               <div className="flex-1 overflow-auto -mx-1 space-y-1">
-                <DataState isEmpty={!sessions || sessions.length === 0}
+                <DataState
+                  isEmpty={sessions.length === 0}
                   emptyTitle="No conversations yet"
                   emptyDescription="Start asking questions below."
                 >
-                  {(sessions ?? []).map((s) => (
+                  {sessions.map((s) => (
                     <button
-                      key={s.session_id}
-                      onClick={() => loadSession(s.session_id)}
+                      key={s.id}
+                      onClick={() => loadSession(s)}
                       className={cn(
                         'w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-muted group flex items-start gap-1',
-                        sessionId === s.session_id && 'bg-muted',
+                        activeSessionId === s.id && 'bg-muted',
                       )}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="line-clamp-2">{s.preview || '(no messages)'}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {s.updated_at ? formatDistanceToNow(new Date(s.updated_at), { addSuffix: true }) : ''}
-                        </div>
                       </div>
                       <Trash2
                         className="h-3 w-3 opacity-0 group-hover:opacity-70 hover:opacity-100 shrink-0 mt-0.5"
-                        onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
+                        onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
                       />
                     </button>
                   ))}
@@ -310,8 +368,8 @@ export default function AIAssistant() {
                     <div className="mt-4 flex flex-wrap gap-2 justify-center max-w-lg">
                       {SUGGESTIONS.map((s) => (
                         <Button key={s} size="sm" variant="outline"
-                                className="text-[11px] h-auto py-1.5 whitespace-normal text-left"
-                                onClick={() => sendMessage(s)}>
+                          className="text-[11px] h-auto py-1.5 whitespace-normal text-left"
+                          onClick={() => sendMessage(s)}>
                           {s}
                         </Button>
                       ))}
@@ -320,7 +378,7 @@ export default function AIAssistant() {
                 ) : (
                   messages.map((m, i) => (
                     <div
-                      key={`${m.created_at ?? 'live'}-${i}-${m.role}`}
+                      key={i}
                       className={cn('flex gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}
                     >
                       {m.role === 'assistant' && (
@@ -440,9 +498,7 @@ export default function AIAssistant() {
                       <tbody>
                         {sortedAnomalies.map((a, i) => (
                           <tr key={`${a.well}-${a.date}-${a.type}-${i}`} className="border-t">
-                            <td className="px-2 py-1">
-                              <SeverityBadge sev={a.severity} />
-                            </td>
+                            <td className="px-2 py-1"><SeverityBadge sev={a.severity} /></td>
                             <td className="px-2 py-1"><span className="inline-flex items-center gap-1"><Droplet className="h-3 w-3 text-muted-foreground" />{a.well}</span></td>
                             <td className="px-2 py-1 font-mono-num"><span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3 text-muted-foreground" />{a.date}</span></td>
                             <td className="px-2 py-1">{a.type}</td>
