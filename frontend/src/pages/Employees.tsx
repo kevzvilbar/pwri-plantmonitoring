@@ -436,10 +436,12 @@ function OrgNode({ member, allStaff, roles, depth = 0 }: {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium leading-none truncate">{fullName(member)}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-            {member.designation ?? memberRole}
+            {member.designation ?? '—'}
           </div>
         </div>
-        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">{memberRole}</span>
+        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">
+          role: {memberRole}
+        </span>
         {hasChildren && (
           <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform', expanded && 'rotate-180')} />
         )}
