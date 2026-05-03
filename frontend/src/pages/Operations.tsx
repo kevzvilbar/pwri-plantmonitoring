@@ -3172,7 +3172,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   // rows sorted descending → rows[i+1] is the immediately preceding reading in time
                   const predecessor: any = rows[i + 1] ?? null;
 
-                  // Shared "Repl." toggle cell — rendered for well / locator / power
+                  const isGridRepl      = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
+                  const isSolarRepl     = !!(r.is_solar_replacement ?? false);
+                  const isTogglingGrid  = togglingGridId  === r.id;
+                  const isTogglingSolar = togglingSolarId === r.id;
+
+                  // Shared "Repl." toggle cell — rendered for well / locator
                   const replCell = (
                     <td className="px-2 py-1.5 text-center">
                       <button
@@ -3249,32 +3254,71 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       </>}
 
                       {module === 'power' && <>
-                        {/* Grid meter reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
-                          {fmtNum(r.meter_reading_kwh)}
-                        </td>
-                        {/* Δ Grid = current - previous meter_reading_kwh */}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
-                          }
-                        </td>
-                        {/* Solar meter reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
-                          {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
-                        </td>
-                        {/* Δ Solar = current - previous solar_meter_reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                              ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
-                              : '—'
-                          }
-                        </td>
-                        {replCell}
-                      </>}
+                          {/* Grid meter reading */}
+                          <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
+                            {fmtNum(r.meter_reading_kwh)}
+                          </td>
+                          {/* Δ Grid */}
+                          <td className="px-3 py-1.5 text-right font-mono-num">
+                            {isGridRepl
+                              ? <span className="text-orange-500 font-medium">0</span>
+                              : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
+                            }
+                          </td>
+                          {/* Grid Repl. toggle */}
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              title={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
+                              disabled={isDeleting || isTogglingGrid}
+                              onClick={() => toggleGridReplacement(r)}
+                              className={[
+                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                'disabled:opacity-40 disabled:cursor-not-allowed',
+                                isGridRepl
+                                  ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600'
+                                  : 'border-input bg-background hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20',
+                              ].join(' ')}
+                            >
+                              {isTogglingGrid
+                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                : isGridRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                              }
+                            </button>
+                          </td>
+                          {/* Solar meter reading */}
+                          <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
+                            {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                          </td>
+                          {/* Δ Solar */}
+                          <td className="px-3 py-1.5 text-right font-mono-num">
+                            {isSolarRepl
+                              ? <span className="text-orange-500 font-medium">0</span>
+                              : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                                ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
+                                : '—'
+                            }
+                          </td>
+                          {/* Solar Repl. toggle */}
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              title={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
+                              disabled={isDeleting || isTogglingSolar}
+                              onClick={() => toggleSolarReplacement(r)}
+                              className={[
+                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                'disabled:opacity-40 disabled:cursor-not-allowed',
+                                isSolarRepl
+                                  ? 'bg-yellow-500 border-yellow-500 text-white hover:bg-yellow-600'
+                                  : 'border-input bg-background hover:border-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20',
+                              ].join(' ')}
+                            >
+                              {isTogglingSolar
+                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                : isSolarRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                              }
+                            </button>
+                          </td>
+                        </>}
 
                       {canEditDelete && (
                         <td className="px-2 py-1 text-center">
