@@ -139,15 +139,22 @@ function ChatWindow({ peer, currentUserId, onClose }: {
   });
 
   useEffect(() => {
-    // Subscribe to both directions of this conversation so that:
-    //  - The receiver sees incoming messages from the peer in real-time.
-    //  - The sender's window also refreshes immediately after their own insert
-    //    (outgoing echo), keeping both sides in sync without waiting for polling.
+    // Listen for messages WHERE the current user is the recipient.
+    // Using filter: recipient_id=eq.<currentUserId> ensures only messages
+    // addressed to this user trigger the refetch (REPLICA IDENTITY FULL required).
     const channelName = `chat:${[currentUserId, peer.id].sort().join('-')}`;
     const ch = supabase
       .channel(channelName)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `recipient_id=eq.${currentUserId}` }, () => refetch())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `sender_id=eq.${currentUserId}` }, () => refetch())
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        () => refetch()
+      )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [currentUserId, peer.id, refetch]);
@@ -365,23 +372,28 @@ function StaffTile({ member, roles, isSelf, onChat, onDetail }: {
 function Staff() {
   const { data: plants } = usePlants();
   const { isAdmin, user } = useAuth();
+  const queryClient = useQueryClient();
 
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
-  // Touch updated_at so the current user appears "Active" while they are
-  // viewing this page. This is a lightweight presence heartbeat since we
-  // do not have a dedicated presence table.
-  // FIX: Immediately update on mount so the user shows as "Active" right away,
-  // then keep refreshing every 2 minutes (well within the 15-min "active" window).
+  // Heartbeat: write updated_at to DB AND patch the query cache immediately so
+  // the current user's presence dot shows "Active" without waiting for a refetch.
   useEffect(() => {
     if (!user) return;
-    const heartbeat = () =>
-      supabase.from('user_profiles').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
-    heartbeat(); // immediate on mount — fixes "offline" flash for the current user
-    const interval = setInterval(heartbeat, 2 * 60 * 1000); // every 2 min
+    const heartbeat = async () => {
+      const now = new Date().toISOString();
+      // 1. Persist to DB so other users see us as active on their next refetch.
+      await supabase.from('user_profiles').update({ updated_at: now }).eq('id', user.id);
+      // 2. Patch local cache immediately so OUR own dot flips to Active right away.
+      queryClient.setQueryData<StaffMember[]>(['staff'], (prev) =>
+        prev?.map((s) => s.id === user.id ? { ...s, updated_at: now } : s) ?? prev
+      );
+    };
+    heartbeat();
+    const interval = setInterval(heartbeat, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, queryClient]);
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
@@ -397,11 +409,9 @@ function Staff() {
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
-    // Refresh every 30 s so presence badges stay current for all staff.
-    // staleTime kept low (0) so the cached data is never served as "fresh"
-    // when the refetch interval fires — this ensures presence dots update promptly.
-    refetchInterval: 30_000,
-    staleTime: 0,
+    // FIX: Refresh every 60 s so presence badges stay current for all staff.
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
   // FIX: Subscribe to realtime updated_at changes so that when any user's
@@ -459,7 +469,7 @@ function Staff() {
         />
       )}
 
-      {chatPeer && user && chatPeer.id !== user.id && (
+      {chatPeer && user && (
         <ChatWindow peer={chatPeer} currentUserId={user.id} onClose={() => setChatPeer(null)} />
       )}
     </>
