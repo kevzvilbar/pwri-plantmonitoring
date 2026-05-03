@@ -75,9 +75,16 @@ const adminGroup = {
   title: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-    { to: '/employees', label: 'Employees', icon: Users },
     { to: '/exports', label: 'Data Exports', icon: Download },
     { to: '/import', label: 'Smart Import', icon: Upload },
+  ],
+};
+
+// Always visible (all roles)
+const teamGroup = {
+  title: 'Team',
+  items: [
+    { to: '/employees', label: 'Employees', icon: Users },
   ],
 };
 
@@ -86,7 +93,9 @@ export function BottomNav() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const fullPath = pathname + search;
-  const visibleGroups = isAdmin ? [...sideSheetGroups, adminGroup] : sideSheetGroups;
+  const visibleGroups = isAdmin
+    ? [...sideSheetGroups, teamGroup, adminGroup]
+    : [...sideSheetGroups, teamGroup];
 
   const isPriorityActive = (item: Priority) => {
     const target = item.to.split('?')[0];
