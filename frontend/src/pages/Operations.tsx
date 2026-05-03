@@ -59,18 +59,23 @@ async function logReadingImport(entry: {
 }
 
 // ─── Duplicate check helper for CSV imports ──────────────────────────────────
-// Returns: 'insert' | 'overwrite' | 'skip'
-// Uses a module-level cache per import session so we only ask once per conflict.
+// Uses a per-import-session cache so we only ask once per unique key.
+// The actual prompt is driven by React state (see ImportReadingsDialog) via a
+// Promise resolver — avoids window.confirm which is blocked in iframes.
 const _dupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
 function clearDupDecisions() { _dupDecisions.clear(); }
 
+// Set by ImportReadingsDialog before each import run; resolved by the in-dialog confirm UI.
+let _dupPromptResolver: ((decision: 'overwrite' | 'skip') => void) | null = null;
+let _dupShowPrompt: ((label: string, isDateOnly: boolean) => void) | null = null;
+
 async function resolveImportDuplicate(key: string, label: string, isDateOnly = false): Promise<'overwrite' | 'skip'> {
   if (_dupDecisions.has(key)) return _dupDecisions.get(key)!;
-  const timeDesc = isDateOnly ? 'on this date' : 'at this date & time';
-  const overwrite = window.confirm(
-    `Duplicate detected: a reading for "${label}" already exists ${timeDesc}.\n\nClick OK to overwrite it, or Cancel to skip this row.`
-  );
-  const decision: 'overwrite' | 'skip' = overwrite ? 'overwrite' : 'skip';
+  // Ask via the React dialog (not window.confirm)
+  const decision = await new Promise<'overwrite' | 'skip'>((resolve) => {
+    _dupPromptResolver = resolve;
+    _dupShowPrompt?.(label, isDateOnly);
+  });
   _dupDecisions.set(key, decision);
   return decision;
 }
@@ -105,9 +110,24 @@ function ImportReadingsDialog({
   const [busy, setBusy]     = useState(false);
   const [done, setDone]     = useState(false);
   const [imported, setImported] = useState(0);
-  // Duplicate handling: rows that match existing records
+  // Intra-file duplicate handling
   const [dupRows, setDupRows] = useState<Record<string, string>[]>([]);
   const [dupResolved, setDupResolved] = useState(false);
+  // DB-level duplicate confirmation (replaces window.confirm)
+  const [dupConfirm, setDupConfirm] = useState<{ label: string; isDateOnly: boolean } | null>(null);
+
+  // Wire up the module-level resolver hooks so resolveImportDuplicate() can
+  // pause and ask the user via React state instead of window.confirm.
+  useEffect(() => {
+    _dupShowPrompt = (label, isDateOnly) => setDupConfirm({ label, isDateOnly });
+    return () => { _dupShowPrompt = null; _dupPromptResolver = null; };
+  }, []);
+
+  const handleDupDecision = (decision: 'overwrite' | 'skip') => {
+    setDupConfirm(null);
+    _dupPromptResolver?.(decision);
+    _dupPromptResolver = null;
+  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -153,13 +173,8 @@ function ImportReadingsDialog({
 
     // If intra-file duplicates exist, warn and block
     if (intraDups.length > 0 && !dupResolved) {
-      const dupDesc = isPowerModule
-        ? `${intraDups.length} row(s) in the file share the same calendar date as another row.\n\nOnly one reading per day is allowed — only the first occurrence of each date will be imported. Continue?`
-        : `${intraDups.length} row(s) in the file share the same date & time as another row.\n\nOnly the first occurrence of each duplicate will be imported. Continue?`;
-      const proceed = window.confirm(dupDesc);
-      if (!proceed) { setBusy(false); return; }
-      // Keep only first occurrence of each key
-      const uniqueRows = rows.filter((r, i) => !intraDups.includes(i));
+      // Keep only first occurrence of each key, then let user confirm by clicking Import again
+      const uniqueRows = rows.filter((_r, i) => !intraDups.includes(i));
       setRows(uniqueRows);
       setDupResolved(true);
       setBusy(false);
@@ -318,10 +333,50 @@ function ImportReadingsDialog({
               {imported} record(s) imported. Audit log written.
             </p>
           )}
+
+          {/* Intra-file duplicate notice (shown after dedup, before re-import) */}
+          {dupResolved && !done && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Duplicate rows within the file were removed — only the first occurrence of each date is kept. Click <strong>Import Rows</strong> to proceed.</span>
+            </div>
+          )}
+
+          {/* DB-level duplicate confirmation (replaces window.confirm) */}
+          {dupConfirm && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Duplicate detected
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                A reading for <strong>"{dupConfirm.label}"</strong> already exists{' '}
+                {dupConfirm.isDateOnly ? 'on this date' : 'at this date & time'}.
+                Overwrite it, or skip this row?
+              </p>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs"
+                  onClick={() => handleDupDecision('overwrite')}
+                >
+                  Overwrite
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => handleDupDecision('skip')}
+                >
+                  Skip
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
           <Button
             onClick={doImport}
             disabled={!canSubmit}
