@@ -158,13 +158,6 @@ export function OperatorSwitcher() {
     }
   };
 
-  const clearOverride = () => {
-    setActiveOperatorId(null);
-    setPendingId(null);
-    setOpen(false);
-    toast.success('Switched back to your own profile');
-  };
-
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -189,23 +182,16 @@ export function OperatorSwitcher() {
 
         {/* Header */}
         <div className="px-3 py-2">
-          {isOverride ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <UserCheck className="h-3 w-3 text-amber-500 shrink-0" />
-                <span className="font-semibold text-xs truncate">{fullName(activeOperator)}</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">Active · {activeOperator?.designation}</p>
-              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">Logged in as {fullName(profile)}</p>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5">
-                <UserCog className="h-3 w-3 text-muted-foreground shrink-0" />
-                <span className="font-semibold text-xs truncate">{fullName(profile)}</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground pl-4 leading-tight">{profile?.designation ?? 'No designation'}</p>
-            </>
+          <div className="flex items-center gap-1.5">
+            {isOverride
+              ? <UserCheck className="h-3 w-3 text-amber-500 shrink-0" />
+              : <UserCog className="h-3 w-3 text-muted-foreground shrink-0" />
+            }
+            <span className="font-semibold text-xs truncate">{fullName(activeOperator)}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground pl-4 leading-tight">{activeOperator?.designation ?? 'Operator'}</p>
+          {isOverride && (
+            <p className="text-[10px] text-muted-foreground pl-4 leading-tight truncate">Logged in as {user?.email}</p>
           )}
         </div>
 
@@ -260,11 +246,6 @@ export function OperatorSwitcher() {
         )}
 
         {/* Actions */}
-        {isOverride && (
-          <DropdownMenuItem onClick={clearOverride} className="text-amber-600 gap-2 text-xs py-1.5">
-            <UserCog className="h-3.5 w-3.5" /> Back to my profile
-          </DropdownMenuItem>
-        )}
         <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-2 text-xs py-1.5">
           <UserCog className="h-3.5 w-3.5" /> My profile
         </DropdownMenuItem>
