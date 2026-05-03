@@ -448,7 +448,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
       )}
 
       <BackwashModeCard plant={plant} />
-      <PlantComponentTypeCard plant={plant} />
 
       <div className="grid grid-cols-5 gap-1 p-1 bg-muted rounded-lg w-full">
         {(['locators', 'wells', 'product', 'trains', 'power'] as const).map((t) => (
@@ -470,7 +469,10 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} /></div>
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
-      <div className={tab === 'trains'   ? undefined : 'hidden'}><TrainsList plantId={plantId} /></div>
+      <div className={tab === 'trains'   ? undefined : 'hidden'}>
+        <PlantComponentTypeCard plant={plant} />
+        <TrainsList plantId={plantId} />
+      </div>
       <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
     </div>
   );
