@@ -2701,13 +2701,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
-  // appliedFrom/To only update when user clicks Apply — prevents mid-typing refetches
   const [appliedFrom, setAppliedFrom] = useState(customFrom);
   const [appliedTo, setAppliedTo]     = useState(customTo);
   const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [togglingGridId, setTogglingGridId] = useState<string | null>(null);
+  const [togglingSolarId, setTogglingSolarId] = useState<string | null>(null);
 
   // Helper: parse a YYYY-MM-DD string as LOCAL midnight (avoids UTC timezone shift)
   const localMidnight = (dateStr: string) => {
@@ -2807,7 +2810,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     }
   };
 
-  // One-click toggle — saves is_meter_replacement without opening the edit panel
+  // One-click toggle for shared (non-power) meter replacement
   const toggleMeterReplacement = async (r: any) => {
     setTogglingId(r.id);
     const next = !r.is_meter_replacement;
@@ -2816,15 +2819,97 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       ({ error } = await (supabase.from('well_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
     else if (module === 'locator')
       ({ error } = await (supabase.from('locator_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-    else if (module === 'power')
-      ({ error } = await (supabase.from('power_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
     setTogglingId(null);
     if (error) { toast.error(error.message); return; }
     toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
     qc.invalidateQueries({ queryKey });
   };
 
-  const saveEdit = async () => {
+  // Power-specific: toggle grid meter replacement
+  const toggleGridReplacement = async (r: any) => {
+    setTogglingGridId(r.id);
+    const next = !r.is_grid_replacement;
+    const { error } = await (supabase.from('power_readings') as any)
+      .update({ is_grid_replacement: next }).eq('id', r.id);
+    setTogglingGridId(null);
+    if (error) {
+      // Column may not exist yet — fall back to shared flag
+      const { error: e2 } = await (supabase.from('power_readings') as any)
+        .update({ is_meter_replacement: next }).eq('id', r.id);
+      if (e2) { toast.error(e2.message); return; }
+    }
+    toast.success(next ? 'Grid replacement marked — Δ zeroed' : 'Grid replacement flag removed');
+    qc.invalidateQueries({ queryKey });
+  };
+
+  // Power-specific: toggle solar meter replacement
+  const toggleSolarReplacement = async (r: any) => {
+    setTogglingSolarId(r.id);
+    const next = !r.is_solar_replacement;
+    const { error } = await (supabase.from('power_readings') as any)
+      .update({ is_solar_replacement: next }).eq('id', r.id);
+    setTogglingSolarId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success(next ? 'Solar replacement marked — Δ zeroed' : 'Solar replacement flag removed');
+    qc.invalidateQueries({ queryKey });
+  };
+
+  // Row selection helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (!rows?.length) return;
+    setSelectedIds(prev =>
+      prev.size === rows.length ? new Set() : new Set(rows.map((r: any) => r.id))
+    );
+  };
+
+  // Bulk delete
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} reading(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    const ids = [...selectedIds];
+    let error: any = null;
+    if (module === 'well')
+      ({ error } = await supabase.from('well_readings').delete().in('id', ids));
+    else if (module === 'locator')
+      ({ error } = await supabase.from('locator_readings').delete().in('id', ids));
+    else if (module === 'power')
+      ({ error } = await supabase.from('power_readings').delete().in('id', ids));
+    else if (module === 'blending')
+      ({ error } = await supabase.from('blending_events').delete().in('id', ids));
+    setBulkDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${ids.length} reading(s) deleted`);
+    setSelectedIds(new Set());
+    qc.invalidateQueries({ queryKey });
+    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
+    qc.invalidateQueries();
+  };
+
+  const deleteRow = async (id: string) => {
+    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
+    setDeletingId(id);
+    let error: any = null;
+    if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
+    else if (module === 'locator') ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
+    else if (module === 'power') ({ error } = await supabase.from('power_readings').delete().eq('id', id));
+    setDeletingId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Reading deleted');
+    setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    qc.invalidateQueries({ queryKey });
+    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
+    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
+    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
+    qc.invalidateQueries();
+  };
     if (!editRow) return;
     setSaving(true);
     let error: any = null;
@@ -2864,26 +2949,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     qc.invalidateQueries();
   };
 
-  const deleteRow = async (id: string) => {
-    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
-    setDeletingId(id);
-    let error: any = null;
-    if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
-    else if (module === 'locator') ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
-    else if (module === 'power') ({ error } = await supabase.from('power_readings').delete().eq('id', id));
-    setDeletingId(null);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Reading deleted');
-    qc.invalidateQueries({ queryKey });
-    // Also invalidate the parent form queries so "Last 7 readings" refreshes
-    if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
-    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
-    qc.invalidateQueries();
-  };
-
   const title = module === 'power' ? `Power — ${entityName}` : `${entityName} — History`;
-  const canEditDelete = module !== 'blending';
+  const canEditDelete = true; // all modules support checkbox selection + bulk delete
+  const canInlineEdit = module !== 'blending'; // blending rows have no inline edit/single-delete
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -3000,6 +3068,29 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           </div>
         )}
 
+        {/* Bulk delete toolbar — shown when rows are selected */}
+        {canEditDelete && selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <span className="text-xs font-medium text-destructive flex-1">
+              {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 px-3 text-xs gap-1.5"
+              onClick={bulkDelete}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+              Delete selected
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+              onClick={() => setSelectedIds(new Set())}>
+              Clear
+            </Button>
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-auto max-h-72 rounded border text-xs">
           {isLoading ? (
@@ -3016,6 +3107,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
             <table className="w-full text-left">
               <thead className="bg-muted sticky top-0">
                 <tr>
+                  {canEditDelete && (
+                    <th className="px-2 py-2 w-8">
+                      <input type="checkbox"
+                        className="h-3.5 w-3.5 accent-teal-700 cursor-pointer"
+                        checked={!!rows?.length && selectedIds.size === rows.length}
+                        onChange={toggleSelectAll}
+                        title="Select all"
+                      />
+                    </th>
+                  )}
                   <th className="px-3 py-2 font-medium">Date & Time</th>
                   {module === 'locator' && <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
@@ -3035,11 +3136,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   {module === 'power' && <>
                     <th className="px-3 py-2 font-medium text-right">Grid Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Grid (kWh)</th>
+                    <th className="px-2 py-2 font-medium text-center text-blue-600" title="Mark as grid meter replacement — zeroes Δ Grid">Grid Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Solar Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Solar (kWh)</th>
-                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
+                    <th className="px-2 py-2 font-medium text-center text-yellow-600" title="Mark as solar meter replacement — zeroes Δ Solar">Solar Repl.</th>
                   </>}
-                  {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
+                  {canInlineEdit && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -3129,35 +3231,80 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.volume_m3 ?? 0)}</td>
                       </>}
 
-                      {module === 'power' && <>
-                        {/* Grid meter reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
-                          {fmtNum(r.meter_reading_kwh)}
-                        </td>
-                        {/* Δ Grid = current - previous meter_reading_kwh */}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
-                          }
-                        </td>
-                        {/* Solar meter reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
-                          {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
-                        </td>
-                        {/* Δ Solar = current - previous solar_meter_reading */}
-                        <td className="px-3 py-1.5 text-right font-mono-num">
-                          {isMeterReplacement
-                            ? <span className="text-orange-500 font-medium">0</span>
-                            : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                              ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
-                              : '—'
-                          }
-                        </td>
-                        {replCell}
-                      </>}
+                      {module === 'power' && (() => {
+                        const isGridRepl  = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
+                        const isSolarRepl = !!(r.is_solar_replacement ?? false);
+                        const isTogglingGrid  = togglingGridId  === r.id;
+                        const isTogglingSolar = togglingSolarId === r.id;
+                        return <>
+                          {/* Grid meter reading */}
+                          <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
+                            {fmtNum(r.meter_reading_kwh)}
+                          </td>
+                          {/* Δ Grid */}
+                          <td className="px-3 py-1.5 text-right font-mono-num">
+                            {isGridRepl
+                              ? <span className="text-orange-500 font-medium">0</span>
+                              : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
+                            }
+                          </td>
+                          {/* Grid Repl. toggle */}
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              title={isGridRepl ? 'Grid replacement — click to unmark' : 'Mark grid meter replacement (zeroes Δ Grid)'}
+                              disabled={isDeleting || isTogglingGrid}
+                              onClick={() => toggleGridReplacement(r)}
+                              className={[
+                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                'disabled:opacity-40 disabled:cursor-not-allowed',
+                                isGridRepl
+                                  ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600'
+                                  : 'border-input bg-background hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20',
+                              ].join(' ')}
+                            >
+                              {isTogglingGrid
+                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                : isGridRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                              }
+                            </button>
+                          </td>
+                          {/* Solar meter reading */}
+                          <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
+                            {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                          </td>
+                          {/* Δ Solar */}
+                          <td className="px-3 py-1.5 text-right font-mono-num">
+                            {isSolarRepl
+                              ? <span className="text-orange-500 font-medium">0</span>
+                              : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                                ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
+                                : '—'
+                            }
+                          </td>
+                          {/* Solar Repl. toggle */}
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              title={isSolarRepl ? 'Solar replacement — click to unmark' : 'Mark solar meter replacement (zeroes Δ Solar)'}
+                              disabled={isDeleting || isTogglingSolar}
+                              onClick={() => toggleSolarReplacement(r)}
+                              className={[
+                                'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                                'disabled:opacity-40 disabled:cursor-not-allowed',
+                                isSolarRepl
+                                  ? 'bg-yellow-500 border-yellow-500 text-white hover:bg-yellow-600'
+                                  : 'border-input bg-background hover:border-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20',
+                              ].join(' ')}
+                            >
+                              {isTogglingSolar
+                                ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                : isSolarRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                              }
+                            </button>
+                          </td>
+                        </>;
+                      })()}
 
-                      {canEditDelete && (
+                      {canInlineEdit && (
                         <td className="px-2 py-1 text-center">
                           <div className="flex items-center justify-center gap-0.5">
                             <button
