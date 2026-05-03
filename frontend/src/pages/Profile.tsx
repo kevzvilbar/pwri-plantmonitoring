@@ -18,9 +18,13 @@ import { toast } from '@/components/ui/sonner';
 import { Loader2, Pencil, ShieldCheck, Building2, MapPin } from 'lucide-react';
 
 export default function Profile() {
-  const { user, profile, roles, refreshProfile, loading } = useAuth();
+  const { user, profile, activeOperator, roles, refreshProfile, loading } = useAuth();
   const { data: plants } = usePlants();
-  const { selectedPlantId, setSelectedPlantId } = useAppStore();
+  const { selectedPlantId, setSelectedPlantId, activeOperatorId } = useAppStore();
+
+  // When an operator is switched, show their profile; otherwise show own
+  const isOverride = !!activeOperatorId && activeOperatorId !== user?.id;
+  const displayProfile = isOverride ? activeOperator : profile;
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,17 +34,19 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    if (profile) {
+    if (displayProfile) {
       setForm({
-        first_name: profile.first_name ?? '',
-        middle_name: profile.middle_name ?? '',
-        last_name: profile.last_name ?? '',
-        suffix: profile.suffix ?? '',
-        username: profile.username ?? '',
-        designation: profile.designation ?? '',
+        first_name: displayProfile.first_name ?? '',
+        middle_name: displayProfile.middle_name ?? '',
+        last_name: displayProfile.last_name ?? '',
+        suffix: displayProfile.suffix ?? '',
+        username: displayProfile.username ?? '',
+        designation: displayProfile.designation ?? '',
       });
     }
-  }, [profile]);
+    // Exit edit mode whenever active operator changes
+    setEditing(false);
+  }, [displayProfile?.id]);
 
   // Preload designation hints from all known profiles for better suggestions
   const { data: existingDesignations } = useQuery({
@@ -55,8 +61,8 @@ export default function Profile() {
 
   const assignedPlants = useMemo(() => {
     if (!plants || !profile) return [];
-    return plants.filter((p) => profile.plant_assignments?.includes(p.id));
-  }, [plants, profile]);
+    return plants.filter((p) => displayProfile?.plant_assignments?.includes(p.id));
+  }, [plants, displayProfile]);
 
   const save = async () => {
     setSaving(true);
@@ -91,14 +97,15 @@ export default function Profile() {
 
   const access = accessLevelFromRoles(roles);
   const displayName = [
-    profile.first_name, profile.middle_name, profile.last_name, profile.suffix,
+    displayProfile?.first_name, displayProfile?.middle_name,
+    displayProfile?.last_name, displayProfile?.suffix,
   ].filter(Boolean).join(' ') || '—';
 
   return (
     <div className="space-y-3 animate-fade-in" data-testid="profile-page">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">My profile</h1>
-        {!editing && (
+        <h1 className="text-xl font-semibold tracking-tight">{isOverride ? `${displayProfile?.first_name ?? ''} ${displayProfile?.last_name ?? ''} — Profile`.trim() : 'My profile'}</h1>
+        {!editing && !isOverride && (
           <Button
             size="sm"
             variant="outline"
@@ -221,10 +228,10 @@ export default function Profile() {
         ) : (
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
             <Meta label="Name" value={displayName} />
-            <Meta label="Username" value={profile.username ? `@${profile.username}` : '—'} />
-            <Meta label="Designation" value={profile.designation ?? '—'} />
+            <Meta label="Username" value={displayProfile?.username ? `@${displayProfile.username}` : '—'} />
+            <Meta label="Designation" value={displayProfile?.designation ?? '—'} />
             <Meta label="Email" value={user.email ?? '—'} />
-            <Meta label="Status" value={profile.status} />
+            <Meta label="Status" value={displayProfile?.status ?? '—'} />
           </div>
         )}
         {editing && (
