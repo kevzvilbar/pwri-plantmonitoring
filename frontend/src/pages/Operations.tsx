@@ -1876,7 +1876,7 @@ function ProductMeterRow({
 
   return (
     <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
-      {/* Row 1: Name + rename + date on same row */}
+      {/* Row 1: Name + rename */}
       <div className="min-w-0">
         {editingName ? (
           <div className="flex items-center gap-1.5">
@@ -1895,7 +1895,7 @@ function ProductMeterRow({
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5">
             <div className="text-sm font-medium truncate flex items-center gap-1.5">
               <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
               {meter.name}
@@ -1910,12 +1910,6 @@ function ProductMeterRow({
                 <Pencil className="h-3 w-3" />
               </Button>
             )}
-            <Input
-              type="datetime-local" value={customDt}
-              onChange={e => setCustomDt(e.target.value)}
-              className="shrink-0 w-44 text-xs h-7 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 ml-auto"
-              title="Reading date & time"
-            />
           </div>
         )}
         <div className="text-xs text-muted-foreground mt-0.5">
@@ -1930,8 +1924,14 @@ function ProductMeterRow({
         </div>
       </div>
 
-      {/* Row 2: reading input + save + history */}
+      {/* Row 2: reading input + save + history | date inline on right */}
       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <Input
+          type="datetime-local" value={customDt}
+          onChange={e => setCustomDt(e.target.value)}
+          className="shrink-0 w-44 text-xs h-9 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+          title="Reading date & time"
+        />
         <div className="relative flex-1 min-w-0">
           <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
           <Input
@@ -2442,41 +2442,58 @@ function PowerForm() {
   // Effective daily kWh = Δ reading × multiplier
   const dailyEffective = daily != null ? daily * effectiveMultiplier : null;
 
-  const submit = async () => {
-    if (!plantId || !reading) return;
-    if (!editingId) {
+  // Per-meter saving state
+  const [savingMeter, setSavingMeter] = useState<string | null>(null);
+
+  // Save a single meter reading independently
+  const submitMeter = async (kind: 'solar' | 'grid', idx: number) => {
+    if (!plantId) return;
+    const meterKey = `${kind}-${idx}`;
+    const val = kind === 'solar' ? (solarMeterReadings[idx] ?? '') : (gridMeterReadings[idx] ?? '');
+    if (!val) { toast.error(`Enter a reading for ${kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx)}`); return; }
+
+    setSavingMeter(meterKey);
+
+    // Duplicate check (day-level) — only for the first/primary grid meter
+    if (kind === 'grid' && idx === 0 && !editingId) {
       const dup = await findExistingReading({
         table: 'power_readings', entityCol: 'plant_id', entityId: plantId,
         datetime: new Date(dt), windowKind: 'day',
       });
       if (dup) {
-        if (!confirm('A power reading already exists for this plant today. Edit it instead?')) return;
+        if (!confirm('A power reading already exists for this plant today. Edit it instead?')) {
+          setSavingMeter(null); return;
+        }
         setEditingId(dup);
       }
     }
 
-    // When showSolar: reading = grid meter, solarReading = solar meter
-    // Daily solar   = Δ solar meter (no multiplier — solar inverter already gives kWh)
-    // Daily grid    = Δ grid meter × CT multiplier
-    const computedDailyGrid  = showSolar && deltaGrid  != null ? deltaGrid * effectiveMultiplier : null;
-    const computedDailySolar = showSolar && deltaSolar != null ? deltaSolar : null;
+    // Compute deltas for the primary meter only
+    const computedDailyGrid  = kind === 'grid'  && idx === 0 && showSolar && deltaGrid  != null ? deltaGrid  * effectiveMultiplier : null;
+    const computedDailySolar = kind === 'solar' && idx === 0 && showSolar && deltaSolar != null ? deltaSolar : null;
 
     const payload: any = {
       plant_id: plantId,
       reading_datetime: new Date(dt).toISOString(),
-      meter_reading_kwh: +reading,
       recorded_by: user?.id,
     };
-    if (showSolar && solarReading) payload.solar_meter_reading = +solarReading;
-    if (showSolar && computedDailyGrid  != null) payload.daily_grid_kwh  = computedDailyGrid;
-    if (showSolar && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
+
+    if (kind === 'grid') {
+      payload.meter_reading_kwh = +val;
+      if (idx === 0 && computedDailyGrid != null) payload.daily_grid_kwh = computedDailyGrid;
+    }
+    if (kind === 'solar') {
+      // Solar readings stored in solar_meter_reading; need a placeholder meter_reading_kwh if inserting fresh
+      payload.meter_reading_kwh = +(gridMeterReadings[0] || '0');
+      payload.solar_meter_reading = +val;
+      if (idx === 0 && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
+    }
 
     const runQuery = () => editingId
       ? supabase.from('power_readings').update(payload).eq('id', editingId)
       : supabase.from('power_readings').insert(payload);
 
     let { error } = await runQuery();
-    // If optional columns don't exist in DB yet, strip and retry
     if (error && (
       error.message.includes('daily_solar_kwh') ||
       error.message.includes('daily_grid_kwh') ||
@@ -2487,6 +2504,52 @@ function PowerForm() {
       delete payload.daily_grid_kwh;
       delete payload.solar_meter_reading;
       delete payload.multiplier;
+      ({ error } = await runQuery());
+    }
+
+    setSavingMeter(null);
+    if (error) { toast.error(error.message); return; }
+
+    const label = kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx);
+    toast.success(`${label}: reading saved`);
+
+    // Clear only the saved meter's input
+    if (kind === 'grid') {
+      setGridMeterReadings(prev => { const next = [...prev]; next[idx] = ''; return next; });
+      if (idx === 0) setReading('');
+    } else {
+      setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = ''; return next; });
+      if (idx === 0) setSolarReading('');
+    }
+    qc.invalidateQueries();
+  };
+
+  // Keep legacy submit for cancel/edit flows
+  const submit = async () => {
+    if (!plantId || !reading) return;
+    const computedDailyGrid  = showSolar && deltaGrid  != null ? deltaGrid * effectiveMultiplier : null;
+    const computedDailySolar = showSolar && deltaSolar != null ? deltaSolar : null;
+    const payload: any = {
+      plant_id: plantId,
+      reading_datetime: new Date(dt).toISOString(),
+      meter_reading_kwh: +reading,
+      recorded_by: user?.id,
+    };
+    if (showSolar && solarReading) payload.solar_meter_reading = +solarReading;
+    if (showSolar && computedDailyGrid  != null) payload.daily_grid_kwh  = computedDailyGrid;
+    if (showSolar && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
+    const runQuery = () => editingId
+      ? supabase.from('power_readings').update(payload).eq('id', editingId)
+      : supabase.from('power_readings').insert(payload);
+    let { error } = await runQuery();
+    if (error && (
+      error.message.includes('daily_solar_kwh') ||
+      error.message.includes('daily_grid_kwh') ||
+      error.message.includes('solar_meter_reading') ||
+      error.message.includes('multiplier')
+    )) {
+      delete payload.daily_solar_kwh; delete payload.daily_grid_kwh;
+      delete payload.solar_meter_reading; delete payload.multiplier;
       ({ error } = await runQuery());
     }
     if (error) { toast.error(error.message); return; }
@@ -2612,6 +2675,8 @@ function PowerForm() {
                     setSolarMeterReading(idx, v);
                     if (isFirst) setSolarReading(v);
                   };
+                  const meterKey = `solar-${idx}`;
+                  const isSavingThis = savingMeter === meterKey;
                   return (
                     <div key={`solar-${idx}`}>
                       <Label className="flex items-center gap-1 text-xs">
@@ -2619,11 +2684,22 @@ function PowerForm() {
                         {meterLabel}
                         {isFirst && editingId && <span className="text-[10px] text-amber-600 ml-1">(editing)</span>}
                       </Label>
-                      <Input type="number" step="any" value={val}
-                        onChange={e => handleChange(e.target.value)}
-                        placeholder="Solar reading"
-                        className="border-yellow-300 focus-visible:ring-yellow-300"
-                        data-testid={`power-solar-input-${idx}`} />
+                      <div className="flex items-center gap-2">
+                        <Input type="number" step="any" value={val}
+                          onChange={e => handleChange(e.target.value)}
+                          placeholder="Solar reading"
+                          className="border-yellow-300 focus-visible:ring-yellow-300"
+                          data-testid={`power-solar-input-${idx}`} />
+                        <Button
+                          size="sm"
+                          disabled={isSavingThis || !val}
+                          onClick={() => submitMeter('solar', idx)}
+                          className="shrink-0 h-9 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+                          data-testid={`power-solar-save-${idx}`}
+                        >
+                          {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                        </Button>
+                      </div>
                       {isFirst && prevSolar != null && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
@@ -2664,17 +2740,30 @@ function PowerForm() {
                     setGridMeterReading(idx, v);
                     if (isFirst) setReading(v);
                   };
+                  const meterKey = `grid-${idx}`;
+                  const isSavingThis = savingMeter === meterKey;
                   return (
                     <div key={`grid-${idx}`}>
                       <Label className="flex items-center gap-1 text-xs">
                         <Zap className="h-2.5 w-2.5 text-blue-400" />
                         {meterLabel}
                       </Label>
-                      <Input type="number" step="any" value={val}
-                        onChange={e => handleChange(e.target.value)}
-                        placeholder="Grid reading"
-                        className="border-blue-300 focus-visible:ring-blue-300"
-                        data-testid={`power-meter-input-${idx}`} />
+                      <div className="flex items-center gap-2">
+                        <Input type="number" step="any" value={val}
+                          onChange={e => handleChange(e.target.value)}
+                          placeholder="Grid reading"
+                          className="border-blue-300 focus-visible:ring-blue-300"
+                          data-testid={`power-meter-input-${idx}`} />
+                        <Button
+                          size="sm"
+                          disabled={isSavingThis || !val}
+                          onClick={() => submitMeter('grid', idx)}
+                          className="shrink-0 h-9 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+                          data-testid={`power-grid-save-${idx}`}
+                        >
+                          {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                        </Button>
+                      </div>
                       {isFirst && prevGrid != null && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           prev: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
@@ -2764,6 +2853,8 @@ function PowerForm() {
                 setGridMeterReading(idx, v);
                 if (isFirst) setReading(v);
               };
+              const meterKey2 = `grid-${idx}`;
+              const isSavingThis2 = savingMeter === meterKey2;
               return (
                 <div key={`grid-ns-${idx}`}>
                   <Label className="flex items-center gap-1.5">
@@ -2771,11 +2862,22 @@ function PowerForm() {
                     {meterLabel}
                     {isFirst && editingId && <span className="text-xs text-highlight ml-1">(editing)</span>}
                   </Label>
-                  <Input type="number" step="any" value={val}
-                    onChange={e => handleChange(e.target.value)}
-                    placeholder="Grid meter reading"
-                    className="border-blue-300 focus-visible:ring-blue-300"
-                    data-testid={`power-meter-input-${idx}`} />
+                  <div className="flex items-center gap-2">
+                    <Input type="number" step="any" value={val}
+                      onChange={e => handleChange(e.target.value)}
+                      placeholder="Grid meter reading"
+                      className="border-blue-300 focus-visible:ring-blue-300"
+                      data-testid={`power-meter-input-${idx}`} />
+                    <Button
+                      size="sm"
+                      disabled={isSavingThis2 || !val}
+                      onClick={() => submitMeter('grid', idx)}
+                      className="shrink-0 h-9 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+                      data-testid={`power-grid-save-ns-${idx}`}
+                    >
+                      {isSavingThis2 ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                    </Button>
+                  </div>
                   {isFirst && prevGrid != null && (
                     <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
                       <span>
@@ -2799,12 +2901,11 @@ function PowerForm() {
           </div>
         )}
 
-        <div className="flex gap-2">
-          <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
-          {editingId && (
-            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); setGridMeterReadings(['', '', '', '', '']); setSolarMeterReadings(['', '', '', '', '']); }}>Cancel</Button>
-          )}
-        </div>
+        {editingId && (
+          <div className="flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); setGridMeterReadings(['', '', '', '', '']); setSolarMeterReadings(['', '', '', '', '']); }}>Cancel edit</Button>
+          </div>
+        )}
       </Card>
 
       <Card className="p-3">
