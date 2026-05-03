@@ -135,6 +135,13 @@ function PretreatmentAndROLog() {
   const [bagsChanged, setBagsChanged] = useState('0');
   const [remarks, setRemarks] = useState('');
 
+  // RO Train online/offline status
+  const [trainOnline, setTrainOnline] = useState(true);
+  const [offlineStart, setOfflineStart] = useState('');
+  const [offlineEnd, setOfflineEnd] = useState('');
+  const [offlineReason, setOfflineReason] = useState('');
+  const [offlineReasonOther, setOfflineReasonOther] = useState('');
+
   // RO Train readings
   const [roValues, setRoValues] = useState({
     feed_pressure_psi: '', reject_pressure_psi: '',
@@ -217,6 +224,8 @@ function PretreatmentAndROLog() {
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
     setSyncMeterStart(''); setSyncMeterEnd('');
+    setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
+    setOfflineReason(''); setOfflineReasonOther('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '', reject_flow: '',
@@ -306,6 +315,10 @@ function PretreatmentAndROLog() {
   const recWarn = recovery != null && (recovery < 65 || recovery > 75);
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
 
+  // Train is offline and no end time entered → block all RO parameter inputs
+  const isOfflineBlocked = !trainOnline && !offlineEnd;
+  const offlineReasonFinal = offlineReason === 'Other' ? offlineReasonOther : offlineReason;
+
   // ── Power meter ──────────────────────────────────────────────────────────
   // Duration reuses the same auto-computed interval; prev reading from last session
   const pwrDurHr = mDurHr;  // same time window as water meter
@@ -320,6 +333,13 @@ function PretreatmentAndROLog() {
 
   const submit = async () => {
     if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
+
+    // Offline validation
+    if (!trainOnline) {
+      if (!offlineStart) { toast.error('Please enter the time the train went offline.'); return; }
+      if (!offlineReason) { toast.error('Please select a reason for the offline event.'); return; }
+      if (offlineReason === 'Other' && !offlineReasonOther.trim()) { toast.error('Please specify the reason for offline.'); return; }
+    }
 
     // Check for duplicate RO reading
     const dup = await findExistingReading({
@@ -340,6 +360,10 @@ function PretreatmentAndROLog() {
       power_meter_prev: prevPowerMeter, meter_duration_min: autoDurationMin,
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
+      train_online: trainOnline,
+      offline_since: !trainOnline && offlineStart ? new Date(offlineStart).toISOString() : null,
+      offline_until: !trainOnline && offlineEnd   ? new Date(offlineEnd).toISOString()   : null,
+      offline_reason: !trainOnline ? offlineReasonFinal || null : null,
       recorded_by: user?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
@@ -412,6 +436,8 @@ function PretreatmentAndROLog() {
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
     setSyncMeterStart(''); setSyncMeterEnd('');
     setHppTarget(''); setBagsChanged('0'); setRemarks('');
+    // Reset offline state (train reverts to online after a successful save)
+    setTrainOnline(true); setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther('');
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '', reject_flow: '',
@@ -436,6 +462,7 @@ function PretreatmentAndROLog() {
       </div>
 
       <Card className="p-3 space-y-3">
+        {/* Plant + Train row — with online/offline toggle */}
         <div className="grid grid-cols-2 gap-2 max-w-md">
           <div>
             <Label>Plant</Label>
@@ -454,6 +481,124 @@ function PretreatmentAndROLog() {
             </Select>
           </div>
         </div>
+
+        {/* Online / Offline toggle — shown once a train is picked */}
+        {train && (
+          <div className={cn(
+            'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
+            trainOnline
+              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
+              : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
+          )}>
+            <Checkbox
+              id="train-online"
+              checked={trainOnline}
+              onCheckedChange={(c) => {
+                setTrainOnline(!!c);
+                if (!!c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
+              }}
+              className={trainOnline ? 'data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600' : ''}
+            />
+            <div className="flex-1 min-w-0">
+              <label htmlFor="train-online" className={cn(
+                'text-sm font-semibold cursor-pointer select-none',
+                trainOnline ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-400'
+              )}>
+                {trainOnline ? '● Online / Running' : '○ Offline / Not Running'}
+              </label>
+              {!trainOnline && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                  RO parameters locked until offline period is resolved or train comes back online
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Offline details — shown when train is marked offline */}
+        {train && !trainOnline && (
+          <div className="space-y-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Offline Details</p>
+
+            {/* Reason dropdown */}
+            <div>
+              <Label className="text-xs">Reason for Offline <span className="text-red-500">*</span></Label>
+              <Select value={offlineReason} onValueChange={setOfflineReason}>
+                <SelectTrigger className="h-9 mt-0.5 border-red-200 dark:border-red-700">
+                  <SelectValue placeholder="Select reason…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Scheduled Maintenance">Scheduled Maintenance</SelectItem>
+                  <SelectItem value="Membrane Replacement">Membrane Replacement</SelectItem>
+                  <SelectItem value="CIP In Progress">CIP In Progress</SelectItem>
+                  <SelectItem value="Power Outage">Power Outage</SelectItem>
+                  <SelectItem value="High Pressure Trip">High Pressure Trip</SelectItem>
+                  <SelectItem value="Low Feed Flow">Low Feed Flow</SelectItem>
+                  <SelectItem value="Instrumentation Fault">Instrumentation Fault</SelectItem>
+                  <SelectItem value="Pump Failure">Pump Failure</SelectItem>
+                  <SelectItem value="Feedwater Quality Issue">Feedwater Quality Issue</SelectItem>
+                  <SelectItem value="Operator Shutdown">Operator Shutdown</SelectItem>
+                  <SelectItem value="Other">Other (specify below)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Free-text for Other */}
+            {offlineReason === 'Other' && (
+              <div>
+                <Label className="text-xs">Specify reason <span className="text-red-500">*</span></Label>
+                <Input
+                  value={offlineReasonOther}
+                  onChange={e => setOfflineReasonOther(e.target.value)}
+                  placeholder="Describe the reason…"
+                  className="mt-0.5 border-red-200 dark:border-red-700"
+                />
+              </div>
+            )}
+
+            {/* Offline start / end times */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">
+                  Offline Since <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="datetime-local"
+                  value={offlineStart}
+                  onChange={e => setOfflineStart(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">
+                  Back Online At
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
+                </Label>
+                <Input
+                  type="datetime-local"
+                  value={offlineEnd}
+                  onChange={e => setOfflineEnd(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
+              </div>
+            </div>
+
+            {/* Status banner */}
+            {!offlineEnd && offlineStart && (
+              <div className="flex items-center gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                Train is currently offline — RO parameters cannot be logged until it comes back online.
+              </div>
+            )}
+            {offlineEnd && offlineStart && (
+              <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                Offline period recorded — you may now log RO parameters for the resumed period.
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <Label>Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
@@ -468,6 +613,24 @@ function PretreatmentAndROLog() {
 
       {train && (
         <>
+          {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
+          {isOfflineBlocked && (
+            <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl leading-none mt-0.5">🔒</span>
+                <div>
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Train is currently offline</p>
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    No RO parameters can be logged while the train is offline and no "Back Online At" time has been entered.
+                    Enter the time the train came back online above, or mark the train as Online to continue logging.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {!isOfflineBlocked && (
+          <>
           {isSynchronized && (
             <Card className="p-3 space-y-2">
               <div className="flex items-center gap-2">
@@ -897,6 +1060,8 @@ function PretreatmentAndROLog() {
           </Card>
 
           <Button onClick={submit} className="w-full h-12 text-base">Save Pre-Treatment & RO Reading</Button>
+          </>
+          )}
         </>
       )}
 
