@@ -2184,6 +2184,139 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
   );
 }
 
+// ─── MeterNameList ────────────────────────────────────────────────────────────
+// Per-meter name chips with inline edit + delete (with confirmation).
+// Manager/Admin only — rendered conditionally by the caller.
+
+function MeterNameList({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const isYellow = accentColor === 'yellow';
+  const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
+  const border = isYellow ? 'border-yellow-300' : 'border-blue-300';
+  const chip   = isYellow
+    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/20 dark:border-yellow-800 dark:text-yellow-300'
+    : 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300';
+
+  // editingIdx: which chip is in edit mode (-1 = none)
+  const [editingIdx, setEditingIdx] = useState<number>(-1);
+  const [editVal, setEditVal]       = useState('');
+  // confirmDeleteIdx: which chip is showing delete confirmation
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit = (i: number) => {
+    setConfirmDeleteIdx(-1);
+    setEditingIdx(i);
+    setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`);
+  };
+
+  const commitEdit = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names];
+    next[editingIdx] = trimmed;
+    onSave(next);
+    setEditingIdx(-1);
+  };
+
+  const cancelEdit = () => { setEditingIdx(-1); };
+
+  const askDelete = (i: number) => {
+    setEditingIdx(-1);
+    setConfirmDeleteIdx(i);
+  };
+
+  const confirmDelete = (i: number) => {
+    // Remove this entry by shifting names down; decrement count via onRemoveLast
+    const next = [...names];
+    next.splice(i, 1);
+    onSave(next);
+    onRemoveLast();
+    setConfirmDeleteIdx(-1);
+  };
+
+  const cancelDelete = () => setConfirmDeleteIdx(-1);
+
+  return (
+    <div className="flex gap-1 flex-wrap mt-0.5">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+        const isEditing  = editingIdx === i;
+        const isDeleting = confirmDeleteIdx === i;
+
+        if (isEditing) {
+          return (
+            <div key={i} className={`flex items-center gap-0.5 rounded border ${border} bg-background px-1 py-0.5`}>
+              <input
+                autoFocus
+                value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                className={`h-5 w-20 text-[11px] bg-transparent focus:outline-none focus-visible:ring-1 ${ring} rounded px-0.5`}
+              />
+              <button
+                onClick={commitEdit}
+                className="text-[9px] font-semibold text-emerald-700 hover:text-emerald-900 px-0.5 leading-none"
+                title="Save name"
+              >✓</button>
+              <button
+                onClick={cancelEdit}
+                className="text-[9px] text-muted-foreground hover:text-foreground px-0.5 leading-none"
+                title="Cancel"
+              >✕</button>
+            </div>
+          );
+        }
+
+        if (isDeleting) {
+          return (
+            <div key={i} className="flex items-center gap-0.5 rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5">
+              <span className="text-[10px] text-destructive font-medium">Delete "{name}"?</span>
+              <button
+                onClick={() => confirmDelete(i)}
+                className="text-[9px] font-bold text-destructive hover:text-destructive/80 ml-1 px-0.5"
+                title="Confirm delete"
+              >Yes</button>
+              <button
+                onClick={cancelDelete}
+                className="text-[9px] text-muted-foreground hover:text-foreground px-0.5"
+                title="Cancel"
+              >No</button>
+            </div>
+          );
+        }
+
+        return (
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+            <span className="leading-none">{name}</span>
+            <button
+              onClick={() => startEdit(i)}
+              className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
+              title={`Rename "${name}"`}
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button
+              onClick={() => askDelete(i)}
+              className="opacity-60 hover:opacity-100 hover:text-destructive transition-opacity"
+              title={`Remove "${name}"`}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── POWER ───────────────────────────────────────────────────────────────────
 
 function PowerForm() {
@@ -2410,15 +2543,16 @@ function PowerForm() {
                     />
                   </div>
                 </div>
-                {solarMeterCount >= 2 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {Array.from({ length: solarMeterCount }).map((_, i) => (
-                      <input key={i} value={solarMeterNames[i] ?? `Solar ${i+1}`}
-                        onChange={e => setSolarMeterNames(prev => { const a=[...prev]; a[i]=e.target.value; return a; })}
-                        placeholder={`Solar ${i+1}`}
-                        className="h-6 w-20 rounded border border-yellow-200 bg-background px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-yellow-400" />
-                    ))}
-                  </div>
+                {/* Solar meter name chips — manager/admin only */}
+                {solarMeterCount >= 2 && (isAdmin || isManager) && (
+                  <MeterNameList
+                    count={solarMeterCount}
+                    names={solarMeterNames}
+                    accentColor="yellow"
+                    defaultPrefix="Solar"
+                    onSave={names => setSolarMeterNames(names)}
+                    onRemoveLast={() => setSolarMeterCount(c => Math.max(1, c - 1))}
+                  />
                 )}
               </div>
 
@@ -2448,15 +2582,16 @@ function PowerForm() {
                     />
                   </div>
                 </div>
-                {gridMeterCount >= 2 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {Array.from({ length: gridMeterCount }).map((_, i) => (
-                      <input key={i} value={gridMeterNames[i] ?? `Grid ${i+1}`}
-                        onChange={e => setGridMeterNames(prev => { const a=[...prev]; a[i]=e.target.value; return a; })}
-                        placeholder={`Grid ${i+1}`}
-                        className="h-6 w-20 rounded border border-blue-200 bg-background px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400" />
-                    ))}
-                  </div>
+                {/* Grid meter name chips — manager/admin only */}
+                {gridMeterCount >= 2 && (isAdmin || isManager) && (
+                  <MeterNameList
+                    count={gridMeterCount}
+                    names={gridMeterNames}
+                    accentColor="blue"
+                    defaultPrefix="Grid"
+                    onSave={names => setGridMeterNames(names)}
+                    onRemoveLast={() => setGridMeterCount(c => Math.max(1, c - 1))}
+                  />
                 )}
               </div>
             </div>
