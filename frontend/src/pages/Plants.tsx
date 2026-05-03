@@ -211,7 +211,7 @@ export default function Plants() {
             >
               <div>
                 <div className="text-muted-foreground">Capacity</div>
-                <div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} m³</div>
+                <div className="font-mono-num text-sm">{fmtNum(p.design_capacity_m3 ?? 0)} MLD</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Wells</div>
@@ -344,7 +344,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
             </Button>
           )}
           {isManager && (
-            <div className="[&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
+            <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
               <DeleteEntityMenu
                 kind="plant" id={plant.id} label={plant.name}
                 canSoftDelete={plant.status === 'Active'} canHardDelete
@@ -367,7 +367,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
         <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
           <div>
             <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Capacity</div>
-            <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} m³</div>
+            <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} MLD</div>
           </div>
           <div>
             <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">RO Trains</div>
