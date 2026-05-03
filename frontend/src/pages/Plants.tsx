@@ -117,8 +117,17 @@ export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const { isManager } = useAuth();
-  const list = selectedPlantId ? plants?.filter(p => p.id === selectedPlantId) : plants;
+  const { isManager, profile } = useAuth();
+
+  // Non-managers only see plants they are assigned to.
+  // Managers/Admins see all plants. Sign-up uses its own direct query, unaffected.
+  const visiblePlants = isManager
+    ? plants
+    : plants?.filter(p => profile?.plant_assignments?.includes(p.id));
+
+  const list = selectedPlantId
+    ? visiblePlants?.filter(p => p.id === selectedPlantId)
+    : visiblePlants;
   const navigate = useNavigate();
 
   // Summary counts: active/total per plant for Wells, Locators, RO Trains
