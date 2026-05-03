@@ -124,31 +124,32 @@ function ChatWindow({ peer, currentUserId, onClose }: {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Fetch messages for this conversation (both directions, non-expired).
+  const fetchMessages = useCallback(async (): Promise<ChatMsg[]> => {
+    const { data, error } = await (supabase as any)
+      .from('chat_messages').select('*')
+      .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${peer.id}),and(sender_id.eq.${peer.id},recipient_id.eq.${currentUserId})`)
+      .gt('expires_at', new Date().toISOString())
+      .order('sent_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as ChatMsg[];
+  }, [currentUserId, peer.id]);
+
   const { data: messages = [], refetch } = useQuery<ChatMsg[]>({
     queryKey: ['chat', currentUserId, peer.id],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from('chat_messages').select('*')
-        .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${peer.id}),and(sender_id.eq.${peer.id},recipient_id.eq.${currentUserId})`)
-        .gt('expires_at', new Date().toISOString())
-        .order('sent_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as ChatMsg[];
-    },
-    refetchInterval: 5000,
+    queryFn: fetchMessages,
+    // Fallback polling every 3 s in case realtime broadcast misses an event.
+    refetchInterval: 3000,
   });
 
   useEffect(() => {
-    // Listen for new messages in BOTH directions so that:
-    //   - The receiver sees incoming messages in real-time.
-    //   - The sender's window also updates immediately (no waiting for 5s poll).
-    const channelName = `chat:${[currentUserId, peer.id].sort().join('-')}`;
+    // Use a Broadcast channel (no REPLICA IDENTITY FULL required) so both the
+    // sender and receiver are notified the moment a message is inserted.
+    // Channel name is deterministic for the pair so both sides join the same room.
+    const channelName = `chat:${[currentUserId, peer.id].sort().join(':')}`;
     const ch = supabase
       .channel(channelName)
-      // incoming: peer → me
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `recipient_id=eq.${currentUserId}` }, () => refetch())
-      // outgoing echo: me → peer (keeps sender window in sync instantly)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `sender_id=eq.${currentUserId}` }, () => refetch())
+      .on('broadcast', { event: 'new_message' }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [currentUserId, peer.id, refetch]);
@@ -160,7 +161,12 @@ function ChatWindow({ peer, currentUserId, onClose }: {
     if (!body) return;
     setInput(''); setSending(true);
     try {
+      // 1. Persist the message to the DB.
       await (supabase as any).from('chat_messages').insert({ sender_id: currentUserId, recipient_id: peer.id, body });
+      // 2. Broadcast to the shared channel so the peer's window refetches immediately.
+      const channelName = `chat:${[currentUserId, peer.id].sort().join(':')}`;
+      await supabase.channel(channelName).send({ type: 'broadcast', event: 'new_message', payload: {} });
+      // 3. Refetch our own window immediately too.
       refetch();
     } finally { setSending(false); }
   }, [input, currentUserId, peer.id, refetch]);
