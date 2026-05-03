@@ -2214,19 +2214,33 @@ function PowerForm() {
     queryKey: ['op-power', plantId],
     queryFn: async () => {
       if (!plantId) return [];
+      // First try with all optional columns
       const { data, error } = await supabase
         .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by')
-        .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8);
-      if (!error) return data ?? [];
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,is_meter_replacement,recorded_by')
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(8);
+      if (!error && data) return data;
       // Optional columns not yet in DB — retry with base columns only
-      const { data: fallback } = await supabase
+      const { data: fallback, error: fallbackErr } = await supabase
         .from('power_readings')
-        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by')
-        .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8);
-      return fallback ?? [];
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,is_meter_replacement,recorded_by')
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(8);
+      if (!fallbackErr && fallback) return fallback;
+      // Last resort: absolute minimum columns
+      const { data: minimal } = await supabase
+        .from('power_readings')
+        .select('id,plant_id,reading_datetime,meter_reading_kwh')
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: false })
+        .limit(8);
+      return minimal ?? [];
     },
     enabled: !!plantId,
+    staleTime: 0,
   });
 
   // The most recent prior reading (skip the one being edited)
@@ -2706,19 +2720,22 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   const { data: rows, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      let sinceIso: string;
-      let untilIso: string;
+      // Use date-only strings (YYYY-MM-DD) for all filters — avoids UTC offset
+      // cutting off records that were saved in a different timezone.
+      let sinceDate: string;
+      let untilNextDay: string; // exclusive upper bound = day after end date
       if (days === 'custom') {
-        sinceIso = localMidnight(appliedFrom).toISOString();
-        // end of day: set time to 23:59:59 in local time
-        const end = localMidnight(appliedTo);
-        end.setHours(23, 59, 59, 999);
-        untilIso = end.toISOString();
+        sinceDate = appliedFrom;
+        const end = new Date(appliedTo + 'T00:00:00');
+        end.setDate(end.getDate() + 1);
+        untilNextDay = end.toISOString().slice(0, 10);
       } else {
         const since = new Date();
         since.setDate(since.getDate() - days);
-        sinceIso = since.toISOString();
-        untilIso = new Date().toISOString();
+        sinceDate = since.toISOString().slice(0, 10);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        untilNextDay = tomorrow.toISOString().slice(0, 10);
       }
 
       if (module === 'locator') {
@@ -2726,8 +2743,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           .from('locator_readings')
           .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement')
           .eq('locator_id', entityId)
-          .gte('reading_datetime', sinceIso)
-          .lte('reading_datetime', untilIso)
+          .gte('reading_datetime', sinceDate)
+          .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
@@ -2736,27 +2753,27 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
           .from('well_readings')
           .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, is_meter_replacement')
           .eq('well_id', entityId)
-          .gte('reading_datetime', sinceIso)
-          .lte('reading_datetime', untilIso)
+          .gte('reading_datetime', sinceDate)
+          .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         return data ?? [];
       }
       if (module === 'power') {
-        // Try full select; fall back to base columns if optional migration columns are missing
         const { data, error } = await supabase
           .from('power_readings')
           .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement')
           .eq('plant_id', entityId)
-          .gte('reading_datetime', sinceIso)
-          .lte('reading_datetime', untilIso)
+          .gte('reading_datetime', sinceDate)
+          .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         if (!error) return data ?? [];
+        // Fallback: base columns only (optional migration columns missing)
         const { data: fallback } = await supabase
           .from('power_readings')
           .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime, is_meter_replacement')
           .eq('plant_id', entityId)
-          .gte('reading_datetime', sinceIso)
-          .lte('reading_datetime', untilIso)
+          .gte('reading_datetime', sinceDate)
+          .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         return fallback ?? [];
       }
@@ -2775,6 +2792,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       }
       return [];
     },
+    staleTime: 0,
   });
 
   const startEdit = (r: any) => {
