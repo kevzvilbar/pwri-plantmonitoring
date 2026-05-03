@@ -4179,21 +4179,89 @@ function MeterNameList({
           </div>
         );
         return (
-          <div key={i} className={`flex items-center gap-1 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
             <span>{name}</span>
+            <button onClick={() => startEdit(i)} className="ml-0.5 opacity-60 hover:opacity-100" title={`Rename "${name}"`}>
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button onClick={() => askDelete(i)} className="opacity-60 hover:opacity-100 hover:text-destructive" title={`Remove "${name}"`}>
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MeterNameListRows (full-width row editor, matches image 2 design) ────────
+function MeterNameListRows({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const [editingIdx, setEditingIdx]           = useState<number>(-1);
+  const [editVal, setEditVal]                 = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
+  const commitEdit = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSave(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSave(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="space-y-1">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+
+        if (editingIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5">
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className="flex-1 text-xs bg-transparent focus:outline-none" />
+            <button onClick={commitEdit} className="text-[10px] font-semibold text-emerald-700 hover:text-emerald-900 px-1">✓</button>
+            <button onClick={cancelEdit} className="text-[10px] text-muted-foreground hover:text-foreground px-1">✕</button>
+          </div>
+        );
+
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5">
+            <span className="flex-1 text-xs text-destructive font-medium">Delete "{name}"?</span>
+            <button onClick={() => confirmDelete(i)} className="text-[10px] font-bold text-destructive px-1">Yes</button>
+            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[10px] text-muted-foreground px-1">No</button>
+          </div>
+        );
+
+        return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5 text-xs">
+            <span className="flex-1 truncate">{name}</span>
             <button
               onClick={() => startEdit(i)}
-              className="ml-0.5 inline-flex items-center justify-center rounded px-1 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 hover:text-emerald-900 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
+              className="inline-flex items-center justify-center h-5 w-5 rounded text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
               title={`Rename "${name}"`}
             >
-              <Pencil className="h-2.5 w-2.5" />
+              <Pencil className="h-3 w-3" />
             </button>
             <button
               onClick={() => askDelete(i)}
-              className="inline-flex items-center justify-center rounded px-1 py-0.5 bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-800 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 transition-colors"
+              className="inline-flex items-center justify-center h-5 w-5 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
               title={`Remove "${name}"`}
             >
-              <X className="h-2.5 w-2.5" />
+              <X className="h-3 w-3" />
             </button>
           </div>
         );
@@ -4293,78 +4361,77 @@ function PowerMetersCard({ plant }: { plant: any }) {
           These names appear as reading inputs in <strong>Operations → Power</strong>.
         </p>
 
-        {/* ── Solar Meters ── */}
-        {plant.has_solar && (
-          <div className="space-y-2 rounded-md border border-yellow-200 bg-yellow-50/50 dark:border-yellow-800/40 dark:bg-yellow-950/10 p-3">
+        {/* ── Solar + Grid side-by-side columns ── */}
+        <div className={['grid gap-4', plant.has_solar ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
+
+          {/* Solar column */}
+          {plant.has_solar && (
+            <div className="space-y-3 rounded-md border border-yellow-200 bg-yellow-50/50 dark:border-yellow-800/40 dark:bg-yellow-950/10 p-3">
+              <div className="flex items-center gap-2">
+                <Sun className="h-3.5 w-3.5 text-yellow-500" />
+                <span className="text-sm font-semibold">Solar Meters</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Meter Count:</span>
+                <div className="flex items-center border rounded overflow-hidden text-[11px]">
+                  <input
+                    type="number" min="1" max="20" disabled={!canEdit}
+                    value={solarCount}
+                    onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setSolarCount(v); }}
+                    className="w-12 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50 bg-background"
+                  />
+                  {canEdit && (
+                    <div className="flex flex-col border-l">
+                      <button onClick={() => setSolarCount(c => Math.min(20, c + 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px]">▲</button>
+                      <button onClick={() => setSolarCount(c => Math.max(1, c - 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px] border-t">▼</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {canEdit && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Meter Names:</p>
+                  <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
+                    onSave={names => setSolarNames(names)}
+                    onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Grid column */}
+          <div className="space-y-3 rounded-md border border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-950/10 p-3">
             <div className="flex items-center gap-2">
-              <Sun className="h-3.5 w-3.5 text-yellow-500" />
-              <span className="text-sm font-medium">Solar Meters</span>
+              <Zap className="h-3.5 w-3.5 text-blue-500" />
+              <span className="text-sm font-semibold">Grid Meters</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-14">Count:</span>
-              <div className="flex rounded border overflow-hidden text-[11px]">
-                {[1,2,3].map(n => (
-                  <button key={n} disabled={!canEdit} onClick={() => setSolarCount(n)}
-                    className={['px-2.5 py-1 transition-colors disabled:opacity-50',
-                      solarCount === n ? 'bg-yellow-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground',
-                    ].join(' ')}>
-                    {n}
-                  </button>
-                ))}
-                <input type="number" min="1" max="20" disabled={!canEdit}
-                  value={solarCount > 3 ? solarCount : ''}
-                  onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setSolarCount(v); }}
-                  placeholder="…"
-                  className={['w-10 px-1 py-1 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50',
-                    solarCount > 3 ? 'bg-yellow-500 text-white' : 'bg-background text-muted-foreground',
-                  ].join(' ')} />
+              <span className="text-xs text-muted-foreground">Meter Count:</span>
+              <div className="flex items-center border rounded overflow-hidden text-[11px]">
+                <input
+                  type="number" min="1" max="20" disabled={!canEdit}
+                  value={gridCount}
+                  onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setGridCount(v); }}
+                  className="w-12 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50 bg-background"
+                />
+                {canEdit && (
+                  <div className="flex flex-col border-l">
+                    <button onClick={() => setGridCount(c => Math.min(20, c + 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px]">▲</button>
+                    <button onClick={() => setGridCount(c => Math.max(1, c - 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px] border-t">▼</button>
+                  </div>
+                )}
               </div>
             </div>
             {canEdit && (
-              <div>
-                <p className="text-[11px] text-muted-foreground mb-0.5">Meter names — click ✎ to rename:</p>
-                <MeterNameList count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
-                  onSave={names => setSolarNames(names)}
-                  onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Meter Names:</p>
+                <MeterNameListRows count={gridCount} names={gridNames} accentColor="blue" defaultPrefix="Grid Meter"
+                  onSave={names => setGridNames(names)}
+                  onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))} />
               </div>
             )}
           </div>
-        )}
 
-        {/* ── Grid Meters ── */}
-        <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-950/10 p-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5 text-blue-500" />
-            <span className="text-sm font-medium">Grid Meters</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground w-14">Count:</span>
-            <div className="flex rounded border overflow-hidden text-[11px]">
-              {[1,2,3].map(n => (
-                <button key={n} disabled={!canEdit} onClick={() => setGridCount(n)}
-                  className={['px-2.5 py-1 transition-colors disabled:opacity-50',
-                    gridCount === n ? 'bg-blue-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground',
-                  ].join(' ')}>
-                  {n}
-                </button>
-              ))}
-              <input type="number" min="1" max="20" disabled={!canEdit}
-                value={gridCount > 3 ? gridCount : ''}
-                onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setGridCount(v); }}
-                placeholder="…"
-                className={['w-10 px-1 py-1 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50',
-                  gridCount > 3 ? 'bg-blue-500 text-white' : 'bg-background text-muted-foreground',
-                ].join(' ')} />
-            </div>
-          </div>
-          {canEdit && (
-            <div>
-              <p className="text-[11px] text-muted-foreground mb-0.5">Meter names — click ✎ to rename:</p>
-              <MeterNameList count={gridCount} names={gridNames} accentColor="blue" defaultPrefix="Grid Meter"
-                onSave={names => setGridNames(names)}
-                onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))} />
-            </div>
-          )}
         </div>
 
         {canEdit ? (
