@@ -2396,6 +2396,18 @@ function PowerForm() {
                         {n}
                       </button>
                     ))}
+                    {/* Custom count input */}
+                    <input
+                      type="number" min="1" max="20"
+                      value={solarMeterCount > 3 ? solarMeterCount : ''}
+                      onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setSolarMeterCount(v); }}
+                      placeholder="…"
+                      title="Custom count"
+                      className={[
+                        'w-10 px-1 py-0.5 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-yellow-400',
+                        solarMeterCount > 3 ? 'bg-yellow-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted',
+                      ].join(' ')}
+                    />
                   </div>
                 </div>
                 {solarMeterCount >= 2 && (
@@ -2422,6 +2434,18 @@ function PowerForm() {
                         {n}
                       </button>
                     ))}
+                    {/* Custom count input */}
+                    <input
+                      type="number" min="1" max="20"
+                      value={gridMeterCount > 3 ? gridMeterCount : ''}
+                      onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setGridMeterCount(v); }}
+                      placeholder="…"
+                      title="Custom count"
+                      className={[
+                        'w-10 px-1 py-0.5 text-center text-[11px] border-l focus:outline-none focus:ring-1 focus:ring-blue-400',
+                        gridMeterCount > 3 ? 'bg-blue-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted',
+                      ].join(' ')}
+                    />
                   </div>
                 </div>
                 {gridMeterCount >= 2 && (
