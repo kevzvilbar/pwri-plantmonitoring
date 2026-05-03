@@ -4123,6 +4123,82 @@ function MeterNameList({
   );
 }
 
+// ─── MeterNameListRows (full-width row editor matching image 2 design) ────────
+function MeterNameListRows({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const [editingIdx, setEditingIdx]             = useState<number>(-1);
+  const [editVal, setEditVal]                   = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
+  const commitEdit = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSave(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSave(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="space-y-1">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+
+        if (editingIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5">
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className="flex-1 text-xs bg-transparent focus:outline-none" />
+            <button onClick={commitEdit} className="text-[10px] font-semibold text-emerald-700 hover:text-emerald-900 px-1">✓</button>
+            <button onClick={cancelEdit} className="text-[10px] text-muted-foreground hover:text-foreground px-1">✕</button>
+          </div>
+        );
+
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5">
+            <span className="flex-1 text-xs text-destructive font-medium">Delete "{name}"?</span>
+            <button onClick={() => confirmDelete(i)} className="text-[10px] font-bold text-destructive px-1">Yes</button>
+            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[10px] text-muted-foreground px-1">No</button>
+          </div>
+        );
+
+        return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5 text-xs">
+            <span className="flex-1 truncate">{name}</span>
+            <button
+              onClick={() => startEdit(i)}
+              className="inline-flex items-center justify-center h-5 w-5 rounded text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              title={`Rename "${name}"`}
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => askDelete(i)}
+              className="inline-flex items-center justify-center h-5 w-5 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              title={`Remove "${name}"`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── PowerMetersCard ──────────────────────────────────────────────────────────
 // Lives in Plant Detail > Power tab.
 // Manages: solar meter count + names, grid meter count + names.
