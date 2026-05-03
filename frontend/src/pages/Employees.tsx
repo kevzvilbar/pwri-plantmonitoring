@@ -365,29 +365,56 @@ function Staff() {
   // Touch updated_at so the current user appears "Active" while they are
   // viewing this page. This is a lightweight presence heartbeat since we
   // do not have a dedicated presence table.
+  // FIX: Immediately update on mount so the user shows as "Active" right away,
+  // then keep refreshing every 2 minutes (well within the 15-min "active" window).
   useEffect(() => {
     if (!user) return;
-    supabase.from('user_profiles').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
-    const interval = setInterval(() => {
+    const heartbeat = () =>
       supabase.from('user_profiles').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
-    }, 5 * 60 * 1000); // every 5 min
+    heartbeat(); // immediate on mount — fixes "offline" flash for the current user
+    const interval = setInterval(heartbeat, 2 * 60 * 1000); // every 2 min
     return () => clearInterval(interval);
   }, [user]);
 
-  const { data: staff = [] } = useQuery<StaffMember[]>({
+  const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
+      // FIX: Use an RPC with SECURITY DEFINER to bypass RLS so that Operators
+      // can see ALL staff (including Managers and Admins) for communication.
+      // Falls back to a direct select (which RLS may restrict for non-admins).
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
+      if (!rpcError && rpcData) return rpcData as StaffMember[];
+
+      // Fallback: direct select (will be limited by RLS for non-admin roles)
       const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
+    // FIX: Refresh every 60 s so presence badges stay current for all staff.
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
-  // Join roles into profiles to bypass RLS on user_roles that restricts
-  // non-admins to only seeing their own row.
+  // FIX: Subscribe to realtime updated_at changes so that when any user's
+  // heartbeat fires the staff list re-fetches and their presence dot updates.
+  useEffect(() => {
+    const ch = supabase
+      .channel('staff-presence')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, () => {
+        refetchStaff();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [refetchStaff]);
+
+  // FIX: Use RPC to get all roles — bypasses RLS so non-admins see correct
+  // role labels for all users (not just their own row from user_roles).
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
     queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
+      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
+
       const { data } = await supabase
         .from('user_profiles')
         .select('id, user_roles(role)');
@@ -705,18 +732,28 @@ function RegisterInfo() {
   const { isAdmin } = useAuth();
   const { data: plants = [] } = usePlants();
 
+  // FIX: Reuse the same 'staff' queryKey so this shares the cached result
+  // from Staff tab (which already uses the RPC to bypass RLS).
   const { data: staff = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
+      if (!rpcError && rpcData) return rpcData as StaffMember[];
       const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
+    staleTime: 30_000,
   });
 
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
     queryFn: async () => {
+      // FIX: Use RPC to get all roles bypassing RLS, so Managers/Admins show
+      // the correct role label in the Reporting Tree instead of "Operator".
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
+      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
+
       const { data } = await supabase
         .from('user_profiles')
         .select('id, user_roles(role)');
