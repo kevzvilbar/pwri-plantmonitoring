@@ -1214,10 +1214,11 @@ function WellRow({
   };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-testid={`well-row-${well.id}`}>
-      <div className="min-w-0 flex-1 sm:basis-[160px]">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="text-sm font-medium truncate">{well.name}</div>
+    <div className="p-3 space-y-2" data-testid={`well-row-${well.id}`}>
+      {/* Row 1: Well name + badges | date on right */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+          <div className="text-sm font-semibold truncate">{well.name}</div>
           {well.has_power_meter && (
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted px-1.5 py-0.5 rounded">kWh</span>
           )}
@@ -1228,53 +1229,23 @@ function WellRow({
           )}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">Editing</span>}
         </div>
-        <div className="text-xs text-muted-foreground truncate">
-          prev: <span className="font-mono-num">{previousMeter == null ? '—' : fmtNum(previousMeter)}</span>
-          {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
-          <span className="mx-1">·</span>
-          <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 shrink-0 sm:order-last">
-        <Button onClick={save} disabled={saving || !reading || atLimit} className="h-9 px-3 text-xs">
-          {saving ? '...' : editingId ? 'Update' : 'Save'}
-        </Button>
-        {lastToday && !editingId && (
-          <Button variant="ghost" className="h-9 w-9 p-0"
-            onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading ?? '')); setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : ''); }}
-            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
-        {editingId && (
-          <Button variant="ghost" className="h-9 w-9 p-0"
-            onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); }} title="Cancel edit">
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
-        {isManagerOrAdmin && (
-          <Button variant="ghost" className="h-9 w-9 p-0 text-muted-foreground"
-            onClick={() => setShowHistory(true)} title="View reading history">
-            <History className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-      {showHistory && (
-        <ReadingHistoryDialog
-          entityName={well.name}
-          module="well"
-          entityId={well.id}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
-
-      <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
         <Input type="datetime-local" value={customDt}
           onChange={e => setCustomDt(e.target.value)}
-          className="shrink-0 text-xs h-9 w-44 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+          className="ml-auto shrink-0 text-xs h-7 w-44 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate.400"
           title="Reading date & time" />
-        <div className="relative flex-1 sm:flex-initial sm:w-32">
+      </div>
+
+      {/* prev + today count */}
+      <div className="text-xs text-muted-foreground">
+        prev: <span className="font-mono-num">{previousMeter == null ? '—' : fmtNum(previousMeter)}</span>
+        {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
+        <span className="mx-1">·</span>
+        <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
+      </div>
+
+      {/* Row 2: Water | Power | Save | History */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-cyan-600 pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={reading}
             onChange={(e) => setReading(e.target.value)} placeholder="Water"
@@ -1282,18 +1253,49 @@ function WellRow({
             data-testid={`well-meter-input-${well.id}`} />
         </div>
         {well.has_power_meter && (
-          <div className="relative flex-1 sm:flex-initial sm:w-32">
+          <div className="relative flex-1">
             <Zap className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-600 pointer-events-none" />
             <Input type="number" step="any" inputMode="decimal" value={powerReading}
-              onChange={(e) => setPowerReading(e.target.value)} placeholder="Power Meter"
+              onChange={(e) => setPowerReading(e.target.value)} placeholder="Power Me"
               className="h-9 pl-7 w-full border-amber-300 focus-visible:ring-amber-300 bg-amber-50/40 dark:bg-amber-950/20"
               data-testid={`well-power-input-${well.id}`} />
           </div>
+        )}
+        <Button onClick={save} disabled={saving || !reading || atLimit} className="h-9 px-3 text-xs shrink-0">
+          {saving ? '...' : editingId ? 'Update' : 'Save'}
+        </Button>
+        {lastToday && !editingId && (
+          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0"
+            onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading ?? '')); setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : ''); }}
+            title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {editingId && (
+          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0"
+            onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); }} title="Cancel edit">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {isManagerOrAdmin && (
+          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0 text-muted-foreground"
+            onClick={() => setShowHistory(true)} title="View reading history">
+            <History className="h-3.5 w-3.5" />
+          </Button>
         )}
       </div>
 
       {reading && belowPrev && (
         <div className="w-full text-xs text-warn-foreground bg-warn-soft px-2 py-1 rounded">Meter below previous</div>
+      )}
+
+      {showHistory && (
+        <ReadingHistoryDialog
+          entityName={well.name}
+          module="well"
+          entityId={well.id}
+          onClose={() => setShowHistory(false)}
+        />
       )}
     </div>
   );
