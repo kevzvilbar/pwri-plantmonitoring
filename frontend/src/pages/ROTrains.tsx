@@ -141,6 +141,8 @@ function PretreatmentAndROLog() {
   const [offlineEnd, setOfflineEnd] = useState('');
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
+  const [offlineStartSaved, setOfflineStartSaved] = useState(false);
+  const [offlineEndSaved, setOfflineEndSaved] = useState(false);
 
   // RO Train readings
   const [roValues, setRoValues] = useState({
@@ -226,6 +228,7 @@ function PretreatmentAndROLog() {
     setSyncMeterStart(''); setSyncMeterEnd('');
     setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
     setOfflineReason(''); setOfflineReasonOther('');
+    setOfflineStartSaved(false); setOfflineEndSaved(false);
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '', reject_flow: '',
@@ -461,7 +464,7 @@ function PretreatmentAndROLog() {
         <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
       </div>
 
-      <Card className="p-3 space-y-2">
+      <Card className="p-3 space-y-3">
         {/* Plant + Train row — with online/offline toggle */}
         <div className="grid grid-cols-2 gap-2 max-w-md">
           <div>
@@ -485,7 +488,7 @@ function PretreatmentAndROLog() {
         {/* Online / Offline toggle — shown once a train is picked */}
         {train && (
           <div className={cn(
-            'rounded-md border px-2.5 py-2 flex items-center gap-2.5 transition-colors',
+            'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
             trainOnline
               ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
               : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
@@ -517,7 +520,7 @@ function PretreatmentAndROLog() {
 
         {/* Offline details — shown when train is marked offline */}
         {train && !trainOnline && (
-          <div className="space-y-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-2.5">
+          <div className="space-y-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Offline Details</p>
 
             {/* Reason dropdown */}
@@ -562,24 +565,88 @@ function PretreatmentAndROLog() {
                 <Label className="text-xs">
                   Offline Since <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  type="datetime-local"
-                  value={offlineStart}
-                  onChange={e => setOfflineStart(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
-                />
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Input
+                    type="datetime-local"
+                    value={offlineStart}
+                    onChange={e => { setOfflineStart(e.target.value); setOfflineStartSaved(false); }}
+                    disabled={offlineStartSaved}
+                    className={cn(
+                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
+                      offlineStartSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                    )}
+                  />
+                  {!offlineStartSaved ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!offlineStart}
+                      onClick={() => setOfflineStartSaved(true)}
+                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Save
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOfflineStartSaved(false)}
+                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {offlineStartSaved && offlineStart && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
+                  </p>
+                )}
               </div>
               <div>
                 <Label className="text-xs">
                   Back Online At
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
                 </Label>
-                <Input
-                  type="datetime-local"
-                  value={offlineEnd}
-                  onChange={e => setOfflineEnd(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
-                />
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Input
+                    type="datetime-local"
+                    value={offlineEnd}
+                    onChange={e => { setOfflineEnd(e.target.value); setOfflineEndSaved(false); }}
+                    disabled={offlineEndSaved}
+                    className={cn(
+                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
+                      offlineEndSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                    )}
+                  />
+                  {!offlineEndSaved ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!offlineEnd}
+                      onClick={() => setOfflineEndSaved(true)}
+                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Save
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOfflineEndSaved(false)}
+                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {offlineEndSaved && offlineEnd && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
+                  </p>
+                )}
               </div>
             </div>
 
@@ -599,13 +666,11 @@ function PretreatmentAndROLog() {
           </div>
         )}
 
-        {!trainOnline ? null : (
         <div>
           <Label>Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
-            className="h-9 w-full sm:max-w-[240px] min-w-[200px]" />
+            className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
         </div>
-        )}
         {plant && (
           <div className="text-[11px] text-muted-foreground">
             Backwash mode: <span className="font-semibold">{isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}</span>
@@ -617,9 +682,9 @@ function PretreatmentAndROLog() {
         <>
           {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
           {isOfflineBlocked && (
-            <Card className="p-3 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+            <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
               <div className="flex items-start gap-3">
-                <span className="text-xl leading-none mt-0.5">🔒</span>
+                <span className="text-2xl leading-none mt-0.5">🔒</span>
                 <div>
                   <p className="text-sm font-semibold text-red-700 dark:text-red-400">Train is currently offline</p>
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">
