@@ -181,14 +181,18 @@ function ImportReadingsDialog({
     setImported(count);
     setDone(true);
     if (importErrors.length) toast.error(`${count} imported, ${importErrors.length} failed`);
+    else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
     else toast.success(`${count} reading(s) imported`);
-    onImported();
+    // Only auto-close when at least one row was actually imported;
+    // if everything was skipped (user chose Cancel on every overwrite prompt)
+    // keep the dialog open so the user can see what happened.
+    if (count > 0) onImported();
   };
 
   const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -614,9 +618,20 @@ async function insertPowerReadings(
     if (existing && existing.length > 0) {
       const decision = await resolveImportDuplicate(`${plantId}|${dtDate}`, `Power @ ${dtDate}`, true);
       if (decision === 'skip') continue;
-      // overwrite
+      // overwrite — with the same column-fallback retry used by doInsert
       const { error } = await supabase.from('power_readings').update(payload).eq('id', existing[0].id);
-      if (error) errors.push(error.message); else count++;
+      if (error) {
+        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
+          // optional columns not yet in DB — strip and retry
+          const { daily_solar_kwh: _s, daily_grid_kwh: _g, ...fallbackPayload } = payload as any;
+          const { error: e2 } = await supabase.from('power_readings').update(fallbackPayload).eq('id', existing[0].id);
+          if (e2) errors.push(e2.message); else count++;
+        } else {
+          errors.push(error.message);
+        }
+      } else {
+        count++;
+      }
     } else {
       await doInsert();
     }
@@ -2092,14 +2107,15 @@ function PowerForm() {
   const qc = useQueryClient();
   const { user, isAdmin, isManager } = useAuth();
   const { data: plants } = usePlants();
-  const [plantId, setPlantId]     = useState('');
-  const [reading, setReading]     = useState('');
-  const [solarKwh, setSolarKwh]   = useState('');
-  const [gridKwh, setGridKwh]     = useState('');
-  const [dt, setDt]               = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [plantId, setPlantId]         = useState('');
+  // When showSolar: `reading` = grid meter reading, `solarReading` = solar meter reading
+  // When !showSolar: `reading` = combined meter reading
+  const [reading, setReading]         = useState('');
+  const [solarReading, setSolarReading] = useState('');
+  const [dt, setDt]                   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [editingId, setEditingId]     = useState<string | null>(null);
   const [powerHistoryOpen, setPowerHistoryOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen]   = useState(false);
   // Multiplier: auto-populated from latest saved electric bill; editable by admin only when no bill exists
   const [multiplierInput, setMultiplierInput] = useState('');
 
@@ -2130,13 +2146,24 @@ function PowerForm() {
     queryKey: ['op-power', plantId],
     queryFn: async () => plantId
       ? (await supabase.from('power_readings')
-          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by')
-          .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(7)).data ?? []
+          .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by')
+          .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8)).data ?? []
       : [],
     enabled: !!plantId,
   });
-  const previous = history?.find((r: any) => r.id !== editingId)?.meter_reading_kwh ?? null;
-  const daily    = previous != null && reading ? +reading - previous : null;
+
+  // The most recent prior reading (skip the one being edited)
+  const prevRow    = history?.find((r: any) => r.id !== editingId) ?? null;
+  // Combined/grid meter: previous meter_reading_kwh
+  const prevGrid   = prevRow?.meter_reading_kwh ?? null;
+  // Solar meter: previous solar_meter_reading (if tracked)
+  const prevSolar  = prevRow?.solar_meter_reading ?? null;
+
+  // Delta calculations from meter readings
+  const deltaGrid  = prevGrid != null && reading       ? +reading       - prevGrid  : null;
+  const deltaSolar = prevSolar != null && solarReading ? +solarReading  - prevSolar : null;
+  // For combined (no solar): just use the main meter delta
+  const daily      = showSolar ? deltaGrid : (prevGrid != null && reading ? +reading - prevGrid : null);
   // Effective daily kWh = Δ reading × multiplier
   const dailyEffective = daily != null ? daily * effectiveMultiplier : null;
 
@@ -2152,13 +2179,22 @@ function PowerForm() {
         setEditingId(dup);
       }
     }
+
+    // When showSolar: reading = grid meter, solarReading = solar meter
+    // Daily solar   = Δ solar meter (no multiplier — solar inverter already gives kWh)
+    // Daily grid    = Δ grid meter × CT multiplier
+    const computedDailyGrid  = showSolar && deltaGrid  != null ? deltaGrid * effectiveMultiplier : null;
+    const computedDailySolar = showSolar && deltaSolar != null ? deltaSolar : null;
+
     const payload: any = {
-      plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
-      meter_reading_kwh: +reading, recorded_by: user?.id,
-      // multiplier is stored on electric_bills, not power_readings
+      plant_id: plantId,
+      reading_datetime: new Date(dt).toISOString(),
+      meter_reading_kwh: +reading,
+      recorded_by: user?.id,
     };
-    if (showSolar && solarKwh) payload.daily_solar_kwh = +solarKwh;
-    if ((showSolar || showGrid) && gridKwh) payload.daily_grid_kwh = +gridKwh;
+    if (showSolar && solarReading) payload.solar_meter_reading = +solarReading;
+    if (showSolar && computedDailyGrid  != null) payload.daily_grid_kwh  = computedDailyGrid;
+    if (showSolar && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
 
     const runQuery = () => editingId
       ? supabase.from('power_readings').update(payload).eq('id', editingId)
@@ -2169,27 +2205,47 @@ function PowerForm() {
     if (error && (
       error.message.includes('daily_solar_kwh') ||
       error.message.includes('daily_grid_kwh') ||
+      error.message.includes('solar_meter_reading') ||
       error.message.includes('multiplier')
     )) {
       delete payload.daily_solar_kwh;
       delete payload.daily_grid_kwh;
+      delete payload.solar_meter_reading;
       delete payload.multiplier;
       ({ error } = await runQuery());
     }
     if (error) { toast.error(error.message); return; }
     toast.success(editingId ? 'Updated' : 'Power reading saved');
-    setReading(''); setSolarKwh(''); setGridKwh(''); setEditingId(null);
+    setReading(''); setSolarReading(''); setEditingId(null);
     qc.invalidateQueries();
   };
 
   const startEdit = (r: any) => {
     setReading(String(r.meter_reading_kwh));
-    setSolarKwh(r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '');
-    setGridKwh(r.daily_grid_kwh   != null ? String(r.daily_grid_kwh)  : '');
+    setSolarReading(r.solar_meter_reading != null ? String(r.solar_meter_reading) : '');
     setDt(format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"));
     setEditingId(r.id);
     toast.info('Editing power reading');
   };
+
+  // Build display rows: compute Δ on the fly by pairing consecutive readings
+  const displayHistory = useMemo(() => {
+    if (!history?.length) return [];
+    return history.map((r: any, i: number) => {
+      const pred          = history[i + 1] ?? null; // predecessor = row below (older), history is DESC
+      // Grid meter Δ (raw, before multiplier)
+      const deltaKwh      = pred != null ? r.meter_reading_kwh - pred.meter_reading_kwh : (r.daily_consumption_kwh ?? null);
+      // Solar meter Δ
+      const deltaSolarKwh = (pred?.solar_meter_reading != null && r.solar_meter_reading != null)
+        ? r.solar_meter_reading - pred.solar_meter_reading
+        : (r.daily_solar_kwh ?? null);
+      // Grid consumption = grid meter Δ × CT multiplier
+      const deltaGridKwh  = showSolar && deltaKwh != null
+        ? deltaKwh * effectiveMultiplier
+        : (r.daily_grid_kwh != null ? r.daily_grid_kwh : deltaKwh);
+      return { ...r, _deltaKwh: deltaKwh, _deltaSolar: deltaSolarKwh, _deltaGrid: deltaGridKwh };
+    });
+  }, [history, showSolar, effectiveMultiplier]);
 
   return (
     <div className="space-y-3">
@@ -2221,104 +2277,190 @@ function PowerForm() {
             className="h-10 w-full max-w-[260px] min-w-[220px] mx-auto sm:mx-0 block text-center sm:text-left" />
         </div>
 
-        {/* Meter Reading + Multiplier — same row, labels inline */}
-        <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
-          {/* Left: Meter Reading */}
-          <div>
-            <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
-            <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
-              placeholder="Plant Power Reading" data-testid="power-meter-input" />
-          </div>
+        {/* Meter Reading(s) + Multiplier */}
+        {showSolar ? (
+          // ── Solar plant ────────────────────────────────────────────────────────
+          <div className="space-y-3">
 
-          {/* Right: Multiplier */}
-          <div className="w-28">
-            <Label className="flex items-center gap-1">
-              Multiplier
-              {plantId && !billLoading && (
-                billMultiplier !== null
-                  ? <span className="text-[10px] text-muted-foreground font-normal">(from bill)</span>
-                  : isAdmin
-                    ? <span className="text-[10px] text-amber-600 font-normal">(no bill yet)</span>
-                    : null
-              )}
-            </Label>
-            <Input
-              type="number"
-              step="any"
-              min="1"
-              value={billMultiplier !== null ? billMultiplier : multiplierInput}
-              onChange={e => multiplierEditable && setMultiplierInput(e.target.value)}
-              readOnly={!multiplierEditable}
-              placeholder={billLoading ? '…' : '1'}
-              className={[
-                'text-center font-mono-num',
-                !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : '',
-              ].join(' ')}
-              title={
-                billMultiplier !== null
-                  ? `CT multiplier from latest bill (×${billMultiplier}). Update via Costs → Power bill.`
-                  : isAdmin
-                    ? 'No bill saved yet — enter multiplier manually. Save a bill in Costs to lock it.'
-                    : 'Multiplier is set by the latest electric bill.'
-              }
-              data-testid="power-multiplier-input"
-            />
-          </div>
-        </div>
+            {/* Row: Solar | Grid | Multiplier */}
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-start">
 
-        {/* Previous reading + daily effective kWh hint */}
-        {previous != null && (
-          <div className="text-xs text-muted-foreground space-y-0.5 -mt-1">
-            <span>
-              Previous: <span className="font-mono-num">{fmtNum(previous)}</span>
-              {daily != null && <> · Δ <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
-            </span>
-            {dailyEffective != null && effectiveMultiplier !== 1 && (
-              <div className="inline-flex items-center gap-1.5 ml-2 rounded bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-2 py-0.5">
-                <Zap className="h-3 w-3 text-amber-500 shrink-0" />
-                <span className="font-mono-num font-medium text-amber-700 dark:text-amber-300">
-                  {fmtNum(dailyEffective, 2)} kWh
+              {/* ① Solar meter reading — FIRST */}
+              <div>
+                <Label className="flex items-center gap-1.5">
+                  <span className="text-yellow-500 text-sm leading-none">☀</span>
+                  Solar Power Reading
+                  {editingId && <span className="text-xs text-amber-600 ml-1">(editing)</span>}
+                </Label>
+                <Input type="number" step="any" value={solarReading}
+                  onChange={e => setSolarReading(e.target.value)}
+                  placeholder="Solar meter reading"
+                  className="border-yellow-300 focus-visible:ring-yellow-300"
+                  data-testid="power-solar-input" />
+                {prevSolar != null && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
+                    {deltaSolar != null && (
+                      <> · <span className={`font-mono-num font-medium ${deltaSolar >= 0 ? 'text-yellow-600' : 'text-destructive'}`}>
+                        Δ {fmtNum(deltaSolar)} kWh
+                      </span></>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              {/* ② Grid meter reading — SECOND */}
+              <div>
+                <Label className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 text-blue-500" />
+                  Grid Power Reading
+                </Label>
+                <Input type="number" step="any" value={reading}
+                  onChange={e => setReading(e.target.value)}
+                  placeholder="Grid meter reading"
+                  className="border-blue-300 focus-visible:ring-blue-300"
+                  data-testid="power-meter-input" />
+                {prevGrid != null && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    prev: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
+                    {deltaGrid != null && (
+                      <> · <span className={`font-mono-num font-medium ${deltaGrid >= 0 ? 'text-blue-600' : 'text-destructive'}`}>
+                        Δ {fmtNum(deltaGrid)} kWh
+                      </span></>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              {/* ③ Multiplier */}
+              <div className="w-28">
+                <Label className="flex items-center gap-1">
+                  Multiplier
+                  {plantId && !billLoading && (
+                    billMultiplier !== null
+                      ? <span className="text-[10px] text-muted-foreground font-normal">(from bill)</span>
+                      : isAdmin
+                        ? <span className="text-[10px] text-amber-600 font-normal">(no bill yet)</span>
+                        : null
+                  )}
+                </Label>
+                <Input
+                  type="number" step="any" min="1"
+                  value={billMultiplier !== null ? billMultiplier : multiplierInput}
+                  onChange={e => multiplierEditable && setMultiplierInput(e.target.value)}
+                  readOnly={!multiplierEditable}
+                  placeholder={billLoading ? '…' : '1'}
+                  className={['text-center font-mono-num', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
+                  title={billMultiplier !== null ? `CT multiplier from latest bill (×${billMultiplier}). Update via Costs → Power bill.` : isAdmin ? 'No bill saved yet — enter multiplier manually.' : 'Multiplier is set by the latest electric bill.'}
+                  data-testid="power-multiplier-input"
+                />
+              </div>
+            </div>
+
+            {/* Energy Source Breakdown — read-only, auto-calculated */}
+            <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                Energy Source Breakdown
+                <span className="normal-case font-normal text-[10px] text-muted-foreground/60 bg-muted rounded px-1 py-0.5">
+                  auto-calculated · read-only
                 </span>
-                <span className="text-amber-600/70 dark:text-amber-400/60">effective (×{effectiveMultiplier})</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+
+                {/* Daily Solar = Δ solar meter (no multiplier) */}
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
+                    <span className="text-yellow-500">☀</span> Daily Solar (kWh)
+                  </p>
+                  <div className={[
+                    'h-9 rounded-md border px-3 flex items-center font-mono-num text-sm select-none',
+                    'bg-muted/40 cursor-not-allowed',
+                    deltaSolar != null ? 'text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' : 'text-muted-foreground',
+                  ].join(' ')}>
+                    {deltaSolar != null ? fmtNum(deltaSolar) : <span className="text-muted-foreground/50">—</span>}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">= solar current − previous</p>
+                </div>
+
+                {/* Daily Grid = Δ grid × multiplier */}
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-blue-500" /> Daily Grid (kWh)
+                    {effectiveMultiplier !== 1 && (
+                      <span className="text-[10px] text-amber-600 ml-0.5">×{effectiveMultiplier}</span>
+                    )}
+                  </p>
+                  <div className={[
+                    'h-9 rounded-md border px-3 flex items-center font-mono-num text-sm select-none',
+                    'bg-muted/40 cursor-not-allowed',
+                    deltaGrid != null ? 'text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' : 'text-muted-foreground',
+                  ].join(' ')}>
+                    {deltaGrid != null
+                      ? fmtNum(deltaGrid * effectiveMultiplier)
+                      : <span className="text-muted-foreground/50">—</span>
+                    }
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">= (grid current − previous) × multiplier</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Non-solar plant: single combined meter + multiplier
+          <div className="space-y-1">
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
+              <div>
+                <Label>Meter Reading {editingId && <span className="text-xs text-highlight">(editing)</span>}</Label>
+                <Input type="number" step="any" value={reading} onChange={e => setReading(e.target.value)}
+                  placeholder="Plant Power Reading" data-testid="power-meter-input" />
+              </div>
+              <div className="w-28">
+                <Label className="flex items-center gap-1">
+                  Multiplier
+                  {plantId && !billLoading && (
+                    billMultiplier !== null
+                      ? <span className="text-[10px] text-muted-foreground font-normal">(from bill)</span>
+                      : isAdmin
+                        ? <span className="text-[10px] text-amber-600 font-normal">(no bill yet)</span>
+                        : null
+                  )}
+                </Label>
+                <Input
+                  type="number" step="any" min="1"
+                  value={billMultiplier !== null ? billMultiplier : multiplierInput}
+                  onChange={e => multiplierEditable && setMultiplierInput(e.target.value)}
+                  readOnly={!multiplierEditable}
+                  placeholder={billLoading ? '…' : '1'}
+                  className={['text-center font-mono-num', !multiplierEditable ? 'bg-muted cursor-not-allowed text-muted-foreground' : ''].join(' ')}
+                  title={billMultiplier !== null ? `CT multiplier from latest bill (×${billMultiplier}). Update via Costs → Power bill.` : isAdmin ? 'No bill saved yet — enter multiplier manually. Save a bill in Costs to lock it.' : 'Multiplier is set by the latest electric bill.'}
+                  data-testid="power-multiplier-input"
+                />
+              </div>
+            </div>
+            {prevGrid != null && (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <span>
+                  Previous: <span className="font-mono-num">{fmtNum(prevGrid)}</span>
+                  {daily != null && <> · Δ <span className="font-mono-num">{fmtNum(daily)} kWh</span></>}
+                </span>
+                {dailyEffective != null && effectiveMultiplier !== 1 && (
+                  <div className="inline-flex items-center gap-1.5 ml-2 rounded bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-2 py-0.5">
+                    <Zap className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="font-mono-num font-medium text-amber-700 dark:text-amber-300">
+                      {fmtNum(dailyEffective, 2)} kWh
+                    </span>
+                    <span className="text-amber-600/70 dark:text-amber-400/60">effective (×{effectiveMultiplier})</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {(showSolar || showGrid) && (
-          <details className="rounded-md border bg-muted/30 px-3 py-2" open={showSolar}>
-            <summary className="text-xs font-medium cursor-pointer flex items-center gap-2">
-              Energy Source Breakdown
-              <span className="text-[10px] text-muted-foreground">
-                {showSolar && showGrid ? 'Solar + Grid' : showSolar ? 'Solar only' : 'Grid only'}
-              </span>
-            </summary>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {showSolar && (
-                <div>
-                  <Label className="text-xs">Daily Solar (kWh)</Label>
-                  <Input type="number" step="any" value={solarKwh}
-                    onChange={e => setSolarKwh(e.target.value)} placeholder="kWh from solar" data-testid="power-solar-input" />
-                </div>
-              )}
-              {showGrid && (
-                <div>
-                  <Label className="text-xs">Daily Grid (kWh)</Label>
-                  <Input type="number" step="any" value={gridKwh}
-                    onChange={e => setGridKwh(e.target.value)} placeholder="kWh from grid" data-testid="power-grid-input" />
-                </div>
-              )}
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Optional. Leave blank if you only have a single combined meter.
-            </p>
-          </details>
-        )}
-
         <div className="flex gap-2">
           <Button onClick={submit} className="flex-1">{editingId ? 'Update' : 'Save'}</Button>
           {editingId && (
-            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarKwh(''); setGridKwh(''); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setEditingId(null); setReading(''); setSolarReading(''); }}>Cancel</Button>
           )}
         </div>
       </Card>
@@ -2333,18 +2475,49 @@ function PowerForm() {
             </Button>
           )}
         </div>
-        {history?.length ? history.map((r: any) => (
-          <div key={r.id} className="flex justify-between items-center text-xs py-1.5 border-t">
-            <span className="flex-1">{format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}</span>
-            <span className="font-mono-num mr-2">{fmtNum(r.daily_consumption_kwh ?? 0)} kWh</span>
-            {((r.daily_solar_kwh ?? 0) > 0 || (r.daily_grid_kwh ?? 0) > 0) && (
-              <span className="font-mono-num mr-2 text-[10px] text-muted-foreground">
-                ☀{fmtNum(r.daily_solar_kwh ?? 0)} · ⚡{fmtNum(r.daily_grid_kwh ?? 0)}
+        {displayHistory.length ? displayHistory.slice(0, 7).map((r: any) => (
+          <div key={r.id} className="py-2 border-t space-y-0.5">
+            {/* ── Row 1: date + grid meter reading + grid Δ (×mult) + edit ── */}
+            <div className="flex justify-between items-center text-xs gap-2">
+              <span className="flex-1 text-muted-foreground whitespace-nowrap">
+                {format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm')}
               </span>
+              {/* Raw grid meter reading */}
+              <span className="font-mono-num text-blue-600" title="Grid meter reading">
+                <Zap className="inline h-3 w-3 mr-0.5 text-blue-400" />
+                {fmtNum(r.meter_reading_kwh)}
+              </span>
+              {/* Grid Δ (after multiplier) */}
+              <span className={[
+                'font-mono-num font-medium whitespace-nowrap',
+                r._deltaGrid != null && r._deltaGrid < 0 ? 'text-destructive' : 'text-blue-700 dark:text-blue-400',
+              ].join(' ')}>
+                {r._deltaGrid != null
+                  ? <>Δ {fmtNum(r._deltaGrid)} kWh{effectiveMultiplier !== 1 && <span className="text-[10px] text-amber-500 ml-0.5">×{effectiveMultiplier}</span>}</>
+                  : '—'
+                }
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => startEdit(r)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {/* ── Row 2 (solar plants only): solar meter reading + Δ ── */}
+            {showSolar && (
+              <div className="flex items-center gap-2 text-[11px] pl-0.5">
+                <span className="text-yellow-500">☀</span>
+                <span className="font-mono-num text-yellow-700 dark:text-yellow-400" title="Solar meter reading">
+                  {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                </span>
+                {r._deltaSolar != null ? (
+                  <span className={r._deltaSolar < 0 ? 'text-destructive font-mono-num' : 'text-yellow-600 font-mono-num'}>
+                    Δ {fmtNum(r._deltaSolar)} kWh
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/50">no solar Δ</span>
+                )}
+              </div>
             )}
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => startEdit(r)}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
           </div>
         )) : <p className="text-xs text-muted-foreground">No readings</p>}
       </Card>
@@ -2352,7 +2525,7 @@ function PowerForm() {
       {importOpen && (
         <ImportReadingsDialog
           title="Import Power Readings from CSV"
-          module="Power Readings"
+          module="power"
           plantId={plantId}
           userId={user?.id ?? null}
           schemaHint={POWER_SCHEMA}
@@ -2464,7 +2637,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       if (module === 'power') {
         const { data } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, reading_datetime, is_meter_replacement')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceIso)
           .lte('reading_datetime', untilIso)
@@ -2496,7 +2669,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     } else if (module === 'locator') {
       setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'power') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.daily_solar_kwh != null ? String(r.daily_solar_kwh) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.solar_meter_reading != null ? String(r.solar_meter_reading) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', isMeterReplacement: !!r.is_meter_replacement });
     }
   };
 
@@ -2539,8 +2712,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     } else if (module === 'power') {
       ({ error } = await (supabase.from('power_readings') as any).update({
         meter_reading_kwh: +editRow.value,
-        daily_solar_kwh: editRow.value2 ? +editRow.value2 : null,
-        daily_grid_kwh: editRow.value3 ? +editRow.value3 : null,
+        solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
       }).eq('id', editRow.id));
@@ -2642,7 +2814,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
               </div>
               <div>
                 <Label className="text-[11px]">
-                  {module === 'well' ? 'Water (unitless)' : module === 'locator' ? 'Reading' : 'Meter Reading (kWh)'}
+                  {module === 'well' ? 'Water (unitless)' : module === 'locator' ? 'Reading' : 'Grid Power Reading (kWh)'}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })}
@@ -2657,20 +2829,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                 </div>
               )}
               {module === 'power' && (
-                <>
-                  <div>
-                    <Label className="text-[11px]">Daily Solar (kWh)</Label>
-                    <Input type="number" step="any" value={editRow.value2 ?? ''}
-                      onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                      className="h-8 text-xs" placeholder="optional" />
-                  </div>
-                  <div>
-                    <Label className="text-[11px]">Daily Grid (kWh)</Label>
-                    <Input type="number" step="any" value={editRow.value3 ?? ''}
-                      onChange={e => setEditRow({ ...editRow, value3: e.target.value })}
-                      className="h-8 text-xs" placeholder="optional" />
-                  </div>
-                </>
+                <div>
+                  <Label className="text-[11px]">Solar Power Reading (kWh)</Label>
+                  <Input type="number" step="any" value={editRow.value2 ?? ''}
+                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
+                    className="h-8 text-xs" placeholder="optional" />
+                </div>
               )}
             </div>
             <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
@@ -2723,10 +2887,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                     <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
                   </>}
                   {module === 'power' && <>
-                    <th className="px-3 py-2 font-medium text-right">Daily (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right">Grid Reading</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ Grid (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right">Solar Reading</th>
+                    <th className="px-3 py-2 font-medium text-right">Δ Solar (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
-                    <th className="px-3 py-2 font-medium text-right">Solar</th>
-                    <th className="px-3 py-2 font-medium text-right">Grid</th>
                   </>}
                   {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
                 </tr>
@@ -2819,15 +2984,31 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                       </>}
 
                       {module === 'power' && <>
+                        {/* Grid meter reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">
+                          {fmtNum(r.meter_reading_kwh)}
+                        </td>
+                        {/* Δ Grid = current - previous meter_reading_kwh */}
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
                             ? <span className="text-orange-500 font-medium">0</span>
                             : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
                           }
                         </td>
+                        {/* Solar meter reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
+                          {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                        </td>
+                        {/* Δ Solar = current - previous solar_meter_reading */}
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {isMeterReplacement
+                            ? <span className="text-orange-500 font-medium">0</span>
+                            : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                              ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
+                              : '—'
+                          }
+                        </td>
                         {replCell}
-                        <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">{fmtNum(r.daily_solar_kwh ?? 0)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono-num text-blue-600">{fmtNum(r.daily_grid_kwh ?? 0)}</td>
                       </>}
 
                       {canEditDelete && (
