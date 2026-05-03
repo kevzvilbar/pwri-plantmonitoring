@@ -425,7 +425,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
                 />
               </div>
               <div>
-                <Label className="text-xs">Capacity (m³)</Label>
+                <Label className="text-xs">Capacity (MLD)</Label>
                 <Input
                   type="number"
                   step="any"
