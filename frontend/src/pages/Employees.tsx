@@ -139,22 +139,15 @@ function ChatWindow({ peer, currentUserId, onClose }: {
   });
 
   useEffect(() => {
-    // Listen for messages WHERE the current user is the recipient.
-    // Using filter: recipient_id=eq.<currentUserId> ensures only messages
-    // addressed to this user trigger the refetch (REPLICA IDENTITY FULL required).
+    // Subscribe to both directions of this conversation so that:
+    //  - The receiver sees incoming messages from the peer in real-time.
+    //  - The sender's window also refreshes immediately after their own insert
+    //    (outgoing echo), keeping both sides in sync without waiting for polling.
     const channelName = `chat:${[currentUserId, peer.id].sort().join('-')}`;
     const ch = supabase
       .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `recipient_id=eq.${currentUserId}`,
-        },
-        () => refetch()
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `recipient_id=eq.${currentUserId}` }, () => refetch())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `sender_id=eq.${currentUserId}` }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [currentUserId, peer.id, refetch]);
@@ -404,9 +397,11 @@ function Staff() {
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
-    // FIX: Refresh every 60 s so presence badges stay current for all staff.
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    // Refresh every 30 s so presence badges stay current for all staff.
+    // staleTime kept low (0) so the cached data is never served as "fresh"
+    // when the refetch interval fires — this ensures presence dots update promptly.
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   // FIX: Subscribe to realtime updated_at changes so that when any user's
@@ -464,7 +459,7 @@ function Staff() {
         />
       )}
 
-      {chatPeer && user && (
+      {chatPeer && user && chatPeer.id !== user.id && (
         <ChatWindow peer={chatPeer} currentUserId={user.id} onClose={() => setChatPeer(null)} />
       )}
     </>
