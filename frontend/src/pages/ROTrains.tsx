@@ -461,7 +461,7 @@ function PretreatmentAndROLog() {
         <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
       </div>
 
-      <Card className="p-3 space-y-3">
+      <Card className="p-3 space-y-2">
         {/* Plant + Train row — with online/offline toggle */}
         <div className="grid grid-cols-2 gap-2 max-w-md">
           <div>
@@ -485,7 +485,7 @@ function PretreatmentAndROLog() {
         {/* Online / Offline toggle — shown once a train is picked */}
         {train && (
           <div className={cn(
-            'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
+            'rounded-md border px-2.5 py-2 flex items-center gap-2.5 transition-colors',
             trainOnline
               ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
               : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
@@ -517,7 +517,7 @@ function PretreatmentAndROLog() {
 
         {/* Offline details — shown when train is marked offline */}
         {train && !trainOnline && (
-          <div className="space-y-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-3">
+          <div className="space-y-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Offline Details</p>
 
             {/* Reason dropdown */}
@@ -599,11 +599,13 @@ function PretreatmentAndROLog() {
           </div>
         )}
 
+        {!trainOnline ? null : (
         <div>
           <Label>Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
-            className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
+            className="h-9 w-full sm:max-w-[240px] min-w-[200px]" />
         </div>
+        )}
         {plant && (
           <div className="text-[11px] text-muted-foreground">
             Backwash mode: <span className="font-semibold">{isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}</span>
@@ -615,9 +617,9 @@ function PretreatmentAndROLog() {
         <>
           {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
           {isOfflineBlocked && (
-            <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+            <Card className="p-3 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
               <div className="flex items-start gap-3">
-                <span className="text-2xl leading-none mt-0.5">🔒</span>
+                <span className="text-xl leading-none mt-0.5">🔒</span>
                 <div>
                   <p className="text-sm font-semibold text-red-700 dark:text-red-400">Train is currently offline</p>
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">
