@@ -142,12 +142,10 @@ function PretreatmentAndROLog() {
     feed_tds: '', permeate_tds: '', reject_tds: '',
     feed_ph: '', permeate_ph: '', reject_ph: '',
     turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
-    feed_meter_prev: '', feed_meter_curr: '',
-    permeate_meter_prev: '', permeate_meter_curr: '',
-    reject_meter_prev: '', reject_meter_curr: '',
-    meter_duration_min: '',
-    power_meter_prev: '', power_meter_curr: '',
-    power_duration_min: '',
+    feed_meter_curr: '',
+    permeate_meter_curr: '',
+    reject_meter_curr: '',
+    power_meter_curr: '',
   });
 
   // One-shot seed: when the global selectedPlantId resolves and this
@@ -187,6 +185,29 @@ function PretreatmentAndROLog() {
     return out;
   }, [prevPretreat]);
 
+  // Pull the most recent RO train reading to auto-fill prev meter readings + duration
+  const { data: prevRO } = useQuery({
+    queryKey: ['ro-prev', trainId],
+    enabled: !!trainId,
+    queryFn: async () => (await supabase.from('ro_train_readings')
+      .select('reading_datetime, feed_meter_curr, permeate_meter_curr, reject_meter_curr, power_meter_curr')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
+  });
+
+  // Auto-compute duration (min) between current reading datetime and last reading datetime
+  const autoDurationMin = useMemo(() => {
+    if (!prevRO?.reading_datetime || !dt) return null;
+    const diff = (new Date(dt).getTime() - new Date(prevRO.reading_datetime).getTime()) / 60000;
+    return diff > 0 ? +diff.toFixed(1) : null;
+  }, [prevRO, dt]);
+
+  // Previous meter readings come from last reading's curr values (read-only, auto-filled)
+  const prevFeedMeter  = prevRO?.feed_meter_curr     ?? null;
+  const prevPermMeter  = prevRO?.permeate_meter_curr ?? null;
+  const prevRejMeter   = prevRO?.reject_meter_curr   ?? null;
+  const prevPowerMeter = prevRO?.power_meter_curr     ?? null;
+
   // Per-AFM/MMF rows: independent backwash + reading + pressure
   const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
   const [boosters, setBoosters] = useState<Record<number, { target: string; amp: string }>>({});
@@ -202,12 +223,10 @@ function PretreatmentAndROLog() {
       feed_tds: '', permeate_tds: '', reject_tds: '',
       feed_ph: '', permeate_ph: '', reject_ph: '',
       turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
-      feed_meter_prev: '', feed_meter_curr: '',
-      permeate_meter_prev: '', permeate_meter_curr: '',
-      reject_meter_prev: '', reject_meter_curr: '',
-      meter_duration_min: '',
-      power_meter_prev: '', power_meter_curr: '',
-      power_duration_min: '',
+      feed_meter_curr: '',
+      permeate_meter_curr: '',
+      reject_meter_curr: '',
+      power_meter_curr: '',
     });
   }, [trainId]);
 
@@ -238,12 +257,17 @@ function PretreatmentAndROLog() {
   const dp = calc.pressureDiff(num(roValues.feed_pressure_psi), num(roValues.reject_pressure_psi));
 
   // ── Water meter derived flow rates (m³/hr) ──────────────────────────────
-  const mDur = num(roValues.meter_duration_min);   // minutes
+  // Duration: auto from datetime diff; prev readings: auto from last session's curr
+  const mDur   = autoDurationMin ?? NaN;
   const mDurHr = !isNaN(mDur) && mDur > 0 ? mDur / 60 : null;
 
-  const feedDelta  = !isNaN(num(roValues.feed_meter_curr))  && !isNaN(num(roValues.feed_meter_prev))  ? num(roValues.feed_meter_curr)  - num(roValues.feed_meter_prev)  : null;
-  const permDelta  = !isNaN(num(roValues.permeate_meter_curr)) && !isNaN(num(roValues.permeate_meter_prev)) ? num(roValues.permeate_meter_curr) - num(roValues.permeate_meter_prev) : null;
-  const rejDelta   = !isNaN(num(roValues.reject_meter_curr))  && !isNaN(num(roValues.reject_meter_prev))  ? num(roValues.reject_meter_curr)  - num(roValues.reject_meter_prev)  : null;
+  const feedCurr = num(roValues.feed_meter_curr);
+  const permCurr = num(roValues.permeate_meter_curr);
+  const rejCurr  = num(roValues.reject_meter_curr);
+
+  const feedDelta  = !isNaN(feedCurr) && prevFeedMeter != null ? feedCurr - prevFeedMeter : null;
+  const permDelta  = !isNaN(permCurr) && prevPermMeter != null ? permCurr - prevPermMeter : null;
+  const rejDelta   = !isNaN(rejCurr)  && prevRejMeter  != null ? rejCurr  - prevRejMeter  : null;
 
   // Dynamic filling: any one missing = sum/diff of the other two (requires at least two streams entered)
   const feedVol  = feedDelta  ?? (permDelta !== null && rejDelta  !== null ? +(permDelta  + rejDelta ).toFixed(3) : null);
@@ -283,10 +307,11 @@ function PretreatmentAndROLog() {
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
 
   // ── Power meter ──────────────────────────────────────────────────────────
-  const pwrDur   = num(roValues.power_duration_min);
-  const pwrDurHr = !isNaN(pwrDur) && pwrDur > 0 ? pwrDur / 60 : null;
-  const pwrDelta = !isNaN(num(roValues.power_meter_curr)) && !isNaN(num(roValues.power_meter_prev))
-    ? +(num(roValues.power_meter_curr) - num(roValues.power_meter_prev)).toFixed(3)
+  // Duration reuses the same auto-computed interval; prev reading from last session
+  const pwrDurHr = mDurHr;  // same time window as water meter
+  const pwrCurr  = num(roValues.power_meter_curr);
+  const pwrDelta = !isNaN(pwrCurr) && prevPowerMeter != null
+    ? +(pwrCurr - prevPowerMeter).toFixed(3)
     : null;
   const pwrKw    = pwrDelta !== null && pwrDurHr ? +(pwrDelta / pwrDurHr).toFixed(2) : null;  // avg kW
   // Specific energy uses effective permeate volume (meter-derived preferred for volumetric accuracy)
@@ -310,6 +335,9 @@ function PretreatmentAndROLog() {
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       ...Object.fromEntries(Object.entries(roValues).map(([k, val]) => [k, val ? +val : null])),
+      // Auto-filled prev readings and duration stored alongside curr for record completeness
+      feed_meter_prev: prevFeedMeter, permeate_meter_prev: prevPermMeter, reject_meter_prev: prevRejMeter,
+      power_meter_prev: prevPowerMeter, meter_duration_min: autoDurationMin,
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
       recorded_by: user?.id,
@@ -390,12 +418,10 @@ function PretreatmentAndROLog() {
       feed_tds: '', permeate_tds: '', reject_tds: '',
       feed_ph: '', permeate_ph: '', reject_ph: '',
       turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
-      feed_meter_prev: '', feed_meter_curr: '',
-      permeate_meter_prev: '', permeate_meter_curr: '',
-      reject_meter_prev: '', reject_meter_curr: '',
-      meter_duration_min: '',
-      power_meter_prev: '', power_meter_curr: '',
-      power_duration_min: '',
+      feed_meter_curr: '',
+      permeate_meter_curr: '',
+      reject_meter_curr: '',
+      power_meter_curr: '',
     });
     qc.invalidateQueries();
   };
@@ -658,25 +684,34 @@ function PretreatmentAndROLog() {
             {/* ── Water Meter ─────────────────────────────────────────────── */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter (m³)</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter</p>
                 <p className="text-[10px] text-muted-foreground/60 italic">Leave one stream blank — it will be inferred</p>
               </div>
-              {/* Shared duration */}
+              {/* Auto-computed duration from datetime diff */}
               <div className="flex items-center gap-2 mb-1">
                 <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
-                <Input type="number" step="any" className="h-7 text-xs w-24" {...f('meter_duration_min')} placeholder="e.g. 60" />
+                <ComputedInput
+                  value={autoDurationMin != null ? String(autoDurationMin) : ''}
+                  className="h-7 text-xs w-28"
+                />
+                {autoDurationMin == null && (
+                  <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
+                )}
               </div>
-              {/* prev / current / Δ / flow columns */}
+              {/* current / prev (auto) / Δ / flow columns */}
               <div className="grid grid-cols-3 gap-2">
                 {/* Feed */}
                 <div className="space-y-1">
-                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('feed_meter_prev')} placeholder="m³" /></div>
-                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
+                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} />
+                  </div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Δ Volume{feedInferred ? ' (inferred)' : ''}
+                      Δ Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? `${feedVol} m³` : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
@@ -685,13 +720,16 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Permeate */}
                 <div className="space-y-1">
-                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('permeate_meter_prev')} placeholder="m³" /></div>
-                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
+                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} />
+                  </div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Δ Volume{permInferred ? ' (inferred)' : ''}
+                      Δ Volume{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? `${permVol} m³` : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
@@ -700,13 +738,16 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Reject */}
                 <div className="space-y-1">
-                  <div><Label className="text-[11px] text-muted-foreground">Prev reading</Label><Input type="number" step="any" {...f('reject_meter_prev')} placeholder="m³" /></div>
-                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} placeholder="m³" /></div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
+                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} />
+                  </div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Δ Volume{rejInferred ? ' (inferred)' : ''}
+                      Δ Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? `${rejVol} m³` : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
@@ -721,8 +762,16 @@ function PretreatmentAndROLog() {
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Pressure (psi)</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1.5">
-                  <div><Label className="text-[11px] text-muted-foreground">Suction</Label><Input type="number" step="any" {...f('suction_pressure_psi')} /></div>
-                  <div><Label className="text-[11px] text-muted-foreground">Feed</Label><Input type="number" step="any" {...f('feed_pressure_psi')} /></div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Suction</Label>
+                    <Input type="number" step="any" {...f('suction_pressure_psi')}
+                      placeholder="Suction pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Feed</Label>
+                    <Input type="number" step="any" {...f('feed_pressure_psi')}
+                      placeholder="Feed pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
@@ -730,7 +779,8 @@ function PretreatmentAndROLog() {
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">Reject</Label>
-                  <Input type="number" step="any" {...f('reject_pressure_psi')} />
+                  <Input type="number" step="any" {...f('reject_pressure_psi')}
+                    placeholder="Reject pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                 </div>
               </div>
             </div>
@@ -811,13 +861,18 @@ function PretreatmentAndROLog() {
 
           {/* ── Power Meter ──────────────────────────────────────────────────── */}
           <Card className="p-3 space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter</h4>
-            <div className="flex items-center gap-2">
-              <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
-              <Input type="number" step="any" className="h-7 text-xs w-24" {...f('power_duration_min')} placeholder="e.g. 60" />
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter</h4>
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                <span>Duration:</span>
+                <span className="font-mono font-medium">{autoDurationMin != null ? `${autoDurationMin} min` : '—'}</span>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-[11px] text-muted-foreground">Prev reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_prev')} /></div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Prev reading (kWh) — auto</Label>
+                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} />
+              </div>
               <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
             </div>
             <div className="grid grid-cols-3 gap-2">
