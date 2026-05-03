@@ -371,29 +371,32 @@ function StaffTile({ member, roles, isSelf, onChat, onDetail }: {
 
 function Staff() {
   const { data: plants } = usePlants();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, user, activeOperator } = useAuth();
   const queryClient = useQueryClient();
 
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
-  // Heartbeat: write updated_at to DB AND patch the query cache immediately so
-  // the current user's presence dot shows "Active" without waiting for a refetch.
+  // Heartbeat: marks the ACTIVE OPERATOR (not just the auth user) as "Active".
+  // When operator is switched (e.g. Glenn switches to Reynan's session), we must
+  // touch the active operator's updated_at — otherwise the switched-to tile stays
+  // Idle even though someone is actively using that session.
+  // We also patch the query cache immediately so the dot flips without waiting
+  // for the next DB refetch.
   useEffect(() => {
-    if (!user) return;
+    const operatorId = activeOperator?.id ?? user?.id;
+    if (!operatorId) return;
     const heartbeat = async () => {
       const now = new Date().toISOString();
-      // 1. Persist to DB so other users see us as active on their next refetch.
-      await supabase.from('user_profiles').update({ updated_at: now }).eq('id', user.id);
-      // 2. Patch local cache immediately so OUR own dot flips to Active right away.
+      await supabase.from('user_profiles').update({ updated_at: now }).eq('id', operatorId);
       queryClient.setQueryData<StaffMember[]>(['staff'], (prev) =>
-        prev?.map((s) => s.id === user.id ? { ...s, updated_at: now } : s) ?? prev
+        prev?.map((s) => s.id === operatorId ? { ...s, updated_at: now } : s) ?? prev
       );
     };
     heartbeat();
     const interval = setInterval(heartbeat, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, queryClient]);
+  }, [activeOperator?.id, user?.id, queryClient]);
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
@@ -448,7 +451,7 @@ function Staff() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {staff.map((s) => (
           <StaffTile key={s.id} member={s} roles={roles as any[]}
-            isSelf={s.id === user?.id}
+            isSelf={s.id === (activeOperator?.id ?? user?.id)}
             onChat={() => setChatPeer(s)}
             onDetail={() => setDetailMember(s)}
           />
@@ -463,14 +466,14 @@ function Staff() {
       {detailMember && (
         <DetailDrawer
           member={detailMember} roles={roles as any[]} plants={plants ?? []} allStaff={staff}
-          isSelf={detailMember.id === user?.id} isAdmin={isAdmin}
+          isSelf={detailMember.id === (activeOperator?.id ?? user?.id)} isAdmin={isAdmin}
           onChat={() => setChatPeer(detailMember)}
           onClose={() => setDetailMember(null)}
         />
       )}
 
       {chatPeer && user && (
-        <ChatWindow peer={chatPeer} currentUserId={user.id} onClose={() => setChatPeer(null)} />
+        <ChatWindow peer={chatPeer} currentUserId={activeOperator?.id ?? user.id} onClose={() => setChatPeer(null)} />
       )}
     </>
   );
