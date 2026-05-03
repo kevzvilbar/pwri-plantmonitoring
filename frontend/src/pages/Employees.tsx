@@ -139,22 +139,16 @@ function ChatWindow({ peer, currentUserId, onClose }: {
   });
 
   useEffect(() => {
-    // Listen for messages WHERE the current user is the recipient.
-    // Using filter: recipient_id=eq.<currentUserId> ensures only messages
-    // addressed to this user trigger the refetch (REPLICA IDENTITY FULL required).
+    // Listen for new messages in BOTH directions so that:
+    //   - The receiver sees incoming messages in real-time.
+    //   - The sender's window also updates immediately (no waiting for 5s poll).
     const channelName = `chat:${[currentUserId, peer.id].sort().join('-')}`;
     const ch = supabase
       .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `recipient_id=eq.${currentUserId}`,
-        },
-        () => refetch()
-      )
+      // incoming: peer → me
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `recipient_id=eq.${currentUserId}` }, () => refetch())
+      // outgoing echo: me → peer (keeps sender window in sync instantly)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `sender_id=eq.${currentUserId}` }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [currentUserId, peer.id, refetch]);
@@ -371,18 +365,17 @@ function StaffTile({ member, roles, isSelf, onChat, onDetail }: {
 
 function Staff() {
   const { data: plants } = usePlants();
+  // activeOperator = the switched-to operator (or own profile if no switch).
+  // All presence/identity logic must use activeOperator, NOT raw user.
   const { isAdmin, user, activeOperator } = useAuth();
   const queryClient = useQueryClient();
 
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
-  // Heartbeat: marks the ACTIVE OPERATOR (not just the auth user) as "Active".
-  // When operator is switched (e.g. Glenn switches to Reynan's session), we must
-  // touch the active operator's updated_at — otherwise the switched-to tile stays
-  // Idle even though someone is actively using that session.
-  // We also patch the query cache immediately so the dot flips without waiting
-  // for the next DB refetch.
+  // Heartbeat: touch updated_at for the ACTIVE OPERATOR so their tile shows
+  // "Active" while the session is in use. Also patch the query cache immediately
+  // so the dot flips without waiting for the next DB refetch.
   useEffect(() => {
     const operatorId = activeOperator?.id ?? user?.id;
     if (!operatorId) return;
@@ -396,6 +389,7 @@ function Staff() {
     heartbeat();
     const interval = setInterval(heartbeat, 2 * 60 * 1000);
     return () => clearInterval(interval);
+  // Re-run whenever the active operator switches so the new operator gets the heartbeat.
   }, [activeOperator?.id, user?.id, queryClient]);
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
@@ -412,9 +406,9 @@ function Staff() {
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
-    // FIX: Refresh every 60 s so presence badges stay current for all staff.
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    // Refresh every 30 s; staleTime 0 so presence dots are always fresh.
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   // FIX: Subscribe to realtime updated_at changes so that when any user's
@@ -472,7 +466,7 @@ function Staff() {
         />
       )}
 
-      {chatPeer && user && (
+      {chatPeer && user && chatPeer.id !== (activeOperator?.id ?? user.id) && (
         <ChatWindow peer={chatPeer} currentUserId={activeOperator?.id ?? user.id} onClose={() => setChatPeer(null)} />
       )}
     </>
