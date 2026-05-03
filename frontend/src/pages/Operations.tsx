@@ -1876,7 +1876,7 @@ function ProductMeterRow({
 
   return (
     <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
-      {/* Row 1: Name + rename */}
+      {/* Row 1: Name + rename + date on same row */}
       <div className="min-w-0">
         {editingName ? (
           <div className="flex items-center gap-1.5">
@@ -1895,7 +1895,7 @@ function ProductMeterRow({
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <div className="text-sm font-medium truncate flex items-center gap-1.5">
               <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
               {meter.name}
@@ -1910,6 +1910,12 @@ function ProductMeterRow({
                 <Pencil className="h-3 w-3" />
               </Button>
             )}
+            <Input
+              type="datetime-local" value={customDt}
+              onChange={e => setCustomDt(e.target.value)}
+              className="shrink-0 w-44 text-xs h-7 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 ml-auto"
+              title="Reading date & time"
+            />
           </div>
         )}
         <div className="text-xs text-muted-foreground mt-0.5">
@@ -1924,14 +1930,8 @@ function ProductMeterRow({
         </div>
       </div>
 
-      {/* Row 2: reading input + save + history | date inline on right */}
+      {/* Row 2: reading input + save + history */}
       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-        <Input
-          type="datetime-local" value={customDt}
-          onChange={e => setCustomDt(e.target.value)}
-          className="shrink-0 w-44 text-xs h-9 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
-          title="Reading date & time"
-        />
         <div className="relative flex-1 min-w-0">
           <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
           <Input

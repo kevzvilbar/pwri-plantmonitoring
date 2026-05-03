@@ -4179,12 +4179,20 @@ function MeterNameList({
           </div>
         );
         return (
-          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+          <div key={i} className={`flex items-center gap-1 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
             <span>{name}</span>
-            <button onClick={() => startEdit(i)} className="ml-0.5 opacity-60 hover:opacity-100" title={`Rename "${name}"`}>
+            <button
+              onClick={() => startEdit(i)}
+              className="ml-0.5 inline-flex items-center justify-center rounded px-1 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 hover:text-emerald-900 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 transition-colors"
+              title={`Rename "${name}"`}
+            >
               <Pencil className="h-2.5 w-2.5" />
             </button>
-            <button onClick={() => askDelete(i)} className="opacity-60 hover:opacity-100 hover:text-destructive" title={`Remove "${name}"`}>
+            <button
+              onClick={() => askDelete(i)}
+              className="inline-flex items-center justify-center rounded px-1 py-0.5 bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-800 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 transition-colors"
+              title={`Remove "${name}"`}
+            >
               <X className="h-2.5 w-2.5" />
             </button>
           </div>
