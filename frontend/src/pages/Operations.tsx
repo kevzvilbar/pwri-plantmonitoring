@@ -2173,6 +2173,11 @@ function PowerForm() {
   const [importOpen, setImportOpen]   = useState(false);
   // Multiplier: auto-populated from latest saved electric bill; editable by admin only when no bill exists
   const [multiplierInput, setMultiplierInput] = useState('');
+  // Meter count configuration (shown between plant selector and Import)
+  const [solarMeterCount, setSolarMeterCount] = useState(1);
+  const [gridMeterCount, setGridMeterCount]   = useState(1);
+  const [solarMeterNames, setSolarMeterNames] = useState(['Solar 1', 'Solar 2', 'Solar 3']);
+  const [gridMeterNames, setGridMeterNames]   = useState(['Grid 1', 'Grid 2', 'Grid 3']);
 
   const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const showSolar = !!plant?.has_solar;
@@ -2201,25 +2206,16 @@ function PowerForm() {
     queryKey: ['op-power', plantId],
     queryFn: async () => {
       if (!plantId) return [];
-      // Try full select first (includes optional columns added by the energy migration).
-      // If the DB hasn't run that migration yet, Supabase returns an error and data is null —
-      // fall back to the base columns so the Last 7 readings card always shows data.
-      const fullSelect = 'id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by';
-      const baseSelect = 'id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by';
       const { data, error } = await supabase
         .from('power_readings')
-        .select(fullSelect)
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(8);
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,solar_meter_reading,recorded_by')
+        .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8);
       if (!error) return data ?? [];
-      // Optional columns not present — retry with base columns only
+      // Optional columns not yet in DB — retry with base columns only
       const { data: fallback } = await supabase
         .from('power_readings')
-        .select(baseSelect)
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(8);
+        .select('id,plant_id,reading_datetime,meter_reading_kwh,daily_consumption_kwh,recorded_by')
+        .eq('plant_id', plantId).order('reading_datetime', { ascending: false }).limit(8);
       return fallback ?? [];
     },
     enabled: !!plantId,
@@ -2342,6 +2338,63 @@ function PowerForm() {
               </Button>
             )}
           </div>
+
+          {/* ── Compact meter count config (shown when a plant is selected) ── */}
+          {plantId && showSolar && (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 items-start">
+              {/* Solar meter count */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-yellow-500 text-xs">☀</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">Solar meters</span>
+                  <div className="flex rounded border overflow-hidden text-[11px]">
+                    {[1,2,3].map(n => (
+                      <button key={n} onClick={() => setSolarMeterCount(n)}
+                        className={['px-2 py-0.5 transition-colors', solarMeterCount === n ? 'bg-yellow-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground'].join(' ')}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {solarMeterCount >= 2 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: solarMeterCount }).map((_, i) => (
+                      <input key={i} value={solarMeterNames[i] ?? `Solar ${i+1}`}
+                        onChange={e => setSolarMeterNames(prev => { const a=[...prev]; a[i]=e.target.value; return a; })}
+                        placeholder={`Solar ${i+1}`}
+                        className="h-6 w-20 rounded border border-yellow-200 bg-background px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-yellow-400" />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Grid meter count */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 text-blue-500" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Grid meters</span>
+                  <div className="flex rounded border overflow-hidden text-[11px]">
+                    {[1,2,3].map(n => (
+                      <button key={n} onClick={() => setGridMeterCount(n)}
+                        className={['px-2 py-0.5 transition-colors', gridMeterCount === n ? 'bg-blue-500 text-white' : 'bg-background hover:bg-muted text-muted-foreground'].join(' ')}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {gridMeterCount >= 2 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: gridMeterCount }).map((_, i) => (
+                      <input key={i} value={gridMeterNames[i] ?? `Grid ${i+1}`}
+                        onChange={e => setGridMeterNames(prev => { const a=[...prev]; a[i]=e.target.value; return a; })}
+                        placeholder={`Grid ${i+1}`}
+                        className="h-6 w-20 rounded border border-blue-200 bg-background px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
@@ -2430,52 +2483,25 @@ function PowerForm() {
               </div>
             </div>
 
-            {/* Energy Source Breakdown — read-only, auto-calculated */}
-            <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                Energy Source Breakdown
-                <span className="normal-case font-normal text-[10px] text-muted-foreground/60 bg-muted rounded px-1 py-0.5">
-                  auto-calculated · read-only
-                </span>
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-
-                {/* Daily Solar = Δ solar meter (no multiplier) */}
-                <div>
-                  <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
-                    <span className="text-yellow-500">☀</span> Daily Solar (kWh)
-                  </p>
-                  <div className={[
-                    'h-9 rounded-md border px-3 flex items-center font-mono-num text-sm select-none',
-                    'bg-muted/40 cursor-not-allowed',
-                    deltaSolar != null ? 'text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' : 'text-muted-foreground',
-                  ].join(' ')}>
-                    {deltaSolar != null ? fmtNum(deltaSolar) : <span className="text-muted-foreground/50">—</span>}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">= solar current − previous</p>
-                </div>
-
-                {/* Daily Grid = Δ grid × multiplier */}
-                <div>
-                  <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
-                    <Zap className="h-3 w-3 text-blue-500" /> Daily Grid (kWh)
-                    {effectiveMultiplier !== 1 && (
-                      <span className="text-[10px] text-amber-600 ml-0.5">×{effectiveMultiplier}</span>
-                    )}
-                  </p>
-                  <div className={[
-                    'h-9 rounded-md border px-3 flex items-center font-mono-num text-sm select-none',
-                    'bg-muted/40 cursor-not-allowed',
-                    deltaGrid != null ? 'text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' : 'text-muted-foreground',
-                  ].join(' ')}>
-                    {deltaGrid != null
-                      ? fmtNum(deltaGrid * effectiveMultiplier)
-                      : <span className="text-muted-foreground/50">—</span>
-                    }
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">= (grid current − previous) × multiplier</p>
-                </div>
-              </div>
+            {/* Energy Source Breakdown — compact inline strip */}
+            <div className="flex items-center gap-1.5 rounded border bg-muted/20 px-2.5 py-1.5 text-[11px]">
+              <span className="text-muted-foreground/60 font-medium uppercase tracking-wide shrink-0">Breakdown</span>
+              <span className="text-muted-foreground/40">·</span>
+              {/* Solar Δ */}
+              <span className="text-yellow-500 shrink-0">☀</span>
+              <span className={deltaSolar != null ? 'font-mono-num font-medium text-yellow-700 dark:text-yellow-400' : 'text-muted-foreground/50'}>
+                {deltaSolar != null ? `${fmtNum(deltaSolar)} kWh` : '—'}
+              </span>
+              <span className="text-muted-foreground/40 mx-0.5">|</span>
+              {/* Grid Δ */}
+              <Zap className="h-3 w-3 text-blue-500 shrink-0" />
+              <span className={deltaGrid != null ? 'font-mono-num font-medium text-blue-700 dark:text-blue-400' : 'text-muted-foreground/50'}>
+                {deltaGrid != null ? `${fmtNum(deltaGrid * effectiveMultiplier)} kWh` : '—'}
+              </span>
+              {effectiveMultiplier !== 1 && deltaGrid != null && (
+                <span className="text-[10px] text-amber-500 ml-0.5">×{effectiveMultiplier}</span>
+              )}
+              <span className="text-muted-foreground/30 text-[10px] ml-auto">auto · read-only</span>
             </div>
           </div>
         ) : (
@@ -2708,7 +2734,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         return data ?? [];
       }
       if (module === 'power') {
-        // Try full select (optional columns from energy migration); fall back if columns missing
+        // Try full select; fall back to base columns if optional migration columns are missing
         const { data, error } = await supabase
           .from('power_readings')
           .select('id, meter_reading_kwh, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement')
