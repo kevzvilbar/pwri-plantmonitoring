@@ -42,7 +42,9 @@ type Anomaly = {
 // Anthropic API helpers
 // ---------------------------------------------------------------------------
 
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const GEMINI_API_KEY = 'AIzaSyCa4T025UrRWQxM7hj4pxoLKp68PfD0Bm0';
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 const SYSTEM_PROMPT = `You are an AI assistant for PWRI Monitoring, a multi-plant water operations management system.
 You help operators, supervisors, and managers analyze water plant data including:
@@ -58,15 +60,20 @@ Be concise, data-focused, and professional. When data is provided in the convers
 If asked about specific data you don't have, explain what data would be needed and how to find it in the system.`;
 
 async function callClaude(messages: Msg[]): Promise<string> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  // Build Gemini contents array — prepend system prompt as first user turn
+  const contents = [
+    { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
+    { role: 'model', parts: [{ text: 'Understood. I am ready to help with PWRI water operations data.' }] },
+    ...messages.map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content }],
+    })),
+  ];
+
+  const res = await fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-    }),
+    body: JSON.stringify({ contents }),
   });
 
   if (!res.ok) {
@@ -75,17 +82,11 @@ async function callClaude(messages: Msg[]): Promise<string> {
   }
 
   const data = await res.json();
-  return data.content?.map((b: any) => b.text ?? '').join('') ?? '';
+  return data.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? '').join('') ?? '';
 }
 
 async function callClaudeForAnomalies(readings: any[]): Promise<{ anomalies: Anomaly[]; summary: string }> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      system: `You are a water operations anomaly detection expert. Analyze well meter readings and identify anomalies.
+  const systemInstruction = `You are a water operations anomaly detection expert. Analyze well meter readings and identify anomalies.
 Return ONLY valid JSON in this exact format, no markdown, no explanation outside the JSON:
 {
   "summary": "Brief plain-text summary of findings",
@@ -101,12 +102,18 @@ Return ONLY valid JSON in this exact format, no markdown, no explanation outside
       "suggested_action": "Recommended action"
     }
   ]
-}`,
-      messages: [{
-        role: 'user',
-        content: `Analyze these well meter readings for anomalies. Look for: sudden spikes or drops (>50% from baseline), zero readings, negative deltas, off-location flags.\n\nReadings:\n${JSON.stringify(readings, null, 2)}`,
-      }],
-    }),
+}`;
+
+  const contents = [
+    { role: 'user', parts: [{ text: systemInstruction }] },
+    { role: 'model', parts: [{ text: '{"summary":"ready","anomalies":[]}' }] },
+    { role: 'user', parts: [{ text: `Analyze these well meter readings for anomalies. Look for: sudden spikes or drops (>50% from baseline), zero readings, negative deltas, off-location flags.\n\nReadings:\n${JSON.stringify(readings, null, 2)}` }] },
+  ];
+
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents }),
   });
 
   if (!res.ok) {
@@ -115,7 +122,7 @@ Return ONLY valid JSON in this exact format, no markdown, no explanation outside
   }
 
   const data = await res.json();
-  const text = data.content?.map((b: any) => b.text ?? '').join('') ?? '{}';
+  const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? '').join('') ?? '{}';
 
   try {
     const clean = text.replace(/```json|```/g, '').trim();
