@@ -362,6 +362,18 @@ function Staff() {
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
+  // Touch updated_at so the current user appears "Active" while they are
+  // viewing this page. This is a lightweight presence heartbeat since we
+  // do not have a dedicated presence table.
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('user_profiles').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
+    const interval = setInterval(() => {
+      supabase.from('user_profiles').update({ updated_at: new Date().toISOString() }).eq('id', user.id);
+    }, 5 * 60 * 1000); // every 5 min
+    return () => clearInterval(interval);
+  }, [user]);
+
   const { data: staff = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -371,9 +383,18 @@ function Staff() {
     },
   });
 
+  // Join roles into profiles to bypass RLS on user_roles that restricts
+  // non-admins to only seeing their own row.
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
-    queryFn: async () => (await supabase.from('user_roles').select('*')).data ?? [],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, user_roles(role)');
+      return (data ?? []).flatMap((p: any) =>
+        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
+      );
+    },
   });
 
   return (
@@ -436,12 +457,11 @@ function OrgNode({ member, allStaff, roles, depth = 0 }: {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium leading-none truncate">{fullName(member)}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-            {member.designation ?? '—'}
+            {member.designation
+              ? <><span>{member.designation}</span><span className="mx-1 opacity-40">·</span><span>{memberRole}</span></>
+              : memberRole}
           </div>
         </div>
-        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">
-          role: {memberRole}
-        </span>
         {hasChildren && (
           <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform', expanded && 'rotate-180')} />
         )}
@@ -696,7 +716,14 @@ function RegisterInfo() {
 
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
-    queryFn: async () => (await supabase.from('user_roles').select('*')).data ?? [],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, user_roles(role)');
+      return (data ?? []).flatMap((p: any) =>
+        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
+      );
+    },
   });
 
   return (
