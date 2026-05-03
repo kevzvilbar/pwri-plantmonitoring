@@ -2827,61 +2827,38 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
       </div>
 
       {editing && (
-        <div className="mt-3 space-y-3">
-          {/* Media filter type */}
-          <div>
-            <Label className="text-xs mb-1.5 block">Media Filter Type (applied to all trains)</Label>
-            <div className="flex gap-2">
+        <div className="mt-2 space-y-1.5">
+          {/* Media filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground w-20 shrink-0">Media</span>
+            <div className="flex gap-1 flex-1">
               {(['AFM', 'MMF'] as const).map((opt) => (
-                <Button
-                  key={opt}
-                  size="sm"
-                  variant={mediaType === opt ? 'default' : 'outline'}
-                  onClick={() => setMediaType(opt)}
-                  data-testid={`media-type-${opt}`}
-                  className="flex-1"
-                >
-                  <span
-                    aria-hidden
-                    className={`mr-1.5 h-2 w-2 rounded-full border ${mediaType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
-                  />
+                <Button key={opt} size="sm" variant={mediaType === opt ? 'default' : 'outline'}
+                  onClick={() => setMediaType(opt)} data-testid={`media-type-${opt}`}
+                  className="flex-1 h-7 text-xs px-2">
                   {opt}
                 </Button>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              AFM = Active Filter Media · MMF = Multi-Media Filter
-            </p>
           </div>
-
-          {/* Pre-filter housing type */}
-          <div>
-            <Label className="text-xs mb-1.5 block">Pre-filter Housing Type (applied to all trains)</Label>
-            <div className="flex gap-2">
+          {/* Pre-filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground w-20 shrink-0">Pre-filter</span>
+            <div className="flex gap-1 flex-1">
               {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => (
-                <Button
-                  key={opt}
-                  size="sm"
-                  variant={filterType === opt ? 'default' : 'outline'}
-                  onClick={() => setFilterType(opt)}
-                  data-testid={`filter-type-${opt.replace(' ', '-')}`}
-                  className="flex-1"
-                >
-                  <span
-                    aria-hidden
-                    className={`mr-1.5 h-2 w-2 rounded-full border ${filterType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
-                  />
-                  {opt}
+                <Button key={opt} size="sm" variant={filterType === opt ? 'default' : 'outline'}
+                  onClick={() => setFilterType(opt)} data-testid={`filter-type-${opt.replace(' ', '-')}`}
+                  className="flex-1 h-7 text-xs px-2">
+                  {opt === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
                 </Button>
               ))}
             </div>
           </div>
-
-          <div className="flex gap-2 justify-end pt-1">
-            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn">
+          <div className="flex gap-1.5 justify-end pt-0.5">
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3">
               {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Save &amp; Apply to All Trains
+              Save
             </Button>
           </div>
         </div>
@@ -4051,7 +4028,79 @@ function TrainCsvImportDialog({ plantId, onClose,
   );
 }
 
-// ─── MeterNameListRows (full-width row editor) ───────────────────────────────
+// ─── MeterNameList (inline chip editor) ─────────────────────────────────────
+function MeterNameList({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const isYellow = accentColor === 'yellow';
+  const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
+  const border = isYellow ? 'border-yellow-300' : 'border-blue-300';
+  const chip   = isYellow
+    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/20 dark:border-yellow-800 dark:text-yellow-300'
+    : 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300';
+
+  const [editingIdx, setEditingIdx]           = useState<number>(-1);
+  const [editVal, setEditVal]                 = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit     = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
+  const commitEdit    = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSave(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSave(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="flex gap-1.5 flex-wrap mt-1">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+        if (editingIdx === i) return (
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${border} bg-background px-1 py-0.5`}>
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className={`h-5 w-24 text-[11px] bg-transparent focus:outline-none focus-visible:ring-1 ${ring} rounded px-0.5`} />
+            <button onClick={commitEdit} className="text-[9px] font-semibold text-emerald-700 hover:text-emerald-900 px-0.5">✓</button>
+            <button onClick={cancelEdit} className="text-[9px] text-muted-foreground hover:text-foreground px-0.5">✕</button>
+          </div>
+        );
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="flex items-center gap-0.5 rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5">
+            <span className="text-[10px] text-destructive font-medium">Delete "{name}"?</span>
+            <button onClick={() => confirmDelete(i)} className="text-[9px] font-bold text-destructive ml-1 px-0.5">Yes</button>
+            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[9px] text-muted-foreground px-0.5">No</button>
+          </div>
+        );
+        return (
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+            <span>{name}</span>
+            <button onClick={() => startEdit(i)} className="ml-0.5 opacity-60 hover:opacity-100" title={`Rename "${name}"`}>
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button onClick={() => askDelete(i)} className="opacity-60 hover:opacity-100 hover:text-destructive" title={`Remove "${name}"`}>
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MeterNameListRows (full-width row editor matching image 2 design) ────────
 function MeterNameListRows({
   count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
 }: {
