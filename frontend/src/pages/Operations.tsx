@@ -64,10 +64,11 @@ async function logReadingImport(entry: {
 const _dupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
 function clearDupDecisions() { _dupDecisions.clear(); }
 
-async function resolveImportDuplicate(key: string, label: string): Promise<'overwrite' | 'skip'> {
+async function resolveImportDuplicate(key: string, label: string, isDateOnly = false): Promise<'overwrite' | 'skip'> {
   if (_dupDecisions.has(key)) return _dupDecisions.get(key)!;
+  const timeDesc = isDateOnly ? 'on this date' : 'at this date & time';
   const overwrite = window.confirm(
-    `Duplicate detected: a reading for "${label}" already exists at this date & time.\n\nClick OK to overwrite it, or Cancel to skip this row.`
+    `Duplicate detected: a reading for "${label}" already exists ${timeDesc}.\n\nClick OK to overwrite it, or Cancel to skip this row.`
   );
   const decision: 'overwrite' | 'skip' = overwrite ? 'overwrite' : 'skip';
   _dupDecisions.set(key, decision);
@@ -130,22 +131,32 @@ function ImportReadingsDialog({
     const ts = new Date().toISOString();
 
     // ── Duplicate detection ──────────────────────────────────────────────────
-    // Group rows by datetime (normalised to minute). Detect rows where another
-    // row in the same import shares the same datetime (intra-file dups).
+    // Power readings are one-per-day: use date-only key (YYYY-MM-DD) so that
+    // two rows on the same date but different times are still caught as dups.
+    // All other modules allow multiple readings per day → use minute-level key.
+    const isPowerModule = module === 'power';
     const seenKeys = new Map<string, number>(); // key → first row index
     const intraDups: number[] = [];
     rows.forEach((r, i) => {
       const dtRaw = r.reading_datetime || r.event_date || '';
-      const key = dtRaw ? `${new Date(dtRaw).toISOString().slice(0, 16)}` : `__nodate__${i}`;
+      let key: string;
+      if (!dtRaw) {
+        key = `__nodate__${i}`;
+      } else if (isPowerModule) {
+        key = new Date(dtRaw).toISOString().slice(0, 10); // YYYY-MM-DD
+      } else {
+        key = new Date(dtRaw).toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+      }
       if (seenKeys.has(key)) intraDups.push(i);
       else seenKeys.set(key, i);
     });
 
     // If intra-file duplicates exist, warn and block
     if (intraDups.length > 0 && !dupResolved) {
-      const proceed = window.confirm(
-        `${intraDups.length} row(s) in the file share the same date & time as another row.\n\nOnly the first occurrence of each duplicate will be imported. Continue?`
-      );
+      const dupDesc = isPowerModule
+        ? `${intraDups.length} row(s) in the file share the same calendar date as another row.\n\nOnly one reading per day is allowed — only the first occurrence of each date will be imported. Continue?`
+        : `${intraDups.length} row(s) in the file share the same date & time as another row.\n\nOnly the first occurrence of each duplicate will be imported. Continue?`;
+      const proceed = window.confirm(dupDesc);
       if (!proceed) { setBusy(false); return; }
       // Keep only first occurrence of each key
       const uniqueRows = rows.filter((r, i) => !intraDups.includes(i));
@@ -568,13 +579,17 @@ async function insertPowerReadings(
   const errors: string[] = [];
   for (const r of rows) {
     const dt = new Date(r.reading_datetime).toISOString();
-    const dtMin = dt.slice(0, 16);
+    // Power readings are one-per-day: use date-only key for duplicate detection
+    // (matches manual entry which uses windowKind: 'day')
+    const dtDate = dt.slice(0, 10); // YYYY-MM-DD
+    const dayStart = `${dtDate}T00:00:00.000Z`;
+    const dayEnd   = `${dtDate}T23:59:59.999Z`;
 
-    // Duplicate check for power readings
+    // Duplicate check for power readings — one per calendar day per plant
     const { data: existing } = await supabase.from('power_readings')
       .select('id').eq('plant_id', plantId)
-      .gte('reading_datetime', `${dtMin}:00`)
-      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+      .gte('reading_datetime', dayStart)
+      .lte('reading_datetime', dayEnd).limit(1);
 
     const payload: Record<string, any> = {
       plant_id: plantId,
@@ -597,7 +612,7 @@ async function insertPowerReadings(
     };
 
     if (existing && existing.length > 0) {
-      const decision = await resolveImportDuplicate(`${plantId}|${dtMin}`, `Power @ ${dtMin}`);
+      const decision = await resolveImportDuplicate(`${plantId}|${dtDate}`, `Power @ ${dtDate}`, true);
       if (decision === 'skip') continue;
       // overwrite
       const { error } = await supabase.from('power_readings').update(payload).eq('id', existing[0].id);
