@@ -47,15 +47,15 @@ export default function ROTrains() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">RO Trains & Pre-Treatment</h1>
-          <p className="text-sm text-muted-foreground">Train logs, AFM/MMF, CIP, and pre-treatment readings</p>
+
         </div>
       </div>
       <Tabs defaultValue="overview">
         <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="pretreat-ro">Pre-Treatment & RO</TabsTrigger>
-          <TabsTrigger value="cip">CIP</TabsTrigger>
-          <TabsTrigger value="chemical-dosing">Chemical Dosing</TabsTrigger>
+          <TabsTrigger value="overview" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Pre-Treatment & RO</TabsTrigger>
+          <TabsTrigger value="cip" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">CIP</TabsTrigger>
+          <TabsTrigger value="chemical-dosing" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Chemical Dosing</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="mt-3"><Overview /></TabsContent>
         <TabsContent value="pretreat-ro" className="mt-3"><PretreatmentAndROLog /></TabsContent>
@@ -1024,93 +1024,82 @@ function PretreatmentAndROLog() {
             </Card>
           )}
 
-          {train.num_booster_pumps > 0 && (() => {
-            // Shared psiMode across all pumps — read from pump 1 as the source of truth
-            const sharedPsiMode = (boosters[1]?.psiMode) !== false;
-            const toggleAllPsiMode = () => {
-              const next = !sharedPsiMode;
-              const updated: Record<number, { hz: string; target: string; amp: string; psiMode: boolean }> = {};
-              Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((u) => {
-                updated[u] = { ...(boosters[u] || { hz: '', target: '', amp: '', psiMode: true }), psiMode: next, hz: '', target: '' };
-              });
-              setBoosters(updated);
-            };
-            return (
-              <Card className="overflow-hidden">
-                {/* Table header */}
-                <div className="grid grid-cols-[100px_1fr_1fr] bg-muted/60 border-b border-border">
-                  <div className="px-3 py-2 text-[11px] font-semibold text-foreground flex items-center">
-                    <span>Booster Pumps ({train.num_booster_pumps})</span>
-                  </div>
-                  {/* Target column header with inline Hz/psi toggle */}
-                  <div className="px-3 py-2 flex items-center gap-2 border-l border-border">
-                    <span className="text-[11px] font-semibold text-foreground">
-                      Target ({sharedPsiMode ? 'psi' : 'Hz'})
-                    </span>
-                    {/* Toggle pill */}
-                    <button
-                      type="button"
-                      onClick={toggleAllPsiMode}
-                      className={cn(
-                        'h-6 px-2.5 rounded-full text-[10px] font-semibold border transition-colors',
-                        'border-primary/40 bg-background text-primary hover:bg-primary hover:text-primary-foreground'
-                      )}
-                    >
-                      {sharedPsiMode ? 'Hz' : 'psi'}
-                    </button>
-                  </div>
-                  <div className="px-3 py-2 border-l border-border">
-                    <span className="text-[11px] font-semibold text-foreground">Amperage (A)</span>
-                  </div>
-                </div>
-
-                {/* Pump rows */}
-                {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
-                  const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
-                  const setB = (patch: Partial<typeof b>) =>
-                    setBoosters({ ...boosters, [u]: { ...b, ...patch } });
-                  return (
-                    <div key={u} className={cn('grid grid-cols-[100px_1fr_1fr]', u < train.num_booster_pumps && 'border-b border-border')}>
-                      {/* Pump label */}
-                      <div className="px-3 py-2.5 flex items-center">
-                        <span className="text-[11px] font-semibold text-foreground">Pump {u}</span>
+          {train.num_booster_pumps > 0 && (
+            <Card className="p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Booster Pumps ({train.num_booster_pumps})</h4>
+              {/* Column headers */}
+              <div className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2">
+                <div />
+                <div className="text-[11px] text-muted-foreground font-medium">Frequency (Hz)</div>
+                <div className="text-[11px] text-muted-foreground font-medium">Target Pressure (psi)</div>
+                <div className="text-[11px] text-muted-foreground font-medium">Amperage (A)</div>
+              </div>
+              {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+                const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
+                const psiMode = b.psiMode !== false; // default to psi mode
+                const setB = (patch: Partial<typeof b>) =>
+                  setBoosters({ ...boosters, [u]: { ...b, ...patch } });
+                return (
+                  <div key={u} className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2 items-end">
+                    <div className="text-[11px] font-semibold text-foreground pb-2">Pump {u}</div>
+                    {/* Hz input */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <Label className="text-[11px] text-muted-foreground">Hz</Label>
+                        {psiMode && (
+                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                        )}
                       </div>
-                      {/* Target input */}
-                      <div className="px-3 py-2.5 border-l border-border flex items-center">
-                        <div className="flex w-full rounded-md border border-input overflow-hidden">
-                          <Input
-                            type="number" step="any"
-                            value={sharedPsiMode ? b.target : b.hz}
-                            placeholder={sharedPsiMode ? 'Enter psi' : 'Enter Hz'}
-                            className="border-0 rounded-none flex-1 min-w-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/50 bg-transparent text-sm"
-                            onChange={(e) => sharedPsiMode ? setB({ target: e.target.value }) : setB({ hz: e.target.value })}
-                          />
-                          <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
-                            {sharedPsiMode ? 'psi' : 'Hz'}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Amperage input */}
-                      <div className="px-3 py-2.5 border-l border-border flex items-center">
-                        <div className="flex w-full rounded-md border border-input overflow-hidden">
-                          <Input
-                            type="number" step="any"
-                            value={b.amp}
-                            placeholder="Enter A"
-                            className="border-0 rounded-none flex-1 min-w-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/50 bg-transparent text-sm"
-                            onChange={(e) => setB({ amp: e.target.value })}
-                          />
-                          <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
-                            A
-                          </span>
-                        </div>
-                      </div>
+                      <Input type="number" step="any"
+                        value={psiMode ? '' : b.hz}
+                        disabled={psiMode}
+                        placeholder={psiMode ? '—' : 'Enter Hz'}
+                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onChange={(e) => setB({ hz: e.target.value })} />
                     </div>
-                  );
-                })}
-              </Card>
-            );
-          })()}
+                    {/* Psi input + mode toggle */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <Label className="text-[11px] text-muted-foreground">psi</Label>
+                        {!psiMode && (
+                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Input type="number" step="any"
+                          value={!psiMode ? '' : b.target}
+                          disabled={!psiMode}
+                          placeholder={!psiMode ? '—' : 'Enter psi'}
+                          className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                          onChange={(e) => setB({ target: e.target.value })} />
+                        {/* Toggle button */}
+                        <button
+                          type="button"
+                          title={psiMode ? 'Switch to Hz input' : 'Switch to psi input'}
+                          onClick={() => setB({ psiMode: !psiMode, hz: '', target: '' })}
+                          className="shrink-0 h-9 w-9 rounded-md border border-input bg-muted hover:bg-muted/70 flex items-center justify-center text-[9px] font-bold text-muted-foreground transition-colors"
+                        >
+                          {psiMode ? 'Hz' : 'psi'}
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/50 mt-0.5 text-right">
+                        tap to switch
+                      </p>
+                    </div>
+                    {/* Amperage */}
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground mb-0.5 block">A</Label>
+                      <Input type="number" step="any"
+                        value={b.amp}
+                        placeholder="Enter amps"
+                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40"
+                        onChange={(e) => setB({ amp: e.target.value })} />
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
 
           <Card className="p-3 space-y-2">
             <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
@@ -1449,6 +1438,140 @@ function PretreatmentAndROLog() {
   );
 }
 
+// ─── CIP Volumetric Calculator (per vessel) ───────────────────────────────────
+// Standard formula: V = π × r² × L   (cylindrical pressure vessel)
+// where r = inner_diameter / 2,  L = vessel_length (active membrane length)
+// Standard 8040 RO element: ID ≈ 0.201 m, length ≈ 1.016 m → ~0.0323 m³ per element
+// Fill volume for CIP = vessel_volume × fill_factor (typically 0.8–1.0)
+function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
+  const [vessels, setVessels] = useState<Array<{
+    id: number; diameter_mm: string; length_m: string; fill_factor: string;
+  }>>(
+    Array.from({ length: numVessels }, (_, i) => ({
+      id: i + 1, diameter_mm: '201', length_m: '1.016', fill_factor: '1.0',
+    }))
+  );
+  const [expanded, setExpanded] = useState(false);
+  const [useUniform, setUseUniform] = useState(true);
+  const [uniformD, setUniformD] = useState('201');
+  const [uniformL, setUniformL] = useState('1.016');
+  const [uniformF, setUniformF] = useState('1.0');
+
+  const calcVessel = (d_mm: string, l_m: string, ff: string) => {
+    const r = (+d_mm / 1000) / 2;
+    const l = +l_m;
+    const f = +ff || 1;
+    if (!r || !l) return null;
+    return +(Math.PI * r * r * l * f).toFixed(4);
+  };
+
+  const vesselVols = useMemo(() => vessels.map(v => {
+    if (useUniform) return calcVessel(uniformD, uniformL, uniformF);
+    return calcVessel(v.diameter_mm, v.length_m, v.fill_factor);
+  }), [vessels, useUniform, uniformD, uniformL, uniformF]);
+
+  const totalVol = vesselVols.reduce((s, v) => s + (v ?? 0), 0);
+  const totalVolL = +(totalVol * 1000).toFixed(1);
+
+  return (
+    <Card className="p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Volumetric Calculator</h4>
+          <p className="text-[10px] text-muted-foreground">CIP solution volume per vessel — V = π·r²·L × fill factor</p>
+        </div>
+        <button onClick={() => setExpanded(e => !e)}
+          className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
+          {expanded ? 'Collapse ▲' : 'Expand ▼'}
+        </button>
+      </div>
+
+      {/* Uniform / Per-vessel toggle */}
+      <div className="flex items-center gap-3">
+        <button onClick={() => setUseUniform(true)}
+          className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors font-medium',
+            useUniform ? 'bg-emerald-600 text-white border-emerald-600' : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
+          Uniform (all same)
+        </button>
+        <button onClick={() => setUseUniform(false)}
+          className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors font-medium',
+            !useUniform ? 'bg-emerald-600 text-white border-emerald-600' : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
+          Per-vessel
+        </button>
+      </div>
+
+      {useUniform && (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Inner Dia. (mm)</Label>
+            <Input type="number" step="any" value={uniformD} onChange={e => setUniformD(e.target.value)} className="h-8 text-sm" placeholder="201" />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Length (m)</Label>
+            <Input type="number" step="any" value={uniformL} onChange={e => setUniformL(e.target.value)} className="h-8 text-sm" placeholder="1.016" />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Fill Factor</Label>
+            <Input type="number" step="0.01" min="0.1" max="1" value={uniformF} onChange={e => setUniformF(e.target.value)} className="h-8 text-sm" placeholder="1.0" />
+          </div>
+        </div>
+      )}
+
+      {!useUniform && expanded && (
+        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+          {vessels.map((vv, i) => (
+            <div key={vv.id} className="grid grid-cols-[28px_1fr_1fr_1fr_52px] gap-1.5 items-end">
+              <span className="text-[10px] text-muted-foreground font-mono-num pb-1.5">V{vv.id}</span>
+              <div>
+                {i === 0 && <Label className="text-[10px] text-muted-foreground">Dia (mm)</Label>}
+                <Input type="number" step="any" value={vv.diameter_mm}
+                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, diameter_mm: e.target.value } : x))}
+                  className="h-7 text-xs" />
+              </div>
+              <div>
+                {i === 0 && <Label className="text-[10px] text-muted-foreground">Length (m)</Label>}
+                <Input type="number" step="any" value={vv.length_m}
+                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, length_m: e.target.value } : x))}
+                  className="h-7 text-xs" />
+              </div>
+              <div>
+                {i === 0 && <Label className="text-[10px] text-muted-foreground">Fill</Label>}
+                <Input type="number" step="0.01" min="0.1" max="1" value={vv.fill_factor}
+                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, fill_factor: e.target.value } : x))}
+                  className="h-7 text-xs" />
+              </div>
+              <div className="text-right">
+                {i === 0 && <Label className="text-[10px] text-muted-foreground">Vol (m³)</Label>}
+                <div className={cn('h-7 flex items-center justify-end text-xs font-mono-num font-medium pr-1',
+                  vesselVols[i] ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                  {vesselVols[i]?.toFixed(4) ?? '—'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Summary row */}
+      <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Vessels</p>
+          <p className="text-sm font-bold font-mono-num">{numVessels}</p>
+        </div>
+        <div>
+          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total (m³)</p>
+          <p className="text-sm font-bold font-mono-num">{totalVol.toFixed(4)}</p>
+        </div>
+        <div>
+          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total (L)</p>
+          <p className="text-sm font-bold font-mono-num">{totalVolL}</p>
+        </div>
+      </div>
+      <p className="text-[9px] text-muted-foreground/60">Standard 8040 element defaults: ID 201 mm, length 1.016 m</p>
+    </Card>
+  );
+}
+
 function CIPLog() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -1484,8 +1607,9 @@ function CIPLog() {
   });
 
   const selectedTrain = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
+  const numVessels = selectedTrain?.num_vessels ?? 15;
 
-  // Live computed values for sidebar
+  // Live computed values
   const causticKg  = +v.caustic || 0;
   const hclL       = +v.hcl     || 0;
   const slsG       = +v.sls     || 0;
@@ -1513,7 +1637,6 @@ function CIPLog() {
     return parts.join(' + ') || '—';
   };
 
-  // Comparison to last saved CIP
   const lastCip = history?.[0];
   const lastCipCost = lastCip ? getHistoryCost(lastCip) : null;
   const comparisonPct = lastCipCost && liveCost
@@ -1544,47 +1667,68 @@ function CIPLog() {
     ? 'text-amber-500'
     : 'text-red-500';
 
+  // ── CIP Summary block (reused in both sidebar and mobile bottom bar) ─────────
+  const CIPSummaryContent = () => (
+    <>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Chemical Cost:</p>
+        <p className="text-xl font-bold font-mono-num leading-tight">₱ {fmtNum(liveCost, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Mass:</p>
+        <p className="text-sm font-semibold font-mono-num">{fmtNum(totalMassKg, 3)} kg</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Volume:</p>
+        <p className="text-sm font-semibold font-mono-num">{fmtNum(totalVolumeL, 2)} L</p>
+      </div>
+      {comparisonPct != null && (
+        <div>
+          <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">vs Last CIP:</p>
+          <p className={cn('text-sm font-semibold', +comparisonPct <= 0 ? 'text-emerald-400' : 'text-amber-400')}>
+            {+comparisonPct > 0 ? '+' : ''}{comparisonPct}% Chemical Use
+          </p>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className="flex gap-3 items-start">
-      {/* ── Main Content ──────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-2.5">
-
-        {/* Plant + Train row */}
-        <Card className="p-3 space-y-2.5">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-[11px] text-muted-foreground">Plant</Label>
-              <PlantPicker value={plantId} onChange={(p) => { setPlantId(p); setTrainId(''); }} />
-            </div>
-            <div>
-              <Label className="text-[11px] text-muted-foreground">Train</Label>
-              <Select value={trainId} onValueChange={setTrainId}>
-                <SelectTrigger><SelectValue placeholder="Select train" /></SelectTrigger>
-                <SelectContent>
-                  {trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="space-y-2.5">
+      {/* ── Plant + Train row ──────────────────────────────────────────── */}
+      <Card className="p-3 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Plant</Label>
+            <PlantPicker value={plantId} onChange={(p) => { setPlantId(p); setTrainId(''); }} />
           </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Train</Label>
+            <Select value={trainId} onValueChange={setTrainId}>
+              <SelectTrigger><SelectValue placeholder="Select train" /></SelectTrigger>
+              <SelectContent>
+                {trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {selectedTrain && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <span className="text-sm font-bold">Train {selectedTrain.train_number}</span>
+            <span className={cn('text-xs font-medium', trainStatusColor)}>({trainStatusLabel})</span>
+          </div>
+        )}
+      </Card>
 
-          {/* Train status badge */}
-          {selectedTrain && (
-            <div className="flex items-center gap-2 pt-0.5">
-              <span className="text-sm font-bold">Train {selectedTrain.train_number}</span>
-              <span className={cn('text-xs font-medium', trainStatusColor)}>
-                ({trainStatusLabel})
-              </span>
-            </div>
-          )}
-        </Card>
+      {/* ── Main + Sidebar layout: stacked on mobile, side-by-side on md+ ─ */}
+      <div className="flex flex-col md:flex-row gap-2.5 items-start">
 
-        {/* Dosing & Time + Remarks — side by side on wider screens */}
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2.5">
+        {/* Main content */}
+        <div className="flex-1 min-w-0 space-y-2.5">
 
           {/* Dosing & Time */}
           <Card className="p-3 space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Dosing & Time</h4>
-
             <div className="grid grid-cols-2 gap-2">
               {/* Caustic Soda */}
               <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
@@ -1603,7 +1747,6 @@ function CIPLog() {
                   <div className={cn('h-full rounded-full bg-teal-400 transition-all', v.caustic ? 'w-1/2' : 'w-0')} />
                 </div>
               </div>
-
               {/* HCl */}
               <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
                 v.hcl ? 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30' : 'border-border bg-muted/20')}>
@@ -1621,9 +1764,8 @@ function CIPLog() {
                   <div className={cn('h-full rounded-full bg-amber-400 transition-all', v.hcl ? 'w-1/2' : 'w-0')} />
                 </div>
               </div>
-
               {/* SLS */}
-              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors col-span-1',
+              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
                 v.sls ? 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30' : 'border-border bg-muted/20')}>
                 <div className="flex items-center gap-1.5">
                   <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-yellow-100 dark:bg-yellow-900 text-[8px] font-bold text-yellow-700 dark:text-yellow-300">SO₃</span>
@@ -1640,7 +1782,6 @@ function CIPLog() {
                 </div>
               </div>
             </div>
-
             {/* Datetime pickers */}
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1669,7 +1810,7 @@ function CIPLog() {
             <div>
               <Label className="text-[11px] text-muted-foreground">Remarks</Label>
               <Textarea value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })}
-                placeholder="Any observations..." className="text-xs min-h-[72px] resize-none" />
+                placeholder="Any observations..." className="text-xs min-h-[60px] resize-none" />
             </div>
             <div className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 p-2 space-y-0.5">
               <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
@@ -1681,106 +1822,85 @@ function CIPLog() {
               </div>
             </div>
           </Card>
+
+          {/* Volumetric Calculator */}
+          <CIPVolumetric numVessels={numVessels} />
+
+          {/* CIP History table */}
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                CIP History {selectedTrain ? `— Train ${selectedTrain.train_number}` : ''}
+              </h4>
+              <ExportButton table="cip_logs" label="Export" />
+            </div>
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b border-border">
+                    <th className="text-left py-1.5 pr-2 font-semibold">Date</th>
+                    <th className="text-left py-1.5 pr-2 font-semibold">Duration</th>
+                    <th className="text-left py-1.5 pr-2 font-semibold">Chemical Type</th>
+                    <th className="text-right py-1.5 font-semibold">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history?.map((c: any) => {
+                    const dur = c.start_datetime && c.end_datetime
+                      ? Math.round((new Date(c.end_datetime).getTime() - new Date(c.start_datetime).getTime()) / 60000)
+                      : null;
+                    const hCost = getHistoryCost(c);
+                    return (
+                      <tr key={c.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                        <td className="py-1.5 pr-2 font-mono-num text-[11px]">
+                          {c.start_datetime ? format(new Date(c.start_datetime), 'MM/dd/yy') : '—'}
+                        </td>
+                        <td className="py-1.5 pr-2 text-muted-foreground">
+                          {dur != null && dur > 0 ? `${dur} min` : '—'}
+                        </td>
+                        <td className="py-1.5 pr-2">{getChemType(c)}</td>
+                        <td className="py-1.5 text-right font-mono-num">
+                          {cipPrices ? `₱ ${fmtNum(hCost, 2)}` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!history?.length && (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center text-muted-foreground">No CIP records yet</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
 
-        {/* CIP History table */}
-        <Card className="p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              CIP History {selectedTrain ? `— Train ${selectedTrain.train_number}` : ''}
-            </h4>
-            <ExportButton table="cip_logs" label="Export" />
+        {/* ── Sidebar: hidden on mobile (shown below instead), visible md+ ── */}
+        <div className="hidden md:block w-48 shrink-0">
+          <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary</p>
+              <p className="text-[9px] text-teal-400">(Live Calc)</p>
+            </div>
+            <div className="space-y-2.5"><CIPSummaryContent /></div>
+            <div className="border-t border-teal-700/60 pt-2.5 space-y-2">
+              <Button onClick={submit} className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save CIP</Button>
+              <Button variant="ghost" onClick={clearForm} className="w-full h-8 text-xs text-teal-300 hover:text-white hover:bg-teal-800">Clear Form</Button>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-muted-foreground border-b border-border">
-                  <th className="text-left py-1.5 pr-3 font-semibold">Date</th>
-                  <th className="text-left py-1.5 pr-3 font-semibold">Duration</th>
-                  <th className="text-left py-1.5 pr-3 font-semibold">Chemical Type</th>
-                  <th className="text-right py-1.5 font-semibold">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history?.map((c: any) => {
-                  const dur = c.start_datetime && c.end_datetime
-                    ? Math.round((new Date(c.end_datetime).getTime() - new Date(c.start_datetime).getTime()) / 60000)
-                    : null;
-                  const hCost = getHistoryCost(c);
-                  return (
-                    <tr key={c.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                      <td className="py-1.5 pr-3 font-mono-num text-[11px]">
-                        {c.start_datetime ? format(new Date(c.start_datetime), 'MM/dd/yyyy') : '—'}
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted-foreground">
-                        {dur != null && dur > 0 ? `${dur} min` : '—'}
-                      </td>
-                      <td className="py-1.5 pr-3">{getChemType(c)}</td>
-                      <td className="py-1.5 text-right font-mono-num">
-                        {cipPrices ? `₱ ${fmtNum(hCost, 2)}` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!history?.length && (
-                  <tr>
-                    <td colSpan={4} className="py-4 text-center text-muted-foreground">
-                      No CIP records yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        </div>
       </div>
 
-      {/* ── Right Sidebar ─────────────────────────────────────────────── */}
-      <div className="w-48 shrink-0">
-        <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary</p>
-            <p className="text-[9px] text-teal-400">(Live Calc)</p>
-          </div>
-
-          <div className="space-y-2.5">
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Chemical Cost:</p>
-              <p className="text-xl font-bold font-mono-num leading-tight">₱ {fmtNum(liveCost, 2)}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Mass:</p>
-              <p className="text-sm font-semibold font-mono-num">{fmtNum(totalMassKg, 3)} kg</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Volume:</p>
-              <p className="text-sm font-semibold font-mono-num">{fmtNum(totalVolumeL, 2)} L</p>
-            </div>
-            {comparisonPct != null && (
-              <div>
-                <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">vs Last CIP:</p>
-                <p className={cn('text-sm font-semibold', +comparisonPct <= 0 ? 'text-emerald-400' : 'text-amber-400')}>
-                  "{+comparisonPct > 0 ? '+' : ''}{comparisonPct}% Chemical Use"
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-teal-700/60 pt-2.5 space-y-2">
-            <Button
-              onClick={submit}
-              className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0"
-            >
-              Save CIP
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={clearForm}
-              className="w-full h-8 text-xs text-teal-300 hover:text-white hover:bg-teal-800"
-            >
-              Clear Form
-            </Button>
-          </div>
+      {/* ── Mobile summary bar (visible only on mobile) ─────────────────── */}
+      <div className="md:hidden rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-2.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary <span className="text-teal-400 font-normal">(Live)</span></p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <CIPSummaryContent />
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <Button variant="ghost" onClick={clearForm} className="h-9 text-xs text-teal-300 hover:text-white hover:bg-teal-800 border border-teal-700">Clear Form</Button>
+          <Button onClick={submit} className="h-9 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save CIP</Button>
         </div>
       </div>
     </div>
@@ -1955,141 +2075,147 @@ function ChemDosingForm() {
     qc.invalidateQueries();
   };
 
+  // Shared summary content used in both sidebar and mobile bar
+  const DosingMobileSummary = () => (
+    <>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Mass (kg):</p>
+        <p className="text-xl font-bold font-mono-num leading-tight">{fmtNum(totalMassKg, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Volume (L):</p>
+        <p className="text-base font-bold font-mono-num">{fmtNum(totalVolumeL, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Free Cl Test PCS:</p>
+        <p className="text-base font-bold font-mono-num">{freePcs}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Calculated Cost:</p>
+        <p className="text-xl font-bold leading-tight">₱ {fmtNum(cost, 2)}</p>
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex gap-3 items-start">
-      {/* ── Main Content ─────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-3">
+    <div className="space-y-2.5">
+      {/* ── Main + Sidebar: stacked mobile, side-by-side md+ ─────────── */}
+      <div className="flex flex-col md:flex-row gap-2.5 items-start">
 
-        {/* Plant header card */}
-        <Card className="p-3 space-y-2">
-          {plantName && (
-            <div className="flex items-center gap-2 pb-1">
-              <span className="text-base">🏭</span>
-              <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-[11px] text-muted-foreground">Plant</Label>
-              <ChemPlantPick value={plantId} onChange={setPlantId} />
-            </div>
-            <div>
-              <Label className="text-[11px] text-muted-foreground">Date & time</Label>
-              <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
-            </div>
-          </div>
-        </Card>
+        {/* ── Main Content ─────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-3">
 
-        {/* Mass-Based Dosing Group */}
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Mass-Based Dosing Group</p>
-          <div className="grid grid-cols-3 gap-2">
-            <ChemCard
-              name="Chlorine (kg)"
-              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
-              value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
-              unit="kg" accent="teal"
-            />
-            <ChemCard
-              name="SMBS (kg)"
-              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
-              value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
-              unit="kg" accent="default"
-            />
-            <ChemCard
-              name="Soda Ash (kg)"
-              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
-              value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
-              unit="kg" accent="default"
-            />
-          </div>
-        </div>
-
-        {/* Volume-Based Dosing Group */}
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Volume-Based Dosing Group</p>
-          <div className="grid grid-cols-2 gap-2">
-            <ChemCard
-              name="Anti Scalant (L)"
-              icon={<span className="text-base leading-none">🚛</span>}
-              value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
-              unit="L" accent="olive"
-            />
-          </div>
-        </div>
-
-        {/* Ancillary & Tests Group */}
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Ancillary & Tests Group</p>
-          <div className="grid grid-cols-2 gap-2">
-            <ChemCard
-              name="Free Cl Reagent (pcs)"
-              icon={<span className="text-base leading-none">🧪</span>}
-              value={v.free_chlorine_reagent_pcs}
-              onChange={val => setV({ ...v, free_chlorine_reagent_pcs: val })}
-              unit="pcs" accent="default"
-              inputProps={{ min: '0', max: '20' }}
-            />
-          </div>
-        </div>
-
-        {/* Residual samples */}
-        {samples.length > 0 && (
-          <Card className="p-3 space-y-2 border-t">
-            <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual Samples</h4>
-            {samples.map((s, i) => (
-              <div key={s.id} className="grid grid-cols-[20px_1fr_88px] gap-2 items-end">
-                <div className="text-xs font-mono-num pt-2 text-muted-foreground">#{i + 1}</div>
-                <div>
-                  <Label className="text-xs">Sampling point</Label>
-                  <Input value={s.point} placeholder="e.g. Tank outlet"
-                    onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
-                </div>
-                <div>
-                  <Label className="text-xs">ppm</Label>
-                  <Input type="number" step="any" value={s.ppm}
-                    onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
-                </div>
+          {/* Plant header card */}
+          <Card className="p-3 space-y-2">
+            {plantName && (
+              <div className="flex items-center gap-2 pb-1">
+                <span className="text-base">🏭</span>
+                <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
               </div>
-            ))}
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Plant</Label>
+                <ChemPlantPick value={plantId} onChange={setPlantId} />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Date & time</Label>
+                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
+              </div>
+            </div>
           </Card>
-        )}
+
+          {/* Mass-Based Dosing Group */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Mass-Based Dosing Group</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <ChemCard
+                name="Chlorine (kg)"
+                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
+                value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
+                unit="kg" accent="teal"
+              />
+              <ChemCard
+                name="SMBS (kg)"
+                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
+                value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
+                unit="kg" accent="default"
+              />
+              <ChemCard
+                name="Soda Ash (kg)"
+                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
+                value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
+                unit="kg" accent="default"
+              />
+            </div>
+          </div>
+
+          {/* Volume-Based + Ancillary row */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Volume-Based & Ancillary</p>
+            <div className="grid grid-cols-2 gap-2">
+              <ChemCard
+                name="Anti Scalant (L)"
+                icon={<span className="text-base leading-none">🚛</span>}
+                value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
+                unit="L" accent="olive"
+              />
+              <ChemCard
+                name="Free Cl Reagent (pcs)"
+                icon={<span className="text-base leading-none">🧪</span>}
+                value={v.free_chlorine_reagent_pcs}
+                onChange={val => setV({ ...v, free_chlorine_reagent_pcs: val })}
+                unit="pcs" accent="default"
+                inputProps={{ min: '0', max: '20' }}
+              />
+            </div>
+          </div>
+
+          {/* Residual samples */}
+          {samples.length > 0 && (
+            <Card className="p-3 space-y-2 border-t">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual Samples</h4>
+              {samples.map((s, i) => (
+                <div key={s.id} className="grid grid-cols-[20px_1fr_80px] gap-2 items-end">
+                  <div className="text-xs font-mono-num pt-2 text-muted-foreground">#{i + 1}</div>
+                  <div>
+                    <Label className="text-xs">Sampling point</Label>
+                    <Input value={s.point} placeholder="e.g. Tank outlet"
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">ppm</Label>
+                    <Input type="number" step="any" value={s.ppm}
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+
+        {/* ── Right Sidebar — hidden on mobile ─────────────────────────── */}
+        <div className="hidden md:block w-48 shrink-0">
+          <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary</p>
+            <div className="space-y-2.5"><DosingMobileSummary /></div>
+            <div className="border-t border-teal-700/60 pt-2 space-y-2">
+              <button onClick={clearAll} className="w-full text-xs text-teal-300 hover:text-white underline underline-offset-2 transition-colors">Clear All</button>
+              <Button onClick={submit} className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save Dosing</Button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* ── Right Sidebar ─────────────────────────────────────────────── */}
-      <div className="w-48 shrink-0">
-        <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary</p>
-
-          <div className="space-y-2.5">
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Mass (kg):</p>
-              <p className="text-xl font-bold font-mono-num leading-tight">{fmtNum(totalMassKg, 2)}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Volume (L):</p>
-              <p className="text-base font-bold font-mono-num">{fmtNum(totalVolumeL, 2)}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Free CI Test PCS:</p>
-              <p className="text-base font-bold font-mono-num">{freePcs}</p>
-            </div>
-            <div className="border-t border-teal-700/60 pt-2">
-              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium mb-0.5">Calculated Cost:</p>
-              <p className="text-xl font-bold leading-tight">₱ {fmtNum(cost, 2)}</p>
-            </div>
-          </div>
-
-          <div className="border-t border-teal-700/60 pt-2 space-y-2">
-            <button onClick={clearAll}
-              className="w-full text-xs text-teal-300 hover:text-white underline underline-offset-2 transition-colors">
-              Clear All
-            </button>
-            <Button onClick={submit}
-              className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">
-              Save Dosing
-            </Button>
-          </div>
+      {/* ── Mobile summary bar — visible only on mobile ───────────────── */}
+      <div className="md:hidden rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-2.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary <span className="text-teal-400 font-normal">(Live)</span></p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <DosingMobileSummary />
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button onClick={clearAll} className="h-9 text-xs text-teal-300 hover:text-white border border-teal-700 rounded-md transition-colors">Clear All</button>
+          <Button onClick={submit} className="h-9 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save Dosing</Button>
         </div>
       </div>
     </div>
