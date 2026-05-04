@@ -217,7 +217,7 @@ function PretreatmentAndROLog() {
 
   // Per-AFM/MMF rows: independent backwash + reading + pressure
   const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
-  const [boosters, setBoosters] = useState<Record<number, { target: string; amp: string }>>({});
+  const [boosters, setBoosters] = useState<Record<number, { hz: string; target: string; amp: string; psiMode: boolean }>>({});
   const [housings, setHousings] = useState<Record<number, { inP: string; outP: string }>>({});
 
   useEffect(() => {
@@ -438,7 +438,7 @@ function PretreatmentAndROLog() {
         };
       });
 
-    const booster_pumps = Object.entries(boosters).filter(([, v]) => v.target || v.amp)
+    const booster_pumps = Object.entries(boosters).filter(([, v]) => v.hz || v.target || v.amp)
       .map(([k, v]) => ({ unit: +k, target_pressure_psi: v.target ? +v.target : null, amperage: v.amp ? +v.amp : null }));
     const filter_housings = Object.entries(housings).filter(([, v]) => v.inP || v.outP)
       .map(([k, v]) => ({ unit: +k, in_psi: v.inP ? +v.inP : null, out_psi: v.outP ? +v.outP : null }));
@@ -512,8 +512,8 @@ function PretreatmentAndROLog() {
           <div className={cn(
             'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
             trainOnline
-              ? 'border-accent/25 bg-accent-soft/50'
-              : 'border-danger/25 bg-danger-soft/50'
+              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
+              : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
           )}>
             <Checkbox
               id="train-online"
@@ -522,17 +522,17 @@ function PretreatmentAndROLog() {
                 setTrainOnline(!!c);
                 if (!!c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
               }}
-              className={trainOnline ? 'data-[state=checked]:bg-accent data-[state=checked]:border-accent' : ''}
+              className={trainOnline ? 'data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600' : ''}
             />
             <div className="flex-1 min-w-0">
               <label htmlFor="train-online" className={cn(
                 'text-sm font-semibold cursor-pointer select-none',
-                trainOnline ? 'text-accent' : 'text-danger'
+                trainOnline ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-400'
               )}>
                 {trainOnline ? '● Online / Running' : '○ Offline / Not Running'}
               </label>
               {!trainOnline && (
-                <p className="text-xs text-danger/80 mt-0.5">
+                <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
                   RO parameters locked until offline period is resolved or train comes back online
                 </p>
               )}
@@ -542,14 +542,14 @@ function PretreatmentAndROLog() {
 
         {/* Offline details — shown when train is marked offline */}
         {train && !trainOnline && (
-          <div className="space-y-2.5 rounded-md border border-danger/25 bg-danger-soft/40 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-danger">Offline Details</p>
+          <div className="space-y-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Offline Details</p>
 
             {/* Reason dropdown */}
             <div>
-              <Label className="text-xs">Reason for Offline <span className="text-danger">*</span></Label>
+              <Label className="text-[11px] text-muted-foreground">Reason for Offline <span className="text-red-500">*</span></Label>
               <Select value={offlineReason} onValueChange={setOfflineReason}>
-                <SelectTrigger className="h-9 mt-0.5 border-danger/30">
+                <SelectTrigger className="h-9 mt-0.5 border-red-200 dark:border-red-700">
                   <SelectValue placeholder="Select reason…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -571,12 +571,12 @@ function PretreatmentAndROLog() {
             {/* Free-text for Other */}
             {offlineReason === 'Other' && (
               <div>
-                <Label className="text-xs">Specify reason <span className="text-danger">*</span></Label>
+                <Label className="text-[11px] text-muted-foreground">Specify reason <span className="text-red-500">*</span></Label>
                 <Input
                   value={offlineReasonOther}
                   onChange={e => setOfflineReasonOther(e.target.value)}
                   placeholder="Describe the reason…"
-                  className="mt-0.5 border-danger/30"
+                  className="mt-0.5 border-red-200 dark:border-red-700"
                 />
               </div>
             )}
@@ -584,18 +584,18 @@ function PretreatmentAndROLog() {
             {/* Offline start / end times */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">
-                  Offline Since <span className="text-danger">*</span>
+                <Label className="text-[11px] text-muted-foreground">
+                  Offline Since <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   type="datetime-local"
                   value={offlineStart}
                   onChange={e => setOfflineStart(e.target.value)}
-                  className="mt-0.5 w-full border-danger/30"
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
                 />
               </div>
               <div>
-                <Label className="text-xs">
+                <Label className="text-[11px] text-muted-foreground">
                   Back Online At
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
                 </Label>
@@ -603,21 +603,21 @@ function PretreatmentAndROLog() {
                   type="datetime-local"
                   value={offlineEnd}
                   onChange={e => setOfflineEnd(e.target.value)}
-                  className="mt-0.5 w-full border-danger/30"
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
                 />
               </div>
             </div>
 
             {/* Status banner */}
             {!offlineEnd && offlineStart && (
-              <div className="flex items-center gap-2 text-xs text-danger bg-danger-soft rounded px-2.5 py-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-danger animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                 Train is currently offline — RO parameters cannot be logged until it comes back online.
               </div>
             )}
             {offlineEnd && offlineStart && (
-              <div className="flex items-center gap-2 text-xs text-accent bg-accent-soft rounded px-2.5 py-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-accent shrink-0" />
+              <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
                 Offline period recorded — you may now log RO parameters for the resumed period.
               </div>
             )}
@@ -627,10 +627,10 @@ function PretreatmentAndROLog() {
         <div>
           <Label>Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
-            className="h-10 w-full sm:max-w-[260px]" />
+            className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
         </div>
         {plant && (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-[11px] text-muted-foreground">
             Backwash mode: <span className="font-semibold">{isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}</span>
           </div>
         )}
@@ -640,12 +640,12 @@ function PretreatmentAndROLog() {
         <>
           {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
           {isOfflineBlocked && (
-            <Card className="p-4 border-danger/25 bg-danger-soft/40">
+            <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
               <div className="flex items-start gap-3">
                 <span className="text-2xl leading-none mt-0.5">🔒</span>
                 <div>
-                  <p className="text-sm font-semibold text-danger">Train is currently offline</p>
-                  <p className="text-xs text-danger/80 mt-1">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Train is currently offline</p>
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                     No RO parameters can be logged while the train is offline and no "Back Online At" time has been entered.
                     Enter the time the train came back online above, or mark the train as Online to continue logging.
                   </p>
@@ -666,23 +666,23 @@ function PretreatmentAndROLog() {
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs">Started</Label>
-                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full" />
+                      <Label className="text-[11px] text-muted-foreground">Started</Label>
+                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full min-w-[220px]" />
                     </div>
                     <div>
-                      <Label className="text-xs">Ended</Label>
-                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full" />
+                      <Label className="text-[11px] text-muted-foreground">Ended</Label>
+                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full min-w-[220px]" />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs">Meter Reading Start</Label>
+                      <Label className="text-[11px] text-muted-foreground">Meter Reading Start</Label>
                       <Input type="number" step="any" value={syncMeterStart}
                         onChange={(e) => setSyncMeterStart(e.target.value)}
                         placeholder="From Previous Backwash End" />
                     </div>
                     <div>
-                      <Label className="text-xs">Meter Reading End</Label>
+                      <Label className="text-[11px] text-muted-foreground">Meter Reading End</Label>
                       <Input type="number" step="any" value={syncMeterEnd} onChange={(e) => setSyncMeterEnd(e.target.value)} />
                     </div>
                   </div>
@@ -694,7 +694,7 @@ function PretreatmentAndROLog() {
 
           {train.num_afm > 0 && (
             <Card className="p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground">AFM/MMF Units ({train.num_afm})</h4>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">AFM/MMF Units ({train.num_afm})</h4>
               <div className="space-y-2">
                 {Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => {
                   const row = afmmf[u] ?? { unit: u, bw: false, bwStart: '', bwEnd: '', meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '' };
@@ -724,16 +724,16 @@ function PretreatmentAndROLog() {
                           {!isSynchronized && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <Label className="text-xs">Started</Label>
+                                <Label className="text-[11px] text-muted-foreground">Started</Label>
                                 <Input type="datetime-local" value={row.bwStart}
                                   onChange={(e) => setAfmmfField(u, { bwStart: e.target.value })}
-                                  className="w-full" />
+                                  className="w-full min-w-[220px]" />
                               </div>
                               <div>
-                                <Label className="text-xs">Ended</Label>
+                                <Label className="text-[11px] text-muted-foreground">Ended</Label>
                                 <Input type="datetime-local" value={row.bwEnd}
                                   onChange={(e) => setAfmmfField(u, { bwEnd: e.target.value })}
-                                  className="w-full" />
+                                  className="w-full min-w-[220px]" />
                               </div>
                             </div>
                           )}
@@ -744,7 +744,7 @@ function PretreatmentAndROLog() {
                           ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <Label className="text-xs">Meter Reading Start</Label>
+                                <Label className="text-[11px] text-muted-foreground">Meter Reading Start</Label>
                                 <Input type="number" step="any" value={meterStartValue}
                                   onChange={(e) => setAfmmfField(u, { meterStart: e.target.value })}
                                   placeholder={prevEnd != null ? String(prevEnd) : 'From Previous Backwash End'} />
@@ -753,7 +753,7 @@ function PretreatmentAndROLog() {
                                 )}
                               </div>
                               <div>
-                                <Label className="text-xs">Meter Reading End</Label>
+                                <Label className="text-[11px] text-muted-foreground">Meter Reading End</Label>
                                 <Input type="number" step="any" value={row.meterEnd}
                                   onChange={(e) => setAfmmfField(u, { meterEnd: e.target.value })} />
                               </div>
@@ -764,17 +764,17 @@ function PretreatmentAndROLog() {
                         // No backwash → always-visible pressure In/Out (per unit)
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <Label className="text-xs">Pressure In (psi)</Label>
+                            <Label className="text-[11px] text-muted-foreground">Pressure In (psi)</Label>
                             <Input type="number" step="any" value={row.pressureIn}
                               onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} />
                           </div>
                           <div>
-                            <Label className="text-xs">Pressure Out (psi)</Label>
+                            <Label className="text-[11px] text-muted-foreground">Pressure Out (psi)</Label>
                             <Input type="number" step="any" value={row.pressureOut}
                               onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
                           </div>
                           <div>
-                            <Label className="text-xs">ΔPressure</Label>
+                            <Label className="text-[11px] text-muted-foreground">ΔPressure</Label>
                             <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
                           </div>
                         </div>
@@ -788,62 +788,118 @@ function PretreatmentAndROLog() {
 
           {train.num_booster_pumps > 0 && (
             <Card className="p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground">Booster Pumps ({train.num_booster_pumps})</h4>
-              {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => (
-                <div key={u} className="grid grid-cols-3 gap-2 items-start">
-                  <div className="text-xs font-semibold text-muted-foreground pt-7">Pump {u}</div>
-                  <div>
-                    <Label className="text-xs">Target Pressure (psi)</Label>
-                    <Input type="number" step="any" value={boosters[u]?.target ?? ''}
-                      onChange={(e) => setBoosters({ ...boosters, [u]: { ...(boosters[u] || { amp: '' }), target: e.target.value } })} />
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Booster Pumps ({train.num_booster_pumps})</h4>
+              {/* Column headers */}
+              <div className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2">
+                <div />
+                <div className="text-[11px] text-muted-foreground font-medium">Frequency (Hz)</div>
+                <div className="text-[11px] text-muted-foreground font-medium">Target Pressure (psi)</div>
+                <div className="text-[11px] text-muted-foreground font-medium">Amperage (A)</div>
+              </div>
+              {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+                const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
+                const psiMode = b.psiMode !== false; // default to psi mode
+                const setB = (patch: Partial<typeof b>) =>
+                  setBoosters({ ...boosters, [u]: { ...b, ...patch } });
+                return (
+                  <div key={u} className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2 items-end">
+                    <div className="text-[11px] font-semibold text-foreground pb-2">Pump {u}</div>
+                    {/* Hz input */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <Label className="text-[11px] text-muted-foreground">Hz</Label>
+                        {psiMode && (
+                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                        )}
+                      </div>
+                      <Input type="number" step="any"
+                        value={psiMode ? '' : b.hz}
+                        disabled={psiMode}
+                        placeholder={psiMode ? '—' : 'Enter Hz'}
+                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onChange={(e) => setB({ hz: e.target.value })} />
+                    </div>
+                    {/* Psi input + mode toggle */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <Label className="text-[11px] text-muted-foreground">psi</Label>
+                        {!psiMode && (
+                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Input type="number" step="any"
+                          value={!psiMode ? '' : b.target}
+                          disabled={!psiMode}
+                          placeholder={!psiMode ? '—' : 'Enter psi'}
+                          className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                          onChange={(e) => setB({ target: e.target.value })} />
+                        {/* Toggle button */}
+                        <button
+                          type="button"
+                          title={psiMode ? 'Switch to Hz input' : 'Switch to psi input'}
+                          onClick={() => setB({ psiMode: !psiMode, hz: '', target: '' })}
+                          className="shrink-0 h-9 w-9 rounded-md border border-input bg-muted hover:bg-muted/70 flex items-center justify-center text-[9px] font-bold text-muted-foreground transition-colors"
+                        >
+                          {psiMode ? 'Hz' : 'psi'}
+                        </button>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/50 mt-0.5 text-right">
+                        tap to switch
+                      </p>
+                    </div>
+                    {/* Amperage */}
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground mb-0.5 block">A</Label>
+                      <Input type="number" step="any"
+                        value={b.amp}
+                        placeholder="Enter amps"
+                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40"
+                        onChange={(e) => setB({ amp: e.target.value })} />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Amperage</Label>
-                    <Input type="number" step="any" value={boosters[u]?.amp ?? ''}
-                      onChange={(e) => setBoosters({ ...boosters, [u]: { ...(boosters[u] || { target: '' }), amp: e.target.value } })} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </Card>
           )}
 
           <Card className="p-3 space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-muted-foreground">High-Pressure Pump</h4>
+            <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
             <div>
-              <Label className="text-xs">HPP Target Pressure (psi)</Label>
+              <Label className="text-[11px] text-muted-foreground">HPP Target Pressure (psi)</Label>
               <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
             </div>
           </Card>
 
           {train.num_filter_housings > 0 && (
             <Card className="p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground">Filter Housings ({train.num_filter_housings})</h4>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Filter Housings ({train.num_filter_housings})</h4>
               {Array.from({ length: train.num_filter_housings }, (_, i) => i + 1).map((u) => {
                 const inP = +(housings[u]?.inP ?? '');
                 const outP = +(housings[u]?.outP ?? '');
                 const housingDp = housings[u]?.inP && housings[u]?.outP ? (inP - outP).toFixed(2) : '';
                 return (
-                  <div key={u} className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-start">
-                    <div className="col-span-2 sm:col-span-1 text-xs font-semibold text-muted-foreground pt-7 sm:pt-0 sm:self-center">Housing {u}</div>
+                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
+                    <div className="text-xs font-medium self-center">Housing {u}</div>
                     <div>
-                      <Label className="text-xs">In (psi)</Label>
+                      <Label className="text-[11px] text-muted-foreground">In (psi)</Label>
                       <Input type="number" step="any" value={housings[u]?.inP ?? ''}
                         onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} />
                     </div>
                     <div>
-                      <Label className="text-xs">Out (psi)</Label>
+                      <Label className="text-[11px] text-muted-foreground">Out (psi)</Label>
                       <Input type="number" step="any" value={housings[u]?.outP ?? ''}
                         onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} />
                     </div>
                     <div>
-                      <Label className="text-xs">ΔPressure</Label>
+                      <Label className="text-[11px] text-muted-foreground">ΔPressure</Label>
                       <ComputedInput value={housingDp} className="text-foreground font-medium" />
                     </div>
                   </div>
                 );
               })}
               <div className="pt-2">
-                <Label className="text-xs">Bag Filters Changed Today</Label>
+                <Label className="text-[11px] text-muted-foreground">Bag Filters Changed Today</Label>
                 <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} />
               </div>
             </Card>
@@ -855,32 +911,32 @@ function PretreatmentAndROLog() {
 
             {/* Column headers */}
             <div className="grid grid-cols-3 gap-2">
-              <div className="flex items-center gap-1.5 rounded-md bg-info-soft border border-info/20 px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-info shrink-0" />
-                <span className="text-[11px] font-semibold text-info">Feed / Raw</span>
+              <div className="flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Feed / Raw</span>
               </div>
-              <div className="flex items-center gap-1.5 rounded-md bg-accent-soft border border-accent/20 px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
-                <span className="text-[11px] font-semibold text-accent">Permeate / Product</span>
+              <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Permeate / Product</span>
               </div>
-              <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/20 px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-warn shrink-0" />
-                <span className="text-[11px] font-semibold text-warn-foreground">Reject / Concentrate</span>
+              <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Reject / Concentrate</span>
               </div>
             </div>
 
             {/* ── Water Meter ─────────────────────────────────────────────── */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="form-section-label">Water Meter</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter</p>
                 <p className="text-[10px] text-muted-foreground/60 italic">Leave one stream blank — it will be inferred</p>
               </div>
               {/* Auto-computed duration from datetime diff */}
               <div className="flex items-center gap-2 mb-1">
-                <Label className="text-xs text-muted-foreground shrink-0">Duration (min)</Label>
+                <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
                 <ComputedInput
                   value={autoDurationMin != null ? String(autoDurationMin) : ''}
-                  className="h-9 text-xs w-28"
+                  className="h-7 text-xs w-28"
                 />
                 {autoDurationMin == null && (
                   <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
@@ -891,63 +947,63 @@ function PretreatmentAndROLog() {
                 {/* Feed */}
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Prev reading (auto)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed Meter Reading</Label>
-                    <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Current feed reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                    <Label className="text-[11px] text-muted-foreground">Feed Meter Reading</Label>
+                    <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   </div>
                   <div>
-                    <Label className={cn('text-xs', feedInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Feed Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-info/40 bg-info-soft/40 text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Feed Flowrate (m³/hr)</Label>
                     <ComputedInput value={feedFlowMeter != null ? String(feedFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
                 {/* Permeate */}
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Prev reading (auto)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Permeate Meter Reading</Label>
-                    <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Current permeate reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                    <Label className="text-[11px] text-muted-foreground">Permeate Meter Reading</Label>
+                    <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   </div>
                   <div>
-                    <Label className={cn('text-xs', permInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Permeate Volume{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-info/40 bg-info-soft/40 text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
                     <ComputedInput value={permFlowMeter != null ? String(permFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
                 {/* Reject */}
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Prev reading (auto)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Reject Meter Reading</Label>
-                    <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Current reject reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                    <Label className="text-[11px] text-muted-foreground">Reject Meter Reading</Label>
+                    <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   </div>
                   <div>
-                    <Label className={cn('text-xs', rejInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Reject Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-info/40 bg-info-soft/40 text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Reject Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Reject Flowrate (m³/hr)</Label>
                     <ComputedInput value={rejFlowMeter != null ? String(rejFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
@@ -956,26 +1012,26 @@ function PretreatmentAndROLog() {
 
             {/* ── Pressure row ────────────────────────────────────────────── */}
             <div className="space-y-0.5">
-              <p className="form-section-label">Pressure (psi)</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Pressure (psi)</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1.5">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Suction</Label>
+                    <Label className="text-[11px] text-muted-foreground">Suction</Label>
                     <Input type="number" step="any" {...f('suction_pressure_psi')}
                       placeholder="Suction pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed</Label>
+                    <Label className="text-[11px] text-muted-foreground">Feed</Label>
                     <Input type="number" step="any" {...f('feed_pressure_psi')}
                       placeholder="Feed pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   </div>
                 </div>
                 <div className="flex flex-col justify-end">
-                  <Label className="text-xs text-muted-foreground">ΔP (feed − reject)</Label>
+                  <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
                   <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
                 </div>
                 <div className="flex flex-col justify-end">
-                  <Label className="text-xs text-muted-foreground">Reject</Label>
+                  <Label className="text-[11px] text-muted-foreground">Reject</Label>
                   <Input type="number" step="any" {...f('reject_pressure_psi')}
                     placeholder="Reject pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                 </div>
@@ -985,7 +1041,7 @@ function PretreatmentAndROLog() {
             {/* ── EM flow override ────────────────────────────────────────── */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="form-section-label">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">
                   Electromagnetic Flowmeter (m³/hr)
                 </p>
                 <p className="text-[10px] text-muted-foreground/60 italic">
@@ -998,13 +1054,13 @@ function PretreatmentAndROLog() {
               <div className="grid grid-cols-3 gap-2">
                 {/* Feed EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emFeedInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label className={cn('text-[11px]', emFeedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                     Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
                   </Label>
                   {emFeedInferred ? (
                     <ComputedInput
                       value={effFeedFlow != null ? String(effFeedFlow) : ''}
-                      className="border-info/40 bg-info-soft/40 text-info font-semibold"
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
                     />
                   ) : (
                     <Input type="number" step="any" {...f('feed_flow')}
@@ -1014,13 +1070,13 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Permeate EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emPermInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label className={cn('text-[11px]', emPermInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                     Permeate Flowrate{emPermInferred ? ' (computed)' : ''}
                   </Label>
                   {emPermInferred ? (
                     <ComputedInput
                       value={effPermFlow != null ? String(effPermFlow) : ''}
-                      className="border-info/40 bg-info-soft/40 text-info font-semibold"
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
                     />
                   ) : (
                     <Input type="number" step="any" {...f('permeate_flow')}
@@ -1028,7 +1084,7 @@ function PretreatmentAndROLog() {
                       className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   )}
                   <div className="mt-1">
-                    <Label className={cn('text-xs', recWarn ? 'text-warn-foreground' : 'text-muted-foreground')}>
+                    <Label className={cn('text-[11px]', recWarn ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
                       Recovery %{recWarn ? ' ⚠' : ''}
                     </Label>
                     <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
@@ -1036,13 +1092,13 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Reject EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emRejInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label className={cn('text-[11px]', emRejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                     Reject Flowrate{emRejInferred ? ' (computed)' : ''}
                   </Label>
                   {emRejInferred ? (
                     <ComputedInput
                       value={effRejFlow != null ? String(effRejFlow) : ''}
-                      className="border-info/40 bg-info-soft/40 text-info font-semibold"
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
                     />
                   ) : (
                     <Input type="number" step="any" {...f('reject_flow')}
@@ -1055,20 +1111,20 @@ function PretreatmentAndROLog() {
 
             {/* ── TDS row ──────────────────────────────────────────────────── */}
             <div className="space-y-0.5">
-              <p className="form-section-label">TDS (ppm)</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">TDS (ppm)</p>
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
               </div>
               {/* Rejection + Salt Passage in their own row below TDS inputs */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Rejection %</Label>
+                  <Label className="text-[11px] text-muted-foreground">Rejection %</Label>
                   <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Salt Passage %</Label>
+                  <Label className="text-[11px] text-muted-foreground">Salt Passage %</Label>
                   <ComputedInput value={saltPassage ?? ''} className="text-foreground font-medium" />
                 </div>
               </div>
@@ -1076,20 +1132,20 @@ function PretreatmentAndROLog() {
 
             {/* ── pH row ───────────────────────────────────────────────────── */}
             <div className="space-y-0.5">
-              <p className="form-section-label">pH</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">pH</p>
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
-                <div><Label className="text-xs text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
               </div>
             </div>
 
             {/* ── Product quality / ambient ────────────────────────────────── */}
             <div className="space-y-0.5">
-              <p className="form-section-label">Product Quality</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Product Quality</p>
               <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
               </div>
             </div>
           </Card>
@@ -1105,33 +1161,33 @@ function PretreatmentAndROLog() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Prev reading (kWh) — auto</Label>
+                <Label className="text-[11px] text-muted-foreground">Prev reading (kWh) — auto</Label>
                 <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" />
               </div>
-              <div><Label className="text-xs text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
+              <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Δ Consumption (kWh)</Label>
+                <Label className="text-[11px] text-muted-foreground">Δ Consumption (kWh)</Label>
                 <ComputedInput value={pwrDelta ?? ''} className="text-foreground font-medium" />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Avg power (kW)</Label>
+                <Label className="text-[11px] text-muted-foreground">Avg power (kW)</Label>
                 <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Specific energy (kWh/m³)</Label>
+                <Label className="text-[11px] text-muted-foreground">Specific energy (kWh/m³)</Label>
                 <ComputedInput value={secEnergy ?? ''} className="text-foreground font-medium" />
               </div>
             </div>
           </Card>
 
           <Card className="p-3 space-y-2">
-            <Label className="text-xs">Remarks</Label>
+            <Label className="text-[11px] text-muted-foreground">Remarks</Label>
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any observations..." />
           </Card>
 
-          <Button onClick={submit} className="w-full h-12 text-sm font-semibold tracking-wide rounded-lg shadow-sm">Save Pre-Treatment &amp; RO Reading</Button>
+          <Button onClick={submit} className="w-full h-12 text-base">Save Pre-Treatment & RO Reading</Button>
           </>
           )}
         </>
@@ -1193,7 +1249,7 @@ function CIPLog() {
               type="datetime-local"
               value={v.start}
               onChange={e => setV({ ...v, start: e.target.value })}
-              className="w-full "
+              className="w-full sm:min-w-[220px]"
             />
           </div>
           <div className="col-span-2 sm:col-span-1">
@@ -1202,7 +1258,7 @@ function CIPLog() {
               type="datetime-local"
               value={v.end}
               onChange={e => setV({ ...v, end: e.target.value })}
-              className="w-full "
+              className="w-full sm:min-w-[220px]"
             />
           </div>
           <div><Label>SLS (g)</Label><Input type="number" step="any" value={v.sls} onChange={e => setV({ ...v, sls: e.target.value })} /></div>
