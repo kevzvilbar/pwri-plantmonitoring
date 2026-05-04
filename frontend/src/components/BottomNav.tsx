@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
-  Building2, Droplet, Cog, FlaskConical,
+  Building2, Droplet, Cog,
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
@@ -48,12 +48,6 @@ const sideSheetGroups = [
     items: [
       { to: '/ai', label: 'AI Assistant', icon: Sparkles },
       { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
-    ],
-  },
-  {
-    title: 'Operations',
-    items: [
-      { to: '/chemicals', label: 'Chemicals', icon: FlaskConical },
     ],
   },
   {

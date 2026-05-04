@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Activity, Cog, FlaskConical, Wrench, AlertTriangle,
+  LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
   Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 import {
@@ -33,7 +33,6 @@ const groups: SidebarGroup[] = [
       { to: '/plants', label: 'Plants', icon: Building2 },
       { to: '/operations', label: 'Wells & Locators', icon: Activity },
       { to: '/ro-trains', label: 'RO Trains', icon: Cog },
-      { to: '/chemicals', label: 'Chemicals', icon: FlaskConical },
     ],
   },
   {
