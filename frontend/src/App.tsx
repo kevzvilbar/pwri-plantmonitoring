@@ -16,7 +16,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Plants = lazy(() => import("./pages/Plants"));
 const Operations = lazy(() => import("./pages/Operations"));
 const ROTrains = lazy(() => import("./pages/ROTrains"));
-const Chemicals = lazy(() => import("./pages/Chemicals"));
 const Costs = lazy(() => import("./pages/Costs"));
 const Maintenance = lazy(() => import("./pages/Maintenance"));
 const Incidents = lazy(() => import("./pages/Incidents"));
@@ -90,7 +89,6 @@ const App = () => (
                 <Route path="/plants/:id" element={<Plants />} />
                 <Route path="/operations" element={<Operations />} />
                 <Route path="/ro-trains" element={<ROTrains />} />
-                <Route path="/chemicals" element={<Chemicals />} />
                 <Route path="/costs" element={<Costs />} />
                 <Route path="/maintenance" element={<Maintenance />} />
                 <Route path="/incidents" element={<Incidents />} />
