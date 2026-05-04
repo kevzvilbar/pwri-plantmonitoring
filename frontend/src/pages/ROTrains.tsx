@@ -141,8 +141,6 @@ function PretreatmentAndROLog() {
   const [offlineEnd, setOfflineEnd] = useState('');
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
-  const [offlineStartSaved, setOfflineStartSaved] = useState(false);
-  const [offlineEndSaved, setOfflineEndSaved] = useState(false);
 
   // RO Train readings
   const [roValues, setRoValues] = useState({
@@ -228,7 +226,6 @@ function PretreatmentAndROLog() {
     setSyncMeterStart(''); setSyncMeterEnd('');
     setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
     setOfflineReason(''); setOfflineReasonOther('');
-    setOfflineStartSaved(false); setOfflineEndSaved(false);
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '', reject_flow: '',
@@ -317,6 +314,15 @@ function PretreatmentAndROLog() {
   const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
   const recWarn = recovery != null && (recovery < 65 || recovery > 75);
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
+
+  // Helper: return className for a ComputedInput — vivid text so value is readable,
+  // red border+text when alert, blue/slate when normal.
+  const cval = (hasValue: boolean, alert?: boolean, inferred?: boolean) => {
+    if (!hasValue) return '';
+    if (alert) return 'border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-semibold';
+    if (inferred) return 'border-blue-300 dark:border-blue-700 bg-blue-50/60 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 font-medium';
+    return 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 font-medium';
+  };
 
   // Train is offline and no end time entered → block all RO parameter inputs
   const isOfflineBlocked = !trainOnline && !offlineEnd;
@@ -565,88 +571,24 @@ function PretreatmentAndROLog() {
                 <Label className="text-xs">
                   Offline Since <span className="text-red-500">*</span>
                 </Label>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Input
-                    type="datetime-local"
-                    value={offlineStart}
-                    onChange={e => { setOfflineStart(e.target.value); setOfflineStartSaved(false); }}
-                    disabled={offlineStartSaved}
-                    className={cn(
-                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
-                      offlineStartSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
-                    )}
-                  />
-                  {!offlineStartSaved ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!offlineStart}
-                      onClick={() => setOfflineStartSaved(true)}
-                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      Save
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setOfflineStartSaved(false)}
-                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
-                    >
-                      Edit
-                    </Button>
-                  )}
-                </div>
-                {offlineStartSaved && offlineStart && (
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
-                  </p>
-                )}
+                <Input
+                  type="datetime-local"
+                  value={offlineStart}
+                  onChange={e => setOfflineStart(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
               </div>
               <div>
                 <Label className="text-xs">
                   Back Online At
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
                 </Label>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Input
-                    type="datetime-local"
-                    value={offlineEnd}
-                    onChange={e => { setOfflineEnd(e.target.value); setOfflineEndSaved(false); }}
-                    disabled={offlineEndSaved}
-                    className={cn(
-                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
-                      offlineEndSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
-                    )}
-                  />
-                  {!offlineEndSaved ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!offlineEnd}
-                      onClick={() => setOfflineEndSaved(true)}
-                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      Save
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setOfflineEndSaved(false)}
-                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
-                    >
-                      Edit
-                    </Button>
-                  )}
-                </div>
-                {offlineEndSaved && offlineEnd && (
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
-                  </p>
-                )}
+                <Input
+                  type="datetime-local"
+                  value={offlineEnd}
+                  onChange={e => setOfflineEnd(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
               </div>
             </div>
 
@@ -817,7 +759,7 @@ function PretreatmentAndROLog() {
                           </div>
                           <div>
                             <Label className="text-xs">ΔPressure</Label>
-                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger' : ''} />
+                            <ComputedInput value={afmDp} className={cval(!!afmDp, dpWarn ?? false)} />
                           </div>
                         </div>
                       )}
@@ -879,7 +821,7 @@ function PretreatmentAndROLog() {
                     </div>
                     <div>
                       <Label className="text-xs">ΔPressure</Label>
-                      <ComputedInput value={housingDp} />
+                      <ComputedInput value={housingDp} className={cval(!!housingDp)} />
                     </div>
                   </div>
                 );
@@ -922,7 +864,7 @@ function PretreatmentAndROLog() {
                 <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
                 <ComputedInput
                   value={autoDurationMin != null ? String(autoDurationMin) : ''}
-                  className="h-7 text-xs w-28"
+                  className={cn("h-7 text-xs w-28", cval(autoDurationMin != null))}
                 />
                 {autoDurationMin == null && (
                   <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
@@ -934,54 +876,54 @@ function PretreatmentAndROLog() {
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} />
+                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} className={cval(prevFeedMeter != null)} />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={cval(feedVol != null, false, feedInferred)} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={feedFlowMeter ?? ''} />
+                    <ComputedInput value={feedFlowMeter ?? ''} className={cval(feedFlowMeter != null)} />
                   </div>
                 </div>
                 {/* Permeate */}
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} />
+                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} className={cval(prevPermMeter != null)} />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={cval(permVol != null, false, permInferred)} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={permFlowMeter ?? ''} />
+                    <ComputedInput value={permFlowMeter ?? ''} className={cval(permFlowMeter != null)} />
                   </div>
                 </div>
                 {/* Reject */}
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} />
+                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} className={cval(prevRejMeter != null)} />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={cval(rejVol != null, false, rejInferred)} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={rejFlowMeter ?? ''} />
+                    <ComputedInput value={rejFlowMeter ?? ''} className={cval(rejFlowMeter != null)} />
                   </div>
                 </div>
               </div>
@@ -1005,7 +947,7 @@ function PretreatmentAndROLog() {
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
-                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : ''} />
+                  <ComputedInput value={dp ?? ''} className={cval(dp != null, dpAlert ?? false)} />
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">Reject</Label>
@@ -1032,7 +974,7 @@ function PretreatmentAndROLog() {
                     placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'} />
                   <div className="mt-1.5">
                     <Label className="text-[11px] text-muted-foreground">Recovery %</Label>
-                    <ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} />
+                    <ComputedInput value={recovery ?? ''} className={cval(recovery != null, recWarn)} />
                   </div>
                 </div>
                 <div>
@@ -1060,11 +1002,11 @@ function PretreatmentAndROLog() {
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
                   <Label className="text-[11px] text-muted-foreground">Rejection %</Label>
-                  <ComputedInput value={rejection ?? ''} />
+                  <ComputedInput value={rejection ?? ''} className={cval(rejection != null, rejection != null && rejection < 90)} />
                 </div>
                 <div>
                   <Label className="text-[11px] text-muted-foreground">Salt Passage %</Label>
-                  <ComputedInput value={saltPassage ?? ''} />
+                  <ComputedInput value={saltPassage ?? ''} className={cval(saltPassage != null, saltPassage != null && saltPassage > 10)} />
                 </div>
               </div>
             </div>
@@ -1101,22 +1043,22 @@ function PretreatmentAndROLog() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-[11px] text-muted-foreground">Prev reading (kWh) — auto</Label>
-                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} />
+                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className={cval(prevPowerMeter != null)} />
               </div>
               <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <Label className="text-[11px] text-muted-foreground">Δ Consumption (kWh)</Label>
-                <ComputedInput value={pwrDelta ?? ''} />
+                <ComputedInput value={pwrDelta ?? ''} className={cval(pwrDelta != null)} />
               </div>
               <div>
                 <Label className="text-[11px] text-muted-foreground">Avg power (kW)</Label>
-                <ComputedInput value={pwrKw ?? ''} />
+                <ComputedInput value={pwrKw ?? ''} className={cval(pwrKw != null)} />
               </div>
               <div>
                 <Label className="text-[11px] text-muted-foreground">Specific energy (kWh/m³)</Label>
-                <ComputedInput value={secEnergy ?? ''} />
+                <ComputedInput value={secEnergy ?? ''} className={cval(secEnergy != null, secEnergy != null && secEnergy > 3.5)} />
               </div>
             </div>
           </Card>
