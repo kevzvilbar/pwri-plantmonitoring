@@ -141,6 +141,8 @@ function PretreatmentAndROLog() {
   const [offlineEnd, setOfflineEnd] = useState('');
   const [offlineReason, setOfflineReason] = useState('');
   const [offlineReasonOther, setOfflineReasonOther] = useState('');
+  const [offlineStartSaved, setOfflineStartSaved] = useState(false);
+  const [offlineEndSaved, setOfflineEndSaved] = useState(false);
 
   // RO Train readings
   const [roValues, setRoValues] = useState({
@@ -226,6 +228,7 @@ function PretreatmentAndROLog() {
     setSyncMeterStart(''); setSyncMeterEnd('');
     setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
     setOfflineReason(''); setOfflineReasonOther('');
+    setOfflineStartSaved(false); setOfflineEndSaved(false);
     setRoValues({
       feed_pressure_psi: '', reject_pressure_psi: '',
       feed_flow: '', permeate_flow: '', reject_flow: '',
@@ -293,53 +296,22 @@ function PretreatmentAndROLog() {
   const rejInferred  = rejDelta  === null && rejVol  !== null;
 
   // ── Effective flow values: EM takes priority, then meter-derived ─────────
-  // EM inputs allow direct override; missing one is inferred from the other two.
+  // EM inputs (feed_flow, permeate_flow, reject_flow) allow direct override.
+  // If EM not provided, fall back to meter-derived rate.
   const emFeedFlow  = roValues.feed_flow     ? num(roValues.feed_flow)     : null;
   const emPermFlow  = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
   const emRejFlow   = roValues.reject_flow   ? num(roValues.reject_flow)   : null;
 
-  // Base effective values from EM or meter fallback
-  const baseFeed = emFeedFlow ?? feedFlowMeter;
-  const basePerm = emPermFlow ?? permFlowMeter;
-  const baseRej  = emRejFlow  ?? rejFlowMeter;
-
-  // Count how many EM values are explicitly entered by the user
-  const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
-
-  // 3-way EM inference: if exactly 2 user-entered EM values, compute the missing one
-  const effFeedFlow: number | null = (() => {
-    if (emFeedFlow !== null) return emFeedFlow;
-    if (emEntered === 2 && emPermFlow !== null && emRejFlow !== null)
-      return +((emPermFlow + emRejFlow).toFixed(2));
-    return baseFeed;
-  })();
-  const effPermFlow: number | null = (() => {
-    if (emPermFlow !== null) return emPermFlow;
-    if (emEntered === 2 && emFeedFlow !== null && emRejFlow !== null)
-      return +((emFeedFlow - emRejFlow).toFixed(2));
-    return basePerm;
-  })();
-  const effRejFlow: number | null = (() => {
-    if (emRejFlow !== null) return emRejFlow;
-    if (emEntered === 2 && emFeedFlow !== null && emPermFlow !== null)
-      return +((emFeedFlow - emPermFlow).toFixed(2));
-    if (baseFeed !== null && basePerm !== null) return +((baseFeed - basePerm).toFixed(2));
-    return baseRej;
-  })();
-
-  // Flags: is this EM value inferred (not user-typed)?
-  const emFeedInferred = emFeedFlow === null && emEntered === 2 && emPermFlow !== null && emRejFlow !== null;
-  const emPermInferred = emPermFlow === null && emEntered === 2 && emFeedFlow !== null && emRejFlow !== null;
-  const emRejInferred  = emRejFlow  === null && (
-    (emEntered === 2 && emFeedFlow !== null && emPermFlow !== null) ||
-    (emEntered < 2 && baseFeed !== null && basePerm !== null)
-  );
+  const effFeedFlow = emFeedFlow  ?? feedFlowMeter;
+  const effPermFlow = emPermFlow  ?? permFlowMeter;
+  const effRejFlow  = emRejFlow   ?? rejFlowMeter ?? (effFeedFlow !== null && effPermFlow !== null ? +(effFeedFlow - effPermFlow).toFixed(2) : null);
 
   // Recovery uses effective flows (EM > meter-derived)
   const recovery    = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
     ? +((effPermFlow / effFeedFlow) * 100).toFixed(1) : null;
   const rejection   = calc.rejection(num(roValues.permeate_tds), num(roValues.reject_tds));
   const saltPassage = calc.saltPassage(num(roValues.permeate_tds), num(roValues.reject_tds));
+  // rejectFlow shown in EM section: if user typed it, show as-is; else compute
   const rejectFlow  = effRejFlow;
 
   const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
@@ -593,24 +565,88 @@ function PretreatmentAndROLog() {
                 <Label className="text-xs">
                   Offline Since <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  type="datetime-local"
-                  value={offlineStart}
-                  onChange={e => setOfflineStart(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
-                />
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Input
+                    type="datetime-local"
+                    value={offlineStart}
+                    onChange={e => { setOfflineStart(e.target.value); setOfflineStartSaved(false); }}
+                    disabled={offlineStartSaved}
+                    className={cn(
+                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
+                      offlineStartSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                    )}
+                  />
+                  {!offlineStartSaved ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!offlineStart}
+                      onClick={() => setOfflineStartSaved(true)}
+                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Save
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOfflineStartSaved(false)}
+                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {offlineStartSaved && offlineStart && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
+                  </p>
+                )}
               </div>
               <div>
                 <Label className="text-xs">
                   Back Online At
                   <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
                 </Label>
-                <Input
-                  type="datetime-local"
-                  value={offlineEnd}
-                  onChange={e => setOfflineEnd(e.target.value)}
-                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
-                />
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Input
+                    type="datetime-local"
+                    value={offlineEnd}
+                    onChange={e => { setOfflineEnd(e.target.value); setOfflineEndSaved(false); }}
+                    disabled={offlineEndSaved}
+                    className={cn(
+                      'w-full min-w-[160px] border-red-200 dark:border-red-700 transition-colors',
+                      offlineEndSaved && 'bg-muted/50 text-muted-foreground cursor-not-allowed'
+                    )}
+                  />
+                  {!offlineEndSaved ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!offlineEnd}
+                      onClick={() => setOfflineEndSaved(true)}
+                      className="h-9 px-2.5 shrink-0 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Save
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOfflineEndSaved(false)}
+                      className="h-9 px-2.5 shrink-0 text-xs border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {offlineEndSaved && offlineEnd && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Saved
+                  </p>
+                )}
               </div>
             </div>
 
@@ -900,15 +936,15 @@ function PretreatmentAndROLog() {
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} />
                   </div>
-                  <div><Label className="text-[11px] text-muted-foreground">Feed Meter Reading</Label><Input type="number" step="any" placeholder="Input current feed reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" {...f('feed_meter_curr')} /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Feed Volume{feedInferred ? ' (inferred)' : ''} (m³)
+                      Δ Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
                     <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
-                    <Label className="text-[11px] text-muted-foreground">Feed Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
                     <ComputedInput value={feedFlowMeter ?? ''} />
                   </div>
                 </div>
@@ -918,15 +954,15 @@ function PretreatmentAndROLog() {
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} />
                   </div>
-                  <div><Label className="text-[11px] text-muted-foreground">Permeate Meter Reading</Label><Input type="number" step="any" placeholder="Input current permeate reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" {...f('permeate_meter_curr')} /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Permeate Volume{permInferred ? ' (inferred)' : ''} (m³)
+                      Δ Volume{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
                     <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
-                    <Label className="text-[11px] text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
                     <ComputedInput value={permFlowMeter ?? ''} />
                   </div>
                 </div>
@@ -936,15 +972,15 @@ function PretreatmentAndROLog() {
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
                     <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} />
                   </div>
-                  <div><Label className="text-[11px] text-muted-foreground">Reject Meter Reading</Label><Input type="number" step="any" placeholder="Input current reject reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" {...f('reject_meter_curr')} /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Reject Volume{rejInferred ? ' (inferred)' : ''} (m³)
+                      Δ Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
                     <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : ''} />
                   </div>
                   <div>
-                    <Label className="text-[11px] text-muted-foreground">Reject Flowrate (m³/hr)</Label>
+                    <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
                     <ComputedInput value={rejFlowMeter ?? ''} />
                   </div>
                 </div>
@@ -982,61 +1018,34 @@ function PretreatmentAndROLog() {
             {/* ── EM flow override ────────────────────────────────────────── */}
             <div className="space-y-0.5">
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">
-                Electromagnetic Flowmeter (m³/hr)
-                <span className="normal-case font-normal"> — enter any two; third is auto-computed. Enter all three to override.</span>
+                Electromagnetic Flowmeter (m³/hr) <span className="normal-case font-normal">— enter direct reading if available; otherwise meter-derived rate is used</span>
               </p>
               <div className="grid grid-cols-3 gap-2">
-                {/* Feed EM */}
-                <div className="space-y-1">
-                  <Label className={cn('text-[11px]', emFeedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                    Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
-                  </Label>
-                  {emFeedInferred ? (
-                    <ComputedInput value={effFeedFlow != null ? String(effFeedFlow) : ''} className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" />
-                  ) : (
-                    <Input type="number" step="any" {...f('feed_flow')}
-                      placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'}
-                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
-                  )}
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Feed flow</Label>
+                  <Input type="number" step="any" {...f('feed_flow')}
+                    placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'} />
                 </div>
-                {/* Permeate EM */}
-                <div className="space-y-1">
-                  <Label className={cn('text-[11px]', emPermInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                    Permeate Flowrate{emPermInferred ? ' (computed)' : ''}
-                  </Label>
-                  {emPermInferred ? (
-                    <ComputedInput value={effPermFlow != null ? String(effPermFlow) : ''} className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" />
-                  ) : (
-                    <Input type="number" step="any" {...f('permeate_flow')}
-                      placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'}
-                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
-                  )}
-                  <div className="mt-1">
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Permeate flow</Label>
+                  <Input type="number" step="any" {...f('permeate_flow')}
+                    placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'} />
+                  <div className="mt-1.5">
                     <Label className="text-[11px] text-muted-foreground">Recovery %</Label>
                     <ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground' : ''} />
                   </div>
                 </div>
-                {/* Reject EM */}
-                <div className="space-y-1">
-                  <Label className={cn('text-[11px]', emRejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                    Reject Flowrate{emRejInferred ? ' (computed)' : ''}
-                  </Label>
-                  {emRejInferred ? (
-                    <ComputedInput value={effRejFlow != null ? String(effRejFlow) : ''} className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" />
-                  ) : (
-                    <Input type="number" step="any" {...f('reject_flow')}
-                      placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM or computed'}
-                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Reject flow</Label>
+                  <Input type="number" step="any" {...f('reject_flow')}
+                    placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM or computed'} />
+                  {rejectFlow !== null && !roValues.reject_flow && (
+                    <div className="mt-1">
+                      <ComputedInput value={`${rejectFlow} m³/hr`} />
+                    </div>
                   )}
                 </div>
               </div>
-              {/* Hint row */}
-              <p className="text-[10px] text-muted-foreground/60 italic pt-0.5">
-                {emEntered === 0 && 'Enter at least two EM values to auto-compute the third.'}
-                {emEntered === 1 && 'Enter one more value — third will be computed automatically.'}
-                {emEntered === 2 && 'One value is being computed from the other two. Enter all three to override.'}
-                {emEntered === 3 && 'All three values are manually entered.'}
-              </p>
             </div>
 
             {/* ── TDS row ──────────────────────────────────────────────────── */}
