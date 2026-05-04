@@ -1024,102 +1024,93 @@ function PretreatmentAndROLog() {
             </Card>
           )}
 
-          {train.num_booster_pumps > 0 && (
-            <Card className="p-3 space-y-2">
-              {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
-                const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
-                const psiMode = b.psiMode !== false;
-                const setB = (patch: Partial<typeof b>) =>
-                  setBoosters({ ...boosters, [u]: { ...b, ...patch } });
-                return (
-                  <div key={u}>
-                    {/* Row: label + 3 inputs + toggle, all inline */}
-                    <div className="flex items-center gap-2">
-                      {/* Section title inline with pump label */}
-                      <div className="shrink-0">
-                        {u === 1 && (
-                          <p className="text-[9px] font-semibold uppercase text-muted-foreground tracking-wider leading-none mb-0.5">
-                            Booster Pumps ({train.num_booster_pumps})
-                          </p>
-                        )}
+          {train.num_booster_pumps > 0 && (() => {
+            // Shared psiMode across all pumps — read from pump 1 as the source of truth
+            const sharedPsiMode = (boosters[1]?.psiMode) !== false;
+            const toggleAllPsiMode = () => {
+              const next = !sharedPsiMode;
+              const updated: Record<number, { hz: string; target: string; amp: string; psiMode: boolean }> = {};
+              Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((u) => {
+                updated[u] = { ...(boosters[u] || { hz: '', target: '', amp: '', psiMode: true }), psiMode: next, hz: '', target: '' };
+              });
+              setBoosters(updated);
+            };
+            return (
+              <Card className="overflow-hidden">
+                {/* Table header */}
+                <div className="grid grid-cols-[100px_1fr_1fr] bg-muted/60 border-b border-border">
+                  <div className="px-3 py-2 text-[11px] font-semibold text-foreground flex items-center">
+                    <span>Booster Pumps ({train.num_booster_pumps})</span>
+                  </div>
+                  {/* Target column header with inline Hz/psi toggle */}
+                  <div className="px-3 py-2 flex items-center gap-2 border-l border-border">
+                    <span className="text-[11px] font-semibold text-foreground">
+                      Target ({sharedPsiMode ? 'psi' : 'Hz'})
+                    </span>
+                    {/* Toggle pill */}
+                    <button
+                      type="button"
+                      onClick={toggleAllPsiMode}
+                      className={cn(
+                        'h-6 px-2.5 rounded-full text-[10px] font-semibold border transition-colors',
+                        'border-primary/40 bg-background text-primary hover:bg-primary hover:text-primary-foreground'
+                      )}
+                    >
+                      {sharedPsiMode ? 'Hz' : 'psi'}
+                    </button>
+                  </div>
+                  <div className="px-3 py-2 border-l border-border">
+                    <span className="text-[11px] font-semibold text-foreground">Amperage (A)</span>
+                  </div>
+                </div>
+
+                {/* Pump rows */}
+                {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+                  const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
+                  const setB = (patch: Partial<typeof b>) =>
+                    setBoosters({ ...boosters, [u]: { ...b, ...patch } });
+                  return (
+                    <div key={u} className={cn('grid grid-cols-[100px_1fr_1fr]', u < train.num_booster_pumps && 'border-b border-border')}>
+                      {/* Pump label */}
+                      <div className="px-3 py-2.5 flex items-center">
                         <span className="text-[11px] font-semibold text-foreground">Pump {u}</span>
                       </div>
-
-                      {/* Spacer */}
-                      <div className="flex-1 flex items-center gap-2">
-                        {/* Target Frequency input */}
-                        <div className="flex-1 min-w-0">
-                          {u === 1 && <Label className="text-[10px] text-muted-foreground block mb-0.5">Target Frequency</Label>}
-                          <div className={cn("flex rounded-md border border-input overflow-hidden", psiMode && "opacity-40")}>
-                            <Input
-                              type="number" step="any"
-                              value={psiMode ? '' : b.hz}
-                              disabled={psiMode}
-                              placeholder={psiMode ? '—' : 'Enter Hz'}
-                              className="border-0 rounded-none flex-1 min-w-0 h-9 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:cursor-not-allowed bg-transparent"
-                              onChange={(e) => setB({ hz: e.target.value })}
-                            />
-                            <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
-                              Hz
-                            </span>
-                          </div>
+                      {/* Target input */}
+                      <div className="px-3 py-2.5 border-l border-border flex items-center">
+                        <div className="flex w-full rounded-md border border-input overflow-hidden">
+                          <Input
+                            type="number" step="any"
+                            value={sharedPsiMode ? b.target : b.hz}
+                            placeholder={sharedPsiMode ? 'Enter psi' : 'Enter Hz'}
+                            className="border-0 rounded-none flex-1 min-w-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/50 bg-transparent text-sm"
+                            onChange={(e) => sharedPsiMode ? setB({ target: e.target.value }) : setB({ hz: e.target.value })}
+                          />
+                          <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
+                            {sharedPsiMode ? 'psi' : 'Hz'}
+                          </span>
                         </div>
-
-                        {/* Target Pressure input */}
-                        <div className="flex-1 min-w-0">
-                          {u === 1 && <Label className="text-[10px] text-muted-foreground block mb-0.5">Target Pressure</Label>}
-                          <div className={cn("flex rounded-md border border-input overflow-hidden", !psiMode && "opacity-40")}>
-                            <Input
-                              type="number" step="any"
-                              value={!psiMode ? '' : b.target}
-                              disabled={!psiMode}
-                              placeholder={!psiMode ? '—' : 'Enter psi'}
-                              className="border-0 rounded-none flex-1 min-w-0 h-9 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:cursor-not-allowed bg-transparent"
-                              onChange={(e) => setB({ target: e.target.value })}
-                            />
-                            <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
-                              psi
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Amperage input */}
-                        <div className="flex-1 min-w-0">
-                          {u === 1 && <Label className="text-[10px] text-muted-foreground block mb-0.5">Amperage</Label>}
-                          <div className="flex rounded-md border border-input overflow-hidden">
-                            <Input
-                              type="number" step="any"
-                              value={b.amp}
-                              placeholder="Enter amps"
-                              className="border-0 rounded-none flex-1 min-w-0 h-9 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/40 bg-transparent"
-                              onChange={(e) => setB({ amp: e.target.value })}
-                            />
-                            <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
-                              A
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Hz / psi toggle button — rightmost */}
-                        <div className="shrink-0">
-                          {u === 1 && <div className="h-[18px] mb-0.5" />}
-                          <button
-                            type="button"
-                            title={psiMode ? 'Switch to Hz input' : 'Switch to psi input'}
-                            onClick={() => setB({ psiMode: !psiMode, hz: '', target: '' })}
-                            className="h-9 px-3 rounded-md border border-input bg-muted hover:bg-muted/80 flex items-center justify-center text-[10px] font-bold text-foreground transition-colors"
-                          >
-                            {psiMode ? 'Hz' : 'psi'}
-                          </button>
+                      </div>
+                      {/* Amperage input */}
+                      <div className="px-3 py-2.5 border-l border-border flex items-center">
+                        <div className="flex w-full rounded-md border border-input overflow-hidden">
+                          <Input
+                            type="number" step="any"
+                            value={b.amp}
+                            placeholder="Enter A"
+                            className="border-0 rounded-none flex-1 min-w-0 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[10px] placeholder:text-muted-foreground/50 bg-transparent text-sm"
+                            onChange={(e) => setB({ amp: e.target.value })}
+                          />
+                          <span className="shrink-0 flex items-center justify-center px-2.5 bg-primary text-primary-foreground text-[10px] font-semibold">
+                            A
+                          </span>
                         </div>
                       </div>
                     </div>
-                    {u < train.num_booster_pumps && <div className="mt-2 border-t border-border/40" />}
-                  </div>
-                );
-              })}
-            </Card>
-          )}
+                  );
+                })}
+              </Card>
+            );
+          })()}
 
           <Card className="p-3 space-y-2">
             <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
