@@ -315,15 +315,6 @@ function PretreatmentAndROLog() {
   const recWarn = recovery != null && (recovery < 65 || recovery > 75);
   const dpAlert = dp != null && dp >= ALERTS.dp_max;
 
-  // Helper: return className for a ComputedInput — vivid text so value is readable,
-  // red border+text when alert, blue/slate when normal.
-  const cval = (hasValue: boolean, alert?: boolean, inferred?: boolean) => {
-    if (!hasValue) return '';
-    if (alert) return 'border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-semibold';
-    if (inferred) return 'border-blue-300 dark:border-blue-700 bg-blue-50/60 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 font-medium';
-    return 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 font-medium';
-  };
-
   // Train is offline and no end time entered → block all RO parameter inputs
   const isOfflineBlocked = !trainOnline && !offlineEnd;
   const offlineReasonFinal = offlineReason === 'Other' ? offlineReasonOther : offlineReason;
@@ -759,7 +750,7 @@ function PretreatmentAndROLog() {
                           </div>
                           <div>
                             <Label className="text-xs">ΔPressure</Label>
-                            <ComputedInput value={afmDp} className={cval(!!afmDp, dpWarn ?? false)} />
+                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
                           </div>
                         </div>
                       )}
@@ -821,7 +812,7 @@ function PretreatmentAndROLog() {
                     </div>
                     <div>
                       <Label className="text-xs">ΔPressure</Label>
-                      <ComputedInput value={housingDp} className={cval(!!housingDp)} />
+                      <ComputedInput value={housingDp} className="text-foreground font-medium" />
                     </div>
                   </div>
                 );
@@ -864,7 +855,7 @@ function PretreatmentAndROLog() {
                 <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
                 <ComputedInput
                   value={autoDurationMin != null ? String(autoDurationMin) : ''}
-                  className={cn("h-7 text-xs w-28", cval(autoDurationMin != null))}
+                  className="h-7 text-xs w-28"
                 />
                 {autoDurationMin == null && (
                   <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
@@ -876,54 +867,54 @@ function PretreatmentAndROLog() {
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} className={cval(prevFeedMeter != null)} />
+                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('feed_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={cval(feedVol != null, false, feedInferred)} />
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={feedFlowMeter ?? ''} className={cval(feedFlowMeter != null)} />
+                    <ComputedInput value={feedFlowMeter ?? ''} className="text-foreground font-medium" />
                   </div>
                 </div>
                 {/* Permeate */}
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} className={cval(prevPermMeter != null)} />
+                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('permeate_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={cval(permVol != null, false, permInferred)} />
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={permFlowMeter ?? ''} className={cval(permFlowMeter != null)} />
+                    <ComputedInput value={permFlowMeter ?? ''} className="text-foreground font-medium" />
                   </div>
                 </div>
                 {/* Reject */}
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} className={cval(prevRejMeter != null)} />
+                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} className="text-foreground font-medium" />
                   </div>
                   <div><Label className="text-[11px] text-muted-foreground">Current reading</Label><Input type="number" step="any" {...f('reject_meter_curr')} /></div>
                   <div>
                     <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                       Δ Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={cval(rejVol != null, false, rejInferred)} />
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Flow rate (m³/hr)</Label>
-                    <ComputedInput value={rejFlowMeter ?? ''} className={cval(rejFlowMeter != null)} />
+                    <ComputedInput value={rejFlowMeter ?? ''} className="text-foreground font-medium" />
                   </div>
                 </div>
               </div>
@@ -947,7 +938,7 @@ function PretreatmentAndROLog() {
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
-                  <ComputedInput value={dp ?? ''} className={cval(dp != null, dpAlert ?? false)} />
+                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
                 </div>
                 <div className="flex flex-col justify-end">
                   <Label className="text-[11px] text-muted-foreground">Reject</Label>
@@ -974,7 +965,7 @@ function PretreatmentAndROLog() {
                     placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'} />
                   <div className="mt-1.5">
                     <Label className="text-[11px] text-muted-foreground">Recovery %</Label>
-                    <ComputedInput value={recovery ?? ''} className={cval(recovery != null, recWarn)} />
+                    <ComputedInput value={recovery ?? ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
                   </div>
                 </div>
                 <div>
@@ -983,7 +974,7 @@ function PretreatmentAndROLog() {
                     placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM or computed'} />
                   {rejectFlow !== null && !roValues.reject_flow && (
                     <div className="mt-1">
-                      <ComputedInput value={`${rejectFlow} m³/hr`} />
+                      <ComputedInput value={`${rejectFlow} m³/hr`} className="text-foreground font-medium" />
                     </div>
                   )}
                 </div>
@@ -1002,11 +993,11 @@ function PretreatmentAndROLog() {
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
                   <Label className="text-[11px] text-muted-foreground">Rejection %</Label>
-                  <ComputedInput value={rejection ?? ''} className={cval(rejection != null, rejection != null && rejection < 90)} />
+                  <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" />
                 </div>
                 <div>
                   <Label className="text-[11px] text-muted-foreground">Salt Passage %</Label>
-                  <ComputedInput value={saltPassage ?? ''} className={cval(saltPassage != null, saltPassage != null && saltPassage > 10)} />
+                  <ComputedInput value={saltPassage ?? ''} className="text-foreground font-medium" />
                 </div>
               </div>
             </div>
@@ -1043,22 +1034,22 @@ function PretreatmentAndROLog() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-[11px] text-muted-foreground">Prev reading (kWh) — auto</Label>
-                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className={cval(prevPowerMeter != null)} />
+                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" />
               </div>
               <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <Label className="text-[11px] text-muted-foreground">Δ Consumption (kWh)</Label>
-                <ComputedInput value={pwrDelta ?? ''} className={cval(pwrDelta != null)} />
+                <ComputedInput value={pwrDelta ?? ''} className="text-foreground font-medium" />
               </div>
               <div>
                 <Label className="text-[11px] text-muted-foreground">Avg power (kW)</Label>
-                <ComputedInput value={pwrKw ?? ''} className={cval(pwrKw != null)} />
+                <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" />
               </div>
               <div>
                 <Label className="text-[11px] text-muted-foreground">Specific energy (kWh/m³)</Label>
-                <ComputedInput value={secEnergy ?? ''} className={cval(secEnergy != null, secEnergy != null && secEnergy > 3.5)} />
+                <ComputedInput value={secEnergy ?? ''} className="text-foreground font-medium" />
               </div>
             </div>
           </Card>
