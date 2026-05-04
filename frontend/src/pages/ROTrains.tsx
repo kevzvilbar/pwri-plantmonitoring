@@ -80,47 +80,263 @@ function PlantPicker({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
+// ─── Sparkline SVG (tiny inline trend line) ──────────────────────────────────
+function Sparkline({ values, color = 'currentColor' }: { values: number[]; color?: string }) {
+  if (values.length < 2) return <span className="text-[10px] text-muted-foreground/40">—</span>;
+  const w = 48; const h = 16;
+  const min = Math.min(...values); const max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block align-middle">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── Overview Dashboard ───────────────────────────────────────────────────────
 function Overview() {
   const [plantId, setPlantId] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
+  const [search, setSearch] = useState('');
+  const { selectedPlantId } = useAppStore();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+
   const { data: trains } = useQuery({
     queryKey: ['ro-overview', plantId],
-    queryFn: async () => plantId ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [] : [],
+    queryFn: async () => plantId
+      ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? []
+      : [],
     enabled: !!plantId,
   });
 
+  // Fetch last readings for ALL trains at once
+  const trainIds = (trains ?? []).map((t: any) => t.id);
+  const { data: lastReadings } = useQuery({
+    queryKey: ['ro-last-all', trainIds],
+    queryFn: async () => {
+      if (!trainIds.length) return {};
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('*')
+        .in('train_id', trainIds)
+        .order('reading_datetime', { ascending: false });
+      // Keep only the most recent per train
+      const map: Record<string, any> = {};
+      for (const r of data ?? []) {
+        if (!map[r.train_id]) map[r.train_id] = r;
+      }
+      return map;
+    },
+    enabled: trainIds.length > 0,
+  });
+
+  // Fetch last 5 readings per train for sparklines
+  const { data: sparkData } = useQuery({
+    queryKey: ['ro-spark', trainIds],
+    queryFn: async () => {
+      if (!trainIds.length) return {};
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id, recovery_pct, permeate_tds, reading_datetime')
+        .in('train_id', trainIds)
+        .order('reading_datetime', { ascending: false })
+        .limit(trainIds.length * 6);
+      const map: Record<string, any[]> = {};
+      for (const r of data ?? []) {
+        if (!map[r.train_id]) map[r.train_id] = [];
+        if (map[r.train_id].length < 5) map[r.train_id].push(r);
+      }
+      return map;
+    },
+    enabled: trainIds.length > 0,
+  });
+
+  const allReadings = Object.values(lastReadings ?? {});
+
+  // Summary stats
+  const onlineCount    = (trains ?? []).filter((t: any) => t.status === 'Running').length;
+  const maintCount     = (trains ?? []).filter((t: any) => t.status === 'Maintenance').length;
+  const offlineCount   = (trains ?? []).filter((t: any) => t.status === 'Offline').length;
+  const avgRecovery    = allReadings.filter(r => r.recovery_pct != null).length
+    ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1)
+    : null;
+  const avgPermTDS     = allReadings.filter(r => r.permeate_tds != null).length
+    ? (allReadings.reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / allReadings.filter(r => r.permeate_tds != null).length).toFixed(0)
+    : null;
+  const totalTrains    = (trains ?? []).length;
+  const healthScore    = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
+
+  const filtered = (trains ?? []).filter((t: any) => {
+    const matchStatus = statusFilter === 'All' || t.status === statusFilter;
+    const matchSearch = !search || `train ${t.train_number}`.toLowerCase().includes(search.toLowerCase()) || String(t.train_number).includes(search);
+    return matchStatus && matchSearch;
+  });
+
+  const STATUS_FILTERS = ['All', 'Running', 'Maintenance', 'Offline'] as const;
+  const statusColor = (s: string) =>
+    s === 'Running' ? 'text-emerald-500' : s === 'Maintenance' ? 'text-amber-500' : s === 'Offline' ? 'text-red-500' : 'text-foreground';
+
   return (
     <div className="space-y-3">
-      <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
-      <div className="space-y-2">
-        {trains?.map((t: any) => <TrainCard key={t.id} train={t} />)}
-        {plantId && !trains?.length && <Card className="p-4 text-xs text-center text-muted-foreground">No trains</Card>}
+      {/* ── Controls row ─────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="min-w-[160px] flex-1">
+          <Label className="text-[11px] text-muted-foreground">Plant</Label>
+          <PlantPicker value={plantId} onChange={setPlantId} />
+        </div>
+        {/* Status filter pills */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-muted-foreground mr-1">Show:</span>
+          {STATUS_FILTERS.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors',
+                statusFilter === s
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : cn('border-border bg-muted/50 hover:bg-muted', statusColor(s))
+              )}>
+              {s}
+            </button>
+          ))}
+        </div>
+        {/* Search */}
+        <div className="relative min-w-[160px]">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[12px]">🔍</span>
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search train…"
+            className="w-full h-9 pl-7 pr-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
       </div>
+
+      {/* ── Summary cards ─────────────────────────────────────────────── */}
+      {plantId && (
+        <div className="grid grid-cols-3 gap-2">
+          {/* Plant Health */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Plant Health</p>
+            <div className="flex items-end gap-2">
+              <span className={cn('text-2xl font-bold font-mono-num', healthScore != null && healthScore >= 80 ? 'text-emerald-500' : healthScore != null && healthScore >= 50 ? 'text-amber-500' : 'text-red-500')}>
+                {healthScore != null ? `${healthScore}%` : '—'}
+              </span>
+              <span className={cn('text-[11px] font-medium pb-0.5', healthScore != null && healthScore >= 80 ? 'text-emerald-500' : 'text-amber-500')}>
+                {healthScore != null && healthScore >= 80 ? 'Optimal' : healthScore != null && healthScore >= 50 ? 'Degraded' : 'Critical'}
+              </span>
+            </div>
+            <div className="flex gap-2 text-[10px] text-muted-foreground flex-wrap">
+              <span className="text-emerald-500 font-medium">● {onlineCount} Online</span>
+              <span className="text-amber-500 font-medium">● {maintCount} Maint.</span>
+              <span className="text-red-500 font-medium">● {offlineCount} Offline</span>
+            </div>
+          </Card>
+
+          {/* Production Summary */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Recovery</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-bold font-mono-num text-foreground">
+                {avgRecovery != null ? `${avgRecovery}%` : '—'}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{totalTrains} trains total · {onlineCount} active</p>
+          </Card>
+
+          {/* Product Quality */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Perm TDS</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-bold font-mono-num text-foreground">
+                {avgPermTDS != null ? `${avgPermTDS} ppm` : '—'}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Last readings · all trains</p>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Train grid ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {filtered.map((t: any) => (
+          <TrainCard
+            key={t.id}
+            train={t}
+            last={lastReadings?.[t.id] ?? null}
+            spark={sparkData?.[t.id] ?? []}
+          />
+        ))}
+      </div>
+      {plantId && !filtered.length && (
+        <Card className="p-4 text-xs text-center text-muted-foreground">No trains match your filter</Card>
+      )}
+      {!plantId && (
+        <Card className="p-4 text-xs text-center text-muted-foreground">Select a plant to view trains</Card>
+      )}
     </div>
   );
 }
 
-function TrainCard({ train }: { train: any }) {
-  const { data: last } = useQuery({
-    queryKey: ['ro-last', train.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('ro_train_readings')
-        .select('*')
-        .eq('train_id', train.id)
-        .order('reading_datetime', { ascending: false })
-        .limit(1);
-      return data?.[0] ?? null;
-    },
-  });
-  const tone = train.status === 'Running' ? 'accent' : train.status === 'Maintenance' ? 'warn' : 'muted';
+function TrainCard({ train, last, spark }: { train: any; last: any; spark: any[] }) {
+  const status: string = train.status ?? 'Unknown';
+  const statusBadge = {
+    Running:     { label: 'Online',      dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+    Maintenance: { label: 'Maintenance', dot: 'bg-amber-500',   text: 'text-amber-600 dark:text-amber-400',     border: 'border-amber-200 dark:border-amber-800' },
+    Offline:     { label: 'Offline',     dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         border: 'border-red-200 dark:border-red-800' },
+  }[status] ?? { label: status, dot: 'bg-muted-foreground', text: 'text-muted-foreground', border: 'border-border' };
+
+  const recovery   = last?.recovery_pct  != null ? `${fmtNum(last.recovery_pct, 1)}%`  : '—';
+  const permTDS    = last?.permeate_tds  != null ? `${fmtNum(last.permeate_tds, 0)} ppm` : '—';
+  const lastTime   = last?.reading_datetime ? format(new Date(last.reading_datetime), 'hh:mm:ss aa') : '—';
+
+  const recoveryVals = spark.map((r: any) => r.recovery_pct).filter((v: any) => v != null).reverse();
+  const tdsVals      = spark.map((r: any) => r.permeate_tds).filter((v: any) => v != null).reverse();
+
+  const recWarn  = last?.recovery_pct != null && (last.recovery_pct < 65 || last.recovery_pct > 75);
+  const tdsWarn  = last?.permeate_tds != null && last.permeate_tds > 50;
+
   return (
-    <Card className="p-3">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="font-medium text-sm">Train {train.train_number}</div>
-          <div className="text-xs text-muted-foreground">Recovery: <span className="font-mono-num">{last?.recovery_pct ?? '—'}%</span> · Perm TDS: <span className="font-mono-num">{last?.permeate_tds ?? '—'}</span></div>
+    <Card className={cn('p-3 space-y-1.5 border', statusBadge.border)}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base">🌊</span>
+          <span className="text-sm font-semibold">Train {train.train_number}</span>
         </div>
-        <StatusPill tone={tone}>{train.status}</StatusPill>
+        <div className={cn('flex items-center gap-1 text-[11px] font-medium', statusBadge.text)}>
+          <span className={cn('h-1.5 w-1.5 rounded-full', statusBadge.dot)} />
+          {statusBadge.label}
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <span>Recovery:</span>
+        <span className={cn('font-mono-num font-semibold', recWarn ? 'text-amber-500' : 'text-foreground')}>
+          {recovery}
+        </span>
+        <Sparkline values={recoveryVals} color={recWarn ? '#f59e0b' : '#6b7280'} />
+        <span className="ml-1">·</span>
+        <span>Perm TDS:</span>
+        <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-red-500' : 'text-foreground')}>
+          {permTDS}
+        </span>
+        <Sparkline values={tdsVals} color={tdsWarn ? '#ef4444' : '#6b7280'} />
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5 border-t border-border/50">
+        <span>Last reading: {lastTime}</span>
+        <div className="flex gap-2">
+          {train.num_afm > 0 && <span className="font-medium">AFM×{train.num_afm}</span>}
+          {train.num_booster_pumps > 0 && <span className="font-medium">BP×{train.num_booster_pumps}</span>}
+        </div>
       </div>
     </Card>
   );
