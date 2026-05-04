@@ -1476,12 +1476,14 @@ function PretreatmentAndROLog() {
   );
 }
 
-// ─── CIP Volumetric Calculator (per vessel) ───────────────────────────────────
-// Standard formula: V = π × r² × L   (cylindrical pressure vessel)
-// where r = inner_diameter / 2,  L = vessel_length (active membrane length)
-// Standard 8040 RO element: ID ≈ 0.201 m, length ≈ 1.016 m → ~0.0323 m³ per element
-// Fill volume for CIP = vessel_volume × fill_factor (typically 0.8–1.0)
+// ─── CIP Volumetric & Analytics ───────────────────────────────────────────────
+// Vessel fill volume:  V = π × r² × L × fill_factor
+// Volumetric flow rate: Q = ΔV / Δt  (m³/hr)
+//   ΔV = curr_meter − prev_meter  (m³)
+//   Δt = elapsed time (hr)
+// Comparative analytics: Δ volume recovery, Δ TDS, Δ cost/efficiency (pre vs post CIP)
 function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
+  // ── Vessel calculator state ──────────────────────────────────────────────
   const [vessels, setVessels] = useState<Array<{
     id: number; diameter_mm: string; length_m: string; fill_factor: string;
   }>>(
@@ -1489,12 +1491,30 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
       id: i + 1, diameter_mm: '201', length_m: '1.016', fill_factor: '1.0',
     }))
   );
-  const [expanded, setExpanded] = useState(false);
+  const [vesselExpanded, setVesselExpanded] = useState(false);
   const [useUniform, setUseUniform] = useState(true);
   const [uniformD, setUniformD] = useState('201');
   const [uniformL, setUniformL] = useState('1.016');
   const [uniformF, setUniformF] = useState('1.0');
 
+  // ── Volumetric flow Q = ΔV / Δt state ───────────────────────────────────
+  const [qPrevMeter, setQPrevMeter] = useState('');
+  const [qCurrMeter, setQCurrMeter] = useState('');
+  const [qPrevTime,  setQPrevTime]  = useState('');
+  const [qCurrTime,  setQCurrTime]  = useState('');
+
+  // ── Comparative analytics state ──────────────────────────────────────────
+  const [preCipVol,       setPreCipVol]       = useState('');
+  const [postCipVol,      setPostCipVol]       = useState('');
+  const [preCipTds,       setPreCipTds]        = useState('');
+  const [postCipTds,      setPostCipTds]       = useState('');
+  const [preCipKpi,       setPreCipKpi]        = useState('');
+  const [postCipKpi,      setPostCipKpi]       = useState('');
+
+  // ── Active section tab ────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'vessel' | 'flow' | 'compare'>('vessel');
+
+  // ── Vessel volume calc ────────────────────────────────────────────────────
   const calcVessel = (d_mm: string, l_m: string, ff: string) => {
     const r = (+d_mm / 1000) / 2;
     const l = +l_m;
@@ -1508,104 +1528,357 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
     return calcVessel(v.diameter_mm, v.length_m, v.fill_factor);
   }), [vessels, useUniform, uniformD, uniformL, uniformF]);
 
-  const totalVol = vesselVols.reduce((s, v) => s + (v ?? 0), 0);
+  const totalVol  = vesselVols.reduce((s, v) => s + (v ?? 0), 0);
   const totalVolL = +(totalVol * 1000).toFixed(1);
+
+  // ── Q = ΔV / Δt calc ─────────────────────────────────────────────────────
+  const deltaV = (qCurrMeter !== '' && qPrevMeter !== '')
+    ? +((+qCurrMeter) - (+qPrevMeter)).toFixed(4) : null;
+  const deltaT_hr = useMemo(() => {
+    if (!qPrevTime || !qCurrTime) return null;
+    const diff = (new Date(qCurrTime).getTime() - new Date(qPrevTime).getTime()) / 3600000;
+    return diff > 0 ? +diff.toFixed(4) : null;
+  }, [qPrevTime, qCurrTime]);
+  const flowQ = (deltaV !== null && deltaT_hr !== null && deltaT_hr > 0)
+    ? +((deltaV) / deltaT_hr).toFixed(4) : null;
+
+  // ── Comparative analytics calc ────────────────────────────────────────────
+  const deltaVolRecovery = (postCipVol !== '' && preCipVol !== '')
+    ? +((+postCipVol) - (+preCipVol)).toFixed(4) : null;
+  const deltaTds = (postCipTds !== '' && preCipTds !== '')
+    ? +((+postCipTds) - (+preCipTds)).toFixed(2) : null;
+  const deltaKpi = (postCipKpi !== '' && preCipKpi !== '')
+    ? +((+postCipKpi) - (+preCipKpi)).toFixed(2) : null;
+
+  const deltaColor = (val: number | null, lowerIsBetter = false) => {
+    if (val === null) return 'text-muted-foreground';
+    const good = lowerIsBetter ? val < 0 : val > 0;
+    return good ? 'text-emerald-600 dark:text-emerald-400' : val === 0 ? 'text-muted-foreground' : 'text-red-500 dark:text-red-400';
+  };
+  const deltaSign = (val: number | null) => val === null ? '—' : val > 0 ? `+${val}` : `${val}`;
+
+  const TABS = [
+    { key: 'vessel',  label: 'Vessel Volume' },
+    { key: 'flow',    label: 'Flow Q=ΔV/Δt'  },
+    { key: 'compare', label: 'Comparative'   },
+  ] as const;
 
   return (
     <Card className="p-3 space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Volumetric Calculator</h4>
-          <p className="text-[10px] text-muted-foreground">CIP solution volume per vessel — V = π·r²·L × fill factor</p>
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Volumetric & Analytics</h4>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Vessel fill · Flow rate · Pre/Post CIP comparison</p>
+      </div>
+
+      {/* ── Section tab pills ────────────────────────────────────────── */}
+      <div className="flex gap-1.5 flex-wrap">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={cn(
+              'text-[11px] px-3 py-1 rounded-full border font-medium transition-colors',
+              activeTab === t.key
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+            )}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ TAB 1 — Vessel Volume ════════════════════════════════════ */}
+      {activeTab === 'vessel' && (
+        <div className="space-y-3">
+          <p className="text-[10px] text-muted-foreground font-mono">V = π · r² · L · fill_factor</p>
+
+          {/* Uniform / Per-vessel toggle */}
+          <div className="flex gap-2">
+            {(['Uniform', 'Per-vessel'] as const).map((m, i) => (
+              <button key={m} onClick={() => setUseUniform(i === 0)}
+                className={cn('text-xs px-3 py-1 rounded-full border font-medium transition-colors',
+                  (i === 0 ? useUniform : !useUniform)
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          {useUniform && (
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Inner Dia. (mm)</Label>
+                <Input type="number" step="any" value={uniformD} onChange={e => setUniformD(e.target.value)} className="h-8 text-sm" placeholder="201" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Length (m)</Label>
+                <Input type="number" step="any" value={uniformL} onChange={e => setUniformL(e.target.value)} className="h-8 text-sm" placeholder="1.016" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Fill Factor</Label>
+                <Input type="number" step="0.01" min="0.1" max="1" value={uniformF} onChange={e => setUniformF(e.target.value)} className="h-8 text-sm" placeholder="1.0" />
+              </div>
+            </div>
+          )}
+
+          {!useUniform && (
+            <>
+              <button onClick={() => setVesselExpanded(e => !e)}
+                className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
+                {vesselExpanded ? 'Collapse vessels ▲' : `Show all ${numVessels} vessels ▼`}
+              </button>
+              {vesselExpanded && (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {vessels.map((vv, i) => (
+                    <div key={vv.id} className="grid grid-cols-[24px_1fr_1fr_1fr_48px] gap-1.5 items-end">
+                      <span className="text-[10px] text-muted-foreground font-mono-num pb-1.5">V{vv.id}</span>
+                      <div>
+                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Dia mm</Label>}
+                        <Input type="number" step="any" value={vv.diameter_mm}
+                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, diameter_mm: e.target.value } : x))}
+                          className="h-7 text-xs" />
+                      </div>
+                      <div>
+                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Len m</Label>}
+                        <Input type="number" step="any" value={vv.length_m}
+                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, length_m: e.target.value } : x))}
+                          className="h-7 text-xs" />
+                      </div>
+                      <div>
+                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Fill</Label>}
+                        <Input type="number" step="0.01" min="0.1" max="1" value={vv.fill_factor}
+                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, fill_factor: e.target.value } : x))}
+                          className="h-7 text-xs" />
+                      </div>
+                      <div className="text-right">
+                        {i === 0 && <Label className="text-[10px] text-muted-foreground">m³</Label>}
+                        <div className={cn('h-7 flex items-center justify-end text-xs font-mono-num font-medium',
+                          vesselVols[i] ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                          {vesselVols[i]?.toFixed(4) ?? '—'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Summary strip */}
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Vessels</p>
+              <p className="text-sm font-bold font-mono-num">{numVessels}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total m³</p>
+              <p className="text-sm font-bold font-mono-num">{totalVol.toFixed(4)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total L</p>
+              <p className="text-sm font-bold font-mono-num">{totalVolL}</p>
+            </div>
+          </div>
+          <p className="text-[9px] text-muted-foreground/50">Defaults: 8040 element — ID 201 mm, L 1.016 m</p>
         </div>
-        <button onClick={() => setExpanded(e => !e)}
-          className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-          {expanded ? 'Collapse ▲' : 'Expand ▼'}
-        </button>
-      </div>
+      )}
 
-      {/* Uniform / Per-vessel toggle */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => setUseUniform(true)}
-          className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors font-medium',
-            useUniform ? 'bg-emerald-600 text-white border-emerald-600' : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
-          Uniform (all same)
-        </button>
-        <button onClick={() => setUseUniform(false)}
-          className={cn('text-xs px-2.5 py-1 rounded-full border transition-colors font-medium',
-            !useUniform ? 'bg-emerald-600 text-white border-emerald-600' : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
-          Per-vessel
-        </button>
-      </div>
+      {/* ══ TAB 2 — Volumetric Flow Q = ΔV / Δt ════════════════════ */}
+      {activeTab === 'flow' && (
+        <div className="space-y-3">
+          {/* Formula card */}
+          <div className="rounded-lg bg-muted/40 border border-border px-3 py-2 space-y-0.5">
+            <p className="text-[11px] font-semibold text-foreground font-mono">Q = ΔV ÷ Δt</p>
+            <p className="text-[10px] text-muted-foreground">ΔV = Curr meter − Prev meter (m³) &nbsp;·&nbsp; Δt = elapsed time (hr)</p>
+          </div>
 
-      {useUniform && (
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <Label className="text-[11px] text-muted-foreground">Inner Dia. (mm)</Label>
-            <Input type="number" step="any" value={uniformD} onChange={e => setUniformD(e.target.value)} className="h-8 text-sm" placeholder="201" />
+          {/* Meter readings */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Meter Readings (m³)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Previous reading</Label>
+                <Input type="number" step="any" value={qPrevMeter} onChange={e => setQPrevMeter(e.target.value)}
+                  placeholder="e.g. 1024.50" className="h-9 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current reading</Label>
+                <Input type="number" step="any" value={qCurrMeter} onChange={e => setQCurrMeter(e.target.value)}
+                  placeholder="e.g. 1087.30" className="h-9 text-sm" />
+              </div>
+            </div>
+            {/* ΔV result */}
+            <div className={cn('rounded-md border px-3 py-2 flex items-center justify-between',
+              deltaV !== null ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                             : 'bg-muted/30 border-border')}>
+              <span className="text-[11px] text-muted-foreground font-medium">ΔV (volume produced)</span>
+              <span className={cn('text-sm font-bold font-mono-num', deltaV !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                {deltaV !== null ? `${deltaV} m³` : '—'}
+              </span>
+            </div>
           </div>
-          <div>
-            <Label className="text-[11px] text-muted-foreground">Length (m)</Label>
-            <Input type="number" step="any" value={uniformL} onChange={e => setUniformL(e.target.value)} className="h-8 text-sm" placeholder="1.016" />
+
+          {/* Time interval */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Time Interval</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Previous date & time</Label>
+                <Input type="datetime-local" value={qPrevTime} onChange={e => setQPrevTime(e.target.value)} className="h-9 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current date & time</Label>
+                <Input type="datetime-local" value={qCurrTime} onChange={e => setQCurrTime(e.target.value)} className="h-9 text-xs" />
+              </div>
+            </div>
+            {/* Δt result */}
+            <div className={cn('rounded-md border px-3 py-2 flex items-center justify-between',
+              deltaT_hr !== null ? 'bg-muted/40 border-border' : 'bg-muted/20 border-border')}>
+              <span className="text-[11px] text-muted-foreground font-medium">Δt (elapsed)</span>
+              <span className="text-sm font-bold font-mono-num text-foreground">
+                {deltaT_hr !== null ? `${deltaT_hr} hr` : '—'}
+              </span>
+            </div>
           </div>
-          <div>
-            <Label className="text-[11px] text-muted-foreground">Fill Factor</Label>
-            <Input type="number" step="0.01" min="0.1" max="1" value={uniformF} onChange={e => setUniformF(e.target.value)} className="h-8 text-sm" placeholder="1.0" />
+
+          {/* Q result — hero strip */}
+          <div className={cn(
+            'rounded-xl border-2 p-3 flex items-center justify-between gap-3',
+            flowQ !== null
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+              : 'bg-muted/20 border-dashed border-border'
+          )}>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                Volumetric Flow Rate
+              </p>
+              <p className="text-[9px] text-muted-foreground font-mono">Q = ΔV ÷ Δt</p>
+            </div>
+            <div className="text-right">
+              <p className={cn('text-2xl font-bold font-mono-num leading-none',
+                flowQ !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/40')}>
+                {flowQ !== null ? flowQ : '—'}
+              </p>
+              {flowQ !== null && <p className="text-[10px] text-muted-foreground mt-0.5">m³/hr</p>}
+            </div>
           </div>
         </div>
       )}
 
-      {!useUniform && expanded && (
-        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-          {vessels.map((vv, i) => (
-            <div key={vv.id} className="grid grid-cols-[28px_1fr_1fr_1fr_52px] gap-1.5 items-end">
-              <span className="text-[10px] text-muted-foreground font-mono-num pb-1.5">V{vv.id}</span>
+      {/* ══ TAB 3 — Comparative Analytics ═══════════════════════════ */}
+      {activeTab === 'compare' && (
+        <div className="space-y-3">
+          <p className="text-[10px] text-muted-foreground">Enter pre‑CIP and post‑CIP values — deltas compute automatically.</p>
+
+          {/* ── Δ Volume Recovery ─────────────────────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Volume Recovery</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Volume − Pre‑CIP Volume (m³)</p>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                {i === 0 && <Label className="text-[10px] text-muted-foreground">Dia (mm)</Label>}
-                <Input type="number" step="any" value={vv.diameter_mm}
-                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, diameter_mm: e.target.value } : x))}
-                  className="h-7 text-xs" />
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP Volume (m³)</Label>
+                <Input type="number" step="any" value={preCipVol} onChange={e => setPreCipVol(e.target.value)}
+                  placeholder="e.g. 180.5" className="h-8 text-sm" />
               </div>
               <div>
-                {i === 0 && <Label className="text-[10px] text-muted-foreground">Length (m)</Label>}
-                <Input type="number" step="any" value={vv.length_m}
-                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, length_m: e.target.value } : x))}
-                  className="h-7 text-xs" />
+                <Label className="text-[11px] text-muted-foreground">Post-CIP Volume (m³)</Label>
+                <Input type="number" step="any" value={postCipVol} onChange={e => setPostCipVol(e.target.value)}
+                  placeholder="e.g. 215.0" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ Volume Recovery</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaVolRecovery))}>
+                {deltaSign(deltaVolRecovery)}{deltaVolRecovery !== null ? ' m³' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Δ Water Quality (TDS) ─────────────────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Water Quality</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Product TDS − Pre‑CIP Product TDS (ppm) — lower is better</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP TDS (ppm)</Label>
+                <Input type="number" step="any" value={preCipTds} onChange={e => setPreCipTds(e.target.value)}
+                  placeholder="e.g. 45" className="h-8 text-sm" />
               </div>
               <div>
-                {i === 0 && <Label className="text-[10px] text-muted-foreground">Fill</Label>}
-                <Input type="number" step="0.01" min="0.1" max="1" value={vv.fill_factor}
-                  onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, fill_factor: e.target.value } : x))}
-                  className="h-7 text-xs" />
+                <Label className="text-[11px] text-muted-foreground">Post-CIP TDS (ppm)</Label>
+                <Input type="number" step="any" value={postCipTds} onChange={e => setPostCipTds(e.target.value)}
+                  placeholder="e.g. 28" className="h-8 text-sm" />
               </div>
-              <div className="text-right">
-                {i === 0 && <Label className="text-[10px] text-muted-foreground">Vol (m³)</Label>}
-                <div className={cn('h-7 flex items-center justify-end text-xs font-mono-num font-medium pr-1',
-                  vesselVols[i] ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
-                  {vesselVols[i]?.toFixed(4) ?? '—'}
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ TDS</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaTds, true))}>
+                {deltaSign(deltaTds)}{deltaTds !== null ? ' ppm' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Δ Cost Impact / Efficiency KPI ───────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Cost Impact</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Efficiency KPI − Pre‑CIP Efficiency KPI (kWh/m³)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP KPI (kWh/m³)</Label>
+                <Input type="number" step="any" value={preCipKpi} onChange={e => setPreCipKpi(e.target.value)}
+                  placeholder="e.g. 0.85" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Post-CIP KPI (kWh/m³)</Label>
+                <Input type="number" step="any" value={postCipKpi} onChange={e => setPostCipKpi(e.target.value)}
+                  placeholder="e.g. 0.62" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ Efficiency KPI</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaKpi, true))}>
+                {deltaSign(deltaKpi)}{deltaKpi !== null ? ' kWh/m³' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Summary strip ────────────────────────────────────── */}
+          {(deltaVolRecovery !== null || deltaTds !== null || deltaKpi !== null) && (
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">CIP Impact Summary</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ Volume</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaVolRecovery))}>
+                    {deltaSign(deltaVolRecovery)}{deltaVolRecovery !== null ? ' m³' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ TDS</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaTds, true))}>
+                    {deltaSign(deltaTds)}{deltaTds !== null ? ' ppm' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ KPI</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaKpi, true))}>
+                    {deltaSign(deltaKpi)}{deltaKpi !== null ? '' : ''}
+                  </p>
                 </div>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
-
-      {/* Summary row */}
-      <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Vessels</p>
-          <p className="text-sm font-bold font-mono-num">{numVessels}</p>
-        </div>
-        <div>
-          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total (m³)</p>
-          <p className="text-sm font-bold font-mono-num">{totalVol.toFixed(4)}</p>
-        </div>
-        <div>
-          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total (L)</p>
-          <p className="text-sm font-bold font-mono-num">{totalVolL}</p>
-        </div>
-      </div>
-      <p className="text-[9px] text-muted-foreground/60">Standard 8040 element defaults: ID 201 mm, length 1.016 m</p>
     </Card>
   );
 }
