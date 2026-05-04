@@ -163,6 +163,14 @@
   .stat-card {
     @apply rounded-xl border bg-card p-4 transition-all cursor-pointer hover:shadow-[var(--shadow-elev)];
   }
+  /* Consistent field-group spacing inside cards */
+  .field-group {
+    @apply space-y-1;
+  }
+  /* Section divider label inside forms */
+  .section-divider {
+    @apply text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 pt-1;
+  }
 }
 
 /* Mobile-friendly tap targets — only on coarse pointer devices (phones/tablets) */
@@ -175,7 +183,15 @@
   }
   input, select, textarea {
     min-height: 44px;
-    font-size: 16px; /* prevents iOS auto-zoom */
+    font-size: 16px !important; /* prevents iOS auto-zoom */
+  }
+  /* Prevent datetime-local inputs from overflowing containers */
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"] {
+    width: 100%;
+    min-width: 0 !important;
+    box-sizing: border-box;
   }
   /* Sticky save bar utility for forms */
   .sticky-save {
@@ -186,6 +202,26 @@
     border-top: 1px solid hsl(var(--border));
     z-index: 10;
   }
+}
+
+/* Number inputs — right-align for readability in data-entry forms */
+input[type="number"] {
+  text-align: right;
+}
+
+/* Computed / read-only inputs keep center/left alignment */
+input[readonly] {
+  text-align: left;
+}
+
+/* Form section divider label */
+.form-section-label {
+  font-size: 0.625rem; /* 10px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: hsl(var(--muted-foreground) / 0.7);
+  padding-inline: 2px;
 }
 
 @media print {
