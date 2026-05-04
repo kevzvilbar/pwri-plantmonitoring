@@ -615,9 +615,15 @@ function PretreatmentAndROLog() {
     }
 
     // Save RO Train reading
+    // Strip local-only meter reading fields (used for calc only, not stored as-is in DB)
+    const METER_CURR_KEYS = new Set(['feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr']);
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
-      ...Object.fromEntries(Object.entries(roValues).map(([k, val]) => [k, val ? +val : null])),
+      ...Object.fromEntries(
+        Object.entries(roValues)
+          .filter(([k]) => !METER_CURR_KEYS.has(k))
+          .map(([k, val]) => [k, val ? +val : null])
+      ),
       // Auto-filled prev readings and duration stored alongside curr for record completeness
       feed_meter_prev: prevFeedMeter, permeate_meter_prev: prevPermMeter, reject_meter_prev: prevRejMeter,
       power_meter_prev: prevPowerMeter, meter_duration_min: autoDurationMin,
@@ -1024,82 +1030,114 @@ function PretreatmentAndROLog() {
             </Card>
           )}
 
-          {train.num_booster_pumps > 0 && (
-            <Card className="p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Booster Pumps ({train.num_booster_pumps})</h4>
-              {/* Column headers */}
-              <div className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2">
-                <div />
-                <div className="text-[11px] text-muted-foreground font-medium">Frequency (Hz)</div>
-                <div className="text-[11px] text-muted-foreground font-medium">Target Pressure (psi)</div>
-                <div className="text-[11px] text-muted-foreground font-medium">Amperage (A)</div>
-              </div>
-              {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+          {train.num_booster_pumps > 0 && (() => {
+            // Shared psi/Hz mode toggle — applies to all pumps at once
+            const anyPsi = Object.values(boosters).some(b => b.psiMode !== false);
+            const globalPsiMode = Object.keys(boosters).length === 0 ? true : anyPsi;
+            const setGlobalMode = (psi: boolean) => {
+              const next: typeof boosters = {};
+              Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach(u => {
                 const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
-                const psiMode = b.psiMode !== false; // default to psi mode
-                const setB = (patch: Partial<typeof b>) =>
-                  setBoosters({ ...boosters, [u]: { ...b, ...patch } });
-                return (
-                  <div key={u} className="grid grid-cols-[80px_1fr_1fr_1fr] gap-2 items-end">
-                    <div className="text-[11px] font-semibold text-foreground pb-2">Pump {u}</div>
-                    {/* Hz input */}
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <Label className="text-[11px] text-muted-foreground">Hz</Label>
-                        {psiMode && (
-                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                next[u] = { ...b, psiMode: psi, hz: '', target: '' };
+              });
+              setBoosters(next);
+            };
+            return (
+              <Card className="p-3 space-y-2.5">
+                {/* Header row: title left, psi/Hz toggle right */}
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Booster Pumps ({train.num_booster_pumps})
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Target</span>
+                    <div className="flex rounded-full border border-border overflow-hidden text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setGlobalMode(true)}
+                        className={cn(
+                          'px-3 py-1 transition-colors',
+                          globalPsiMode
+                            ? 'bg-teal-700 text-white'
+                            : 'bg-background text-muted-foreground hover:bg-muted'
                         )}
-                      </div>
-                      <Input type="number" step="any"
-                        value={psiMode ? '' : b.hz}
-                        disabled={psiMode}
-                        placeholder={psiMode ? '—' : 'Enter Hz'}
-                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                        onChange={(e) => setB({ hz: e.target.value })} />
-                    </div>
-                    {/* Psi input + mode toggle */}
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <Label className="text-[11px] text-muted-foreground">psi</Label>
-                        {!psiMode && (
-                          <span className="text-[9px] text-muted-foreground/50 italic">locked</span>
+                      >psi</button>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalMode(false)}
+                        className={cn(
+                          'px-3 py-1 transition-colors',
+                          !globalPsiMode
+                            ? 'bg-teal-700 text-white'
+                            : 'bg-background text-muted-foreground hover:bg-muted'
                         )}
-                      </div>
-                      <div className="flex gap-1">
-                        <Input type="number" step="any"
-                          value={!psiMode ? '' : b.target}
-                          disabled={!psiMode}
-                          placeholder={!psiMode ? '—' : 'Enter psi'}
-                          className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                          onChange={(e) => setB({ target: e.target.value })} />
-                        {/* Toggle button */}
-                        <button
-                          type="button"
-                          title={psiMode ? 'Switch to Hz input' : 'Switch to psi input'}
-                          onClick={() => setB({ psiMode: !psiMode, hz: '', target: '' })}
-                          className="shrink-0 h-9 w-9 rounded-md border border-input bg-muted hover:bg-muted/70 flex items-center justify-center text-[9px] font-bold text-muted-foreground transition-colors"
-                        >
-                          {psiMode ? 'Hz' : 'psi'}
-                        </button>
-                      </div>
-                      <p className="text-[9px] text-muted-foreground/50 mt-0.5 text-right">
-                        tap to switch
-                      </p>
-                    </div>
-                    {/* Amperage */}
-                    <div>
-                      <Label className="text-[11px] text-muted-foreground mb-0.5 block">A</Label>
-                      <Input type="number" step="any"
-                        value={b.amp}
-                        placeholder="Enter amps"
-                        className="placeholder:text-[10px] placeholder:text-muted-foreground/40"
-                        onChange={(e) => setB({ amp: e.target.value })} />
+                      >Hz</button>
                     </div>
                   </div>
-                );
-              })}
-            </Card>
-          )}
+                </div>
+
+                {/* Column headers */}
+                <div className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 gap-y-0 items-end">
+                  <div />
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">psi</div>
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">Hz</div>
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">Amperage (A)</div>
+                </div>
+
+                {/* Pump rows */}
+                <div className="space-y-2">
+                  {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+                    const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: true };
+                    const psiMode = b.psiMode !== false;
+                    const setB = (patch: Partial<typeof b>) =>
+                      setBoosters({ ...boosters, [u]: { ...b, ...patch } });
+                    return (
+                      <div key={u} className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 items-center">
+                        <span className="text-sm font-semibold text-foreground">Pump {u}</span>
+                        {/* psi input */}
+                        <Input
+                          type="number" step="any"
+                          value={psiMode ? b.target : ''}
+                          disabled={!psiMode}
+                          placeholder={psiMode ? 'Enter psi' : '—'}
+                          className={cn(
+                            'text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg',
+                            !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                          )}
+                          onChange={(e) => setB({ target: e.target.value })}
+                        />
+                        {/* Hz input */}
+                        <Input
+                          type="number" step="any"
+                          value={!psiMode ? b.hz : ''}
+                          disabled={psiMode}
+                          placeholder={!psiMode ? 'Enter Hz' : '—'}
+                          className={cn(
+                            'text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg',
+                            psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                          )}
+                          onChange={(e) => setB({ hz: e.target.value })}
+                        />
+                        {/* Amperage */}
+                        <Input
+                          type="number" step="any"
+                          value={b.amp}
+                          placeholder="Enter A"
+                          className="text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg"
+                          onChange={(e) => setB({ amp: e.target.value })}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Mode hint */}
+                <p className="text-[9px] text-muted-foreground/50 italic">
+                  {globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
+                </p>
+              </Card>
+            );
+          })()}
 
           <Card className="p-3 space-y-2">
             <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
