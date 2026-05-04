@@ -197,7 +197,7 @@ function PretreatmentAndROLog() {
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => (await supabase.from('ro_train_readings')
-      .select('*')
+      .select('reading_datetime, power_meter_curr')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
@@ -209,11 +209,12 @@ function PretreatmentAndROLog() {
     return diff > 0 ? +diff.toFixed(1) : null;
   }, [prevRO, dt]);
 
-  // Previous meter readings come from last reading's curr values (read-only, auto-filled)
-  const prevFeedMeter  = prevRO?.feed_meter_curr     ?? null;
-  const prevPermMeter  = prevRO?.permeate_meter_curr ?? null;
-  const prevRejMeter   = prevRO?.reject_meter_curr   ?? null;
-  const prevPowerMeter = prevRO?.power_meter_curr     ?? null;
+  // Previous meter readings — feed/perm/reject meters live in ro_pretreatment_readings (not ro_train_readings)
+  // Only power meter prev is tracked in ro_train_readings
+  const prevFeedMeter  = null as number | null;
+  const prevPermMeter  = null as number | null;
+  const prevRejMeter   = null as number | null;
+  const prevPowerMeter = prevRO?.power_meter_curr ?? null;
 
   // Per-AFM/MMF rows: independent backwash + reading + pressure
   const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
@@ -377,11 +378,13 @@ function PretreatmentAndROLog() {
     }
 
     // Save RO Train reading
+    // Note: feed/permeate/reject meter readings live in ro_pretreatment_readings, not here.
+    // Strip them out before inserting to avoid "column not found" errors.
+    const { feed_meter_curr, permeate_meter_curr, reject_meter_curr, ...roValuesForInsert } = roValues;
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
-      ...Object.fromEntries(Object.entries(roValues).map(([k, val]) => [k, val ? +val : null])),
+      ...Object.fromEntries(Object.entries(roValuesForInsert).map(([k, val]) => [k, val ? +val : null])),
       // Auto-filled prev readings and duration stored alongside curr for record completeness
-      feed_meter_prev: prevFeedMeter, permeate_meter_prev: prevPermMeter, reject_meter_prev: prevRejMeter,
       power_meter_prev: prevPowerMeter, meter_duration_min: autoDurationMin,
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
@@ -792,7 +795,6 @@ function PretreatmentAndROLog() {
           )}
 
           {train.num_booster_pumps > 0 && (() => {
-            // Shared psi/Hz mode — all pumps use the same active column
             const anyBooster = boosters[1] || { hz: '', target: '', amp: '', psiMode: true };
             const globalPsiMode = anyBooster.psiMode !== false;
             const toggleMode = () => {
@@ -806,90 +808,48 @@ function PretreatmentAndROLog() {
             };
             return (
               <Card className="p-3 space-y-2">
-                {/* Header row: title + shared psi / Hz toggle */}
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
                     Booster Pumps ({train.num_booster_pumps})
                   </h4>
-                  {/* psi / Hz pill toggle */}
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-muted-foreground">Target</span>
                     <div className="flex rounded-md overflow-hidden border border-input text-[11px] font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => !globalPsiMode && toggleMode()}
-                        className={cn(
-                          'px-2.5 py-1 transition-colors',
-                          globalPsiMode
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/70'
-                        )}
-                      >psi</button>
-                      <button
-                        type="button"
-                        onClick={() => globalPsiMode && toggleMode()}
-                        className={cn(
-                          'px-2.5 py-1 transition-colors',
-                          !globalPsiMode
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/70'
-                        )}
-                      >Hz</button>
+                      <button type="button" onClick={() => !globalPsiMode && toggleMode()}
+                        className={cn('px-2.5 py-1 transition-colors', globalPsiMode ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70')}>psi</button>
+                      <button type="button" onClick={() => globalPsiMode && toggleMode()}
+                        className={cn('px-2.5 py-1 transition-colors', !globalPsiMode ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70')}>Hz</button>
                     </div>
                   </div>
                 </div>
-
-                {/* Table column headers */}
                 <div className="grid grid-cols-[72px_1fr_1fr_1fr] gap-2">
                   <div />
                   <div className="text-[11px] text-muted-foreground font-medium text-center">psi</div>
                   <div className="text-[11px] text-muted-foreground font-medium text-center">Hz</div>
                   <div className="text-[11px] text-muted-foreground font-medium text-center">Amperage (A)</div>
                 </div>
-
-                {/* Pump rows */}
                 {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
                   const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: globalPsiMode };
-                  const setB = (patch: Partial<typeof b>) =>
-                    setBoosters({ ...boosters, [u]: { ...b, psiMode: globalPsiMode, ...patch } });
+                  const setB = (patch: Partial<typeof b>) => setBoosters({ ...boosters, [u]: { ...b, psiMode: globalPsiMode, ...patch } });
                   return (
                     <div key={u} className="grid grid-cols-[72px_1fr_1fr_1fr] gap-2 items-center">
                       <div className="text-[11px] font-semibold text-foreground">Pump {u}</div>
-                      {/* psi column — active when globalPsiMode */}
-                      <Input
-                        type="number" step="any"
-                        value={globalPsiMode ? b.target : ''}
-                        disabled={!globalPsiMode}
+                      <Input type="number" step="any" value={globalPsiMode ? b.target : ''} disabled={!globalPsiMode}
                         placeholder={globalPsiMode ? 'Enter psi' : '—'}
                         className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-30 disabled:cursor-not-allowed text-center"
-                        onChange={(e) => setB({ target: e.target.value })}
-                      />
-                      {/* Hz column — active when !globalPsiMode */}
-                      <Input
-                        type="number" step="any"
-                        value={!globalPsiMode ? b.hz : ''}
-                        disabled={globalPsiMode}
+                        onChange={(e) => setB({ target: e.target.value })} />
+                      <Input type="number" step="any" value={!globalPsiMode ? b.hz : ''} disabled={globalPsiMode}
                         placeholder={!globalPsiMode ? 'Enter Hz' : '—'}
                         className="placeholder:text-[10px] placeholder:text-muted-foreground/40 disabled:opacity-30 disabled:cursor-not-allowed text-center"
-                        onChange={(e) => setB({ hz: e.target.value })}
-                      />
-                      {/* Amperage — always editable */}
-                      <Input
-                        type="number" step="any"
-                        value={b.amp}
-                        placeholder="Enter A"
+                        onChange={(e) => setB({ hz: e.target.value })} />
+                      <Input type="number" step="any" value={b.amp} placeholder="Enter A"
                         className="placeholder:text-[10px] placeholder:text-muted-foreground/40 text-center"
-                        onChange={(e) => setB({ amp: e.target.value })}
-                      />
+                        onChange={(e) => setB({ amp: e.target.value })} />
                     </div>
                   );
                 })}
-
-                {/* Mode hint */}
                 <p className="text-[10px] text-muted-foreground/60 italic">
-                  {globalPsiMode
-                    ? 'psi mode — Hz column locked. Tap psi/Hz to switch.'
-                    : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
+                  {globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
                 </p>
               </Card>
             );
