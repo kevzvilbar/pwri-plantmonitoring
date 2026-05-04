@@ -1477,61 +1477,208 @@ function PretreatmentAndROLog() {
 }
 
 // ─── CIP Volumetric & Analytics ───────────────────────────────────────────────
-// Vessel fill volume:  V = π × r² × L × fill_factor
-// Volumetric flow rate: Q = ΔV / Δt  (m³/hr)
-//   ΔV = curr_meter − prev_meter  (m³)
-//   Δt = elapsed time (hr)
+// Per-vessel flow rate — two methods:
+//   A) Water Meter Delta:  Q = ΔV / Δt   (ΔV = curr−prev m³, Δt in hr)
+//   B) Manual Bucket Test: Q = V_bucket / t_fill  (e.g. 20 L ÷ seconds → L/min → m³/hr)
 // Comparative analytics: Δ volume recovery, Δ TDS, Δ cost/efficiency (pre vs post CIP)
-function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
-  // ── Vessel calculator state ──────────────────────────────────────────────
-  const [vessels, setVessels] = useState<Array<{
-    id: number; diameter_mm: string; length_m: string; fill_factor: string;
-  }>>(
-    Array.from({ length: numVessels }, (_, i) => ({
-      id: i + 1, diameter_mm: '201', length_m: '1.016', fill_factor: '1.0',
-    }))
-  );
-  const [vesselExpanded, setVesselExpanded] = useState(false);
-  const [useUniform, setUseUniform] = useState(true);
-  const [uniformD, setUniformD] = useState('201');
-  const [uniformL, setUniformL] = useState('1.016');
-  const [uniformF, setUniformF] = useState('1.0');
 
-  // ── Volumetric flow Q = ΔV / Δt state ───────────────────────────────────
+// ─── Per-vessel flow row ──────────────────────────────────────────────────────
+type VesselFlowMethod = 'meter' | 'manual';
+type VesselFlowRow = {
+  id: number;
+  method: VesselFlowMethod;
+  // meter delta
+  prevMeter: string; currMeter: string;
+  prevTime: string;  currTime: string;
+  // manual bucket
+  bucketVol: string;   // L
+  fillTimeSec: string; // seconds
+};
+
+function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange: (patch: Partial<VesselFlowRow>) => void }) {
+  // ── Meter method calcs ────────────────────────────────────────────────────
+  const deltaV_m3 = (row.currMeter !== '' && row.prevMeter !== '')
+    ? +((+row.currMeter) - (+row.prevMeter)).toFixed(4) : null;
+  const deltaT_hr = useMemo(() => {
+    if (!row.prevTime || !row.currTime) return null;
+    const diff = (new Date(row.currTime).getTime() - new Date(row.prevTime).getTime()) / 3600000;
+    return diff > 0 ? +diff.toFixed(4) : null;
+  }, [row.prevTime, row.currTime]);
+  const qMeter = (deltaV_m3 !== null && deltaT_hr !== null && deltaT_hr > 0)
+    ? +((deltaV_m3) / deltaT_hr).toFixed(4) : null;
+
+  // ── Manual bucket calcs ───────────────────────────────────────────────────
+  // Q (L/min) = bucketVol(L) / fillTime(s) × 60
+  // Q (m³/hr) = Q(L/min) / 1000 × 60
+  const bVol = +row.bucketVol || 0;
+  const bSec = +row.fillTimeSec || 0;
+  const qLperMin  = (bVol > 0 && bSec > 0) ? +((bVol / bSec) * 60).toFixed(3) : null;
+  const qManual   = qLperMin !== null ? +((qLperMin / 1000) * 60).toFixed(4) : null;
+
+  const Q = row.method === 'meter' ? qMeter : qManual;
+  const hasResult = Q !== null;
+
+  return (
+    <div className={cn(
+      'rounded-xl border-2 p-3 space-y-2.5 transition-colors',
+      hasResult ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-border bg-muted/10'
+    )}>
+      {/* Vessel label + method toggle */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-xs font-bold text-foreground">Vessel {row.id}</span>
+        <div className="flex rounded-full border border-border overflow-hidden text-[10px] font-semibold">
+          <button type="button" onClick={() => onChange({ method: 'meter' })}
+            className={cn('px-2.5 py-0.5 transition-colors',
+              row.method === 'meter' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+            📟 Meter
+          </button>
+          <button type="button" onClick={() => onChange({ method: 'manual' })}
+            className={cn('px-2.5 py-0.5 transition-colors',
+              row.method === 'manual' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+            🪣 Bucket
+          </button>
+        </div>
+      </div>
+
+      {/* ── Method A: Water Meter Delta ─────────────────────────────── */}
+      {row.method === 'meter' && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Prev meter (m³)</Label>
+              <Input type="number" step="any" value={row.prevMeter}
+                onChange={e => onChange({ prevMeter: e.target.value })}
+                placeholder="e.g. 102.40" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Curr meter (m³)</Label>
+              <Input type="number" step="any" value={row.currMeter}
+                onChange={e => onChange({ currMeter: e.target.value })}
+                placeholder="e.g. 108.75" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Prev date & time</Label>
+              <Input type="datetime-local" value={row.prevTime}
+                onChange={e => onChange({ prevTime: e.target.value })}
+                className="h-8 text-[10px]" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Curr date & time</Label>
+              <Input type="datetime-local" value={row.currTime}
+                onChange={e => onChange({ currTime: e.target.value })}
+                className="h-8 text-[10px]" />
+            </div>
+          </div>
+          {/* ΔV + Δt inline chips */}
+          <div className="flex gap-1.5 flex-wrap">
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-mono-num',
+              deltaV_m3 !== null ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                 : 'border-border bg-muted/30 text-muted-foreground')}>
+              ΔV = {deltaV_m3 !== null ? `${deltaV_m3} m³` : '—'}
+            </span>
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-mono-num',
+              deltaT_hr !== null ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                                 : 'border-border bg-muted/30 text-muted-foreground')}>
+              Δt = {deltaT_hr !== null ? `${deltaT_hr} hr` : '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Method B: Manual Bucket Test ────────────────────────────── */}
+      {row.method === 'manual' && (
+        <div className="space-y-2">
+          <div className="rounded-md bg-muted/40 border border-border px-2.5 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
+            Fill a container to a known volume (e.g. 20 L), measure the time in seconds.
+            <span className="font-mono ml-1 text-foreground">Q = V ÷ t × 60 (L/min)</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Container volume (L)</Label>
+              <Input type="number" step="any" value={row.bucketVol}
+                onChange={e => onChange({ bucketVol: e.target.value })}
+                placeholder="20" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Fill time (seconds)</Label>
+              <Input type="number" step="any" value={row.fillTimeSec}
+                onChange={e => onChange({ fillTimeSec: e.target.value })}
+                placeholder="e.g. 45" className="h-8 text-xs" />
+            </div>
+          </div>
+          {/* Intermediate L/min chip */}
+          {qLperMin !== null && (
+            <span className="inline-block text-[10px] px-2 py-0.5 rounded-full border border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-mono-num">
+              {qLperMin} L/min
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Q result strip ───────────────────────────────────────────── */}
+      <div className={cn(
+        'rounded-lg px-3 py-2 flex items-center justify-between',
+        hasResult
+          ? 'bg-emerald-100 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700'
+          : 'bg-muted/20 border border-dashed border-border'
+      )}>
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Flow Rate Q</p>
+          <p className="text-[9px] text-muted-foreground font-mono">
+            {row.method === 'meter' ? 'Q = ΔV ÷ Δt' : 'Q = V ÷ t × 60 ÷ 1000 × 60'}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className={cn('text-lg font-bold font-mono-num leading-none',
+            hasResult ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/30')}>
+            {hasResult ? Q : '—'}
+          </p>
+          {hasResult && <p className="text-[9px] text-muted-foreground">m³/hr</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
+  // ── Per-vessel flow state ─────────────────────────────────────────────────
+  const makeRow = (id: number): VesselFlowRow => ({
+    id, method: 'meter',
+    prevMeter: '', currMeter: '', prevTime: '', currTime: '',
+    bucketVol: '20', fillTimeSec: '',
+  });
+  const [vesselRows, setVesselRows] = useState<VesselFlowRow[]>(
+    Array.from({ length: numVessels }, (_, i) => makeRow(i + 1))
+  );
+  const [expandedVessel, setExpandedVessel] = useState<number | null>(null);
+  const [globalMethod, setGlobalMethod] = useState<VesselFlowMethod>('meter');
+
+  const patchRow = (id: number, patch: Partial<VesselFlowRow>) =>
+    setVesselRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
+
+  const applyGlobalMethod = (m: VesselFlowMethod) => {
+    setGlobalMethod(m);
+    setVesselRows(rows => rows.map(r => ({ ...r, method: m })));
+  };
+
+  // ── Volumetric flow Q = ΔV / Δt state (Tab 2 — global) ──────────────────
   const [qPrevMeter, setQPrevMeter] = useState('');
   const [qCurrMeter, setQCurrMeter] = useState('');
   const [qPrevTime,  setQPrevTime]  = useState('');
   const [qCurrTime,  setQCurrTime]  = useState('');
 
   // ── Comparative analytics state ──────────────────────────────────────────
-  const [preCipVol,       setPreCipVol]       = useState('');
-  const [postCipVol,      setPostCipVol]       = useState('');
-  const [preCipTds,       setPreCipTds]        = useState('');
-  const [postCipTds,      setPostCipTds]       = useState('');
-  const [preCipKpi,       setPreCipKpi]        = useState('');
-  const [postCipKpi,      setPostCipKpi]       = useState('');
+  const [preCipVol,  setPreCipVol]  = useState('');
+  const [postCipVol, setPostCipVol] = useState('');
+  const [preCipTds,  setPreCipTds]  = useState('');
+  const [postCipTds, setPostCipTds] = useState('');
+  const [preCipKpi,  setPreCipKpi]  = useState('');
+  const [postCipKpi, setPostCipKpi] = useState('');
 
   // ── Active section tab ────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'vessel' | 'flow' | 'compare'>('vessel');
 
-  // ── Vessel volume calc ────────────────────────────────────────────────────
-  const calcVessel = (d_mm: string, l_m: string, ff: string) => {
-    const r = (+d_mm / 1000) / 2;
-    const l = +l_m;
-    const f = +ff || 1;
-    if (!r || !l) return null;
-    return +(Math.PI * r * r * l * f).toFixed(4);
-  };
-
-  const vesselVols = useMemo(() => vessels.map(v => {
-    if (useUniform) return calcVessel(uniformD, uniformL, uniformF);
-    return calcVessel(v.diameter_mm, v.length_m, v.fill_factor);
-  }), [vessels, useUniform, uniformD, uniformL, uniformF]);
-
-  const totalVol  = vesselVols.reduce((s, v) => s + (v ?? 0), 0);
-  const totalVolL = +(totalVol * 1000).toFixed(1);
-
-  // ── Q = ΔV / Δt calc ─────────────────────────────────────────────────────
+  // ── Q = ΔV / Δt calc (Tab 2) ─────────────────────────────────────────────
   const deltaV = (qCurrMeter !== '' && qPrevMeter !== '')
     ? +((+qCurrMeter) - (+qPrevMeter)).toFixed(4) : null;
   const deltaT_hr = useMemo(() => {
@@ -1558,9 +1705,9 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
   const deltaSign = (val: number | null) => val === null ? '—' : val > 0 ? `+${val}` : `${val}`;
 
   const TABS = [
-    { key: 'vessel',  label: 'Vessel Volume' },
-    { key: 'flow',    label: 'Flow Q=ΔV/Δt'  },
-    { key: 'compare', label: 'Comparative'   },
+    { key: 'vessel',  label: 'Per-Vessel Flow' },
+    { key: 'flow',    label: 'Flow Q=ΔV/Δt'    },
+    { key: 'compare', label: 'Comparative'      },
   ] as const;
 
   return (
@@ -1568,7 +1715,7 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div>
         <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Volumetric & Analytics</h4>
-        <p className="text-[10px] text-muted-foreground mt-0.5">Vessel fill · Flow rate · Pre/Post CIP comparison</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Per-vessel flow rate · Global Q=ΔV/Δt · Pre/Post CIP comparison</p>
       </div>
 
       {/* ── Section tab pills ────────────────────────────────────────── */}
@@ -1586,100 +1733,127 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
         ))}
       </div>
 
-      {/* ══ TAB 1 — Vessel Volume ════════════════════════════════════ */}
+      {/* ══ TAB 1 — Per-Vessel Flow Rate ════════════════════════════ */}
       {activeTab === 'vessel' && (
         <div className="space-y-3">
-          <p className="text-[10px] text-muted-foreground font-mono">V = π · r² · L · fill_factor</p>
-
-          {/* Uniform / Per-vessel toggle */}
-          <div className="flex gap-2">
-            {(['Uniform', 'Per-vessel'] as const).map((m, i) => (
-              <button key={m} onClick={() => setUseUniform(i === 0)}
-                className={cn('text-xs px-3 py-1 rounded-full border font-medium transition-colors',
-                  (i === 0 ? useUniform : !useUniform)
-                    ? 'bg-emerald-600 text-white border-emerald-600'
-                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted')}>
-                {m}
+          {/* Global method switcher */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-muted-foreground font-medium">All vessels:</span>
+            <div className="flex rounded-full border border-border overflow-hidden text-[11px] font-semibold">
+              <button type="button" onClick={() => applyGlobalMethod('meter')}
+                className={cn('px-3 py-1 transition-colors',
+                  globalMethod === 'meter' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                📟 Water Meter
               </button>
-            ))}
+              <button type="button" onClick={() => applyGlobalMethod('manual')}
+                className={cn('px-3 py-1 transition-colors',
+                  globalMethod === 'manual' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                🪣 Bucket Test
+              </button>
+            </div>
+            <span className="text-[10px] text-muted-foreground/60 italic">or switch per vessel ↓</span>
           </div>
 
-          {useUniform && (
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-[11px] text-muted-foreground">Inner Dia. (mm)</Label>
-                <Input type="number" step="any" value={uniformD} onChange={e => setUniformD(e.target.value)} className="h-8 text-sm" placeholder="201" />
-              </div>
-              <div>
-                <Label className="text-[11px] text-muted-foreground">Length (m)</Label>
-                <Input type="number" step="any" value={uniformL} onChange={e => setUniformL(e.target.value)} className="h-8 text-sm" placeholder="1.016" />
-              </div>
-              <div>
-                <Label className="text-[11px] text-muted-foreground">Fill Factor</Label>
-                <Input type="number" step="0.01" min="0.1" max="1" value={uniformF} onChange={e => setUniformF(e.target.value)} className="h-8 text-sm" placeholder="1.0" />
-              </div>
-            </div>
-          )}
+          {/* Formula hint */}
+          <div className="rounded-md bg-muted/30 border border-border px-3 py-1.5 text-[10px] text-muted-foreground font-mono space-y-0.5">
+            {globalMethod === 'meter'
+              ? <><span className="text-foreground font-semibold">Q = ΔV ÷ Δt</span>  ·  ΔV = curr − prev meter (m³)  ·  Δt = elapsed time (hr)</>
+              : <><span className="text-foreground font-semibold">Q = V_bucket ÷ t_fill</span>  ·  e.g. 20 L ÷ 45 s → L/min → m³/hr</>
+            }
+          </div>
 
-          {!useUniform && (
-            <>
-              <button onClick={() => setVesselExpanded(e => !e)}
-                className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-                {vesselExpanded ? 'Collapse vessels ▲' : `Show all ${numVessels} vessels ▼`}
-              </button>
-              {vesselExpanded && (
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                  {vessels.map((vv, i) => (
-                    <div key={vv.id} className="grid grid-cols-[24px_1fr_1fr_1fr_48px] gap-1.5 items-end">
-                      <span className="text-[10px] text-muted-foreground font-mono-num pb-1.5">V{vv.id}</span>
-                      <div>
-                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Dia mm</Label>}
-                        <Input type="number" step="any" value={vv.diameter_mm}
-                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, diameter_mm: e.target.value } : x))}
-                          className="h-7 text-xs" />
-                      </div>
-                      <div>
-                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Len m</Label>}
-                        <Input type="number" step="any" value={vv.length_m}
-                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, length_m: e.target.value } : x))}
-                          className="h-7 text-xs" />
-                      </div>
-                      <div>
-                        {i === 0 && <Label className="text-[10px] text-muted-foreground">Fill</Label>}
-                        <Input type="number" step="0.01" min="0.1" max="1" value={vv.fill_factor}
-                          onChange={e => setVessels(vessels.map((x, j) => j === i ? { ...x, fill_factor: e.target.value } : x))}
-                          className="h-7 text-xs" />
-                      </div>
-                      <div className="text-right">
-                        {i === 0 && <Label className="text-[10px] text-muted-foreground">m³</Label>}
-                        <div className={cn('h-7 flex items-center justify-end text-xs font-mono-num font-medium',
-                          vesselVols[i] ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
-                          {vesselVols[i]?.toFixed(4) ?? '—'}
-                        </div>
-                      </div>
+          {/* Vessel list — accordion */}
+          <div className="space-y-2">
+            {vesselRows.map(row => {
+              const isOpen = expandedVessel === row.id;
+              // Quick Q preview for collapsed state
+              const prevM = +row.prevMeter, currM = +row.currMeter;
+              const dV = (row.currMeter && row.prevMeter) ? currM - prevM : null;
+              const dT = (row.prevTime && row.currTime)
+                ? (new Date(row.currTime).getTime() - new Date(row.prevTime).getTime()) / 3600000 : null;
+              const qPreview_meter = (dV !== null && dT !== null && dT > 0) ? +(dV / dT).toFixed(3) : null;
+              const bV = +row.bucketVol, bT = +row.fillTimeSec;
+              const qPreview_manual = (bV > 0 && bT > 0) ? +((bV / bT * 60 / 1000 * 60)).toFixed(3) : null;
+              const qPreview = row.method === 'meter' ? qPreview_meter : qPreview_manual;
+
+              return (
+                <div key={row.id} className={cn(
+                  'rounded-xl border transition-colors overflow-hidden',
+                  isOpen ? 'border-emerald-300 dark:border-emerald-700' : 'border-border'
+                )}>
+                  {/* Accordion header */}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedVessel(isOpen ? null : row.id)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">Vessel {row.id}</span>
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border font-medium',
+                        row.method === 'meter'
+                          ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
+                          : 'border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300')}>
+                        {row.method === 'meter' ? '📟 Meter' : '🪣 Bucket'}
+                      </span>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2">
+                      {qPreview !== null ? (
+                        <span className="text-xs font-bold font-mono-num text-emerald-600 dark:text-emerald-400">
+                          {qPreview} m³/hr
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/50">not set</span>
+                      )}
+                      <span className="text-muted-foreground/50 text-xs">{isOpen ? '▲' : '▼'}</span>
+                    </div>
+                  </button>
+                  {/* Expanded vessel card */}
+                  {isOpen && (
+                    <div className="px-2 pb-2">
+                      <VesselFlowCard row={row} onChange={patch => patchRow(row.id, patch)} />
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-
-          {/* Summary strip */}
-          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Vessels</p>
-              <p className="text-sm font-bold font-mono-num">{numVessels}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total m³</p>
-              <p className="text-sm font-bold font-mono-num">{totalVol.toFixed(4)}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold tracking-wide">Total L</p>
-              <p className="text-sm font-bold font-mono-num">{totalVolL}</p>
-            </div>
+              );
+            })}
           </div>
-          <p className="text-[9px] text-muted-foreground/50">Defaults: 8040 element — ID 201 mm, L 1.016 m</p>
+
+          {/* All-vessel Q summary strip */}
+          {vesselRows.some(r => {
+            if (r.method === 'meter') {
+              const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+              const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+              return dV !== null && dT !== null && dT > 0;
+            }
+            return +r.bucketVol > 0 && +r.fillTimeSec > 0;
+          }) && (
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5">
+              <p className="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wide mb-1.5">Flow Summary — All Vessels</p>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                {vesselRows.map(r => {
+                  let q: number | null = null;
+                  if (r.method === 'meter') {
+                    const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+                    const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+                    q = (dV !== null && dT !== null && dT > 0) ? +(dV / dT).toFixed(3) : null;
+                  } else {
+                    const bV = +r.bucketVol, bT = +r.fillTimeSec;
+                    q = (bV > 0 && bT > 0) ? +((bV / bT * 60 / 1000 * 60)).toFixed(3) : null;
+                  }
+                  return (
+                    <div key={r.id} className="text-center">
+                      <p className="text-[9px] text-muted-foreground">V{r.id}</p>
+                      <p className={cn('text-xs font-bold font-mono-num',
+                        q !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/40')}>
+                        {q !== null ? q : '—'}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] text-muted-foreground/50 mt-1.5">m³/hr per vessel</p>
+            </div>
+          )}
         </div>
       )}
 
