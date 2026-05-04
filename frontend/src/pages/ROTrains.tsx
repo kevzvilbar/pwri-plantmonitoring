@@ -998,7 +998,7 @@ function PretreatmentAndROLog() {
               <div className="grid grid-cols-3 gap-2">
                 {/* Feed EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emFeedInferred ? 'text-info : 'text-muted-foreground')}>
+                  <Label className={cn('text-xs', emFeedInferred ? 'text-info' : 'text-muted-foreground')}>
                     Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
                   </Label>
                   {emFeedInferred ? (
@@ -1014,7 +1014,7 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Permeate EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emPermInferred ? 'text-info : 'text-muted-foreground')}>
+                  <Label className={cn('text-xs', emPermInferred ? 'text-info' : 'text-muted-foreground')}>
                     Permeate Flowrate{emPermInferred ? ' (computed)' : ''}
                   </Label>
                   {emPermInferred ? (
@@ -1028,7 +1028,7 @@ function PretreatmentAndROLog() {
                       className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   )}
                   <div className="mt-1">
-                    <Label className={cn('text-xs', recWarn ? 'text-warn-foreground : 'text-muted-foreground')}>
+                    <Label className={cn('text-xs', recWarn ? 'text-warn-foreground' : 'text-muted-foreground')}>
                       Recovery %{recWarn ? ' ⚠' : ''}
                     </Label>
                     <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
@@ -1036,7 +1036,7 @@ function PretreatmentAndROLog() {
                 </div>
                 {/* Reject EM */}
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emRejInferred ? 'text-info : 'text-muted-foreground')}>
+                  <Label className={cn('text-xs', emRejInferred ? 'text-info' : 'text-muted-foreground')}>
                     Reject Flowrate{emRejInferred ? ' (computed)' : ''}
                   </Label>
                   {emRejInferred ? (
