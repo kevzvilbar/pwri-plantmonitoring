@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -1451,103 +1451,362 @@ function CIPLog() {
     enabled: !!plantId,
   });
   const { data: history } = useQuery({
-    queryKey: ['cip-history', plantId],
-    queryFn: async () => plantId ? (await supabase.from('cip_logs').select('*,ro_trains(train_number)').eq('plant_id', plantId).order('start_datetime', { ascending: false }).limit(10)).data ?? [] : [],
+    queryKey: ['cip-history', trainId, plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('cip_logs')
+          .select('*,ro_trains(train_number)')
+          .eq('plant_id', plantId)
+          .order('start_datetime', { ascending: false })
+          .limit(10)).data ?? []
+      : [],
     enabled: !!plantId,
   });
+  const { data: cipPrices } = useQuery({
+    queryKey: ['chem-current-prices-cip'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => { if (!(p.chemical_name in map)) map[p.chemical_name] = p.unit_price; });
+      return map;
+    },
+  });
+
+  const selectedTrain = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
+
+  // Live computed values for sidebar
+  const causticKg  = +v.caustic || 0;
+  const hclL       = +v.hcl     || 0;
+  const slsG       = +v.sls     || 0;
+  const totalMassKg   = causticKg + slsG / 1000;
+  const totalVolumeL  = hclL;
+  const liveCost =
+    causticKg * (cipPrices?.['Caustic Soda'] ?? 0) +
+    hclL      * (cipPrices?.['HCl']          ?? 0) +
+    (slsG / 1000) * (cipPrices?.['SLS']      ?? 0);
+
+  const formDuration = v.start && v.end
+    ? Math.round((new Date(v.end).getTime() - new Date(v.start).getTime()) / 60000)
+    : null;
+
+  const getHistoryCost = (c: any) =>
+    (c.caustic_soda_kg || 0) * (cipPrices?.['Caustic Soda'] ?? 0) +
+    (c.hcl_l           || 0) * (cipPrices?.['HCl']          ?? 0) +
+    ((c.sls_g || 0) / 1000)  * (cipPrices?.['SLS']          ?? 0);
+
+  const getChemType = (c: any) => {
+    const parts: string[] = [];
+    if (c.caustic_soda_kg > 0) parts.push('Caustic Alkaline');
+    if (c.hcl_l > 0)           parts.push('Acid HCl');
+    if (c.sls_g > 0)           parts.push('Anti Scalant');
+    return parts.join(' + ') || '—';
+  };
+
+  // Comparison to last saved CIP
+  const lastCip = history?.[0];
+  const lastCipCost = lastCip ? getHistoryCost(lastCip) : null;
+  const comparisonPct = lastCipCost && liveCost
+    ? (((liveCost - lastCipCost) / lastCipCost) * 100).toFixed(0)
+    : null;
 
   const submit = async () => {
-    if (!trainId) return;
+    if (!trainId) { toast.error('Select a train'); return; }
     const { error } = await supabase.from('cip_logs').insert({
       train_id: trainId, plant_id: plantId,
       start_datetime: v.start ? new Date(v.start).toISOString() : null,
-      end_datetime: v.end ? new Date(v.end).toISOString() : null,
+      end_datetime:   v.end   ? new Date(v.end).toISOString()   : null,
       sls_g: v.sls ? +v.sls : null, hcl_l: v.hcl ? +v.hcl : null, caustic_soda_kg: v.caustic ? +v.caustic : null,
       conducted_by: user?.id, remarks: v.remarks || null,
     });
     if (error) { toast.error(error.message); return; }
     toast.success('CIP logged'); qc.invalidateQueries();
-    setV({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
+    clearForm();
   };
+  const clearForm = () => setV({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
+
+  const trainStatusLabel = selectedTrain?.status === 'Running'
+    ? 'Online - Optimal Health'
+    : selectedTrain?.status ?? '';
+  const trainStatusColor = selectedTrain?.status === 'Running'
+    ? 'text-emerald-500'
+    : selectedTrain?.status === 'Maintenance'
+    ? 'text-amber-500'
+    : 'text-red-500';
 
   return (
-    <div className="space-y-3">
-      <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div><Label>Plant</Label><PlantPicker value={plantId} onChange={(p) => { setPlantId(p); setTrainId(''); }} /></div>
-          <div><Label>Train</Label>
-            <Select value={trainId} onValueChange={setTrainId}>
-              <SelectTrigger><SelectValue placeholder="Train" /></SelectTrigger>
-              <SelectContent>{trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}</SelectContent>
-            </Select>
+    <div className="flex gap-3 items-start">
+      {/* ── Main Content ──────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 space-y-2.5">
+
+        {/* Plant + Train row */}
+        <Card className="p-3 space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Plant</Label>
+              <PlantPicker value={plantId} onChange={(p) => { setPlantId(p); setTrainId(''); }} />
+            </div>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Train</Label>
+              <Select value={trainId} onValueChange={setTrainId}>
+                <SelectTrigger><SelectValue placeholder="Select train" /></SelectTrigger>
+                <SelectContent>
+                  {trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="col-span-2 sm:col-span-1">
-            <Label>Start Date &amp; Time</Label>
-            <Input
-              type="datetime-local"
-              value={v.start}
-              onChange={e => setV({ ...v, start: e.target.value })}
-              className="w-full sm:min-w-[220px]"
-            />
-          </div>
-          <div className="col-span-2 sm:col-span-1">
-            <Label>End Date &amp; Time</Label>
-            <Input
-              type="datetime-local"
-              value={v.end}
-              onChange={e => setV({ ...v, end: e.target.value })}
-              className="w-full sm:min-w-[220px]"
-            />
-          </div>
-          <div><Label>SLS (g)</Label><Input type="number" step="any" value={v.sls} onChange={e => setV({ ...v, sls: e.target.value })} /></div>
-          <div><Label>HCl (L)</Label><Input type="number" step="any" value={v.hcl} onChange={e => setV({ ...v, hcl: e.target.value })} /></div>
-          <div className="col-span-2"><Label>Caustic Soda (kg)</Label><Input type="number" step="any" value={v.caustic} onChange={e => setV({ ...v, caustic: e.target.value })} /></div>
-          <div className="col-span-2"><Label>Remarks</Label><Input value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })} /></div>
+
+          {/* Train status badge */}
+          {selectedTrain && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-sm font-bold">Train {selectedTrain.train_number}</span>
+              <span className={cn('text-xs font-medium', trainStatusColor)}>
+                ({trainStatusLabel})
+              </span>
+            </div>
+          )}
+        </Card>
+
+        {/* Dosing & Time + Remarks — side by side on wider screens */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2.5">
+
+          {/* Dosing & Time */}
+          <Card className="p-3 space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Dosing & Time</h4>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Caustic Soda */}
+              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
+                v.caustic ? 'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30' : 'border-border bg-muted/20')}>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-900 text-[9px] font-bold text-teal-700 dark:text-teal-300">A</span>
+                  <span className="text-xs font-semibold">Caustic Soda (kg)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input type="number" step="any" value={v.caustic}
+                    onChange={e => setV({ ...v, caustic: e.target.value })}
+                    className="h-7 text-sm flex-1" placeholder="0" />
+                  <span className="text-[11px] text-muted-foreground shrink-0">kg</span>
+                </div>
+                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                  <div className={cn('h-full rounded-full bg-teal-400 transition-all', v.caustic ? 'w-1/2' : 'w-0')} />
+                </div>
+              </div>
+
+              {/* HCl */}
+              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
+                v.hcl ? 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30' : 'border-border bg-muted/20')}>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900 text-[9px] font-bold text-amber-700 dark:text-amber-300">A</span>
+                  <span className="text-xs font-semibold">HCl (L)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input type="number" step="any" value={v.hcl}
+                    onChange={e => setV({ ...v, hcl: e.target.value })}
+                    className="h-7 text-sm flex-1" placeholder="0" />
+                  <span className="text-[11px] text-muted-foreground shrink-0">L</span>
+                </div>
+                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                  <div className={cn('h-full rounded-full bg-amber-400 transition-all', v.hcl ? 'w-1/2' : 'w-0')} />
+                </div>
+              </div>
+
+              {/* SLS */}
+              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors col-span-1',
+                v.sls ? 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30' : 'border-border bg-muted/20')}>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-yellow-100 dark:bg-yellow-900 text-[8px] font-bold text-yellow-700 dark:text-yellow-300">SO₃</span>
+                  <span className="text-xs font-semibold">SLS (g)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input type="number" step="any" value={v.sls}
+                    onChange={e => setV({ ...v, sls: e.target.value })}
+                    className="h-7 text-sm flex-1" placeholder="0" />
+                  <span className="text-[11px] text-muted-foreground shrink-0">g</span>
+                </div>
+                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                  <div className={cn('h-full rounded-full bg-yellow-400 transition-all', v.sls ? 'w-1/2' : 'w-0')} />
+                </div>
+              </div>
+            </div>
+
+            {/* Datetime pickers */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Start D&T</Label>
+                <Input type="datetime-local" value={v.start}
+                  onChange={e => setV({ ...v, start: e.target.value })}
+                  className="w-full text-xs h-8" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">End D&T</Label>
+                <Input type="datetime-local" value={v.end}
+                  onChange={e => setV({ ...v, end: e.target.value })}
+                  className="w-full text-xs h-8" />
+              </div>
+            </div>
+            {formDuration != null && formDuration > 0 && (
+              <p className="text-[10px] text-muted-foreground">
+                Duration: <span className="font-semibold text-foreground">{formDuration} min</span>
+              </p>
+            )}
+          </Card>
+
+          {/* Remarks & Prediction */}
+          <Card className="p-3 space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Remarks & Prediction</h4>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Remarks</Label>
+              <Textarea value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })}
+                placeholder="Any observations..." className="text-xs min-h-[72px] resize-none" />
+            </div>
+            <div className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 p-2 space-y-0.5">
+              <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                Predicted Recovery Post-CIP:
+              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">+3% est.</span>
+                <span className="text-emerald-500 text-base">↑</span>
+              </div>
+            </div>
+          </Card>
         </div>
-        <Button onClick={submit} className="w-full">Save CIP</Button>
-      </Card>
-      <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Recent CIP</h4>
-        {history?.map((c: any) => (
-          <div key={c.id} className="text-xs py-1.5 border-t">
-            <div>Train {c.ro_trains?.train_number} - {c.start_datetime && format(new Date(c.start_datetime), 'MMM d, HH:mm')}</div>
-            <div className="text-muted-foreground">SLS {c.sls_g ?? 0}g - HCl {c.hcl_l ?? 0}L - NaOH {c.caustic_soda_kg ?? 0}kg</div>
+
+        {/* CIP History table */}
+        <Card className="p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              CIP History {selectedTrain ? `— Train ${selectedTrain.train_number}` : ''}
+            </h4>
+            <ExportButton table="cip_logs" label="Export" />
           </div>
-        ))}
-        {!history?.length && <p className="text-xs text-muted-foreground">No CIP records</p>}
-      </Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border">
+                  <th className="text-left py-1.5 pr-3 font-semibold">Date</th>
+                  <th className="text-left py-1.5 pr-3 font-semibold">Duration</th>
+                  <th className="text-left py-1.5 pr-3 font-semibold">Chemical Type</th>
+                  <th className="text-right py-1.5 font-semibold">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history?.map((c: any) => {
+                  const dur = c.start_datetime && c.end_datetime
+                    ? Math.round((new Date(c.end_datetime).getTime() - new Date(c.start_datetime).getTime()) / 60000)
+                    : null;
+                  const hCost = getHistoryCost(c);
+                  return (
+                    <tr key={c.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                      <td className="py-1.5 pr-3 font-mono-num text-[11px]">
+                        {c.start_datetime ? format(new Date(c.start_datetime), 'MM/dd/yyyy') : '—'}
+                      </td>
+                      <td className="py-1.5 pr-3 text-muted-foreground">
+                        {dur != null && dur > 0 ? `${dur} min` : '—'}
+                      </td>
+                      <td className="py-1.5 pr-3">{getChemType(c)}</td>
+                      <td className="py-1.5 text-right font-mono-num">
+                        {cipPrices ? `₱ ${fmtNum(hCost, 2)}` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!history?.length && (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                      No CIP records yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Right Sidebar ─────────────────────────────────────────────── */}
+      <div className="w-48 shrink-0">
+        <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary</p>
+            <p className="text-[9px] text-teal-400">(Live Calc)</p>
+          </div>
+
+          <div className="space-y-2.5">
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Chemical Cost:</p>
+              <p className="text-xl font-bold font-mono-num leading-tight">₱ {fmtNum(liveCost, 2)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Mass:</p>
+              <p className="text-sm font-semibold font-mono-num">{fmtNum(totalMassKg, 3)} kg</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Volume:</p>
+              <p className="text-sm font-semibold font-mono-num">{fmtNum(totalVolumeL, 2)} L</p>
+            </div>
+            {comparisonPct != null && (
+              <div>
+                <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">vs Last CIP:</p>
+                <p className={cn('text-sm font-semibold', +comparisonPct <= 0 ? 'text-emerald-400' : 'text-amber-400')}>
+                  "{+comparisonPct > 0 ? '+' : ''}{comparisonPct}% Chemical Use"
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-teal-700/60 pt-2.5 space-y-2">
+            <Button
+              onClick={submit}
+              className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0"
+            >
+              Save CIP
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={clearForm}
+              className="w-full h-8 text-xs text-teal-300 hover:text-white hover:bg-teal-800"
+            >
+              Clear Form
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ─── Chemical Dosing Tab ──────────────────────────────────────────────────────
 
+function ToggleSwitch({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-1.5 focus-visible:outline-none group">
+      <div className={cn(
+        'relative w-9 h-5 rounded-full transition-colors duration-200',
+        active ? 'bg-teal-600' : 'bg-muted-foreground/30'
+      )}>
+        <div className={cn(
+          'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
+          active ? 'translate-x-4' : 'translate-x-0.5'
+        )} />
+      </div>
+      <span className={cn('text-sm font-medium transition-colors', active ? 'text-teal-700 dark:text-teal-400' : 'text-muted-foreground group-hover:text-foreground')}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
 function ChemicalDosing() {
   const [active, setActive] = useState<'dosing' | 'inventory'>('dosing');
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 w-full gap-1 p-1 bg-muted rounded-lg">
-        <button
-          onClick={() => setActive('dosing')}
-          className={[
-            'py-2 text-sm font-medium rounded-md transition-all duration-200 focus-visible:outline-none',
-            active === 'dosing'
-              ? 'bg-teal-700 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground',
-          ].join(' ')}
-        >Dosing</button>
-        <button
-          onClick={() => setActive('inventory')}
-          className={[
-            'py-2 text-sm font-medium rounded-md transition-all duration-200 focus-visible:outline-none',
-            active === 'inventory'
-              ? 'bg-teal-700 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground',
-          ].join(' ')}
-        >Inventory</button>
+      <div className="flex items-center justify-end gap-4">
+        <ToggleSwitch label="Dosing"    active={active === 'dosing'}    onClick={() => setActive('dosing')} />
+        <ToggleSwitch label="Inventory" active={active === 'inventory'} onClick={() => setActive('inventory')} />
       </div>
       <div>
-        {active === 'dosing' && <ChemDosingForm />}
+        {active === 'dosing'    && <ChemDosingForm />}
         {active === 'inventory' && <ChemInventory />}
       </div>
     </div>
@@ -1567,9 +1826,48 @@ function ChemPlantPick({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
+// ── Chemical card helper ─────────────────────────────────────────────────────
+function ChemCard({
+  name, icon, value, onChange, unit, accent = 'default', inputProps = {},
+}: {
+  name: string; icon: React.ReactNode; value: string;
+  onChange: (v: string) => void; unit: string;
+  accent?: 'teal' | 'amber' | 'olive' | 'default';
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
+}) {
+  const hasVal = value !== '' && +value !== 0;
+  const borders: Record<string, string> = {
+    teal:    'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30',
+    amber:   'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30',
+    olive:   'border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/30',
+    default: 'border-primary/30 bg-primary/5',
+  };
+  const bars: Record<string, string> = {
+    teal: 'bg-teal-400', amber: 'bg-amber-400', olive: 'bg-yellow-400', default: 'bg-primary/60',
+  };
+  return (
+    <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors', hasVal ? borders[accent] : 'border-border bg-muted/10')}>
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <span className="text-xs font-semibold leading-tight">{name}</span>
+      </div>
+      <div className="relative">
+        <Input type="number" step="any" value={value} onChange={e => onChange(e.target.value)}
+          placeholder="Inputs" className="h-8 text-sm pr-7 placeholder:text-[10px] placeholder:text-muted-foreground/50"
+          {...inputProps} />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">{unit}</span>
+      </div>
+      <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all duration-300', bars[accent], hasVal ? 'w-1/2' : 'w-0')} />
+      </div>
+    </div>
+  );
+}
+
 function ChemDosingForm() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [v, setV] = useState({
@@ -1612,6 +1910,15 @@ function ChemDosingForm() {
     return s + qty * price;
   }, 0);
 
+  // Sidebar live sums
+  const totalMassKg  = (+v.chlorine_kg || 0) + (+v.smbs_kg || 0) + (+v.soda_ash_kg || 0);
+  const totalVolumeL = +v.anti_scalant_l || 0;
+  const freePcs      = +v.free_chlorine_reagent_pcs || 0;
+
+  const plantName = plants?.find(p => p.id === plantId)?.name ?? '';
+
+  const clearAll = () => setV({ chlorine_kg: '', smbs_kg: '', anti_scalant_l: '', soda_ash_kg: '', free_chlorine_reagent_pcs: '0' });
+
   const submit = async () => {
     if (!plantId) { toast.error('Select plant'); return; }
     const validResiduals = samples.filter((s) => s.ppm !== '').map((s) => +s.ppm);
@@ -1633,56 +1940,148 @@ function ChemDosingForm() {
       await supabase.from('chemical_residual_samples').insert(sampleRows);
     }
     toast.success('Dosing logged');
-    setV({ chlorine_kg: '', smbs_kg: '', anti_scalant_l: '', soda_ash_kg: '', free_chlorine_reagent_pcs: '0' });
-    setSamples([]);
+    clearAll(); setSamples([]);
     qc.invalidateQueries();
   };
 
   return (
-    <Card className="p-3 space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <div><Label>Plant</Label><ChemPlantPick value={plantId} onChange={setPlantId} /></div>
-        <div><Label>Date & time</Label><Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {DOSING_KEYS.map(c => (
-          <div key={c.key}>
-            <Label className="text-xs">{c.name} ({c.unit})</Label>
-            <Input type="number" step="any" value={(v as any)[c.key]} onChange={e => setV({ ...v, [c.key]: e.target.value })} />
-          </div>
-        ))}
-        <div>
-          <Label className="text-xs">Free Cl Reagent (pcs)</Label>
-          <Input type="number" min="0" max="20" value={v.free_chlorine_reagent_pcs}
-            onChange={e => setV({ ...v, free_chlorine_reagent_pcs: e.target.value })} />
-        </div>
-      </div>
-      {samples.length > 0 && (
-        <div className="space-y-2 pt-2 border-t">
-          <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual samples</h4>
-          {samples.map((s, i) => (
-            <div key={s.id} className="grid grid-cols-[24px_1fr_100px] gap-2 items-end">
-              <div className="text-xs font-mono-num pt-2">#{i + 1}</div>
-              <div>
-                <Label className="text-xs">Sampling point</Label>
-                <Input value={s.point} placeholder="e.g. Tank outlet"
-                  onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
-              </div>
-              <div>
-                <Label className="text-xs">ppm</Label>
-                <Input type="number" step="any" value={s.ppm}
-                  onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
-              </div>
+    <div className="flex gap-3 items-start">
+      {/* ── Main Content ─────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 space-y-3">
+
+        {/* Plant header card */}
+        <Card className="p-3 space-y-2">
+          {plantName && (
+            <div className="flex items-center gap-2 pb-1">
+              <span className="text-base">🏭</span>
+              <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
             </div>
-          ))}
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Plant</Label>
+              <ChemPlantPick value={plantId} onChange={setPlantId} />
+            </div>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Date & time</Label>
+              <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
+            </div>
+          </div>
+        </Card>
+
+        {/* Mass-Based Dosing Group */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Mass-Based Dosing Group</p>
+          <div className="grid grid-cols-3 gap-2">
+            <ChemCard
+              name="Chlorine (kg)"
+              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
+              value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
+              unit="kg" accent="teal"
+            />
+            <ChemCard
+              name="SMBS (kg)"
+              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
+              value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
+              unit="kg" accent="default"
+            />
+            <ChemCard
+              name="Soda Ash (kg)"
+              icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
+              value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
+              unit="kg" accent="default"
+            />
+          </div>
         </div>
-      )}
-      <div className="bg-accent-soft p-2 rounded text-sm flex justify-between">
-        <span>Calculated cost</span>
-        <span className="font-mono-num font-semibold text-accent">₱ {fmtNum(cost, 2)}</span>
+
+        {/* Volume-Based Dosing Group */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Volume-Based Dosing Group</p>
+          <div className="grid grid-cols-2 gap-2">
+            <ChemCard
+              name="Anti Scalant (L)"
+              icon={<span className="text-base leading-none">🚛</span>}
+              value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
+              unit="L" accent="olive"
+            />
+          </div>
+        </div>
+
+        {/* Ancillary & Tests Group */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Ancillary & Tests Group</p>
+          <div className="grid grid-cols-2 gap-2">
+            <ChemCard
+              name="Free Cl Reagent (pcs)"
+              icon={<span className="text-base leading-none">🧪</span>}
+              value={v.free_chlorine_reagent_pcs}
+              onChange={val => setV({ ...v, free_chlorine_reagent_pcs: val })}
+              unit="pcs" accent="default"
+              inputProps={{ min: '0', max: '20' }}
+            />
+          </div>
+        </div>
+
+        {/* Residual samples */}
+        {samples.length > 0 && (
+          <Card className="p-3 space-y-2 border-t">
+            <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual Samples</h4>
+            {samples.map((s, i) => (
+              <div key={s.id} className="grid grid-cols-[20px_1fr_88px] gap-2 items-end">
+                <div className="text-xs font-mono-num pt-2 text-muted-foreground">#{i + 1}</div>
+                <div>
+                  <Label className="text-xs">Sampling point</Label>
+                  <Input value={s.point} placeholder="e.g. Tank outlet"
+                    onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
+                </div>
+                <div>
+                  <Label className="text-xs">ppm</Label>
+                  <Input type="number" step="any" value={s.ppm}
+                    onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
       </div>
-      <Button onClick={submit} className="w-full">Save dosing</Button>
-    </Card>
+
+      {/* ── Right Sidebar ─────────────────────────────────────────────── */}
+      <div className="w-48 shrink-0">
+        <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary</p>
+
+          <div className="space-y-2.5">
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Mass (kg):</p>
+              <p className="text-xl font-bold font-mono-num leading-tight">{fmtNum(totalMassKg, 2)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Volume (L):</p>
+              <p className="text-base font-bold font-mono-num">{fmtNum(totalVolumeL, 2)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Free CI Test PCS:</p>
+              <p className="text-base font-bold font-mono-num">{freePcs}</p>
+            </div>
+            <div className="border-t border-teal-700/60 pt-2">
+              <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium mb-0.5">Calculated Cost:</p>
+              <p className="text-xl font-bold leading-tight">₱ {fmtNum(cost, 2)}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-teal-700/60 pt-2 space-y-2">
+            <button onClick={clearAll}
+              className="w-full text-xs text-teal-300 hover:text-white underline underline-offset-2 transition-colors">
+              Clear All
+            </button>
+            <Button onClick={submit}
+              className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">
+              Save Dosing
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
