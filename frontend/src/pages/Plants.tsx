@@ -838,8 +838,7 @@ function _ProductMeterNameInline({
       user_id: userId, timestamp: new Date().toISOString(),
     });
     toast.success('Meter renamed');
-    setEditing(false); onChanged(); // Also bust the Operations cache so ProductForm reflects the new name immediately
-    qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
+    setEditing(false); onChanged();
   };
 
   if (editing) {
@@ -4296,57 +4295,59 @@ function PowerMetersCard({ plant }: { plant: any }) {
     <div className="space-y-3">
 
       {/* ── Energy Source Toggles ── */}
-      <Card className="p-4 space-y-3">
+      <Card className="p-3 space-y-2">
+        {/* Header row */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-blue-500" />
-            <h3 className="font-semibold text-sm">Energy Sources</h3>
+          <div className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-blue-500" />
+            <h3 className="font-semibold text-xs">Energy Sources</h3>
           </div>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
             {hasSolar && hasGrid ? 'Solar + Grid' : hasSolar ? 'Solar only' : hasGrid ? 'Grid only' : 'None'}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-end gap-4">
+        {/* Toggles + Save on one compact row */}
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Solar toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
             <Switch
               checked={hasSolar}
               onCheckedChange={canEdit ? setHasSolar : undefined}
               disabled={!canEdit}
               data-testid="energy-power-tab-solar"
+              className="scale-90"
             />
             <span className="inline-flex items-center gap-1">
-              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Solar
+              <Sun className="h-3 w-3 text-yellow-500" /> Solar
             </span>
           </label>
 
           {/* Grid toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
             <Switch
               checked={hasGrid}
               onCheckedChange={canEdit ? setHasGrid : undefined}
               disabled={!canEdit}
               data-testid="energy-power-tab-grid"
+              className="scale-90"
             />
             <span className="inline-flex items-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-blue-500" /> Grid
+              <Zap className="h-3 w-3 text-blue-500" /> Grid
             </span>
           </label>
 
-          {/* Solar kW — only visible when solar is on */}
+          {/* Solar kW — inline when solar is on */}
           {hasSolar && canEdit && (
-            <div className="flex items-end gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-8 w-32 text-xs mt-0.5"
-                  data-testid="energy-power-tab-kw"
-                />
-              </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <Label className="text-[10px] text-muted-foreground whitespace-nowrap">kW cap.</Label>
+              <Input
+                type="number" step="any" value={solarKw}
+                onChange={e => setSolarKw(e.target.value)}
+                placeholder="e.g. 50"
+                className="h-7 w-20 text-xs px-2"
+                data-testid="energy-power-tab-kw"
+              />
             </div>
           )}
 
@@ -4355,61 +4356,55 @@ function PowerMetersCard({ plant }: { plant: any }) {
               size="sm"
               onClick={saveEnergy}
               disabled={energySaving}
-              className="h-8 px-4 text-xs bg-teal-700 text-white hover:bg-teal-800 ml-auto"
+              className={`h-7 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800 ${!hasSolar ? 'ml-auto' : ''}`}
               data-testid="save-energy-power-tab-btn"
             >
-              {energySaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Save
+              {energySaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
             </Button>
           )}
         </div>
       </Card>
 
       {/* ── Meter Configuration ── */}
-      <Card className="p-4 space-y-4">
+      <Card className="p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-blue-500" />
-            <h3 className="font-semibold text-sm">Power Meter Configuration</h3>
+          <div className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-blue-500" />
+            <h3 className="font-semibold text-xs">Power Meter Config</h3>
           </div>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
             {hasSolar && hasGrid ? 'Solar + Grid' : hasSolar ? 'Solar only' : 'Grid only'}
           </span>
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          Configure how many solar and grid meters this plant has, and set their display names.
-          These names appear as reading inputs in <strong>Operations → Power</strong>.
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          Meter names appear as reading inputs in <strong>Operations → Power</strong>.
         </p>
 
         {/* ── 2-column layout: Solar (left, only when solar ON) | Grid (right) ── */}
-        <div className={['grid gap-4', hasSolar ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
+        <div className={['grid gap-2.5', hasSolar ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
 
           {/* Solar column — hidden dynamically when Solar toggle is off */}
           {hasSolar && (
-            <div className="space-y-3 rounded-md border border-yellow-200 bg-yellow-50/50 dark:border-yellow-800/40 dark:bg-yellow-950/10 p-3">
-              <div className="flex items-center gap-2">
-                <Sun className="h-3.5 w-3.5 text-yellow-500" />
-                <span className="text-sm font-semibold">Solar Meters</span>
+            <div className="space-y-2 rounded-md border border-yellow-200 bg-yellow-50/50 dark:border-yellow-800/40 dark:bg-yellow-950/10 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <Sun className="h-3 w-3 text-yellow-500" />
+                <span className="text-xs font-semibold">Solar Meters</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Meter Count:</span>
-                <div className="flex items-center border rounded overflow-hidden text-[11px]">
-                  <input type="number" min="1" max="20" disabled={!canEdit}
-                    value={solarCount}
-                    onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setSolarCount(v); }}
-                    className="w-12 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50 bg-background" />
+                <span className="text-[10px] text-muted-foreground">Count</span>
+                <div className="flex items-center border rounded overflow-hidden text-[11px] ml-auto">
                   {canEdit && (
-                    <div className="flex flex-col border-l">
-                      <button onClick={() => setSolarCount(c => Math.min(20, c + 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px]">▲</button>
-                      <button onClick={() => setSolarCount(c => Math.max(1, c - 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px] border-t">▼</button>
-                    </div>
+                    <button onClick={() => setSolarCount(c => Math.max(1, c - 1))} className="px-1.5 py-1 hover:bg-muted text-muted-foreground text-xs leading-none">−</button>
+                  )}
+                  <span className="px-2 py-1 text-xs font-medium min-w-[1.5rem] text-center bg-background">{solarCount}</span>
+                  {canEdit && (
+                    <button onClick={() => setSolarCount(c => Math.min(20, c + 1))} className="px-1.5 py-1 hover:bg-muted text-muted-foreground text-xs leading-none border-l">+</button>
                   )}
                 </div>
               </div>
               {canEdit && (
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Meter Names:</p>
                   <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
                     onSave={names => setSolarNames(names)}
                     onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
@@ -4419,29 +4414,25 @@ function PowerMetersCard({ plant }: { plant: any }) {
           )}
 
           {/* Grid column */}
-          <div className="space-y-3 rounded-md border border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-950/10 p-3">
-            <div className="flex items-center gap-2">
-              <Zap className="h-3.5 w-3.5 text-blue-500" />
-              <span className="text-sm font-semibold">Grid Meters</span>
+          <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-950/10 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3 w-3 text-blue-500" />
+              <span className="text-xs font-semibold">Grid Meters</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Meter Count:</span>
-              <div className="flex items-center border rounded overflow-hidden text-[11px]">
-                <input type="number" min="1" max="20" disabled={!canEdit}
-                  value={gridCount}
-                  onChange={e => { const v = Math.max(1, Math.min(20, +e.target.value || 1)); setGridCount(v); }}
-                  className="w-12 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50 bg-background" />
+              <span className="text-[10px] text-muted-foreground">Count</span>
+              <div className="flex items-center border rounded overflow-hidden text-[11px] ml-auto">
                 {canEdit && (
-                  <div className="flex flex-col border-l">
-                    <button onClick={() => setGridCount(c => Math.min(20, c + 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px]">▲</button>
-                    <button onClick={() => setGridCount(c => Math.max(1, c - 1))} className="px-1 py-0 hover:bg-muted text-muted-foreground leading-none text-[9px] border-t">▼</button>
-                  </div>
+                  <button onClick={() => setGridCount(c => Math.max(1, c - 1))} className="px-1.5 py-1 hover:bg-muted text-muted-foreground text-xs leading-none">−</button>
+                )}
+                <span className="px-2 py-1 text-xs font-medium min-w-[1.5rem] text-center bg-background">{gridCount}</span>
+                {canEdit && (
+                  <button onClick={() => setGridCount(c => Math.min(20, c + 1))} className="px-1.5 py-1 hover:bg-muted text-muted-foreground text-xs leading-none border-l">+</button>
                 )}
               </div>
             </div>
             {canEdit && (
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Meter Names:</p>
                 <MeterNameListRows count={gridCount} names={gridNames} accentColor="blue" defaultPrefix="Grid Meter"
                   onSave={names => setGridNames(names)}
                   onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))} />
@@ -4452,12 +4443,12 @@ function PowerMetersCard({ plant }: { plant: any }) {
         </div>
 
         {canEdit ? (
-          <Button onClick={saveConfig} disabled={saving} className="w-full bg-teal-700 text-white hover:bg-teal-800">
-            {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-            Save Power Meter Config
+          <Button onClick={saveConfig} disabled={saving} className="w-full h-9 text-xs bg-teal-700 text-white hover:bg-teal-800">
+            {saving ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : null}
+            Save Meter Config
           </Button>
         ) : (
-          <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
+          <p className="text-[10px] text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
         )}
       </Card>
     </div>
