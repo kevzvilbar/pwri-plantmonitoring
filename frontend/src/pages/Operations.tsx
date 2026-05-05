@@ -1309,8 +1309,8 @@ function WellRow({
 
   return (
     <div className="p-3 space-y-2" data-testid={`well-row-${well.id}`}>
-      {/* Row 1: Well name + badges | date on right */}
-      <div className="flex items-center gap-1.5 min-w-0">
+      {/* Row 1: Well name + badges | compact date picker on right */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
           <div className="text-sm font-semibold truncate">{well.name}</div>
           {well.has_power_meter && (
@@ -1323,10 +1323,15 @@ function WellRow({
           )}
           {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">Editing</span>}
         </div>
-        <Input type="datetime-local" value={customDt}
-          onChange={e => setCustomDt(e.target.value)}
-          className="ml-auto shrink-0 text-xs h-7 w-44 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate.400"
-          title="Reading date & time" />
+        <label className="shrink-0 cursor-pointer relative">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+          </span>
+          <Input type="datetime-local" value={customDt}
+            onChange={e => setCustomDt(e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            title="Reading date & time" />
+        </label>
       </div>
 
       {/* prev + today count */}
@@ -1553,29 +1558,42 @@ function BlendingRow({
   };
 
   return (
-    <div className="p-3 flex flex-wrap items-center gap-2" data-testid={`blending-row-${well.id}`}>
-      <div className="min-w-0 flex-1 basis-[140px]">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="text-sm font-medium truncate">{well.name}</div>
-          <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal">Blending</Badge>
-        </div>
-        <div className="text-xs text-muted-foreground truncate">
-          prev: <span className="font-mono-num" title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}>
-            {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
-          </span>
-          <span className="mx-1">·</span>
-          today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
-        </div>
+    <div className="p-3 space-y-2" data-testid={`blending-row-${well.id}`}>
+      {/* Row 1: Well name + badge */}
+      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+        <div className="text-sm font-medium truncate">{well.name}</div>
+        <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal">Blending</Badge>
       </div>
-      <Button onClick={save} disabled={saving || !volume} size="sm" className="h-9 px-3 text-xs shrink-0 sm:order-last">
-        {saving ? '...' : 'Save'}
-      </Button>
-      {isManagerOrAdmin && (
-        <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground sm:order-last"
-          onClick={() => setShowHistory(true)} title="View blending history">
-          <History className="h-3.5 w-3.5" />
+
+      {/* Row 2: prev / today data */}
+      <div className="text-xs text-muted-foreground">
+        prev: <span className="font-mono-num" title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}>
+          {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
+        </span>
+        <span className="mx-1">·</span>
+        today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
+      </div>
+
+      {/* Row 3: Input + Save + History */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
+          <Input type="number" step="any" inputMode="decimal" value={volume}
+            onChange={(e) => setVolume(e.target.value)} placeholder="Blending m³"
+            className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
+            data-testid={`blending-input-${well.id}`} />
+        </div>
+        <Button onClick={save} disabled={saving || !volume} size="sm" className="h-9 px-3 text-xs shrink-0">
+          {saving ? '...' : 'Save'}
         </Button>
-      )}
+        {isManagerOrAdmin && (
+          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground shrink-0"
+            onClick={() => setShowHistory(true)} title="View blending history">
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
       {showHistory && (
         <ReadingHistoryDialog
           entityName={well.name}
@@ -1585,15 +1603,6 @@ function BlendingRow({
           onClose={() => setShowHistory(false)}
         />
       )}
-      <div className="flex items-center gap-1.5 basis-full sm:basis-auto sm:ml-auto">
-        <div className="relative flex-1 sm:flex-initial sm:w-32">
-          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
-          <Input type="number" step="any" inputMode="decimal" value={volume}
-            onChange={(e) => setVolume(e.target.value)} placeholder="Blending Reading"
-            className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
-            data-testid={`blending-input-${well.id}`} />
-        </div>
-      </div>
     </div>
   );
 }
@@ -1966,19 +1975,22 @@ function ProductMeterRow({
 
   return (
     <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
-      {/* Row 1: Name | date on right */}
+      {/* Row 1: Name | compact date picker on right */}
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <div className="text-sm font-medium truncate flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="text-sm font-medium truncate flex items-center gap-1.5 min-w-0 flex-1">
             <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-            {meter.name}
+            <span className="truncate">{meter.name}</span>
           </div>
-          <Input
-            type="datetime-local" value={customDt}
-            onChange={e => setCustomDt(e.target.value)}
-            className="ml-auto shrink-0 w-44 text-xs h-7 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
-            title="Reading date & time"
-          />
+          <label className="shrink-0 cursor-pointer relative">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+              {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            </span>
+            <Input type="datetime-local" value={customDt}
+              onChange={e => setCustomDt(e.target.value)}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              title="Reading date & time" />
+          </label>
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">
           prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
