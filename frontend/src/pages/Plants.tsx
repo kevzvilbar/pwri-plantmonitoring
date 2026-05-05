@@ -838,7 +838,8 @@ function _ProductMeterNameInline({
       user_id: userId, timestamp: new Date().toISOString(),
     });
     toast.success('Meter renamed');
-    setEditing(false); onChanged();
+    setEditing(false); onChanged(); // Also bust the Operations cache so ProductForm reflects the new name immediately
+    qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
   };
 
   if (editing) {
