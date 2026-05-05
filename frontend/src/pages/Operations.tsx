@@ -1587,21 +1587,33 @@ function ProductForm() {
   const canEdit = isAdmin || isManager;
 
   // Product meters for the selected plant
+  // NOTE: uses 'op-product-meters' key (NOT 'product-meters') to avoid colliding with
+  // the Plants.tsx cache, which uses a different select projection and placeholderData
+  // strategy — a shared key causes stale/incomplete data (blank meter names) to appear.
   const { data: meters, isLoading: metersLoading } = useQuery({
-    queryKey: ['product-meters', plantId],
+    queryKey: ['op-product-meters', plantId],
     queryFn: async () => {
       if (!plantId) return [];
       let { data, error } = await supabase
         .from('product_meters' as any)
-        .select('*')
+        .select('id, name, status, sort_order, created_at')
         .eq('plant_id', plantId)
         .order('sort_order', { ascending: true });
       if (error?.message?.includes('sort_order')) {
         ({ data, error } = await supabase
           .from('product_meters' as any)
-          .select('*')
+          .select('id, name, status, created_at')
           .eq('plant_id', plantId)
           .order('created_at', { ascending: true }));
+      }
+      if (error?.message?.includes('status')) {
+        let fallback;
+        ({ data: fallback } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, created_at')
+          .eq('plant_id', plantId)
+          .order('created_at', { ascending: true }));
+        return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
       }
       return (data ?? []) as any[];
     },
@@ -1637,7 +1649,7 @@ function ProductForm() {
   }, [latestReadings]);
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['product-meters', plantId] });
+    qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
     qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
   };
 
@@ -2437,7 +2449,11 @@ function PowerForm() {
 
   // Delta calculations from meter readings
   const deltaGrid  = prevGrid != null && reading       ? +reading       - prevGrid  : null;
-  const deltaSolar = prevSolar != null && solarReading ? +solarReading  - prevSolar : null;
+  // Raw mode: delta = current - prev cumulative reading
+  // Direct mode: the entered value IS the daily kWh — no subtraction, no prevSolar needed
+  const deltaSolar = solarInputMode === 'direct'
+    ? (solarReading ? +solarReading : null)
+    : (prevSolar != null && solarReading ? +solarReading  - prevSolar : null);
   // For combined (no solar): just use the main meter delta
   const daily      = showSolar ? deltaGrid : (prevGrid != null && reading ? +reading - prevGrid : null);
   // Effective daily kWh = Δ reading × multiplier
@@ -2471,7 +2487,9 @@ function PowerForm() {
 
     // Compute deltas for the primary meter only
     const computedDailyGrid  = kind === 'grid'  && idx === 0 && showSolar && deltaGrid  != null ? deltaGrid  * effectiveMultiplier : null;
-    const computedDailySolar = kind === 'solar' && idx === 0 && showSolar && deltaSolar != null ? deltaSolar : null;
+    // In raw mode: delta is computed from prevSolar vs current solar meter reading
+    // In direct mode: the user IS entering the delta — no prev needed, don't use deltaSolar
+    const computedDailySolar = kind === 'solar' && idx === 0 && showSolar && solarInputMode === 'raw' && deltaSolar != null ? deltaSolar : null;
 
     const payload: any = {
       plant_id: plantId,
@@ -2484,7 +2502,10 @@ function PowerForm() {
       if (idx === 0 && computedDailyGrid != null) payload.daily_grid_kwh = computedDailyGrid;
     }
     if (kind === 'solar') {
-      payload.meter_reading_kwh = +(gridMeterReadings[0] || '0');
+      // Only include meter_reading_kwh from grid if the user has actually entered one —
+      // writing 0 would corrupt the cumulative grid meter sequence.
+      const gridVal = gridMeterReadings[0];
+      if (gridVal && +gridVal > 0) payload.meter_reading_kwh = +gridVal;
       if (solarInputMode === 'direct') {
         // Direct daily kWh: store only daily_solar_kwh, do NOT touch solar_meter_reading
         // (writing a raw meter value would corrupt the cumulative sequence)
@@ -2730,6 +2751,11 @@ function PowerForm() {
                           {val && prevSolar != null && deltaSolar == null && (
                             <span className="ml-1 text-muted-foreground/60">(enter value to compute Δ)</span>
                           )}
+                        </p>
+                      )}
+                      {isFirst && solarInputMode === 'raw' && prevSolar == null && val && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          No previous solar reading — Δ will be available after next entry.
                         </p>
                       )}
                       {isFirst && solarInputMode === 'direct' && val && (
