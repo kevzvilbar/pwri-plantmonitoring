@@ -932,16 +932,10 @@ function LocatorRow({
   const [saving, setSaving]       = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt]   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-  // 'raw' = cumulative meter reading (delta auto-computed from prev)
-  // 'direct' = user enters daily m³ consumption directly
-  const [locInputMode, setLocInputMode] = useState<'raw' | 'direct'>('raw');
 
   const cur       = +reading || 0;
-  // In direct mode, reading IS the delta; in raw mode, compute delta from prev
-  const dailyVol  = locInputMode === 'direct'
-    ? (reading ? +reading : null)
-    : (previous != null && reading ? cur - previous : null);
-  const belowPrev = locInputMode === 'raw' && previous != null && cur > 0 && cur < previous;
+  const dailyVol  = previous != null && reading ? cur - previous : null;
+  const belowPrev = previous != null && cur > 0 && cur < previous;
   const highVol   = avgVol != null && dailyVol != null && dailyVol > avgVol * ALERTS.avg_multiplier_warn;
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
@@ -950,7 +944,6 @@ function LocatorRow({
   const save = async () => {
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
-    if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
     if (belowPrev && !window.confirm(`${locator.name}: reading below previous — save anyway?`)) return;
     if (!belowPrev && highVol && !window.confirm(`${locator.name}: volume unusually high — save anyway?`)) return;
 
@@ -963,21 +956,12 @@ function LocatorRow({
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
-    const payload: any = locInputMode === 'direct'
-      ? {
-          // Direct m³ mode: store entered value as daily_volume; current_reading = previous (no meter advance)
-          locator_id: locator.id, plant_id: plantId,
-          current_reading: previous ?? cur, previous_reading: previous,
-          daily_volume: cur,
-          gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
-          reading_datetime: new Date(customDt).toISOString(),
-        }
-      : {
-          locator_id: locator.id, plant_id: plantId,
-          current_reading: cur, previous_reading: previous,
-          gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
-          reading_datetime: new Date(customDt).toISOString(),
-        };
+    const payload: any = {
+      locator_id: locator.id, plant_id: plantId,
+      current_reading: cur, previous_reading: previous,
+      gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
+      reading_datetime: new Date(customDt).toISOString(),
+    };
     const { error } = editingId
       ? await supabase.from('locator_readings').update(payload).eq('id', editingId)
       : await supabase.from('locator_readings').insert(payload);
@@ -999,40 +983,18 @@ function LocatorRow({
             {editingId && <span className="text-[10px] uppercase tracking-wide text-highlight">editing</span>}
           </div>
           <div className="text-xs text-muted-foreground truncate">
-            {locInputMode === 'raw'
-              ? <> prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
-                  {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
-                  <span className="mx-1">·</span>
-                  <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
-                </>
-              : <> <span className="text-teal-600 font-medium">Direct m³ mode</span>
-                  <span className="mx-1">·</span>
-                  <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
-                </>
-            }
+            prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
+            {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
+            <span className="mx-1">·</span>
+            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
           </div>
         </div>
-        <label className="shrink-0 cursor-pointer relative">
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-            {customDt ? new Date(customDt).toLocaleString([], { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}
-          </span>
-          <Input
-            type="datetime-local" value={customDt}
-            onChange={e => setCustomDt(e.target.value)}
-            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-            title="Reading date & time"
-          />
-        </label>
-      </div>
-
-      {/* Row 1b: input mode toggle */}
-      <div className="flex items-center rounded-md border border-border overflow-hidden text-[10px] font-medium w-fit">
-        <button type="button" onClick={() => { setLocInputMode('raw'); setReading(''); }}
-          className={`px-2.5 py-1 transition-colors ${locInputMode === 'raw' ? 'bg-teal-600 text-white' : 'bg-transparent text-muted-foreground hover:bg-muted'}`}
-          title="Enter cumulative meter reading — delta auto-computed">Raw Meter</button>
-        <button type="button" onClick={() => { setLocInputMode('direct'); setReading(''); }}
-          className={`px-2.5 py-1 transition-colors border-l border-border ${locInputMode === 'direct' ? 'bg-teal-600 text-white' : 'bg-transparent text-muted-foreground hover:bg-muted'}`}
-          title="Enter daily m³ consumption directly">Direct m³</button>
+        <Input
+          type="datetime-local" value={customDt}
+          onChange={e => setCustomDt(e.target.value)}
+          className="shrink-0 w-44 text-xs h-9 bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+          title="Reading date & time"
+        />
       </div>
 
       {/* Row 2: Reading input (expanded) + Save + action buttons on right */}
@@ -1040,8 +1002,7 @@ function LocatorRow({
         <Input
           type="number" step="any" inputMode="decimal"
           value={reading} onChange={(e) => setReading(e.target.value)}
-          placeholder={locInputMode === 'direct' ? 'Daily m³' : 'Reading'}
-          className="flex-1 min-w-0"
+          placeholder="Reading" className="flex-1 min-w-0"
         />
         <Button onClick={save} disabled={saving || !reading || atLimit} size="sm" className="shrink-0">
           {saving ? '...' : editingId ? 'Update' : 'Save'}
@@ -1588,11 +1549,19 @@ function ProductForm() {
     queryKey: ['product-meters', plantId],
     queryFn: async () => {
       if (!plantId) return [];
-      const { data } = await supabase
+      // Try with sort_order; fall back to created_at if column not yet migrated
+      let { data, error } = await supabase
         .from('product_meters' as any)
         .select('*')
         .eq('plant_id', plantId)
         .order('sort_order', { ascending: true });
+      if (error?.message?.includes('sort_order')) {
+        ({ data, error } = await supabase
+          .from('product_meters' as any)
+          .select('*')
+          .eq('plant_id', plantId)
+          .order('created_at', { ascending: true }));
+      }
       return (data ?? []) as any[];
     },
     enabled: !!plantId,
@@ -1790,11 +1759,20 @@ function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded:
   const submit = async () => {
     if (!name.trim()) { toast.error('Enter a meter name'); return; }
     setBusy(true);
-    const { error } = await supabase.from('product_meters' as any).insert({
+    // Try with status + sort_order; fall back gracefully if columns missing
+    let { error } = await supabase.from('product_meters' as any).insert({
       plant_id: plantId,
       name: name.trim(),
+      status: 'Active',
       sort_order: 0,
     } as any);
+    if (error?.message?.includes('status')) {
+      ({ error } = await supabase.from('product_meters' as any).insert({
+        plant_id: plantId,
+        name: name.trim(),
+        sort_order: 0,
+      } as any));
+    }
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`"${name.trim()}" added`);
@@ -2327,9 +2305,6 @@ function PowerForm() {
     setGridMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
   const setSolarMeterReading = (idx: number, val: string) =>
     setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = val; return next; });
-  // 'raw' = user enters cumulative meter reading (delta auto-computed)
-  // 'direct' = user enters daily kWh directly (no prev needed)
-  const [solarInputMode, setSolarInputMode] = useState<'raw' | 'direct'>('raw');
 
   const plant     = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const showSolar = !!plant?.has_solar;
@@ -2471,16 +2446,10 @@ function PowerForm() {
       if (idx === 0 && computedDailyGrid != null) payload.daily_grid_kwh = computedDailyGrid;
     }
     if (kind === 'solar') {
-      if (solarInputMode === 'direct') {
-        // User entered daily kWh directly — store as daily_solar_kwh, no raw meter column
-        payload.meter_reading_kwh = +(gridMeterReadings[0] || '0');
-        payload.daily_solar_kwh = +val;
-      } else {
-        // Raw cumulative meter reading — compute delta from prev
-        payload.meter_reading_kwh = +(gridMeterReadings[0] || '0');
-        payload.solar_meter_reading = +val;
-        if (idx === 0 && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
-      }
+      // Solar readings stored in solar_meter_reading; need a placeholder meter_reading_kwh if inserting fresh
+      payload.meter_reading_kwh = +(gridMeterReadings[0] || '0');
+      payload.solar_meter_reading = +val;
+      if (idx === 0 && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
     }
 
     const runQuery = () => editingId
@@ -2661,23 +2630,6 @@ function PowerForm() {
                   <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wide">Solar</span>
                   <span className="text-[10px] text-muted-foreground ml-auto">{solarMeterCount} meter{solarMeterCount !== 1 ? 's' : ''}</span>
                 </div>
-
-                {/* Solar input mode toggle */}
-                <div className="flex items-center rounded-md border border-yellow-200 dark:border-yellow-800/40 overflow-hidden text-[10px] font-medium w-fit">
-                  <button
-                    type="button"
-                    onClick={() => setSolarInputMode('raw')}
-                    className={`px-2.5 py-1 transition-colors ${solarInputMode === 'raw' ? 'bg-yellow-500 text-white' : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30'}`}
-                    title="Enter cumulative meter reading — delta auto-computed from previous"
-                  >Raw Meter</button>
-                  <button
-                    type="button"
-                    onClick={() => setSolarInputMode('direct')}
-                    className={`px-2.5 py-1 transition-colors border-l border-yellow-200 dark:border-yellow-800/40 ${solarInputMode === 'direct' ? 'bg-yellow-500 text-white' : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30'}`}
-                    title="Enter daily kWh directly — no previous reading needed"
-                  >Direct kWh</button>
-                </div>
-
                 {Array.from({ length: solarMeterCount }).map((_, idx) => {
                   const meterLabel = getSolarLabel(idx);
                   const val = solarMeterReadings[idx] ?? '';
@@ -2688,10 +2640,6 @@ function PowerForm() {
                   };
                   const meterKey = `solar-${idx}`;
                   const isSavingThis = savingMeter === meterKey;
-                  // For direct mode: delta is just the entered value itself
-                  const displayDelta = solarInputMode === 'direct'
-                    ? (val ? +val : null)
-                    : (isFirst ? deltaSolar : null);
                   return (
                     <div key={`solar-${idx}`}>
                       <Label className="flex items-center gap-1 text-xs">
@@ -2702,7 +2650,7 @@ function PowerForm() {
                       <div className="flex items-center gap-2">
                         <Input type="number" step="any" value={val}
                           onChange={e => handleChange(e.target.value)}
-                          placeholder={solarInputMode === 'direct' ? 'Daily kWh' : 'Solar reading'}
+                          placeholder="Solar reading"
                           className="border-yellow-300 focus-visible:ring-yellow-300"
                           data-testid={`power-solar-input-${idx}`} />
                         <Button
@@ -2715,19 +2663,14 @@ function PowerForm() {
                           {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
                       </div>
-                      {solarInputMode === 'raw' && isFirst && prevSolar != null && (
+                      {isFirst && prevSolar != null && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           prev: <span className="font-mono-num">{fmtNum(prevSolar)}</span>
-                          {displayDelta != null && (
-                            <span className={`font-mono-num font-medium ml-1 ${displayDelta >= 0 ? 'text-yellow-600' : 'text-destructive'}`}>
-                              Δ {fmtNum(displayDelta)} kWh
+                          {deltaSolar != null && (
+                            <span className={`font-mono-num font-medium ml-1 ${deltaSolar >= 0 ? 'text-yellow-600' : 'text-destructive'}`}>
+                              Δ {fmtNum(deltaSolar)}
                             </span>
                           )}
-                        </p>
-                      )}
-                      {solarInputMode === 'direct' && isFirst && val && (
-                        <p className="text-[10px] text-yellow-600 font-mono-num mt-0.5">
-                          → {fmtNum(+val)} kWh will be saved as daily production
                         </p>
                       )}
                     </div>

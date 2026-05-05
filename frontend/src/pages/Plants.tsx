@@ -866,7 +866,21 @@ function _ProductMeterNameInline({
 
   return (
     <div className="font-medium text-sm truncate">
-      {meter.name?.trim() || <span className="italic text-muted-foreground">(unnamed meter)</span>}
+      {meter.name?.trim()
+        ? meter.name
+        : canEdit
+          ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="italic text-amber-600 dark:text-amber-400 hover:underline focus:outline-none"
+              title="No name set — click to rename"
+            >
+              (unnamed — click to rename)
+            </button>
+          )
+          : <span className="italic text-muted-foreground">(unnamed meter)</span>
+      }
     </div>
   );
 }
