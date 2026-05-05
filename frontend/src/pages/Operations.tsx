@@ -395,22 +395,34 @@ function ImportReadingsDialog({
 // ─── Per-module CSV configs ──────────────────────────────────────────────────
 
 // Locator readings:
-// locator_name*, current_reading*, reading_datetime, previous_reading
-const LOCATOR_SCHEMA = 'locator_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading';
+// locator_name*, current_reading*, reading_datetime, previous_reading, input_mode, daily_volume
+// input_mode: "raw" (default — cumulative meter reading) | "direct" (daily m³ entered directly)
+// When input_mode=direct, supply daily_volume instead of current_reading; current_reading can be blank.
+const LOCATOR_SCHEMA = 'locator_name*, current_reading, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, input_mode (raw|direct), daily_volume';
 const LOCATOR_TEMPLATE_ROW = {
   locator_name: 'MCWD - M1',
   current_reading: '1234.56',
   reading_datetime: '2024-06-15T08:30',
   previous_reading: '1200.00',
+  input_mode: 'raw',
+  daily_volume: '',
 };
 
 function validateLocatorReadingRow(r: Record<string, string>, i: number): string[] {
   const e: string[] = [];
   if (!r.locator_name?.trim()) e.push(`Row ${i}: locator_name is required`);
-  if (!r.current_reading?.trim() || isNaN(Number(r.current_reading)))
-    e.push(`Row ${i}: current_reading must be a number`);
+  const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
+  if (isDirect) {
+    if (!r.daily_volume?.trim() || isNaN(Number(r.daily_volume)) || Number(r.daily_volume) <= 0)
+      e.push(`Row ${i}: daily_volume must be a positive number when input_mode=direct`);
+  } else {
+    if (!r.current_reading?.trim() || isNaN(Number(r.current_reading)))
+      e.push(`Row ${i}: current_reading must be a number`);
+  }
   if (r.previous_reading && isNaN(Number(r.previous_reading)))
     e.push(`Row ${i}: previous_reading must be a number`);
+  if (r.daily_volume && !isDirect && isNaN(Number(r.daily_volume)))
+    e.push(`Row ${i}: daily_volume must be a number`);
   if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
     e.push(`Row ${i}: reading_datetime is not a valid date`);
   return e;
@@ -445,24 +457,40 @@ async function insertLocatorReadings(
       const decision = await resolveImportDuplicate(`${locatorId}|${dtMin}`, `${r.locator_name} @ ${dtMin}`);
       if (decision === 'skip') continue;
       // overwrite: update existing
-      const { error } = await supabase.from('locator_readings').update({
-        current_reading: +r.current_reading,
-        previous_reading: r.previous_reading ? +r.previous_reading : null,
-        reading_datetime: dt,
-        recorded_by: userId,
-      }).eq('id', existing[0].id);
+      const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
+      const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId };
+      if (isDirect) {
+        updatePayload.current_reading = r.previous_reading ? +r.previous_reading : 0;
+        updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
+        updatePayload.daily_volume = +r.daily_volume;
+      } else {
+        updatePayload.current_reading = +r.current_reading;
+        updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
+        if (r.daily_volume?.trim()) updatePayload.daily_volume = +r.daily_volume;
+      }
+      const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
       continue;
     }
 
-    const { error } = await supabase.from('locator_readings').insert({
+    const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
+    const insertPayload: Record<string, any> = {
       locator_id: locatorId,
       plant_id: plantId,
-      current_reading: +r.current_reading,
-      previous_reading: r.previous_reading ? +r.previous_reading : null,
       reading_datetime: dt,
       recorded_by: userId,
-    });
+    };
+    if (isDirect) {
+      // Direct m³ mode: store daily_volume; current_reading stays at prev to preserve sequence
+      insertPayload.current_reading = r.previous_reading ? +r.previous_reading : 0;
+      insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
+      insertPayload.daily_volume = +r.daily_volume;
+    } else {
+      insertPayload.current_reading = +r.current_reading;
+      insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
+      if (r.daily_volume?.trim()) insertPayload.daily_volume = +r.daily_volume;
+    }
+    const { error } = await supabase.from('locator_readings').insert(insertPayload);
     if (error) errors.push(error.message);
     else count++;
   }
@@ -470,14 +498,15 @@ async function insertLocatorReadings(
 }
 
 // Well readings:
-// well_name*, current_reading*, reading_datetime, previous_reading, power_meter_reading
-const WELL_SCHEMA = 'well_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, power_meter_reading';
+// well_name*, current_reading*, reading_datetime, previous_reading, power_meter_reading, solar_meter_reading
+const WELL_SCHEMA = 'well_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, power_meter_reading, solar_meter_reading';
 const WELL_TEMPLATE_ROW = {
   well_name: 'Well #1',
   current_reading: '5678.90',
   reading_datetime: '2024-06-15T08:30',
   previous_reading: '5600.00',
   power_meter_reading: '',
+  solar_meter_reading: '',
 };
 
 function validateWellReadingRow(r: Record<string, string>, i: number): string[] {
@@ -489,6 +518,8 @@ function validateWellReadingRow(r: Record<string, string>, i: number): string[] 
     e.push(`Row ${i}: previous_reading must be a number`);
   if (r.power_meter_reading && isNaN(Number(r.power_meter_reading)))
     e.push(`Row ${i}: power_meter_reading must be a number`);
+  if (r.solar_meter_reading && isNaN(Number(r.solar_meter_reading)))
+    e.push(`Row ${i}: solar_meter_reading must be a number`);
   if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
     e.push(`Row ${i}: reading_datetime is not a valid date`);
   return e;
@@ -525,6 +556,7 @@ async function insertWellReadings(
         current_reading: +r.current_reading,
         previous_reading: r.previous_reading ? +r.previous_reading : null,
         power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
+        solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
         reading_datetime: dt,
         recorded_by: userId,
       }).eq('id', existing[0].id);
@@ -538,6 +570,7 @@ async function insertWellReadings(
       current_reading: +r.current_reading,
       previous_reading: r.previous_reading ? +r.previous_reading : null,
       power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
+      solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
       reading_datetime: dt,
       recorded_by: userId,
     });
@@ -608,10 +641,14 @@ async function insertBlendingReadings(
 // Power readings:
 // meter_reading_kwh*, reading_datetime* — solar/grid columns optional and only needed
 // if the energy migration (20260427) has been run on this Supabase instance.
-const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), daily_solar_kwh (optional), daily_grid_kwh (optional)';
+// solar_input_mode: "raw" (default — cumulative meter reading, Δ auto-computed)
+//                 | "direct" (daily kWh entered directly — stored as daily_solar_kwh; solar_meter_reading ignored)
+const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
 const POWER_TEMPLATE_ROW = {
   meter_reading_kwh: '12345.6',
   reading_datetime: '2024-06-15T08:30',
+  solar_meter_reading: '',
+  solar_input_mode: '',
   daily_solar_kwh: '',
   daily_grid_kwh: '',
 };
@@ -622,6 +659,10 @@ function validatePowerRow(r: Record<string, string>, i: number): string[] {
     e.push(`Row ${i}: meter_reading_kwh is required and must be a number`);
   if (!r.reading_datetime?.trim() || isNaN(Date.parse(r.reading_datetime)))
     e.push(`Row ${i}: reading_datetime is required and must be a valid datetime`);
+  if (r.solar_meter_reading && isNaN(Number(r.solar_meter_reading)))
+    e.push(`Row ${i}: solar_meter_reading must be a number`);
+  if (r.solar_input_mode && !['raw', 'direct'].includes(r.solar_input_mode.trim().toLowerCase()))
+    e.push(`Row ${i}: solar_input_mode must be "raw" or "direct"`);
   if (r.daily_solar_kwh && isNaN(Number(r.daily_solar_kwh)))
     e.push(`Row ${i}: daily_solar_kwh must be a number`);
   if (r.daily_grid_kwh && isNaN(Number(r.daily_grid_kwh)))
@@ -656,14 +697,25 @@ async function insertPowerReadings(
       reading_datetime: dt,
       recorded_by: userId,
     };
-    if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
+    // Solar input mode: "direct" stores daily_solar_kwh only (no cumulative meter write);
+    // "raw" (default) stores solar_meter_reading and optionally daily_solar_kwh.
+    const solarMode = r.solar_input_mode?.trim().toLowerCase() === 'direct' ? 'direct' : 'raw';
+    if (solarMode === 'direct') {
+      // Direct daily kWh: supply via daily_solar_kwh column OR via solar_meter_reading (treated as direct)
+      const directKwh = r.daily_solar_kwh?.trim() || r.solar_meter_reading?.trim();
+      if (directKwh) payload.daily_solar_kwh = +directKwh;
+    } else {
+      // Raw cumulative mode
+      if (r.solar_meter_reading?.trim()) payload.solar_meter_reading = +r.solar_meter_reading;
+      if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
+    }
     if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
 
     const doInsert = async () => {
       const { error } = await supabase.from('power_readings').insert(payload);
       if (error) {
-        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
-          delete payload.daily_solar_kwh; delete payload.daily_grid_kwh;
+        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh') || error.message.includes('solar_meter_reading')) {
+          delete payload.daily_solar_kwh; delete payload.daily_grid_kwh; delete payload.solar_meter_reading;
           const { error: e2 } = await supabase.from('power_readings').insert(payload);
           if (e2) errors.push(e2.message); else count++;
         } else { errors.push(error.message); }
@@ -676,9 +728,9 @@ async function insertPowerReadings(
       // overwrite — with the same column-fallback retry used by doInsert
       const { error } = await supabase.from('power_readings').update(payload).eq('id', existing[0].id);
       if (error) {
-        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh')) {
+        if (error.message.includes('daily_solar_kwh') || error.message.includes('daily_grid_kwh') || error.message.includes('solar_meter_reading')) {
           // optional columns not yet in DB — strip and retry
-          const { daily_solar_kwh: _s, daily_grid_kwh: _g, ...fallbackPayload } = payload as any;
+          const { daily_solar_kwh: _s, daily_grid_kwh: _g, solar_meter_reading: _sm, ...fallbackPayload } = payload as any;
           const { error: e2 } = await supabase.from('power_readings').update(fallbackPayload).eq('id', existing[0].id);
           if (e2) errors.push(e2.message); else count++;
         } else {
@@ -1591,7 +1643,7 @@ function ProductForm() {
   // the Plants.tsx cache, which uses a different select projection and placeholderData
   // strategy — a shared key causes stale/incomplete data (blank meter names) to appear.
   const { data: meters, isLoading: metersLoading } = useQuery({
-    queryKey: ['product-meters', plantId],
+    queryKey: ['op-product-meters', plantId],
     queryFn: async () => {
       if (!plantId) return [];
       let { data, error } = await supabase
@@ -1649,8 +1701,8 @@ function ProductForm() {
   }, [latestReadings]);
 
   const invalidate = () => {
-  qc.invalidateQueries({ queryKey: ['product-meters', plantId] }); // ← unified key
-  qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
+    qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
   };
 
   return (
