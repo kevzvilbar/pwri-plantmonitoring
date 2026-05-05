@@ -624,9 +624,6 @@ function PretreatmentAndROLog() {
           .filter(([k]) => !METER_CURR_KEYS.has(k))
           .map(([k, val]) => [k, val ? +val : null])
       ),
-      // Auto-filled prev readings and duration stored alongside curr for record completeness
-      feed_meter_prev: prevFeedMeter, permeate_meter_prev: prevPermMeter, reject_meter_prev: prevRejMeter,
-      power_meter_prev: prevPowerMeter, meter_duration_min: autoDurationMin,
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
       train_online: trainOnline,
@@ -1647,33 +1644,11 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
     prevMeter: '', currMeter: '', prevTime: '', currTime: '',
     bucketVol: '20', fillTimeSec: '',
   });
-
-  // User-editable vessel count (seeded from prop, but overrideable)
-  const [vesselCount, setVesselCount] = useState<number>(numVessels);
-  const [vesselCountInput, setVesselCountInput] = useState<string>(String(numVessels));
-
   const [vesselRows, setVesselRows] = useState<VesselFlowRow[]>(
     Array.from({ length: numVessels }, (_, i) => makeRow(i + 1))
   );
   const [expandedVessel, setExpandedVessel] = useState<number | null>(null);
   const [globalMethod, setGlobalMethod] = useState<VesselFlowMethod>('meter');
-
-  // Sync vesselRows when vesselCount changes
-  const applyVesselCount = (count: number) => {
-    const clamped = Math.max(1, Math.min(50, count));
-    setVesselCount(clamped);
-    setVesselCountInput(String(clamped));
-    setVesselRows(prev => {
-      if (clamped > prev.length) {
-        return [
-          ...prev,
-          ...Array.from({ length: clamped - prev.length }, (_, i) => makeRow(prev.length + i + 1)),
-        ];
-      }
-      return prev.slice(0, clamped);
-    });
-    setExpandedVessel(v => (v !== null && v > clamped ? null : v));
-  };
 
   const patchRow = (id: number, patch: Partial<VesselFlowRow>) =>
     setVesselRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -1774,47 +1749,6 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
               </button>
             </div>
             <span className="text-[10px] text-muted-foreground/60 italic">or switch per vessel ↓</span>
-          </div>
-
-          {/* Vessel count control */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-muted-foreground font-medium">Vessels in this train:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => applyVesselCount(vesselCount - 1)}
-                disabled={vesselCount <= 1}
-                className="h-7 w-7 rounded-full border border-border bg-muted/50 hover:bg-muted text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-              >−</button>
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={vesselCountInput}
-                onChange={e => setVesselCountInput(e.target.value)}
-                onBlur={() => {
-                  const n = parseInt(vesselCountInput, 10);
-                  if (!isNaN(n)) applyVesselCount(n);
-                  else setVesselCountInput(String(vesselCount));
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    const n = parseInt(vesselCountInput, 10);
-                    if (!isNaN(n)) applyVesselCount(n);
-                    else setVesselCountInput(String(vesselCount));
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                className="h-7 w-14 rounded-md border border-input bg-background text-center text-sm font-bold font-mono-num focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <button
-                type="button"
-                onClick={() => applyVesselCount(vesselCount + 1)}
-                disabled={vesselCount >= 50}
-                className="h-7 w-7 rounded-full border border-border bg-muted/50 hover:bg-muted text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-              >+</button>
-            </div>
-            <span className="text-[10px] text-muted-foreground/60 italic">(1 – 50)</span>
           </div>
 
           {/* Formula hint */}
