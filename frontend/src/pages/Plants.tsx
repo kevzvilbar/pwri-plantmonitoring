@@ -2146,7 +2146,6 @@ function WellsList({ plantId }: { plantId: string }) {
                 </button>
               </div>
             )}
-            </div>
           </Card>
         );
       })}
