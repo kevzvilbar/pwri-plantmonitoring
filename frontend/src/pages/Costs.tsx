@@ -38,8 +38,7 @@ export default function Costs() {
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
         <TabsContent value="power" className="mt-3"><Power /></TabsContent>
-        <TabsContent value="tariff" className="mt-3"><Power /></TabsContent>
-        <TabsContent value="bills" className="mt-3"><Power /></TabsContent>
+        {/* "tariff" and "bills" tabs removed — both merged into the Power tab */}
         <TabsContent value="compare" className="mt-3"><Compare /></TabsContent>
         <TabsContent value="prices" className="mt-3"><ChemicalPrices /></TabsContent>
       </Tabs>
@@ -235,7 +234,7 @@ function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; fr
     const peakTotal = (+peak.chem_cost || 0) + (+peak.power_cost || 0);
     const chemShare = totals.total ? (totals.chem / totals.total) * 100 : 0;
     out.push({ label: 'Period', tone: 'info', text: `${days} day(s) · ₱${fmtNum(avgCost, 0)} avg/day · ${chemShare.toFixed(0)}% chem / ${(100 - chemShare).toFixed(0)}% power.` });
-    if (peakTotal > avgCost * 1.5) {
+    if (avgCost > 0 && peakTotal > avgCost * 1.5) {
       out.push({ label: 'Spike', tone: 'warn', text: `${peak.cost_date}: ₱${fmtNum(peakTotal, 0)} (${((peakTotal / avgCost - 1) * 100).toFixed(0)}% above average). Check for tariff change or chemical top-up.` });
     }
     if (totals.perM3 && totals.perM3 > 25) {
@@ -281,8 +280,8 @@ function Power() {
   // Month dropdown: generate last 24 months + next 2
   const monthOptions = useMemo(() => {
     const opts = [];
-    for (let i = -2; i <= 24; i++) {
-      const d = subMonths(startOfMonth(new Date()), i - 2);
+    for (let i = -2; i <= 23; i++) {
+      const d = subMonths(startOfMonth(new Date()), i);
       opts.push({ value: format(d, 'yyyy-MM-dd'), label: format(d, 'MMMM yyyy') });
     }
     return opts.reverse();
@@ -303,7 +302,7 @@ function Power() {
 
   const totalKwh = v.previous_reading && v.current_reading
     ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
-  const derivedRate = totalKwh && +v.total_amount ? (+v.total_amount / totalKwh) : null;
+  const derivedRate = totalKwh && totalKwh > 0 && +v.total_amount ? (+v.total_amount / totalKwh) : null;
 
   const { data: bills } = useQuery({
     queryKey: ['bills', plantId],
@@ -340,11 +339,12 @@ function Power() {
 
   const submit = async () => {
     if (!plantId || !v.total_amount) { toast.error('Plant and total required'); return; }
+    if (totalKwh !== null && totalKwh < 0) { toast.error('Current reading is less than previous — check meter values'); return; }
     const billRes = await supabase.from('electric_bills').insert({
       plant_id: plantId, billing_month: v.billing_month,
       period_start: v.period_start, period_end: v.period_end,
       previous_reading: +v.previous_reading || 0, current_reading: +v.current_reading || 0,
-      multiplier: +v.multiplier || 1, total_kwh: totalKwh,
+      multiplier: +v.multiplier || 1, total_kwh: totalKwh ?? 0,
       generation_charge: v.generation_charge ? +v.generation_charge : null,
       distribution_charge: v.distribution_charge ? +v.distribution_charge : null,
       other_charges: v.other_charges ? +v.other_charges : null,
@@ -457,7 +457,7 @@ function Power() {
             <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
               <div>
                 <div className="font-mono-num">{format(parseISO(b.billing_month), 'MMM yyyy')}</div>
-                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}</div>
+                <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh && +b.total_kwh > 0 ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}</div>
               </div>
               <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
             </div>
@@ -528,14 +528,15 @@ function Compare() {
     queryKey: ['daily-kwh-cmp', plantId, bills?.length],
     queryFn: async () => {
       if (!plantId || !bills?.length) return [];
-      const earliest = bills[bills.length - 1].period_start;
-      const latest = bills[0].period_end;
+      const earliest = bills[bills.length - 1].period_start ?? '';
+      const latest = bills[0].period_end ?? '';
+      if (!earliest || !latest) return [];
       // Also select multiplier so we can compute effective kWh = daily_consumption × multiplier
       const { data } = await supabase.from('power_readings')
         .select('reading_datetime,daily_consumption_kwh,multiplier')
         .eq('plant_id', plantId)
         .gte('reading_datetime', earliest)
-        .lte('reading_datetime', latest + 'T23:59:59');
+        .lte('reading_datetime', `${latest}T23:59:59.999Z`);
       return data ?? [];
     },
     enabled: !!plantId && !!bills?.length,
@@ -543,7 +544,7 @@ function Compare() {
 
   const rows = (bills ?? []).map((b: any) => {
     const periodReadings = (dailyKwh ?? [])
-      .filter((d: any) => d.reading_datetime >= b.period_start && d.reading_datetime <= b.period_end + 'T23:59:59');
+      .filter((d: any) => d.reading_datetime >= b.period_start && d.reading_datetime <= `${b.period_end}T23:59:59.999Z`);
     const sumDaily = periodReadings.reduce((s: number, d: any) => s + (+d.daily_consumption_kwh || 0), 0);
     // Effective kWh = Σ(daily_consumption × multiplier) — reflects CT ratio applied to each day
     const sumEffective = periodReadings.reduce((s: number, d: any) => {
