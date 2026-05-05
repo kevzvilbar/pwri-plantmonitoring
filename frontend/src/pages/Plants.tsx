@@ -543,11 +543,11 @@ function ProductMetersCard({ plant }: { plant: any }) {
   // ── Data ──────────────────────────────────────────────────────────────────
   const { data: meters, isLoading, isFetching } = useQuery({
     queryKey: ['product-meters', plant.id],
-    // Use placeholderData only on first load (prev is undefined).
-    // Passing prev unconditionally causes stale data to persist during
-    // background refetches triggered by invalidate(), which is what made
-    // the list appear to "reset" after rename/delete/toggle actions.
-    placeholderData: (prev: any) => prev ?? undefined,
+    // staleTime/gcTime: 0 — always fetch fresh from DB on mount; prevents
+    // stale null-name rows being served from the in-memory React Query cache
+    // after a DB fix. placeholderData removed for the same reason.
+    staleTime: 0,
+    gcTime: 0,
     queryFn: async () => {
       // Try full schema first (status + sort_order both present)
       let { data, error } = await supabase
@@ -573,13 +573,9 @@ function ProductMetersCard({ plant }: { plant: any }) {
           .select('id, name, created_at')
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true }));
-        // Normalize: null status → 'Active'; keep name as-is (null shown as unnamed in UI)
         return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
       }
 
-      // Normalize status: null/undefined → keep as null so ?? 'Active' fallback works in UI
-      // Do NOT coerce name here — null name is intentionally shown as "(unnamed)" so user
-      // knows to rename it; coercing to '' would lose that signal.
       return (data ?? []) as any[];
     },
   });
@@ -711,7 +707,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
                     canEdit={canEdit} onChanged={invalidate}
                   />
                   <div className="text-xs text-muted-foreground">
-                    Product Meter · {(m.status ?? 'Active') === 'Active' ? 'Reading active' : 'Inactive'}
+                    Product Meter · {m.status === 'Active' ? 'Reading active' : 'Inactive'}
                   </div>
                 </div>
 
@@ -822,11 +818,11 @@ function _ProductMeterNameInline({
   meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
 }) {
   const [editing, setEditing]       = useState(false);
-  const [nameInput, setNameInput]   = useState(meter.name?.trim() ?? '');
+  const [nameInput, setNameInput]   = useState(meter.name ?? '');
   const [busy, setBusy]             = useState(false);
 
   useEffect(() => {
-    if (!editing) setNameInput(meter.name?.trim() ?? '');
+    if (!editing) setNameInput(meter.name ?? '');
   }, [meter.name, editing]);
 
   const saveName = async () => {
@@ -854,14 +850,14 @@ function _ProductMeterNameInline({
           className="h-7 text-sm"
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveName();
-            if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name?.trim() ?? ''); }
+            if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name ?? ''); }
           }}
           autoFocus
         />
         <Button size="sm" className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700 text-white" onClick={saveName} disabled={busy}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name?.trim() ?? ''); }}>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
           <X className="h-3 w-3" />
         </Button>
       </div>
@@ -902,11 +898,11 @@ function _PMEditTrigger({
   // without lifting state, we keep it simple: clicking pencil opens an AlertDialog
   // rename prompt — consistent with how Edit works across the rest of the app.
   const [open, setOpen]           = useState(false);
-  const [nameInput, setNameInput] = useState(meter.name?.trim() ?? '');
+  const [nameInput, setNameInput] = useState(meter.name ?? '');
   const [busy, setBusy]           = useState(false);
 
   useEffect(() => {
-    if (!open) setNameInput(meter.name?.trim() ?? '');
+    if (!open) setNameInput(meter.name ?? '');
   }, [meter.name, open]);
 
   const save = async () => {
