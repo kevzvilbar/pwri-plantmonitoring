@@ -1591,7 +1591,7 @@ function ProductForm() {
   // the Plants.tsx cache, which uses a different select projection and placeholderData
   // strategy — a shared key causes stale/incomplete data (blank meter names) to appear.
   const { data: meters, isLoading: metersLoading } = useQuery({
-    queryKey: ['op-product-meters', plantId],
+    queryKey: ['product-meters', plantId],
     queryFn: async () => {
       if (!plantId) return [];
       let { data, error } = await supabase
@@ -1649,8 +1649,8 @@ function ProductForm() {
   }, [latestReadings]);
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
-    qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
+  qc.invalidateQueries({ queryKey: ['product-meters', plantId] }); // ← unified key
+  qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
   };
 
   return (
