@@ -615,7 +615,10 @@ function PretreatmentAndROLog() {
     }
 
     // Save RO Train reading
-    // Strip local-only meter reading fields (used for calc only, not stored as-is in DB)
+    // Only include columns that exist in ro_train_readings.
+    // Excluded (no DB column): feed_meter_prev, permeate_meter_prev, reject_meter_prev,
+    //   power_meter_prev, meter_duration_min, train_online, offline_since, offline_until, offline_reason.
+    // Excluded (local-only calc inputs): feed_meter_curr, permeate_meter_curr, reject_meter_curr, power_meter_curr.
     const METER_CURR_KEYS = new Set(['feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr']);
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
@@ -626,10 +629,6 @@ function PretreatmentAndROLog() {
       ),
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp, recovery_pct: recovery, rejection_pct: rejection, salt_passage_pct: saltPassage,
-      train_online: trainOnline,
-      offline_since: !trainOnline && offlineStart ? new Date(offlineStart).toISOString() : null,
-      offline_until: !trainOnline && offlineEnd   ? new Date(offlineEnd).toISOString()   : null,
-      offline_reason: !trainOnline ? offlineReasonFinal || null : null,
       recorded_by: user?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
