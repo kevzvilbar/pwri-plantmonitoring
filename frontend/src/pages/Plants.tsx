@@ -734,7 +734,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
                 <ProductMeterNameInline.EditTrigger meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
                 <Button
                   size="sm" variant="ghost"
-                  className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
                   title="Delete"
                   onClick={() => { setDeleteTarget(m); setDeleteReason(''); }}
                   data-testid={`delete-product-meter-${m.id}`}
@@ -857,7 +857,7 @@ function _ProductMeterNameInline({
         <Button size="sm" className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700 text-white" onClick={saveName} disabled={busy}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
           <X className="h-3 w-3" />
         </Button>
       </div>
@@ -929,7 +929,7 @@ function _PMEditTrigger({
     <>
       <Button
         size="sm" variant="ghost"
-        className="h-7 w-7 p-0"
+        className="h-7 w-7 p-0 rounded-full"
         title="Rename"
         onClick={() => setOpen(true)}
         data-testid={`rename-product-meter-${meter.id}`}
@@ -1349,7 +1349,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggleOne(l.id)}
-                  className="mt-1"
+                  className="mt-1 rounded-full"
                   data-testid={`locator-select-${l.id}`}
                 />
               )}
@@ -1381,10 +1381,10 @@ function LocatorsList({ plantId }: { plantId: string }) {
               </div>
               {isManager && (
                 <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit" onClick={() => setEditing(l)}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit" onClick={() => setEditing(l)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => { setDeleteTarget(l); setDeleteReason(''); }}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => { setDeleteTarget(l); setDeleteReason(''); }}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -2034,7 +2034,7 @@ function WellsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggle(w.id)}
-                  className="mt-1"
+                  className="mt-1 rounded-full"
                   data-testid={`well-select-${w.id}`}
                 />
               )}
@@ -2104,10 +2104,10 @@ function WellsList({ plantId }: { plantId: string }) {
                   during read-only roles. */}
               {isManager && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Edit well" onClick={e => { e.stopPropagation(); setEditingWell(w); }}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit well" onClick={e => { e.stopPropagation(); setEditingWell(w); }}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete well" onClick={e => { e.stopPropagation(); setWellDeleteTarget(w); setWellDeleteReason(''); }}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete well" onClick={e => { e.stopPropagation(); setWellDeleteTarget(w); setWellDeleteReason(''); }}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -3430,7 +3430,7 @@ function TrainsList({ plantId }: { plantId: string }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
                       title="Delete train"
                       onClick={() => { setTrainDeleteTarget(t); setTrainDeleteReason(''); }}
                       data-testid={`delete-train-${t.id}`}
@@ -4151,14 +4151,14 @@ function MeterNameListRows({
             <span className="flex-1 truncate">{name}</span>
             <button
               onClick={() => startEdit(i)}
-              className="inline-flex items-center justify-center h-5 w-5 rounded text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              className="inline-flex items-center justify-center h-5 w-5 rounded-full text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
               title={`Rename "${name}"`}
             >
               <Pencil className="h-3 w-3" />
             </button>
             <button
               onClick={() => askDelete(i)}
-              className="inline-flex items-center justify-center h-5 w-5 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              className="inline-flex items-center justify-center h-5 w-5 rounded-full text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
               title={`Remove "${name}"`}
             >
               <X className="h-3 w-3" />
