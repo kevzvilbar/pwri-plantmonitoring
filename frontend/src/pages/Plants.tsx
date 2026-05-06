@@ -2435,9 +2435,11 @@ function WellsList({ plantId }: { plantId: string }) {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                      <span>
-                        {w.diameter ?? '—'}{w.drilling_depth_m != null ? ` · ${w.drilling_depth_m} m` : ''}
-                      </span>
+                      {(w.diameter != null || w.drilling_depth_m != null) && (
+                        <span>
+                          {w.diameter ?? '—'}{w.drilling_depth_m != null ? ` · ${w.drilling_depth_m} m` : ''}
+                        </span>
+                      )}
                       {w.meter_serial && (
                         <span className="inline-flex items-center gap-0.5">
                           <Gauge className="h-2.5 w-2.5" /> Water SN {w.meter_serial}
@@ -4895,60 +4897,64 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </span>
         </div>
 
-        <div className="flex flex-wrap items-end gap-4">
-          {/* Solar toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <Switch
-              checked={hasSolar}
-              onCheckedChange={canEdit ? setHasSolar : undefined}
-              disabled={!canEdit}
-              data-testid="energy-power-tab-solar"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Solar
-            </span>
-          </label>
+        <div className="space-y-3">
+          {/* Toggle row — two compact toggle+label pairs side by side */}
+          <div className="flex items-center gap-6">
+            {/* Solar toggle */}
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Switch
+                checked={hasSolar}
+                onCheckedChange={canEdit ? setHasSolar : undefined}
+                disabled={!canEdit}
+                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+                data-testid="energy-power-tab-solar"
+              />
+              <span className="inline-flex items-center gap-1">
+                <Sun className="h-3.5 w-3.5 text-yellow-500" /> Solar
+              </span>
+            </label>
 
-          {/* Grid toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <Switch
-              checked={hasGrid}
-              onCheckedChange={canEdit ? setHasGrid : undefined}
-              disabled={!canEdit}
-              data-testid="energy-power-tab-grid"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-blue-500" /> Grid
-            </span>
-          </label>
+            {/* Grid toggle */}
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <Switch
+                checked={hasGrid}
+                onCheckedChange={canEdit ? setHasGrid : undefined}
+                disabled={!canEdit}
+                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+                data-testid="energy-power-tab-grid"
+              />
+              <span className="inline-flex items-center gap-1">
+                <Zap className="h-3.5 w-3.5 text-blue-500" /> Grid
+              </span>
+            </label>
+          </div>
 
-          {/* Solar kW — only visible when solar is on */}
-          {hasSolar && canEdit && (
-            <div className="flex items-end gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-8 w-32 text-xs mt-0.5"
-                  data-testid="energy-power-tab-kw"
-                />
-              </div>
-            </div>
-          )}
-
+          {/* Solar kW + Save — same row on mobile */}
           {canEdit && (
-            <Button
-              size="sm"
-              onClick={saveEnergy}
-              disabled={energySaving}
-              className="h-8 px-4 text-xs bg-teal-700 text-white hover:bg-teal-800 ml-auto"
-              data-testid="save-energy-power-tab-btn"
-            >
-              {energySaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Save
-            </Button>
+            <div className="flex items-center gap-2">
+              {hasSolar && (
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                  <Input
+                    type="number" step="any" value={solarKw}
+                    onChange={e => setSolarKw(e.target.value)}
+                    placeholder="e.g. 50"
+                    className="h-8 text-xs mt-0.5 w-full"
+                    data-testid="energy-power-tab-kw"
+                  />
+                </div>
+              )}
+              <Button
+                size="sm"
+                onClick={saveEnergy}
+                disabled={energySaving}
+                className={`h-8 px-4 text-xs bg-teal-700 text-white hover:bg-teal-800 shrink-0 ${!hasSolar ? 'ml-auto' : 'mt-4'}`}
+                data-testid="save-energy-power-tab-btn"
+              >
+                {energySaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                Save
+              </Button>
+            </div>
           )}
         </div>
       </Card>
@@ -4970,8 +4976,8 @@ function PowerMetersCard({ plant }: { plant: any }) {
           These names appear as reading inputs in <strong>Operations → Power</strong>.
         </p>
 
-        {/* ── 2-column layout: Solar (left, only when solar ON) | Grid (right) ── */}
-        <div className={['grid gap-4', hasSolar ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
+        {/* ── Stacks on mobile, 2-column on sm+ when both solar and grid are on ── */}
+        <div className={['grid gap-4', hasSolar ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'].join(' ')}>
 
           {/* Solar column — hidden dynamically when Solar toggle is off */}
           {hasSolar && (
