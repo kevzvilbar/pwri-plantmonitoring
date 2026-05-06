@@ -134,11 +134,22 @@ export default function Plants() {
   const { data: summaryCounts } = useQuery({
     queryKey: ['plants-summary-counts'],
     queryFn: async () => {
-      const [wellsRes, locatorsRes, trainsRes] = await Promise.all([
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+
+      const [wellsRes, locatorsRes, trainsRes, recentReadingsRes] = await Promise.all([
         supabase.from('wells').select('plant_id, status'),
         supabase.from('locators').select('plant_id, status'),
-        supabase.from('ro_trains').select('plant_id, status'),
+        // Also fetch force_offline so manual override is respected
+        supabase.from('ro_trains').select('id, plant_id, status, force_offline'),
+        // Only fetch train_ids that have had a reading in the last 2 hours
+        supabase.from('ro_train_readings')
+          .select('train_id')
+          .gte('reading_datetime', twoHoursAgo),
       ]);
+
+      // Set of train IDs with a recent (<=2h) reading
+      const recentSet = new Set((recentReadingsRes.data ?? []).map((r: any) => r.train_id));
 
       type Summary = Record<string, { active: number; total: number }>;
       const tally = (
@@ -154,12 +165,25 @@ export default function Plants() {
         return out;
       };
 
+      // Trains use the same 2-hour data rule as ROTrains.tsx deriveTrainStatus:
+      //   force_offline => Offline | Maintenance => Maintenance | recent data => Running | else Offline
+      const trainTally: Summary = {};
+      for (const t of (trainsRes.data ?? []) as any[]) {
+        if (!trainTally[t.plant_id]) trainTally[t.plant_id] = { active: 0, total: 0 };
+        trainTally[t.plant_id].total++;
+        const isRunning = !t.force_offline && t.status !== 'Maintenance' && recentSet.has(t.id);
+        if (isRunning) trainTally[t.plant_id].active++;
+      }
+
       return {
         wells:    tally(wellsRes.data    ?? [], (s) => s === 'Active'),
         locators: tally(locatorsRes.data ?? [], (s) => s === 'Active'),
-        trains:   tally(trainsRes.data   ?? [], (s) => s === 'Running'),
+        trains:   trainTally,
       };
     },
+    // Re-check every minute so the 2-hr window flips automatically
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const summaryLabel = (
@@ -246,15 +270,30 @@ function PlantDetail({ plantId }: { plantId: string }) {
   const [infoSaving, setInfoSaving] = useState(false);
   const [infoForm, setInfoForm] = useState({ name: '', address: '', capacity: '' });
 
-  // RO Train active/total count for this plant
+  // RO Train active/total count for this plant — uses the same 2-hr data rule as the Overview tab
   const { data: trainCounts } = useQuery({
     queryKey: ['ro-trains-count', plantId],
     queryFn: async () => {
-      const { data } = await supabase.from('ro_trains').select('status').eq('plant_id', plantId);
-      const total = data?.length ?? 0;
-      const active = data?.filter((t) => t.status === 'Running').length ?? 0;
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const { data: trains } = await supabase
+        .from('ro_trains').select('id, status, force_offline').eq('plant_id', plantId);
+      const total = trains?.length ?? 0;
+      if (!total) return { active: 0, total: 0 };
+      const trainIds = trains!.map((t: any) => t.id);
+      const { data: recentReadings } = await supabase
+        .from('ro_train_readings')
+        .select('train_id')
+        .in('train_id', trainIds)
+        .gte('reading_datetime', twoHoursAgo);
+      const recentSet = new Set((recentReadings ?? []).map((r: any) => r.train_id));
+      const active = trains!.filter((t: any) =>
+        !t.force_offline && t.status !== 'Maintenance' && recentSet.has(t.id)
+      ).length;
       return { active, total };
     },
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   if (!plant) return <div>Plant not found.</div>;
@@ -3264,6 +3303,36 @@ function TrainsList({ plantId }: { plantId: string }) {
       (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [],
   });
 
+  // Derive Running/Offline using the same 2-hr data rule as the Overview tab.
+  // Avoids relying on the raw DB status field which defaults to 'Offline' for all trains.
+  const trainIdsKey = (trains ?? []).map((t: any) => t.id).join(',');
+  const { data: recentTrainIds } = useQuery({
+    queryKey: ['ro-trains-recent', plantId, trainIdsKey],
+    queryFn: async () => {
+      const ids = (trains ?? []).map((t: any) => t.id);
+      if (!ids.length) return new Set<string>();
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id')
+        .in('train_id', ids)
+        .gte('reading_datetime', twoHoursAgo);
+      return new Set((data ?? []).map((r: any) => r.train_id));
+    },
+    enabled: (trains ?? []).length > 0,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // force_offline=true => Offline | Maintenance => Maintenance | recent data => Running | else Offline
+  const deriveTrainStatus = (t: any): 'Running' | 'Maintenance' | 'Offline' => {
+    if (t.force_offline) return 'Offline';
+    if (t.status === 'Maintenance') return 'Maintenance';
+    if (recentTrainIds?.has(t.id)) return 'Running';
+    return 'Offline';
+  };
+
   const [editTrain, setEditTrain] = useState<any | null>(null);
   const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
   const [trainDeleteReason, setTrainDeleteReason] = useState('');
@@ -3318,10 +3387,21 @@ function TrainsList({ plantId }: { plantId: string }) {
   // Train-level override wins; falls back to plant default; then hardcoded default.
   const toggleTrainStatus = async (t: any) => {
     if (!isManager) return;
-    // Cycle: Running → Offline → Maintenance → Running
-    const cycle: Record<string, string> = { Running: 'Offline', Offline: 'Maintenance', Maintenance: 'Running' };
-    const newStatus = cycle[t.status] ?? 'Running';
-    const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
+    // Derive current effective status so the cycle feels intuitive in the UI
+    const effectiveStatus = deriveTrainStatus(t);
+    // Cycle: Running → ForceOffline → Maintenance → Running
+    //   force_offline drives the Offline state so data-active trains can still be locked out.
+    let payload: any;
+    if (effectiveStatus === 'Running') {
+      payload = { status: 'Offline', force_offline: true };
+    } else if (effectiveStatus === 'Offline') {
+      payload = { status: 'Maintenance', force_offline: false };
+    } else {
+      // Maintenance → Running
+      payload = { status: 'Running', force_offline: false };
+    }
+    const newStatus = payload.status;
+    const { error } = await supabase.from('ro_trains').update(payload).eq('id', t.id);
     if (error) { toast.error(error.message); return; }
     await logStatusChange({
       user_id: user?.id ?? null,
@@ -3349,7 +3429,7 @@ function TrainsList({ plantId }: { plantId: string }) {
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           RO Trains{' '}
           <span className="font-normal">
-            ({trains ? `${trains.filter((t: any) => t.status === 'Running').length}/${trains.length}` : '0/0'})
+            ({trains ? `${trains.filter((t: any) => deriveTrainStatus(t) === 'Running').length}/${trains.length}` : '0/0'})
           </span>
         </h3>
         <div className="flex items-center gap-1.5">
@@ -3369,6 +3449,7 @@ function TrainsList({ plantId }: { plantId: string }) {
       {trains?.map((t: any) => {
         const mt = effectiveMediaType(t);
         const ft = effectiveFilterType(t);
+        const effectiveStatus = deriveTrainStatus(t);
         return (
           <Card key={t.id} className="p-3" data-testid={`train-card-${t.id}`}>
             <div className="flex justify-between items-start gap-2">
@@ -3400,21 +3481,21 @@ function TrainsList({ plantId }: { plantId: string }) {
                 <button
                   type="button"
                   onClick={() => toggleTrainStatus(t)}
-                  title={isManager ? `Click to cycle status (currently ${t.status})` : t.status}
+                  title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
                   className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
-                    t.status === 'Running'
+                    effectiveStatus === 'Running'
                       ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
-                      : t.status === 'Maintenance'
+                      : effectiveStatus === 'Maintenance'
                         ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 hover:bg-amber-100'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                   } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${
-                    t.status === 'Running' ? 'bg-emerald-500'
-                    : t.status === 'Maintenance' ? 'bg-amber-500'
+                    effectiveStatus === 'Running' ? 'bg-emerald-500'
+                    : effectiveStatus === 'Maintenance' ? 'bg-amber-500'
                     : 'bg-muted-foreground'
                   }`} />
-                  {t.status}
+                  {effectiveStatus}
                 </button>
                 <div className="flex items-center gap-1">
                   <Button
