@@ -140,8 +140,7 @@ export default function Plants() {
       const [wellsRes, locatorsRes, trainsRes, recentReadingsRes] = await Promise.all([
         supabase.from('wells').select('plant_id, status'),
         supabase.from('locators').select('plant_id, status'),
-        // Also fetch force_offline so manual override is respected
-        supabase.from('ro_trains').select('id, plant_id, status, force_offline'),
+        supabase.from('ro_trains').select('id, plant_id, status'),
         // Only fetch train_ids that have had a reading in the last 2 hours
         supabase.from('ro_train_readings')
           .select('train_id')
@@ -166,12 +165,12 @@ export default function Plants() {
       };
 
       // Trains use the same 2-hour data rule as ROTrains.tsx deriveTrainStatus:
-      //   force_offline => Offline | Maintenance => Maintenance | recent data => Running | else Offline
+      //   Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
       const trainTally: Summary = {};
       for (const t of (trainsRes.data ?? []) as any[]) {
         if (!trainTally[t.plant_id]) trainTally[t.plant_id] = { active: 0, total: 0 };
         trainTally[t.plant_id].total++;
-        const isRunning = !t.force_offline && t.status !== 'Maintenance' && recentSet.has(t.id);
+        const isRunning = t.status !== 'Maintenance' && recentSet.has(t.id);
         if (isRunning) trainTally[t.plant_id].active++;
       }
 
@@ -277,7 +276,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
       const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
       const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
       const { data: trains } = await supabase
-        .from('ro_trains').select('id, status, force_offline').eq('plant_id', plantId);
+        .from('ro_trains').select('id, status').eq('plant_id', plantId);
       const total = trains?.length ?? 0;
       if (!total) return { active: 0, total: 0 };
       const trainIds = trains!.map((t: any) => t.id);
@@ -288,7 +287,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
         .gte('reading_datetime', twoHoursAgo);
       const recentSet = new Set((recentReadings ?? []).map((r: any) => r.train_id));
       const active = trains!.filter((t: any) =>
-        !t.force_offline && t.status !== 'Maintenance' && recentSet.has(t.id)
+        t.status !== 'Maintenance' && recentSet.has(t.id)
       ).length;
       return { active, total };
     },
@@ -3325,9 +3324,8 @@ function TrainsList({ plantId }: { plantId: string }) {
     refetchOnWindowFocus: true,
   });
 
-  // force_offline=true => Offline | Maintenance => Maintenance | recent data => Running | else Offline
+  // Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
   const deriveTrainStatus = (t: any): 'Running' | 'Maintenance' | 'Offline' => {
-    if (t.force_offline) return 'Offline';
     if (t.status === 'Maintenance') return 'Maintenance';
     if (recentTrainIds?.has(t.id)) return 'Running';
     return 'Offline';
@@ -3387,21 +3385,13 @@ function TrainsList({ plantId }: { plantId: string }) {
   // Train-level override wins; falls back to plant default; then hardcoded default.
   const toggleTrainStatus = async (t: any) => {
     if (!isManager) return;
-    // Derive current effective status so the cycle feels intuitive in the UI
+    // Cycle through effective status: Running → Offline → Maintenance → Running
+    //   Offline = no recent data (data will flip it back to Running automatically)
+    //   Maintenance = hard manual lock that beats even live data
     const effectiveStatus = deriveTrainStatus(t);
-    // Cycle: Running → ForceOffline → Maintenance → Running
-    //   force_offline drives the Offline state so data-active trains can still be locked out.
-    let payload: any;
-    if (effectiveStatus === 'Running') {
-      payload = { status: 'Offline', force_offline: true };
-    } else if (effectiveStatus === 'Offline') {
-      payload = { status: 'Maintenance', force_offline: false };
-    } else {
-      // Maintenance → Running
-      payload = { status: 'Running', force_offline: false };
-    }
-    const newStatus = payload.status;
-    const { error } = await supabase.from('ro_trains').update(payload).eq('id', t.id);
+    const cycle: Record<string, string> = { Running: 'Offline', Offline: 'Maintenance', Maintenance: 'Running' };
+    const newStatus = cycle[effectiveStatus] ?? 'Running';
+    const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
     if (error) { toast.error(error.message); return; }
     await logStatusChange({
       user_id: user?.id ?? null,

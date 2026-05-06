@@ -100,19 +100,16 @@ function Sparkline({ values, color = 'currentColor' }: { values: number[]; color
 
 // ─── Effective-status helper ──────────────────────────────────────────────────
 // Rules (in priority order):
-//   1. Operator manually force-tagged Offline (force_offline = true) → always Offline
-//   2. Operator manually tagged 'Maintenance'                         → always Maintenance
-//   3. A reading exists within the last 2 hours                       → Running
-//   4. Otherwise                                                       → Offline (no recent data)
+//   1. Operator manually tagged 'Maintenance' → always Maintenance (hard lock)
+//   2. A reading exists within the last 2 hours → Running
+//   3. Otherwise → Offline (no recent data)
 //
-// NOTE: `train.status === 'Offline'` is the DB default for every train, so it
-// must NOT short-circuit before the 2-hr data check.  Use the dedicated
-// `force_offline` boolean column to manually lock a train as Offline.
+// NOTE: 'Offline' is the DB default for every train, so it must NOT
+// short-circuit before the 2-hr data check. Only 'Maintenance' is a
+// hard manual override that beats live data. No extra DB column needed.
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 function deriveTrainStatus(train: any, lastReading: any): 'Running' | 'Maintenance' | 'Offline' {
-  // Hard manual overrides first
-  if (train.force_offline) return 'Offline';
   if (train.status === 'Maintenance') return 'Maintenance';
   // Data-driven: a reading within the last 2 hours means the train is Running
   if (lastReading?.reading_datetime) {
