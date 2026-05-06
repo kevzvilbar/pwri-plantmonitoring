@@ -172,7 +172,7 @@ function Rollup() {
   }, [data]);
 
   const chartData = (data ?? []).map((d: any) => ({
-    date: format(parseISO(d.cost_date), 'MMM d'),
+    date: d.cost_date ? format(parseISO(d.cost_date), 'MMM d') : '—',
     chem: +d.chem_cost || 0,
     power: +d.power_cost || 0,
     perM3: +d.cost_per_m3 || 0,
@@ -299,6 +299,8 @@ function Power() {
   // Multiplier confirmation dialog state
   const [pendingMultiplier, setPendingMultiplier] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Track whether auto-populate from useEffect is running so we skip the confirm dialog
+  const skipConfirmRef = { current: false };
 
   const totalKwh = v.previous_reading && v.current_reading
     ? (+v.current_reading - +v.previous_reading) * (+v.multiplier || 1) : null;
@@ -315,11 +317,12 @@ function Power() {
     enabled: !!plantId,
   });
 
-  // Auto-populate multiplier from last bill when plant changes
+  // Auto-populate multiplier from last bill — skip confirm dialog during init
   useEffect(() => {
     if (bills && bills.length > 0) {
       const lastBill = bills[0] as any;
       if (lastBill.multiplier && lastBill.multiplier !== 1) {
+        skipConfirmRef.current = true;
         setV(prev => ({ ...prev, multiplier: String(lastBill.multiplier) }));
       }
     }
@@ -327,9 +330,9 @@ function Power() {
 
   const handleMultiplierChange = (val: string) => {
     if (!canEdit) return;
+    if (skipConfirmRef.current) { skipConfirmRef.current = false; return; }
     const current = v.multiplier;
     if (val !== current && bills && bills.length > 0) {
-      // Has existing bills — require confirmation
       setPendingMultiplier(val);
       setConfirmOpen(true);
     } else {
@@ -338,22 +341,35 @@ function Power() {
   };
 
   const submit = async () => {
-    if (!plantId || !v.total_amount) { toast.error('Plant and total required'); return; }
+    if (!plantId) { toast.error('Select a plant first'); return; }
+    if (!v.total_amount) { toast.error('Total amount is required'); return; }
     if (totalKwh !== null && totalKwh < 0) { toast.error('Current reading is less than previous — check meter values'); return; }
-    const billRes = await supabase.from('electric_bills').insert({
-      plant_id: plantId, billing_month: v.billing_month,
-      period_start: v.period_start, period_end: v.period_end,
-      previous_reading: +v.previous_reading || 0, current_reading: +v.current_reading || 0,
-      multiplier: +v.multiplier || 1, total_kwh: totalKwh ?? 0,
+
+    // Build payload — omit total_kwh entirely: it is a GENERATED column in the DB
+    // and Supabase will throw "cannot insert a non-DEFAULT value" if we supply it.
+    // The DB computes it as (current_reading - previous_reading) * multiplier automatically.
+    const payload: Record<string, any> = {
+      plant_id: plantId,
+      billing_month: v.billing_month,
+      period_start: v.period_start || null,
+      period_end: v.period_end || null,
+      previous_reading: v.previous_reading ? +v.previous_reading : null,
+      current_reading: v.current_reading ? +v.current_reading : null,
+      multiplier: +v.multiplier || 1,
       generation_charge: v.generation_charge ? +v.generation_charge : null,
       distribution_charge: v.distribution_charge ? +v.distribution_charge : null,
       other_charges: v.other_charges ? +v.other_charges : null,
-      total_amount: +v.total_amount, remarks: v.remarks || null, recorded_by: user?.id,
-    });
+      total_amount: +v.total_amount,
+      remarks: v.remarks || null,
+      recorded_by: user?.id,
+    };
+
+    const billRes = await supabase.from('electric_bills').insert(payload);
     if (billRes.error) { toast.error(billRes.error.message); return; }
+
     if (derivedRate) {
       await supabase.from('power_tariffs').insert({
-        plant_id: plantId, effective_date: v.period_start,
+        plant_id: plantId, effective_date: v.period_start || v.billing_month,
         rate_per_kwh: derivedRate, multiplier: +v.multiplier || 1,
         provider: v.provider || null,
         remarks: `Derived from bill ${format(parseISO(v.billing_month), 'MMM yyyy')}`,
@@ -361,6 +377,8 @@ function Power() {
       });
     }
     toast.success(derivedRate ? 'Bill saved · tariff auto-derived' : 'Bill saved');
+    // Reset meter reading fields but keep plant/month context for quick re-entry
+    setV(prev => ({ ...prev, previous_reading: '', current_reading: '', total_amount: '', generation_charge: '', distribution_charge: '', other_charges: '', remarks: '' }));
     qc.invalidateQueries({ queryKey: ['bills'] });
     qc.invalidateQueries({ queryKey: ['tariffs'] });
   };
@@ -456,7 +474,7 @@ function Power() {
           {bills?.map((b: any) => (
             <div key={b.id} className="flex justify-between items-center text-xs border-b last:border-0 py-1.5">
               <div>
-                <div className="font-mono-num">{format(parseISO(b.billing_month), 'MMM yyyy')}</div>
+                <div className="font-mono-num">{b.billing_month ? format(parseISO(b.billing_month), 'MMM yyyy') : '—'}</div>
                 <div className="text-muted-foreground font-mono-num">{fmtNum(b.total_kwh, 0)} kWh · ₱{b.total_kwh && +b.total_kwh > 0 ? (+b.total_amount / +b.total_kwh).toFixed(4) : '—'}/kWh · ×{b.multiplier}</div>
               </div>
               <div className="font-mono-num font-semibold">₱{fmtNum(b.total_amount, 2)}</div>
@@ -528,8 +546,8 @@ function Compare() {
     queryKey: ['daily-kwh-cmp', plantId, bills?.length],
     queryFn: async () => {
       if (!plantId || !bills?.length) return [];
-      const earliest = bills[bills.length - 1].period_start ?? '';
-      const latest = bills[0].period_end ?? '';
+      const earliest = (bills[bills.length - 1] as any).period_start ?? (bills[bills.length - 1] as any).billing_month ?? '';
+      const latest = (bills[0] as any).period_end ?? (bills[0] as any).billing_month ?? '';
       if (!earliest || !latest) return [];
       // Also select multiplier so we can compute effective kWh = daily_consumption × multiplier
       const { data } = await supabase.from('power_readings')
@@ -556,7 +574,7 @@ function Compare() {
   });
 
   const chartData = rows.slice().reverse().map((r: any) => ({
-    month: format(parseISO(r.billing_month), 'MMM yy'),
+    month: r.billing_month ? format(parseISO(r.billing_month), 'MMM yy') : '—',
     billed: +r.total_kwh || 0,
     daily: r.sumDaily || 0,
     effective: r.sumEffective || 0,
@@ -589,7 +607,7 @@ function Compare() {
             <div className="space-y-1.5">
               {rows.map((r: any) => (
                 <div key={r.id} className="grid grid-cols-5 gap-2 text-xs border-b last:border-0 py-1.5 items-center">
-                  <div className="font-mono-num">{format(parseISO(r.billing_month), 'MMM yy')}</div>
+                  <div className="font-mono-num">{r.billing_month ? format(parseISO(r.billing_month), 'MMM yy') : '—'}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.total_kwh, 0)}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.sumDaily, 0)}</div>
                   {/* Effective kWh = daily_consumption × multiplier — what actually gets billed */}
