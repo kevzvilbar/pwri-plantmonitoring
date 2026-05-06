@@ -18,7 +18,20 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { DataState } from '@/components/DataState';
+
+// Inline empty/loading state — avoids a missing-module chunk error
+function DataState({ isEmpty, emptyTitle, emptyDescription }: {
+  isEmpty?: boolean; emptyTitle?: string; emptyDescription?: string;
+}) {
+  if (!isEmpty) return null;
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
+      <ShieldCheck className="h-8 w-8 text-muted-foreground/40" />
+      <p className="text-sm font-medium text-muted-foreground">{emptyTitle}</p>
+      {emptyDescription && <p className="text-xs text-muted-foreground/70">{emptyDescription}</p>}
+    </div>
+  );
+}
 
 // -----------------------------------------------------------------------
 // Shared types
