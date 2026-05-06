@@ -153,20 +153,27 @@ function ImportReadingsDialog({
     // ── Duplicate detection ──────────────────────────────────────────────────
     // Power readings are one-per-day: use date-only key (YYYY-MM-DD) so that
     // two rows on the same date but different times are still caught as dups.
-    // All other modules allow multiple readings per day → use minute-level key.
+    // All other modules: key = entityName|YYYY-MM-DDTHH:mm so rows with the
+    // same datetime but a DIFFERENT well/locator/blending name are NOT deduped.
     const isPowerModule = module === 'power';
     const seenKeys = new Map<string, number>(); // key → first row index
     const intraDups: number[] = [];
     rows.forEach((r, i) => {
       const dtRaw = r.reading_datetime || r.event_date || '';
-      let key: string;
+      // Entity name: prefer well_name, then locator_name (power uses plant_name — handled separately below)
+      const entityName = (r.well_name || r.locator_name || '').trim().toLowerCase();
+      let dtKey: string;
       if (!dtRaw) {
-        key = `__nodate__${i}`;
+        dtKey = `__nodate__${i}`;
       } else if (isPowerModule) {
-        key = new Date(dtRaw).toISOString().slice(0, 10); // YYYY-MM-DD
+        dtKey = new Date(dtRaw).toISOString().slice(0, 10); // YYYY-MM-DD
       } else {
-        key = new Date(dtRaw).toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+        dtKey = new Date(dtRaw).toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
       }
+      // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.
+      // Power uses plant_name as its entity name (from the CSV column).
+      const powerName = isPowerModule ? (r.plant_name || '').trim().toLowerCase() : '';
+      const key = isPowerModule ? `${powerName}|${dtKey}` : `${entityName}|${dtKey}`;
       if (seenKeys.has(key)) intraDups.push(i);
       else seenKeys.set(key, i);
     });
@@ -616,6 +623,27 @@ async function insertBlendingReadings(
     const wellId = nameToId[r.well_name?.toLowerCase()];
     if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
     const eventDate = r.event_date || new Date().toISOString().slice(0, 10);
+
+    // Duplicate check: same well + same event_date → ask user to overwrite or skip
+    try {
+      const { data: existing } = await (supabase.from('blending_events' as any) as any)
+        .select('id')
+        .eq('well_id', wellId)
+        .eq('event_date', eventDate)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        const decision = await resolveImportDuplicate(
+          `${wellId}|${eventDate}`,
+          `${r.well_name} @ ${eventDate}`,
+          true, // date-only match
+        );
+        if (decision === 'skip') continue;
+        // overwrite: fall through — the API call below will upsert/replace
+      }
+    } catch {
+      // blending_events table may not exist yet — fall through and let the API handle it
+    }
+
     try {
       const res = await fetch(`${BASE}/api/blending/audit`, {
         method: 'POST',
@@ -643,8 +671,9 @@ async function insertBlendingReadings(
 // if the energy migration (20260427) has been run on this Supabase instance.
 // solar_input_mode: "raw" (default — cumulative meter reading, Δ auto-computed)
 //                 | "direct" (daily kWh entered directly — stored as daily_solar_kwh; solar_meter_reading ignored)
-const POWER_SCHEMA = 'meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
+const POWER_SCHEMA = 'plant_name*, meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
 const POWER_TEMPLATE_ROW = {
+  plant_name: 'Plant A',
   meter_reading_kwh: '12345.6',
   reading_datetime: '2024-06-15T08:30',
   solar_meter_reading: '',
@@ -655,6 +684,7 @@ const POWER_TEMPLATE_ROW = {
 
 function validatePowerRow(r: Record<string, string>, i: number): string[] {
   const e: string[] = [];
+  if (!r.plant_name?.trim()) e.push(`Row ${i}: plant_name is required`);
   if (!r.meter_reading_kwh?.trim() || isNaN(Number(r.meter_reading_kwh)))
     e.push(`Row ${i}: meter_reading_kwh is required and must be a number`);
   if (!r.reading_datetime?.trim() || isNaN(Date.parse(r.reading_datetime)))
@@ -675,9 +705,19 @@ async function insertPowerReadings(
   plantId: string,
   userId: string | null,
 ): Promise<{ count: number; errors: string[] }> {
+  // Resolve plant names → IDs (supports multi-plant CSVs via plant_name column)
+  const { data: allPlants } = await supabase.from('plants' as any).select('id, name');
+  const plantNameToId: Record<string, string> = {};
+  (allPlants ?? []).forEach((p: any) => { plantNameToId[p.name.toLowerCase()] = p.id; });
+
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
+    // Resolve the target plant: use plant_name from CSV row if present, else fall back to plantId
+    const rowPlantId = r.plant_name?.trim()
+      ? (plantNameToId[r.plant_name.trim().toLowerCase()] ?? plantId)
+      : plantId;
+
     const dt = new Date(r.reading_datetime).toISOString();
     // Power readings are one-per-day: use date-only key for duplicate detection
     // (matches manual entry which uses windowKind: 'day')
@@ -687,12 +727,12 @@ async function insertPowerReadings(
 
     // Duplicate check for power readings — one per calendar day per plant
     const { data: existing } = await supabase.from('power_readings')
-      .select('id').eq('plant_id', plantId)
+      .select('id').eq('plant_id', rowPlantId)
       .gte('reading_datetime', dayStart)
       .lte('reading_datetime', dayEnd).limit(1);
 
     const payload: Record<string, any> = {
-      plant_id: plantId,
+      plant_id: rowPlantId,
       meter_reading_kwh: +r.meter_reading_kwh,
       reading_datetime: dt,
       recorded_by: userId,
@@ -723,7 +763,7 @@ async function insertPowerReadings(
     };
 
     if (existing && existing.length > 0) {
-      const decision = await resolveImportDuplicate(`${plantId}|${dtDate}`, `Power @ ${dtDate}`, true);
+      const decision = await resolveImportDuplicate(`${rowPlantId}|${dtDate}`, `${r.plant_name?.trim() || 'Power'} @ ${dtDate}`, true);
       if (decision === 'skip') continue;
       // overwrite — with the same column-fallback retry used by doInsert
       const { error } = await supabase.from('power_readings').update(payload).eq('id', existing[0].id);
