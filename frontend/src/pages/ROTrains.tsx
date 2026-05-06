@@ -619,12 +619,15 @@ function PretreatmentAndROLog() {
       return;
     }
 
-    // Save RO Train reading
-    // Only include columns that exist in ro_train_readings.
-    // Excluded (no DB column): feed_meter_prev, permeate_meter_prev, reject_meter_prev,
-    //   power_meter_prev, meter_duration_min, train_online, offline_since, offline_until, offline_reason.
-    // Excluded (local-only calc inputs — never stored): feed_meter_curr, permeate_meter_curr,
+    // Save RO Train reading.
+    // Confirmed DB columns in ro_train_readings (from original working code):
+    //   feed_pressure_psi, reject_pressure_psi, feed_flow, permeate_flow, reject_flow,
+    //   feed_tds, permeate_tds, reject_tds, feed_ph, permeate_ph, reject_ph,
+    //   turbidity_ntu, temperature_c, suction_pressure_psi,
+    //   dp_psi, recovery_pct, rejection_pct, salt_passage_pct, recorded_by.
+    // Excluded (local-only, no DB column): feed_meter_curr, permeate_meter_curr,
     //   reject_meter_curr, power_meter_curr.
+    // To save volume/power data, first confirm exact column names in your Supabase schema.
     const EXCLUDED_KEYS = new Set([
       'feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr',
     ]);
@@ -635,20 +638,11 @@ function PretreatmentAndROLog() {
           .filter(([k]) => !EXCLUDED_KEYS.has(k))
           .map(([k, val]) => [k, val ? +val : null])
       ),
-      // Computed effective flow values (EM 3-way inference — override raw roValues.reject_flow)
       reject_flow: rejectFlow ?? (roValues.reject_flow ? +roValues.reject_flow : null),
       dp_psi: dp,
       recovery_pct: recovery,
       rejection_pct: rejection,
       salt_passage_pct: saltPassage,
-      // Computed meter-derived volumes — these are the actual DB columns for volumetric data
-      feed_volume_m3: feedVol ?? null,
-      permeate_volume_m3: permVol ?? null,
-      reject_volume_m3: rejVol ?? null,
-      // Power meter computed values
-      power_kwh: pwrDelta ?? null,
-      avg_power_kw: pwrKw ?? null,
-      specific_energy_kwh_m3: secEnergy ?? null,
       recorded_by: user?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
