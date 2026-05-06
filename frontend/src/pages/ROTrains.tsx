@@ -22,6 +22,8 @@ import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 // ─── Chemical Dosing constants ────────────────────────────────────────────────
 const KNOWN_CHEMICALS = [
@@ -202,6 +204,12 @@ function Overview() {
   const totalTrains    = (trains ?? []).length;
   const healthScore    = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
 
+  const PERM_TDS_LIMIT = 600; // ppm — alert threshold
+  const highTDSTrains  = (trains ?? []).filter((t: any) => {
+    const reading = lastReadings?.[t.id];
+    return reading?.permeate_tds != null && reading.permeate_tds > PERM_TDS_LIMIT;
+  });
+
   const filtered = (trains ?? []).filter((t: any) => {
     const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
     const matchStatus = statusFilter === 'All' || effectiveStatus === statusFilter;
@@ -292,6 +300,24 @@ function Overview() {
         </div>
       )}
 
+      {/* ── High TDS alert banner ───────────────────────────────────── */}
+      {highTDSTrains.length > 0 && (
+        <Alert variant="destructive" className="py-2.5 px-3">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle className="text-sm font-semibold">
+            High Permeate TDS — {highTDSTrains.length} train{highTDSTrains.length > 1 ? 's' : ''} above {PERM_TDS_LIMIT} ppm
+          </AlertTitle>
+          <AlertDescription className="text-xs mt-0.5">
+            {highTDSTrains
+              .map((t: any) => {
+                const tds = lastReadings?.[t.id]?.permeate_tds;
+                return `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}: ${fmtNum(tds, 0)} ppm`;
+              })
+              .join('  ·  ')}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── Train grid ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {filtered.map((t: any) => (
@@ -329,7 +355,7 @@ function TrainCard({ train, last, spark }: { train: any; last: any; spark: any[]
   const tdsVals      = spark.map((r: any) => r.permeate_tds).filter((v: any) => v != null).reverse();
 
   const recWarn  = last?.recovery_pct != null && (last.recovery_pct < 65 || last.recovery_pct > 75);
-  const tdsWarn  = last?.permeate_tds != null && last.permeate_tds > 50;
+  const tdsWarn  = last?.permeate_tds != null && last.permeate_tds > 600;
 
   return (
     <Card className={cn('p-3 space-y-1.5 border', statusBadge.border)}>
