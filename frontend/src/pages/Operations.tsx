@@ -68,9 +68,18 @@ function clearDupDecisions() { _dupDecisions.clear(); }
 // Set by ImportReadingsDialog before each import run; resolved by the in-dialog confirm UI.
 let _dupPromptResolver: ((decision: 'overwrite' | 'skip') => void) | null = null;
 let _dupShowPrompt: ((label: string, isDateOnly: boolean) => void) | null = null;
+// When the user chooses "Overwrite All" or "Skip All", this is set so subsequent
+// duplicates are resolved immediately without prompting again.
+let _bulkDupDecision: 'overwrite' | 'skip' | null = null;
+function clearBulkDupDecision() { _bulkDupDecision = null; }
 
 async function resolveImportDuplicate(key: string, label: string, isDateOnly = false): Promise<'overwrite' | 'skip'> {
   if (_dupDecisions.has(key)) return _dupDecisions.get(key)!;
+  // If user already chose "Overwrite All" or "Skip All", apply that immediately.
+  if (_bulkDupDecision) {
+    _dupDecisions.set(key, _bulkDupDecision);
+    return _bulkDupDecision;
+  }
   // Ask via the React dialog (not window.confirm)
   const decision = await new Promise<'overwrite' | 'skip'>((resolve) => {
     _dupPromptResolver = resolve;
@@ -123,7 +132,10 @@ function ImportReadingsDialog({
     return () => { _dupShowPrompt = null; _dupPromptResolver = null; };
   }, []);
 
-  const handleDupDecision = (decision: 'overwrite' | 'skip') => {
+  const handleDupDecision = (decision: 'overwrite' | 'skip', applyToAll = false) => {
+    if (applyToAll) {
+      _bulkDupDecision = decision;
+    }
     setDupConfirm(null);
     _dupPromptResolver?.(decision);
     _dupPromptResolver = null;
@@ -148,6 +160,7 @@ function ImportReadingsDialog({
     if (!file || rows.length === 0 || errors.length > 0) return;
     setBusy(true);
     clearDupDecisions();
+    clearBulkDupDecision();
     const ts = new Date().toISOString();
 
     // ── Duplicate detection ──────────────────────────────────────────────────
@@ -361,7 +374,7 @@ function ImportReadingsDialog({
                 {dupConfirm.isDateOnly ? 'on this date' : 'at this date & time'}.
                 Overwrite it, or skip this row?
               </p>
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-1">
                 <Button
                   size="sm"
                   className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs"
@@ -376,6 +389,23 @@ function ImportReadingsDialog({
                   onClick={() => handleDupDecision('skip')}
                 >
                   Skip
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs"
+                  onClick={() => handleDupDecision('overwrite', true)}
+                  title="Overwrite this and all remaining duplicates"
+                >
+                  Overwrite All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => handleDupDecision('skip', true)}
+                  title="Skip this and all remaining duplicates"
+                >
+                  Skip All
                 </Button>
               </div>
             </div>
