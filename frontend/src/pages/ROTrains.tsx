@@ -648,6 +648,12 @@ function PretreatmentAndROLog() {
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
 
+    // ── Update train status to match the current online/offline toggle ────────
+    // When a reading is submitted with trainOnline=true → set status to 'Running'.
+    // When offline → set to 'Offline'. This keeps the Overview cards in sync.
+    const newStatus = trainOnline ? 'Running' : 'Offline';
+    await supabase.from('ro_trains').update({ status: newStatus }).eq('id', trainId);
+
     // Save pre-treatment reading
     // mmf_readings keeps per-unit meter start/end (synchronized = shared values across all units)
     const rowsArr = Object.values(afmmf);
