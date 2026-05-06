@@ -22,8 +22,8 @@ import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { cn } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
+
+
 
 // ─── Chemical Dosing constants ────────────────────────────────────────────────
 const KNOWN_CHEMICALS = [
@@ -127,7 +127,7 @@ function Overview() {
   const [plantId, setPlantId] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [search, setSearch] = useState('');
-  const { selectedPlantId } = useAppStore();
+  const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
@@ -209,6 +209,33 @@ function Overview() {
     const reading = lastReadings?.[t.id];
     return reading?.permeate_tds != null && reading.permeate_tds > PERM_TDS_LIMIT;
   });
+
+  // ── Sync high-TDS trains into the global Plant Alert panel & bell ────────
+  // Runs whenever readings refresh (every 60s). Upserts by stable id so the
+  // bell count and PlantAlertPanel stay in sync without duplicate entries.
+  useEffect(() => {
+    if (!plantId) return;
+    if (highTDSTrains.length === 0) {
+      // Clear any previously-pushed TDS alerts for this plant's trains
+      const ids = (trains ?? []).map((t: any) => `high-tds-${t.id}`);
+      removeAlerts(ids);
+      return;
+    }
+    const alerts = highTDSTrains.map((t: any) => {
+      const tds = lastReadings?.[t.id]?.permeate_tds;
+      return {
+        id: `high-tds-${t.id}`,
+        severity: 'critical' as const,
+        title: 'High Permeate TDS',
+        description: `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}: ${fmtNum(tds, 0)} ppm — above ${PERM_TDS_LIMIT} ppm limit`,
+        source: 'RO Trains',
+        plantId,
+        timestamp: Date.now(),
+      };
+    });
+    addAlerts(alerts);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highTDSTrains.length, plantId]);
 
   const filtered = (trains ?? []).filter((t: any) => {
     const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
@@ -300,23 +327,6 @@ function Overview() {
         </div>
       )}
 
-      {/* ── High TDS alert banner ───────────────────────────────────── */}
-      {highTDSTrains.length > 0 && (
-        <Alert variant="destructive" className="py-2.5 px-3">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle className="text-sm font-semibold">
-            High Permeate TDS — {highTDSTrains.length} train{highTDSTrains.length > 1 ? 's' : ''} above {PERM_TDS_LIMIT} ppm
-          </AlertTitle>
-          <AlertDescription className="text-xs mt-0.5">
-            {highTDSTrains
-              .map((t: any) => {
-                const tds = lastReadings?.[t.id]?.permeate_tds;
-                return `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}: ${fmtNum(tds, 0)} ppm`;
-              })
-              .join('  ·  ')}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* ── Train grid ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
