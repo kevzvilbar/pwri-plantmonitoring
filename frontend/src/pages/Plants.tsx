@@ -362,44 +362,47 @@ function PlantDetail({ plantId }: { plantId: string }) {
       </button>
 
       {/* Hero card */}
-      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden relative">
+      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden">
 
-        {/* Top-right: Status pill + Edit + Delete */}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
-          <span className={[
-            'text-xs font-semibold px-3 py-1 rounded-full border',
-            plant.status === 'Active'
-              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
-              : 'bg-amber-400/20 text-amber-200 border-amber-400/30',
-          ].join(' ')}>
-            Status: <span className="font-bold">{plant.status}</span>
-          </span>
-          {isManager && (
-            <Button size="sm" variant="ghost"
-              onClick={openInfoEdit}
-              data-testid="edit-plant-info-btn"
-              className="h-8 gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-xs font-medium">
-              <Pencil className="h-3.5 w-3.5" /> Edit
-            </Button>
-          )}
-          {isManager && (
-            <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
-              <DeleteEntityMenu
-                kind="plant" id={plant.id} label={plant.name}
-                canSoftDelete={plant.status === 'Active'} canHardDelete
-                invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
-              />
-            </div>
-          )}
-        </div>
+        {/* Top row: Name/address (left) + Status pill + Edit + Delete (right) */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          {/* Name + address */}
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
+            <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{plant.address}</span>
+            </p>
+          </div>
 
-        {/* Name + address */}
-        <div className="min-w-0 pr-4 sm:pr-56">
-          <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
-          <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
-            <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate">{plant.address}</span>
-          </p>
+          {/* Status pill + Edit + Delete — now in normal flow, never overlaps */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <span className={[
+              'text-xs font-semibold px-3 py-1 rounded-full border',
+              plant.status === 'Active'
+                ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
+                : 'bg-amber-400/20 text-amber-200 border-amber-400/30',
+            ].join(' ')}>
+              Status: <span className="font-bold">{plant.status}</span>
+            </span>
+            {isManager && (
+              <Button size="sm" variant="ghost"
+                onClick={openInfoEdit}
+                data-testid="edit-plant-info-btn"
+                className="h-8 gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-xs font-medium">
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
+            {isManager && (
+              <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
+                <DeleteEntityMenu
+                  kind="plant" id={plant.id} label={plant.name}
+                  canSoftDelete={plant.status === 'Active'} canHardDelete
+                  invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats: Capacity / RO Trains / Product Meters */}
@@ -1669,7 +1672,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggleOne(l.id)}
-                  className="mt-0.5 rounded-full shrink-0"
+                  className="mt-0.5 h-4 w-4 rounded-sm shrink-0"
                   data-testid={`locator-select-${l.id}`}
                 />
               )}
@@ -2402,7 +2405,7 @@ function WellsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggle(w.id)}
-                  className="mt-1 rounded-full"
+                  className="mt-1 h-4 w-4 rounded-sm"
                   data-testid={`well-select-${w.id}`}
                 />
               )}
@@ -2433,7 +2436,7 @@ function WellsList({ plantId }: { plantId: string }) {
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                       <span>
-                        {w.diameter ?? '—'} · {w.drilling_depth_m ?? '—'} m
+                        {w.diameter ?? '—'}{w.drilling_depth_m != null ? ` · ${w.drilling_depth_m} m` : ''}
                       </span>
                       {w.meter_serial && (
                         <span className="inline-flex items-center gap-0.5">
@@ -2741,7 +2744,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
               <Checkbox
                 checked={form.has_power_meter}
                 onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
-                className="rounded-full"
+                className="h-4 w-4 rounded-sm"
                 data-testid="add-well-has-power-meter"
               />
               <Zap className="h-3 w-3 text-amber-500" />
