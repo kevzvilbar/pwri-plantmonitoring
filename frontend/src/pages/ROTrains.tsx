@@ -98,6 +98,27 @@ function Sparkline({ values, color = 'currentColor' }: { values: number[]; color
   );
 }
 
+// ─── Effective-status helper ──────────────────────────────────────────────────
+// Rules (in priority order):
+//   1. Operator manually tagged 'Offline'  → always Offline
+//   2. Operator manually tagged 'Maintenance' → always Maintenance
+//   3. A reading exists within the last 2 hours → Running
+//   4. Otherwise → Offline (no recent data)
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+function deriveTrainStatus(train: any, lastReading: any): 'Running' | 'Maintenance' | 'Offline' {
+  // Manual overrides win
+  if (train.status === 'Offline') return 'Offline';
+  if (train.status === 'Maintenance') return 'Maintenance';
+  // Recent data → Running
+  if (lastReading?.reading_datetime) {
+    const age = Date.now() - new Date(lastReading.reading_datetime).getTime();
+    if (age <= TWO_HOURS_MS) return 'Running';
+  }
+  // No recent data
+  return 'Offline';
+}
+
 // ─── Overview Dashboard ───────────────────────────────────────────────────────
 function Overview() {
   const [plantId, setPlantId] = useState('');
@@ -160,10 +181,10 @@ function Overview() {
 
   const allReadings = Object.values(lastReadings ?? {});
 
-  // Summary stats
-  const onlineCount    = (trains ?? []).filter((t: any) => t.status === 'Running').length;
-  const maintCount     = (trains ?? []).filter((t: any) => t.status === 'Maintenance').length;
-  const offlineCount   = (trains ?? []).filter((t: any) => t.status === 'Offline').length;
+  // Summary stats — use derived status so the 2-hr rule is reflected in counts
+  const onlineCount    = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
+  const maintCount     = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
+  const offlineCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
   const avgRecovery    = allReadings.filter(r => r.recovery_pct != null).length
     ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1)
     : null;
@@ -174,7 +195,8 @@ function Overview() {
   const healthScore    = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
 
   const filtered = (trains ?? []).filter((t: any) => {
-    const matchStatus = statusFilter === 'All' || t.status === statusFilter;
+    const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
+    const matchStatus = statusFilter === 'All' || effectiveStatus === statusFilter;
     const matchSearch = !search || `train ${t.train_number}`.toLowerCase().includes(search.toLowerCase()) || String(t.train_number).includes(search);
     return matchStatus && matchSearch;
   });
@@ -284,7 +306,7 @@ function Overview() {
 }
 
 function TrainCard({ train, last, spark }: { train: any; last: any; spark: any[] }) {
-  const status: string = train.status ?? 'Unknown';
+  const status: string = deriveTrainStatus(train, last);
   const statusBadge = {
     Running:     { label: 'Online',      dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
     Maintenance: { label: 'Maintenance', dot: 'bg-amber-500',   text: 'text-amber-600 dark:text-amber-400',     border: 'border-amber-200 dark:border-amber-800' },
@@ -648,11 +670,19 @@ function PretreatmentAndROLog() {
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
 
-    // ── Update train status to match the current online/offline toggle ────────
-    // When a reading is submitted with trainOnline=true → set status to 'Running'.
-    // When offline → set to 'Offline'. This keeps the Overview cards in sync.
-    const newStatus = trainOnline ? 'Running' : 'Offline';
-    await supabase.from('ro_trains').update({ status: newStatus }).eq('id', trainId);
+    // ── Sync train status in DB ───────────────────────────────────────────────
+    // When the operator explicitly marks the train Offline, persist that so the
+    // manual override is respected everywhere (Plants view, other users, etc.).
+    // When the train is Online we do NOT write 'Running' — the derived status
+    // from the 2-hour reading window handles that automatically in the UI,
+    // keeping the DB status field as the source of truth only for manual overrides.
+    if (!trainOnline) {
+      await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', trainId);
+    } else if (train?.status === 'Offline') {
+      // Operator was previously tagged Offline manually — a new Online reading
+      // clears that override so the 2-hr rule takes over again.
+      await supabase.from('ro_trains').update({ status: 'Running' }).eq('id', trainId);
+    }
 
     // Save pre-treatment reading
     // mmf_readings keeps per-unit meter start/end (synchronized = shared values across all units)
