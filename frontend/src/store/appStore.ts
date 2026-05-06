@@ -6,6 +6,21 @@ import { format, subDays } from 'date-fns';
 // imports RangeKey from types.ts as before — this is just for typing.
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 
+// ── Plant Alert types ─────────────────────────────────────────────────────────
+export type PlantAlertSeverity = 'critical' | 'warning' | 'info';
+
+export interface PlantAlert {
+  /** Stable unique key — e.g. "high-tds-<trainId>" so re-fires upsert, not duplicate */
+  id: string;
+  severity: PlantAlertSeverity;
+  title: string;
+  description: string;
+  /** Human-readable source module, e.g. "RO Trains" */
+  source: string;
+  plantId: string;
+  timestamp: number; // Date.now()
+}
+
 interface AppState {
   selectedPlantId: string | null; // null = all plants
   setSelectedPlantId: (id: string | null) => void;
@@ -25,6 +40,16 @@ interface AppState {
   chartTo: string;   // yyyy-MM-dd — only used when chartRange === 'CUSTOM'
   setChartRange: (range: RangeKey) => void;
   setChartCustomDates: (from: string, to: string) => void;
+
+  // ── Plant Alerts (in-memory, not persisted) ───────────────────────
+  // Modules push alerts here; TopBar bell + PlantAlertPanel read from here.
+  plantAlerts: PlantAlert[];
+  /** Upsert alerts by id — replaces any existing alert with the same id */
+  addAlerts: (alerts: PlantAlert[]) => void;
+  /** Dismiss specific alert ids */
+  removeAlerts: (ids: string[]) => void;
+  /** Wipe all plant alerts (e.g. on plant switch) */
+  clearAlerts: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -42,6 +67,17 @@ export const useAppStore = create<AppState>()(
       chartTo: format(new Date(), 'yyyy-MM-dd'),
       setChartRange: (range) => set({ chartRange: range }),
       setChartCustomDates: (from, to) => set({ chartFrom: from, chartTo: to }),
+
+      // ── Plant alerts ──────────────────────────────────────────────
+      plantAlerts: [],
+      addAlerts: (incoming) =>
+        set((s) => {
+          const kept = s.plantAlerts.filter((a) => !incoming.find((n) => n.id === a.id));
+          return { plantAlerts: [...kept, ...incoming] };
+        }),
+      removeAlerts: (ids) =>
+        set((s) => ({ plantAlerts: s.plantAlerts.filter((a) => !ids.includes(a.id)) })),
+      clearAlerts: () => set({ plantAlerts: [] }),
     }),
     {
       name: 'pwri-app-state',
@@ -51,6 +87,7 @@ export const useAppStore = create<AppState>()(
         chartRange: s.chartRange,
         chartFrom: s.chartFrom,
         chartTo: s.chartTo,
+        // plantAlerts intentionally NOT persisted — re-derived on mount from live data
       }),
     },
   ),
