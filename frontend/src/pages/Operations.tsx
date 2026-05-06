@@ -1099,23 +1099,23 @@ function LocatorRow({
           className="flex-1 min-w-0"
         />
         <Button onClick={save} disabled={saving || !reading || atLimit} size="sm" className="shrink-0">
-          {saving ? '...' : editingId ? 'Update' : 'Save'}
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : editingId ? 'Update' : 'Save'}
         </Button>
         {lastToday && !editingId && (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full shrink-0"
             onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
             title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         )}
         {editingId && (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0"
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full shrink-0"
             onClick={() => { setEditingId(null); setReading(''); }} title="Cancel edit">
             <X className="h-3.5 w-3.5" />
           </Button>
         )}
         {isManagerOrAdmin && (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 text-muted-foreground"
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full shrink-0 text-muted-foreground"
             onClick={() => setShowHistory(true)} title="View reading history">
             <History className="h-3.5 w-3.5" />
           </Button>
@@ -1361,23 +1361,23 @@ function WellRow({
           </div>
         )}
         <Button onClick={save} disabled={saving || !reading || atLimit} className="h-9 px-3 text-xs shrink-0">
-          {saving ? '...' : editingId ? 'Update' : 'Save'}
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : editingId ? 'Update' : 'Save'}
         </Button>
         {lastToday && !editingId && (
-          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0"
+          <Button variant="ghost" className="h-9 w-9 p-0 rounded-full shrink-0"
             onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading ?? '')); setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : ''); }}
             title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         )}
         {editingId && (
-          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0"
+          <Button variant="ghost" className="h-9 w-9 p-0 rounded-full shrink-0"
             onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); }} title="Cancel edit">
             <X className="h-3.5 w-3.5" />
           </Button>
         )}
         {isManagerOrAdmin && (
-          <Button variant="ghost" className="h-9 w-9 p-0 shrink-0 text-muted-foreground"
+          <Button variant="ghost" className="h-9 w-9 p-0 rounded-full shrink-0 text-muted-foreground"
             onClick={() => setShowHistory(true)} title="View reading history">
             <History className="h-3.5 w-3.5" />
           </Button>
@@ -1535,6 +1535,7 @@ function BlendingRow({
   const [volume, setVolume] = useState('');
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   const save = async () => {
     const v = +volume;
@@ -1546,7 +1547,7 @@ function BlendingRow({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
-          event_date: new Date().toISOString().slice(0, 10), volume_m3: v,
+          event_date: customDt.slice(0, 10), volume_m3: v,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1559,10 +1560,19 @@ function BlendingRow({
 
   return (
     <div className="p-3 space-y-2" data-testid={`blending-row-${well.id}`}>
-      {/* Row 1: Well name + badge */}
-      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-        <div className="text-sm font-medium truncate">{well.name}</div>
-        <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal">Blending</Badge>
+      {/* Row 1: Well name + badge | compact date picker on right — matches Locator/Well format */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+          <div className="text-sm font-medium truncate">{well.name}</div>
+          <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal">Blending</Badge>
+        </div>
+        <label className="shrink-0 cursor-pointer relative">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+          </span>
+          <Input type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />
+        </label>
       </div>
 
       {/* Row 2: prev / today data */}
@@ -1570,6 +1580,7 @@ function BlendingRow({
         prev: <span className="font-mono-num" title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}>
           {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
         </span>
+        {previousDate && <span className="text-muted-foreground/60 ml-1">({previousDate})</span>}
         <span className="mx-1">·</span>
         today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span> logged
       </div>
@@ -1584,10 +1595,10 @@ function BlendingRow({
             data-testid={`blending-input-${well.id}`} />
         </div>
         <Button onClick={save} disabled={saving || !volume} size="sm" className="h-9 px-3 text-xs shrink-0">
-          {saving ? '...' : 'Save'}
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
         {isManagerOrAdmin && (
-          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground shrink-0"
+          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-full text-muted-foreground shrink-0"
             onClick={() => setShowHistory(true)} title="View blending history">
             <History className="h-3.5 w-3.5" />
           </Button>
@@ -2024,11 +2035,11 @@ function ProductMeterRow({
           className="h-9 px-3 text-xs shrink-0"
           data-testid={`product-meter-save-${meter.id}`}
         >
-          {saving ? '…' : 'Save'}
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
         {canEdit && (
           <Button
-            variant="ghost" size="sm" className="h-9 w-9 p-0 text-muted-foreground shrink-0"
+            variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-full text-muted-foreground shrink-0"
             onClick={() => setShowHistory(true)} title="View history"
           >
             <History className="h-3.5 w-3.5" />
