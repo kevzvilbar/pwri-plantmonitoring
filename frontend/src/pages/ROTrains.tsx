@@ -107,15 +107,12 @@ function Sparkline({ values, color = 'currentColor' }: { values: number[]; color
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 function deriveTrainStatus(train: any, lastReading: any): 'Running' | 'Maintenance' | 'Offline' {
-  // Manual overrides win
   if (train.status === 'Offline') return 'Offline';
   if (train.status === 'Maintenance') return 'Maintenance';
-  // Recent data → Running
   if (lastReading?.reading_datetime) {
     const age = Date.now() - new Date(lastReading.reading_datetime).getTime();
     if (age <= TWO_HOURS_MS) return 'Running';
   }
-  // No recent data
   return 'Offline';
 }
 
@@ -139,8 +136,10 @@ function Overview() {
 
   // Fetch last readings for ALL trains at once
   const trainIds = (trains ?? []).map((t: any) => t.id);
+  // Join IDs into a stable string so React Query doesn't see a new array reference every render
+  const trainIdsKey = trainIds.join(',');
   const { data: lastReadings } = useQuery({
-    queryKey: ['ro-last-all', trainIds],
+    queryKey: ['ro-last-all', trainIdsKey],
     queryFn: async () => {
       if (!trainIds.length) return {};
       const { data } = await supabase
@@ -156,11 +155,14 @@ function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
+    // Re-evaluate the 2-hr window every minute so status flips automatically
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   // Fetch last 5 readings per train for sparklines
   const { data: sparkData } = useQuery({
-    queryKey: ['ro-spark', trainIds],
+    queryKey: ['ro-spark', trainIdsKey],
     queryFn: async () => {
       if (!trainIds.length) return {};
       const { data } = await supabase
@@ -177,14 +179,16 @@ function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const allReadings = Object.values(lastReadings ?? {});
 
   // Summary stats — use derived status so the 2-hr rule is reflected in counts
-  const onlineCount    = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
-  const maintCount     = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
-  const offlineCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
+  const onlineCount  = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
+  const maintCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
+  const offlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
   const avgRecovery    = allReadings.filter(r => r.recovery_pct != null).length
     ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1)
     : null;
@@ -670,17 +674,13 @@ function PretreatmentAndROLog() {
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
 
-    // ── Sync train status in DB ───────────────────────────────────────────────
-    // When the operator explicitly marks the train Offline, persist that so the
-    // manual override is respected everywhere (Plants view, other users, etc.).
-    // When the train is Online we do NOT write 'Running' — the derived status
-    // from the 2-hour reading window handles that automatically in the UI,
-    // keeping the DB status field as the source of truth only for manual overrides.
+    // ── Sync train status in DB only for manual overrides ────────────────────
+    // Submitting a reading as Online clears a prior manual Offline tag so the
+    // 2-hr rule takes back over. We never write 'Running' unprompted — the
+    // derived status handles that automatically via the last reading timestamp.
     if (!trainOnline) {
       await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', trainId);
     } else if (train?.status === 'Offline') {
-      // Operator was previously tagged Offline manually — a new Online reading
-      // clears that override so the 2-hr rule takes over again.
       await supabase.from('ro_trains').update({ status: 'Running' }).eq('id', trainId);
     }
 
