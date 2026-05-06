@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,7 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -393,7 +394,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </div>
 
         {/* Name + address */}
-        <div className="min-w-0 pr-56">
+        <div className="min-w-0 pr-4 sm:pr-56">
           <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
           <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
             <MapPin className="h-3 w-3 shrink-0" />
@@ -485,19 +486,27 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </Dialog>
       )}
 
-      <div className="grid grid-cols-5 gap-1 p-1 bg-muted rounded-lg w-full">
-        {(['locators', 'wells', 'product', 'trains', 'power'] as const).map((t) => (
+      <div className="grid grid-cols-5 gap-0.5 p-1 bg-muted rounded-lg w-full">
+        {([
+          { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
+          { id: 'wells', label: 'Wells', short: 'WELL', icon: <Droplet className="h-3.5 w-3.5" /> },
+          { id: 'product', label: 'Product', short: 'PROD', icon: <Gauge className="h-3.5 w-3.5" /> },
+          { id: 'trains', label: 'Trains', short: 'RO', icon: <Wrench className="h-3.5 w-3.5" /> },
+          { id: 'power', label: 'Power', short: 'PWR', icon: <Zap className="h-3.5 w-3.5" /> },
+        ] as const).map((t) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={t.id}
+            onClick={() => setTab(t.id)}
             className={[
-              'py-2 text-sm font-medium rounded-md transition-all duration-200 capitalize focus-visible:outline-none',
-              tab === t
+              'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none min-w-0',
+              tab === t.id
                 ? 'bg-teal-700 text-white shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             ].join(' ')}
           >
-            {t}
+            {t.icon}
+            <span className="hidden sm:inline truncate">{t.label}</span>
+            <span className="sm:hidden text-[9px] font-semibold tracking-wide">{t.short}</span>
           </button>
         ))}
       </div>
@@ -624,6 +633,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
   const [adding, setAdding]     = useState(false);
   const [newName, setNewName]   = useState('');
   const [addBusy, setAddBusy]   = useState(false);
+  const [selectedMeter, setSelectedMeter] = useState<string | null>(null);
 
   const addMeter = async () => {
     if (!newName.trim()) { toast.error('Enter a meter name'); return; }
@@ -728,45 +738,46 @@ function ProductMetersCard({ plant }: { plant: any }) {
         <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" aria-hidden />
       )}
 
-      {/* ── Meter cards — same structure as Locator / Well cards ── */}
+      {/* ── Meter cards — clickable to view history ── */}
       {meters?.map((m: any) => (
         <Card
           key={m.id}
-          className="p-3 hover:shadow-elev"
+          className="p-3 hover:shadow-elev transition-shadow"
           data-testid={`product-meter-card-${m.id}`}
         >
           <div className="flex items-start gap-2">
-            <div className="flex-1 min-w-0">
+            <div
+              className="flex-1 min-w-0 cursor-pointer"
+              onClick={() => setSelectedMeter(selectedMeter === m.id ? null : m.id)}
+            >
               <div className="flex justify-between items-start gap-2">
-                {/* Name + sub-label */}
                 <div className="min-w-0">
                   <ProductMeterNameInline
                     meter={m} plantId={plant.id} userId={user?.id ?? null}
                     canEdit={canEdit} onChanged={invalidate}
                   />
                   <div className="text-xs text-muted-foreground">
-                    Product Meter · {m.status === 'Active' ? 'Reading active' : 'Inactive'}
+                    Product Meter · {(m.status ?? 'Active') === 'Active' ? 'Reading active' : 'Inactive'}
                   </div>
                 </div>
-
-                {/* Status pill — clickable for Manager+ */}
-                <button
-                  type="button"
-                  onClick={() => canEdit && toggleStatus(m)}
-                  title={canEdit ? `Click to toggle (currently ${m.status ?? 'Active'})` : (m.status ?? 'Active')}
-                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
-                    (m.status ?? 'Active') === 'Active'
-                      ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
-                      : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
-                  } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
-                >
-                  <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
-                  {m.status ?? 'Active'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); canEdit && toggleStatus(m); }}
+                    title={canEdit ? `Click to toggle (currently ${m.status ?? 'Active'})` : (m.status ?? 'Active')}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
+                      (m.status ?? 'Active') === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {m.status ?? 'Active'}
+                  </button>
+                  <TrendingUp className={`h-3.5 w-3.5 transition-colors ${selectedMeter === m.id ? 'text-teal-600' : 'text-muted-foreground/40'}`} />
+                </div>
               </div>
             </div>
-
-            {/* Edit + Delete buttons — always visible, matches Locator/Well */}
             {canEdit && (
               <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <ProductMeterNameInline.EditTrigger meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
@@ -782,6 +793,12 @@ function ProductMetersCard({ plant }: { plant: any }) {
               </div>
             )}
           </div>
+          {/* Expandable history chart */}
+          {selectedMeter === m.id && (
+            <div className="mt-3 pt-3 border-t">
+              <EntityHistoryChart entityId={m.id} entityType="product_meter" entityName={m.name ?? 'Meter'} />
+            </div>
+          )}
         </Card>
       ))}
 
@@ -1221,6 +1238,271 @@ function EnergySourceCard({ plant }: { plant: any }) {
   );
 }
 
+// ─── Entity History Chart ─────────────────────────────────────────────────────
+// Reusable historical consumption chart used by Locators, Wells, Product meters.
+// Queries the relevant readings table, computes daily consumption, renders a bar+line chart.
+// onExport fires a CSV download of the raw data.
+
+interface HistoryRow { date: string; consumption: number; reading?: number; }
+
+function EntityHistoryChart({
+  entityId,
+  entityType,
+  entityName,
+}: {
+  entityId: string;
+  entityType: 'locator' | 'well' | 'product_meter';
+  entityName: string;
+}) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<HistoryRow[]>({
+    queryKey: ['entity-history', entityType, entityId, range],
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+
+      let raw: any[] = [];
+
+      if (entityType === 'locator') {
+        const { data } = await supabase
+          .from('locator_readings')
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .eq('locator_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = data ?? [];
+      } else if (entityType === 'well') {
+        const { data } = await supabase
+          .from('well_readings')
+          .select('reading_datetime, current_reading, previous_reading')
+          .eq('well_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = data ?? [];
+      } else {
+        const { data } = await supabase
+          .from('product_meter_readings' as any)
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .eq('meter_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = (data ?? []) as any[];
+      }
+
+      return raw.map((r: any) => {
+        const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
+        let consumption = 0;
+        if (r.daily_volume != null && +r.daily_volume > 0) {
+          consumption = +r.daily_volume;
+        } else if (r.current_reading != null && r.previous_reading != null) {
+          consumption = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        return { date: dateStr, consumption: +consumption.toFixed(2), reading: r.current_reading != null ? +r.current_reading : undefined };
+      }).filter(r => r.date);
+    },
+    staleTime: 60_000,
+  });
+
+  // Aggregate by date (sum consumption for multi-reading days)
+  const aggregated = useMemo<HistoryRow[]>(() => {
+    const map = new Map<string, HistoryRow>();
+    rows.forEach(r => {
+      if (map.has(r.date)) {
+        map.get(r.date)!.consumption += r.consumption;
+        if (r.reading != null) map.get(r.date)!.reading = r.reading;
+      } else {
+        map.set(r.date, { ...r });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [rows]);
+
+  const exportCSV = () => {
+    if (!aggregated.length) { toast.error('No data to export'); return; }
+    const header = 'date,consumption_m3,reading';
+    const lines = aggregated.map(r => `${r.date},${r.consumption},${r.reading ?? ''}`);
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${entityName.replace(/\s+/g, '_')}_history.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const totalConsumption = aggregated.reduce((s, r) => s + r.consumption, 0);
+  const avgConsumption = aggregated.length ? totalConsumption / aggregated.length : 0;
+
+  const customTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.name} style={{ color: p.color }}>
+            {p.name === 'consumption' ? 'Consumption' : 'Reading'}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
+            {p.name === 'consumption' ? ' m³' : ''}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Historical Consumption</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* Range pills */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >{r === 'all' ? 'All' : `${r}d`}</button>
+            ))}
+          </div>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={exportCSV}
+            title="Export to CSV"
+          >
+            <Download className="h-3 w-3" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      {aggregated.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Readings</div>
+            <div className="font-mono font-semibold text-base">{aggregated.length}</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Total</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(totalConsumption)}</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg/day</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(avgConsumption)}</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading chart…
+        </div>
+      ) : aggregated.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-52 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={aggregated} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / aggregated.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                interval="preserveStartEnd"
+                angle={-30}
+                textAnchor="end"
+                height={36}
+              />
+              <YAxis
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                width={38}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+              />
+              <Tooltip content={customTooltip} />
+              <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="consumption" radius={[2,2,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MeterDetailSheet ─────────────────────────────────────────────────────────
+// A button that expands into a Dialog showing meter details.
+// Used in LocatorDetail, WellDetail, etc. as a replacement for inline meter rows.
+
+function MeterDetailButton({
+  label,
+  icon,
+  fields,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  fields: { label: string; value: string | null | undefined }[];
+  children?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const filledCount = fields.filter(f => f.value && f.value !== '—').length;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors group text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon && <span className="text-muted-foreground">{icon}</span>}
+          <span className="text-sm font-medium truncate">{label}</span>
+          {filledCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
+              {filledCount} field{filledCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 -rotate-90" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {icon}
+              <span>{label}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {fields.map((f, i) => (
+                <div key={i} className={f.label === 'Installed' ? 'col-span-2' : ''}>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
+                  <div className="font-mono-num font-medium">{f.value || '—'}</div>
+                </div>
+              ))}
+            </div>
+            {children && <div className="pt-2 border-t">{children}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
@@ -1387,7 +1669,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggleOne(l.id)}
-                  className="mt-1 rounded-full"
+                  className="mt-0.5 rounded-full shrink-0"
                   data-testid={`locator-select-${l.id}`}
                 />
               )}
@@ -1406,7 +1688,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); toggleLocatorStatus(l); }}
                     title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       l.status === 'Active'
                         ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
@@ -1732,38 +2014,86 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
     queryKey: ['locator-replacements', locatorId],
     queryFn: async () => (await supabase.from('locator_meter_replacements').select('*').eq('locator_id', locatorId).order('replacement_date', { ascending: false })).data ?? [],
   });
-  if (!locator) return <div>Loading…</div>;
+  if (!locator) return (
+    <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+    </div>
+  );
+
+  const hasCoords = locator.gps_lat != null && locator.gps_lng != null;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${locator.gps_lat},${locator.gps_lng}` : null;
+
   return (
     <div className="space-y-3">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" /> Back</button>
+      {/* Back */}
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ChevronLeft className="h-4 w-4" /> Back to Locators
+      </button>
+
+      {/* Hero info card */}
       <Card className="p-3">
-        <h3 className="font-semibold">{locator.name}</h3>
-        <p className="text-xs text-muted-foreground">{locator.address}</p>
-        <div className="mt-3 text-sm space-y-1">
-          <div>Brand: <span className="font-medium">{locator.meter_brand ?? '—'}</span></div>
-          <div>Size: <span className="font-medium">{locator.meter_size ?? '—'}</span></div>
-          <div>Serial: <span className="font-mono-num">{locator.meter_serial ?? '—'}</span></div>
-          <div>Installed: <span>{locator.meter_installed_date ?? '—'}</span></div>
-          <div className="flex items-center gap-1">
-            <MapPin className="h-3 w-3 text-muted-foreground" />
-            GPS: <span className="font-mono-num">
-              {locator.gps_lat != null && locator.gps_lng != null
-                ? `${(+locator.gps_lat).toFixed(5)}, ${(+locator.gps_lng).toFixed(5)}`
-                : '—'}
-            </span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-base">{locator.name}</h3>
+            {locator.address && <p className="text-xs text-muted-foreground mt-0.5">{locator.address}</p>}
+            {hasCoords && (
+              <a href={mapsUrl!} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                <MapPin className="h-3 w-3" />
+                {(+locator.gps_lat).toFixed(5)}, {(+locator.gps_lng).toFixed(5)}
+              </a>
+            )}
           </div>
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+            locator.status === 'Active'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900'
+              : 'text-muted-foreground bg-muted border-border'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            {locator.status ?? 'Active'}
+          </span>
         </div>
-        <Button size="sm" className="mt-3" onClick={() => setReplaceOpen(true)}><Wrench className="h-3 w-3 mr-1" />Replace meter</Button>
       </Card>
+
+      {/* Meter — expandable popup button */}
+      <MeterDetailButton
+        label="Meter Details"
+        icon={<Gauge className="h-4 w-4" />}
+        fields={[
+          { label: 'Brand', value: locator.meter_brand },
+          { label: 'Size', value: locator.meter_size ? `${locator.meter_size} in` : null },
+          { label: 'Serial No.', value: locator.meter_serial },
+          { label: 'Installed', value: locator.meter_installed_date },
+        ]}
+      >
+        <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceOpen(true)}>
+          <Wrench className="h-3.5 w-3.5" /> Replace Meter
+        </Button>
+      </MeterDetailButton>
+
+      {/* Historical Consumption Chart */}
       <Card className="p-3">
-        <h4 className="text-sm font-semibold mb-2">Replacement history</h4>
-        {replacements?.length ? replacements.map((r: any) => (
-          <div key={r.id} className="border-t py-2 text-xs">
-            <div className="font-medium">{r.replacement_date}</div>
-            <div className="text-muted-foreground">Old SN {r.old_meter_serial ?? '—'} ({r.old_meter_final_reading ?? '—'}) → New SN {r.new_meter_serial ?? '—'} ({r.new_meter_initial_reading ?? '—'})</div>
-          </div>
-        )) : <p className="text-xs text-muted-foreground">No replacements</p>}
+        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} />
       </Card>
+
+      {/* Replacement history */}
+      <Card className="p-3">
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> Replacement History
+        </h4>
+        {replacements?.length ? (
+          <div className="space-y-0">
+            {(replacements as any[]).map((r: any) => (
+              <div key={r.id} className="border-t py-2 text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <div className="col-span-2 font-medium text-foreground">{r.replacement_date}</div>
+                <div className="text-muted-foreground">Old: SN {r.old_meter_serial ?? '—'} <span className="font-mono">({r.old_meter_final_reading ?? '—'})</span></div>
+                <div className="text-muted-foreground">New: SN {r.new_meter_serial ?? '—'} <span className="font-mono">({r.new_meter_initial_reading ?? '—'})</span></div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-xs text-muted-foreground">No replacements recorded</p>}
+      </Card>
+
       {replaceOpen && (
         <ReplaceMeterDialog
           kind="locator" assetId={locatorId} plantId={locator.plant_id} oldSerial={locator.meter_serial}
@@ -2126,7 +2456,7 @@ function WellsList({ plantId }: { plantId: string }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); toggleWellStatus(w); }}
                     title={isManager ? `Click to toggle status (currently ${w.status})` : w.status}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       w.status === 'Active'
                         ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
@@ -2411,6 +2741,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
               <Checkbox
                 checked={form.has_power_meter}
                 onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
+                className="rounded-full"
                 data-testid="add-well-has-power-meter"
               />
               <Zap className="h-3 w-3 text-amber-500" />
@@ -2473,7 +2804,6 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       return (data?.[0] ?? null) as any;
     },
   });
-  // Recent raw meter readings — water + power side by side (Section 3 of spec).
   const { data: rawReadings = [] } = useQuery<any[]>({
     queryKey: ['well-raw-readings', wellId],
     queryFn: async () => {
@@ -2486,153 +2816,181 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       return data ?? [];
     },
   });
-  if (!well) return <div>Loading…</div>;
+
+  if (!well) return (
+    <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+    </div>
+  );
+
   const latest = pms?.[0];
   const replacerName = latestReplacement?.replacer
     ? [latestReplacement.replacer.first_name, latestReplacement.replacer.last_name].filter(Boolean).join(' ')
     : null;
+  const hasCoords = (well as any).gps_lat != null && (well as any).gps_lng != null;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${(well as any).gps_lat},${(well as any).gps_lng}` : null;
+
   return (
     <div className="space-y-3">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" /> Back</button>
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ChevronLeft className="h-4 w-4" /> Back to Wells
+      </button>
+
+      {/* Hero */}
       <Card className="p-3">
-        <h3 className="font-semibold">{well.name}</h3>
-        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-          <span>{well.diameter ?? '—'}</span>
-          {(well as any).gps_lat != null && (well as any).gps_lng != null && (
-            <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              <span className="font-mono-num">{(+(well as any).gps_lat).toFixed(5)}, {(+(well as any).gps_lng).toFixed(5)}</span>
-            </span>
-          )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-base">{well.name}</h3>
+            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              {well.diameter && <span>{well.diameter}</span>}
+              {(well as any).drilling_depth_m && <span>{(well as any).drilling_depth_m} m depth</span>}
+            </div>
+            {hasCoords && (
+              <a href={mapsUrl!} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                <MapPin className="h-3 w-3" />
+                {(+(well as any).gps_lat).toFixed(5)}, {(+(well as any).gps_lng).toFixed(5)}
+              </a>
+            )}
+          </div>
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+            well.status === 'Active'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30'
+              : 'text-muted-foreground bg-muted border-border'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${well.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            {well.status ?? 'Active'}
+          </span>
         </div>
       </Card>
-      <Card className="p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold flex items-center gap-2"><Gauge className="h-4 w-4" />Hydraulic data</span>
+
+      {/* Water Meter — popup button */}
+      <MeterDetailButton
+        label="Water Meter"
+        icon={<Gauge className="h-4 w-4 text-blue-500" />}
+        fields={[
+          { label: 'Brand', value: well.meter_brand },
+          { label: 'Size', value: well.meter_size ? `${well.meter_size} in` : null },
+          { label: 'Serial No.', value: well.meter_serial },
+          { label: 'Installed', value: well.meter_installed_date },
+          { label: 'Last Replaced By', value: replacerName },
+          { label: 'Replacement Date', value: latestReplacement?.replacement_date },
+        ]}
+      >
+        <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceOpen(true)}>
+          <Wrench className="h-3.5 w-3.5" /> Replace Meter
+        </Button>
+      </MeterDetailButton>
+
+      {/* Electric Meter — popup button (if applicable) */}
+      {well.has_power_meter && (
+        <MeterDetailButton
+          label="Electric Meter"
+          icon={<Zap className="h-4 w-4 text-amber-500" />}
+          fields={[
+            { label: 'Brand', value: (well as any).electric_meter_brand },
+            { label: 'Size', value: (well as any).electric_meter_size },
+            { label: 'Serial No.', value: (well as any).electric_meter_serial },
+            { label: 'Installed', value: (well as any).electric_meter_installed_date },
+          ]}
+        >
           {isManager && (
-            <Button size="sm" variant="outline" onClick={() => setEditHydraulicOpen(true)}>
+            <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setEditElectricOpen(true)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit Electric Meter
+            </Button>
+          )}
+        </MeterDetailButton>
+      )}
+
+      {/* Historical Consumption Chart */}
+      <Card className="p-3">
+        <EntityHistoryChart entityId={wellId} entityType="well" entityName={well.name} />
+      </Card>
+
+      {/* Hydraulic data */}
+      <Card className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-semibold flex items-center gap-1.5">
+            <Gauge className="h-4 w-4 text-sky-500" /> Hydraulic Data
+          </span>
+          {isManager && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setEditHydraulicOpen(true)}>
               <Wrench className="h-3 w-3 mr-1" />Edit
             </Button>
           )}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div>Drilling depth: <span className="font-mono-num">{(latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m</span></div>
-          <div>SWL: <span className="font-mono-num">{latest?.static_water_level_m ?? '—'} m</span></div>
-          <div>PWL: <span className="font-mono-num">{latest?.pumping_water_level_m ?? '—'} m</span></div>
-          <div>Pump setting: <span>{latest?.pump_setting ?? '—'}</span></div>
-          <div>Motor HP: <span className="font-mono-num">{latest?.motor_hp ?? '—'}</span></div>
-          <div>TDS: <span className="font-mono-num">{latest?.tds_ppm ?? '—'} ppm</span></div>
-          <div>Turbidity: <span className="font-mono-num">{latest?.turbidity_ntu ?? '—'} NTU</span></div>
-          <div className="col-span-2 text-muted-foreground">Last gathered: {latest?.date_gathered ?? '—'}</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+          {[
+            ['Drilling depth', `${(latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m`],
+            ['SWL', `${latest?.static_water_level_m ?? '—'} m`],
+            ['PWL', `${latest?.pumping_water_level_m ?? '—'} m`],
+            ['Pump setting', latest?.pump_setting ?? '—'],
+            ['Motor HP', latest?.motor_hp ?? '—'],
+            ['TDS', `${latest?.tds_ppm ?? '—'} ppm`],
+            ['Turbidity', `${latest?.turbidity_ntu ?? '—'} NTU`],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
+              <div className="font-mono-num font-medium">{v}</div>
+            </div>
+          ))}
+          {latest?.date_gathered && (
+            <div className="col-span-2 text-[10px] text-muted-foreground pt-1">Last gathered: {latest.date_gathered}</div>
+          )}
         </div>
         {pms && pms.length > 1 && (
           <details className="mt-3">
-            <summary className="text-xs text-muted-foreground cursor-pointer">History ({pms.length})</summary>
-            <div className="mt-2 space-y-1 text-[11px] max-h-48 overflow-y-auto">
-              {pms.map((p: any) => (
-                <div key={p.id} className="border-t py-1">
-                  <span className="font-medium">{p.date_gathered}</span> · depth {p.drilling_depth_m ?? '—'}m · SWL {p.static_water_level_m ?? '—'}m · PWL {p.pumping_water_level_m ?? '—'}m
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+              History ({pms.length} records)
+            </summary>
+            <div className="mt-2 space-y-0 text-[11px] max-h-48 overflow-y-auto">
+              {(pms as any[]).map((p: any) => (
+                <div key={p.id} className="border-t py-1.5 grid grid-cols-3 gap-x-2">
+                  <span className="font-medium col-span-3">{p.date_gathered}</span>
+                  <span className="text-muted-foreground">D: {p.drilling_depth_m ?? '—'}m</span>
+                  <span className="text-muted-foreground">SWL: {p.static_water_level_m ?? '—'}m</span>
+                  <span className="text-muted-foreground">PWL: {p.pumping_water_level_m ?? '—'}m</span>
                 </div>
               ))}
             </div>
           </details>
         )}
       </Card>
-      <Card className="p-3">
-        <div className="flex justify-between items-center">
-          <h4 className="text-sm font-semibold inline-flex items-center gap-1">
-            <Gauge className="h-3.5 w-3.5" /> Active Water Meter
-          </h4>
-          <Button size="sm" variant="outline" onClick={() => setReplaceOpen(true)}><Wrench className="h-3 w-3 mr-1" />Replace</Button>
-        </div>
-        <div className="mt-2 text-xs space-y-1">
-          <div>Brand: {well.meter_brand ?? '—'}</div>
-          <div>Size: <span className="font-mono-num">{well.meter_size ?? '—'}</span> {well.meter_size && <span className="text-muted-foreground">inch</span>}</div>
-          <div>Serial: <span className="font-mono-num">{well.meter_serial ?? '—'}</span></div>
-          <div>Installed: {well.meter_installed_date ?? '—'}</div>
-          <div className="text-muted-foreground">
-            Replaced by: {replacerName ?? '—'}
-            {latestReplacement?.replacement_date ? ` on ${latestReplacement.replacement_date}` : ''}
-          </div>
-        </div>
-      </Card>
 
-      {well.has_power_meter && (
-        <Card className="p-3" data-testid="well-electric-meter-card">
-          <div className="flex justify-between items-center">
-            <h4 className="text-sm font-semibold inline-flex items-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-amber-500" /> Active Electric Meter
-            </h4>
-            {isManager && (
-              <Button size="sm" variant="outline" onClick={() => setEditElectricOpen(true)}>
-                <Wrench className="h-3 w-3 mr-1" />Edit
-              </Button>
-            )}
-          </div>
-          <div className="mt-2 text-xs space-y-1">
-            <div>Brand: {(well as any).electric_meter_brand ?? '—'}</div>
-            <div>Size: <span className="font-mono-num">{(well as any).electric_meter_size ?? '—'}</span></div>
-            <div>Serial: <span className="font-mono-num">{(well as any).electric_meter_serial ?? '—'}</span></div>
-            <div>Installed: {(well as any).electric_meter_installed_date ?? '—'}</div>
-          </div>
-        </Card>
-      )}
-      {/* Raw Readings — water meter + power meter side by side (last 10) */}
-      <Card className="p-3" data-testid="well-raw-readings-card">
-        <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
-          <h4 className="text-sm font-semibold inline-flex items-center gap-1">
-            <Gauge className="h-3.5 w-3.5" /> Raw Readings
+      {/* Recent raw readings table */}
+      {rawReadings.length > 0 && (
+        <Card className="p-3" data-testid="well-raw-readings-card">
+          <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+            <Gauge className="h-3.5 w-3.5" /> Recent Readings
             {well.has_power_meter && (
-              <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+              <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 px-1.5 py-0.5 rounded">
                 <Zap className="h-2.5 w-2.5" /> kWh tracked
               </span>
             )}
           </h4>
-          <span className="text-[10px] text-muted-foreground">last {rawReadings.length} of 10</span>
-        </div>
-        {rawReadings.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic py-2 text-center">
-            No meter readings recorded yet
-          </div>
-        ) : (
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-xs">
               <thead className="text-[10px] uppercase text-muted-foreground">
                 <tr className="border-b">
-                  <th className="text-left px-1 py-1.5 font-medium">When</th>
-                  <th className="text-right px-1 py-1.5 font-medium">
-                    <span className="inline-flex items-center gap-0.5">
-                      <Gauge className="h-2.5 w-2.5" /> Water (m³)
-                    </span>
-                  </th>
-                  <th className="text-right px-1 py-1.5 font-medium">Δ</th>
-                  {well.has_power_meter && (
-                    <th className="text-right px-1 py-1.5 font-medium">
-                      <span className="inline-flex items-center gap-0.5">
-                        <Zap className="h-2.5 w-2.5 text-amber-500" /> Power (kWh)
-                      </span>
-                    </th>
-                  )}
+                  <th className="text-left px-1 py-1 font-medium">Date</th>
+                  <th className="text-right px-1 py-1 font-medium">Water m³</th>
+                  <th className="text-right px-1 py-1 font-medium">Δ</th>
+                  {well.has_power_meter && <th className="text-right px-1 py-1 font-medium">kWh</th>}
                 </tr>
               </thead>
               <tbody>
                 {rawReadings.map((r: any) => {
                   const delta = r.previous_reading != null && r.current_reading != null
-                    ? +r.current_reading - +r.previous_reading
-                    : null;
+                    ? +r.current_reading - +r.previous_reading : null;
                   return (
                     <tr key={r.id} className="border-b last:border-0">
-                      <td className="px-1 py-1.5 text-muted-foreground whitespace-nowrap">
+                      <td className="px-1 py-1 text-muted-foreground whitespace-nowrap">
                         {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d HH:mm') : '—'}
                       </td>
-                      <td className="px-1 py-1.5 text-right font-mono-num">
-                        {r.current_reading != null ? fmtNum(+r.current_reading) : '—'}
-                      </td>
-                      <td className="px-1 py-1.5 text-right font-mono-num text-muted-foreground">
-                        {delta != null ? fmtNum(delta) : '—'}
-                      </td>
+                      <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading) : '—'}</td>
+                      <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta) : '—'}</td>
                       {well.has_power_meter && (
-                        <td className="px-1 py-1.5 text-right font-mono-num text-amber-700 dark:text-amber-300">
+                        <td className="px-1 py-1 text-right font-mono-num text-amber-700 dark:text-amber-300">
                           {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading) : '—'}
                         </td>
                       )}
@@ -2642,8 +3000,8 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
               </tbody>
             </table>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {replaceOpen && (
         <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
@@ -3287,6 +3645,106 @@ function EditTrainDialog({
   );
 }
 
+// ─── Train History Chart ─────────────────────────────────────────────────────
+// Queries ro_train_readings for daily production volume and renders a bar chart.
+
+function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<{ date: string; volume: number }[]>({
+    queryKey: ['train-history', trainId, range],
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('reading_datetime, permeate_flow, product_flow, net_production')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+
+      // Aggregate per day — use permeate_flow or product_flow or net_production
+      const byDate = new Map<string, number>();
+      for (const r of data ?? []) {
+        const date = (r as any).reading_datetime?.slice(0, 10) ?? '';
+        if (!date) continue;
+        const vol = +((r as any).net_production ?? (r as any).permeate_flow ?? (r as any).product_flow ?? 0);
+        byDate.set(date, (byDate.get(date) ?? 0) + vol);
+      }
+      return Array.from(byDate.entries()).map(([date, volume]) => ({ date, volume: +volume.toFixed(2) })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const blob = new Blob([['date,volume_m3', ...rows.map(r => `${r.date},${r.volume}`)].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `${trainLabel.replace(/\s+/g,'_')}_history.csv`; a.click(); URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const total = rows.reduce((s, r) => s + r.volume, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Production History</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV} title="Export CSV">
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase">Days</div>
+            <div className="font-mono font-semibold text-base">{rows.length}</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase">Total m³</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(total)}</div>
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-44 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / rows.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={38} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)} />
+              <Tooltip formatter={(v: any) => [`${fmtNum(v)} m³`, 'Volume']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Bar dataKey="volume" fill="hsl(174, 72%, 40%)" radius={[2,2,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Trains List ─────────────────────────────────────────────────────────────
 
 function TrainsList({ plantId }: { plantId: string }) {
@@ -3412,6 +3870,7 @@ function TrainsList({ plantId }: { plantId: string }) {
     (t as any).filter_media_type ?? (plant as any)?.filter_media_type ?? 'AFM';
   const effectiveFilterType = (t: any) =>
     (t as any).filter_housing_type ?? (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
+  const [selectedTrain, setSelectedTrain] = useState<string | null>(null);
 
   return (
     <div className="space-y-2">
@@ -3440,10 +3899,11 @@ function TrainsList({ plantId }: { plantId: string }) {
         const mt = effectiveMediaType(t);
         const ft = effectiveFilterType(t);
         const effectiveStatus = deriveTrainStatus(t);
+        const isExpanded = selectedTrain === t.id;
         return (
           <Card key={t.id} className="p-3" data-testid={`train-card-${t.id}`}>
             <div className="flex justify-between items-start gap-2">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setSelectedTrain(isExpanded ? null : t.id)}>
                 <div className="font-medium text-sm">
                   Train {t.train_number}{t.name ? ` · ${t.name}` : ''}
                 </div>
@@ -3451,28 +3911,24 @@ function TrainsList({ plantId }: { plantId: string }) {
                   <span>{mt} × {t.num_afm ?? 0}</span>
                   <span>BP × {t.num_booster_pumps ?? 0}</span>
                   <span>HPP × {t.num_hp_pumps ?? 0}</span>
-                  <span>{ft === 'Bag Filter' ? 'Filter Housing' : 'Cartridge Filter Housing'} × {t.num_cartridge_filters ?? 0}</span>
-                  {(t.num_controllers ?? 0) > 0 && <span>Controllers × {t.num_controllers}</span>}
-                  {ft !== 'Bag Filter' && (t.num_filter_housings ?? 0) > 0 && <span>Filter Housings × {t.num_filter_housings}</span>}
+                  <span>{ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'} × {t.num_cartridge_filters ?? 0}</span>
+                  {(t.num_controllers ?? 0) > 0 && <span>Ctrl × {t.num_controllers}</span>}
                 </div>
                 {/* Type badges + Open log link */}
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-                    {mt}
-                  </span>
-                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
-                    {ft}
-                  </span>
-                  <button className="text-[11px] text-teal-600 hover:underline ml-0.5" onClick={() => navigate('/ro-trains')}>Open log →</button>
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">{mt}</span>
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">{ft}</span>
+                  <button className="text-[11px] text-teal-600 hover:underline ml-0.5" onClick={(e) => { e.stopPropagation(); navigate('/ro-trains'); }}>Open log →</button>
+                  <TrendingUp className={`h-3 w-3 transition-colors ${isExpanded ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
                 </div>
               </div>
               {/* Right column: status + actions */}
               <div className="flex flex-col items-end gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => toggleTrainStatus(t)}
+                  onClick={(e) => { e.stopPropagation(); toggleTrainStatus(t); }}
                   title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
-                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md shrink-0 border transition-colors ${
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
                     effectiveStatus === 'Running'
                       ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
                       : effectiveStatus === 'Maintenance'
@@ -3488,30 +3944,24 @@ function TrainsList({ plantId }: { plantId: string }) {
                   {effectiveStatus}
                 </button>
                 <div className="flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setEditTrain(t)}
-                    data-testid={`edit-train-${t.id}`}
-                  >
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); setEditTrain(t); }} data-testid={`edit-train-${t.id}`}>
                     <Wrench className="h-3 w-3 mr-1" />Edit
                   </Button>
                   {isManager && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                      title="Delete train"
-                      onClick={() => { setTrainDeleteTarget(t); setTrainDeleteReason(''); }}
-                      data-testid={`delete-train-${t.id}`}
-                    >
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete train"
+                      onClick={(e) => { e.stopPropagation(); setTrainDeleteTarget(t); setTrainDeleteReason(''); }} data-testid={`delete-train-${t.id}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>
               </div>
             </div>
+            {/* Expandable train history */}
+            {isExpanded && (
+              <div className="mt-3 pt-3 border-t">
+                <TrainHistoryChart trainId={t.id} trainLabel={`Train ${t.train_number}${t.name ? ' · ' + t.name : ''}`} />
+              </div>
+            )}
           </Card>
         );
       })}
@@ -4241,6 +4691,92 @@ function MeterNameListRows({
   );
 }
 
+// ─── Power History Chart ──────────────────────────────────────────────────────
+function PowerHistoryChart({ plantId, hasSolar, hasGrid }: { plantId: string; hasSolar: boolean; hasGrid: boolean }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<{ date: string; solar: number; grid: number }[]>({
+    queryKey: ['power-history', plantId, range],
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await supabase
+        .from('power_readings' as any)
+        .select('reading_datetime, solar_kwh, grid_kwh, meter_reading_kwh, source_type')
+        .eq('plant_id', plantId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+
+      const byDate = new Map<string, { solar: number; grid: number }>();
+      for (const r of (data ?? []) as any[]) {
+        const date = r.reading_datetime?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date)) byDate.set(date, { solar: 0, grid: 0 });
+        const entry = byDate.get(date)!;
+        const kwh = +(r.meter_reading_kwh ?? 0);
+        if (r.source_type === 'solar' || r.solar_kwh != null) entry.solar += +(r.solar_kwh ?? kwh);
+        else entry.grid += +(r.grid_kwh ?? kwh);
+      }
+      return Array.from(byDate.entries()).map(([date, v]) => ({ date, solar: +v.solar.toFixed(2), grid: +v.grid.toFixed(2) })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const blob = new Blob([['date,solar_kwh,grid_kwh', ...rows.map(r => `${r.date},${r.solar},${r.grid}`)].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
+    a.download = `power_history_${plantId}.csv`; a.click(); URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Power Consumption History</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No power readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-52 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(14, 400 / rows.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={42} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)} />
+              <Tooltip formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? 'Solar' : 'Grid']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              {hasSolar && <Bar dataKey="solar" fill="hsl(48, 96%, 53%)" name="solar" radius={[2,2,0,0]} stackId="a" />}
+              {hasGrid  && <Bar dataKey="grid"  fill="hsl(213, 94%, 68%)" name="grid"  radius={[2,2,0,0]} stackId="a" />}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PowerMetersCard ──────────────────────────────────────────────────────────
 // Lives in Plant Detail > Power tab.
 // Manages: solar meter count + names, grid meter count + names.
@@ -4508,6 +5044,11 @@ function PowerMetersCard({ plant }: { plant: any }) {
         ) : (
           <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
         )}
+      </Card>
+
+      {/* ── Power Consumption History ── */}
+      <Card className="p-4">
+        <PowerHistoryChart plantId={plant.id} hasSolar={hasSolar} hasGrid={hasGrid} />
       </Card>
     </div>
   );
