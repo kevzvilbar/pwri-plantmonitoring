@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Upload, Download, FileText } from 'lucide-react';
 
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
@@ -383,39 +385,45 @@ function Power() {
     qc.invalidateQueries({ queryKey: ['tariffs'] });
   };
 
-  const importRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !plantId) { if (!plantId) toast.error('Select a plant before importing'); e.target.value = ''; return; }
+  const downloadTemplate = () => {
+    const headers = 'billing_month,period_start,period_end,previous_reading,current_reading,multiplier,generation_charge,distribution_charge,other_charges,total_amount,provider,remarks';
+    const example = '2026-05-01,2026-04-01,2026-04-30,12000,12950,120,15000,8000,2000,25000,VECO / NGCP,';
+    const blob = new Blob([`${headers}\n${example}\n`], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'power_billing_template.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async () => {
+    if (!importFile || !plantId) { toast.error('Select a plant and a file'); return; }
+    setImporting(true);
     try {
-      const text = await file.text();
-      let rows: Record<string, any>[] = [];
-      if (file.name.endsWith('.json')) {
-        const parsed = JSON.parse(text);
-        rows = Array.isArray(parsed) ? parsed : [parsed];
-      } else {
-        const lines = text.trim().split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-        rows = lines.slice(1).map(line => {
-          const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-          return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-        });
-      }
+      const text = await importFile.text();
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const rows = lines.slice(1).map(line => {
+        const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+      });
       let inserted = 0;
       for (const row of rows) {
         const payload: Record<string, any> = {
           plant_id: plantId,
-          billing_month: row.billing_month || row.billingMonth || null,
-          period_start: row.period_start || row.periodStart || null,
-          period_end: row.period_end || row.periodEnd || null,
-          previous_reading: row.previous_reading != null && row.previous_reading !== '' ? +row.previous_reading : null,
-          current_reading: row.current_reading != null && row.current_reading !== '' ? +row.current_reading : null,
+          billing_month: row.billing_month || null,
+          period_start: row.period_start || null,
+          period_end: row.period_end || null,
+          previous_reading: row.previous_reading !== '' ? +row.previous_reading : null,
+          current_reading: row.current_reading !== '' ? +row.current_reading : null,
           multiplier: row.multiplier ? +row.multiplier : 1,
-          generation_charge: row.generation_charge != null && row.generation_charge !== '' ? +row.generation_charge : null,
-          distribution_charge: row.distribution_charge != null && row.distribution_charge !== '' ? +row.distribution_charge : null,
-          other_charges: row.other_charges != null && row.other_charges !== '' ? +row.other_charges : null,
-          total_amount: row.total_amount != null && row.total_amount !== '' ? +row.total_amount : null,
+          generation_charge: row.generation_charge !== '' ? +row.generation_charge : null,
+          distribution_charge: row.distribution_charge !== '' ? +row.distribution_charge : null,
+          other_charges: row.other_charges !== '' ? +row.other_charges : null,
+          total_amount: row.total_amount !== '' ? +row.total_amount : null,
           provider: row.provider || null,
           remarks: row.remarks || 'Imported',
           recorded_by: user?.id,
@@ -427,14 +435,95 @@ function Power() {
       toast.success(`Imported ${inserted} of ${rows.length} bill(s)`);
       qc.invalidateQueries({ queryKey: ['bills'] });
       qc.invalidateQueries({ queryKey: ['tariffs'] });
+      setImportOpen(false);
+      setImportFile(null);
     } catch (err: any) {
       toast.error(`Import failed: ${err.message}`);
     }
-    e.target.value = '';
+    setImporting(false);
   };
 
   return (
     <div className="space-y-3">
+      {/* Import Power Billing Dialog */}
+      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) setImportFile(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Upload className="w-4 h-4" />
+              Import Power Billing from CSV
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Download template row */}
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={downloadTemplate}>
+                <Download className="w-3.5 h-3.5" />
+                Download Template
+              </Button>
+              <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+            </div>
+
+            {/* Expected columns */}
+            <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
+                <FileText className="w-3.5 h-3.5" />
+                Expected Columns:
+              </div>
+              <p className="text-xs font-mono leading-relaxed">
+                <span className="font-semibold">billing_month*</span>, period_start, period_end, previous_reading, current_reading, multiplier, generation_charge, distribution_charge, other_charges, <span className="font-semibold">total_amount*</span>, provider, remarks
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Columns marked * are required. <span className="font-mono">billing_month</span> format: <span className="font-mono">YYYY-MM-DD</span> (e.g. 2026-05-01).
+              </p>
+            </div>
+
+            {/* File picker */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Select CSV file <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="shrink-0 gap-1.5 bg-teal-700 hover:bg-teal-800 text-white"
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Choose File
+                </Button>
+                <span className="text-xs text-muted-foreground truncate">
+                  {importFile ? importFile.name : 'No file chosen'}
+                </span>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => { setImportOpen(false); setImportFile(null); }}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-teal-700 hover:bg-teal-800 text-white"
+              disabled={!importFile || importing}
+              onClick={handleImport}
+            >
+              {importing ? 'Importing…' : 'Import Rows'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="p-3 space-y-3">
         <div>
           <Label className="text-xs">Plant</Label>
@@ -445,11 +534,10 @@ function Power() {
               variant="outline"
               size="sm"
               className="shrink-0 h-9 text-xs whitespace-nowrap"
-              onClick={() => importRef.current?.click()}
+              onClick={() => { if (!plantId) { toast.error('Select a plant first'); return; } setImportOpen(true); }}
             >
               Import
             </Button>
-            <input ref={importRef} type="file" accept=".csv,.json" className="hidden" onChange={handleImport} />
           </div>
         </div>
 
