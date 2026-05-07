@@ -760,25 +760,32 @@ export function TrendChart({
           )}
         </div>
 
-        {/* Data Summary toggle — sits at the right end of the same row */}
+        {/* Data Summary — opens a popup dialog (non-retractable) */}
         <button
-          onClick={() => setShowSummary((v) => !v)}
-          className={[
-            'ml-auto h-5 px-2 rounded text-[10px] font-medium transition-colors leading-none shrink-0 border',
-            showSummary
-              ? 'bg-teal-700 text-white border-teal-700'
-              : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-          ].join(' ')}
-          title="Toggle data summary table"
+          onClick={() => setShowSummary(true)}
+          className="ml-auto h-5 px-2 rounded text-[10px] font-medium transition-colors leading-none shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
+          title="Open data summary table"
         >
-          {showSummary ? 'Hide Table' : 'Data Summary'}
+          Data Summary
         </button>
       </div>
 
-      {/* ── Data Summary Table ───────────────────────────────────────────── */}
-      {showSummary && chartData.length > 0 && (
-        <div className="mb-2 rounded-lg border border-border overflow-hidden">
-          <div className="overflow-x-auto max-h-[220px] overflow-y-auto">
+      {/* ── Data Summary Popup Dialog ────────────────────────────────────── */}
+      <Dialog open={showSummary} onOpenChange={(v) => { if (!v) setShowSummary(false); }}>
+        <DialogContent className="max-w-[92vw] w-full max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden" data-testid={`dsm-popup-${metric}`}>
+          <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              Data Summary — {title ?? metric}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Tabular data summary for the {title ?? metric} chart over the selected range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {chartData.length === 0 ? (
+              <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>
+            ) : (
+          <div className="overflow-x-auto overflow-y-auto h-full">
             <table className="w-full text-[10px] border-collapse">
               <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
                 <tr>
@@ -976,8 +983,11 @@ export function TrendChart({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
