@@ -1935,23 +1935,33 @@ function ProductForm() {
                   if (existing && existing.length > 0) {
                     const decision = await resolveImportDuplicate(`${meterId}|${dtMin}`, `${r.meter_name} @ ${dtMin}`);
                     if (decision === 'skip') continue;
+                    const csvCur = +r.current_reading;
+                    const csvPrev = r.previous_reading ? +r.previous_reading : null;
+                    // Bug fix: persist daily_volume on update so Dashboard aggregation works
+                    const csvDailyVol = csvPrev != null ? Math.max(0, csvCur - csvPrev) : null;
                     const { error } = await supabase.from('product_meter_readings' as any).update({
-                      current_reading: +r.current_reading,
-                      previous_reading: r.previous_reading ? +r.previous_reading : null,
+                      current_reading: csvCur,
+                      previous_reading: csvPrev,
                       reading_datetime: dt,
                       recorded_by: user?.id ?? null,
+                      daily_volume: csvDailyVol,   // Bug fix: persist computed delta
                     } as any).eq('id', (existing as any[])[0].id);
                     if (error) errors.push(error.message); else count++;
                     continue;
                   }
 
+                  const csvCur2 = +r.current_reading;
+                  const csvPrev2 = r.previous_reading ? +r.previous_reading : null;
+                  // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly
+                  const csvDailyVol2 = csvPrev2 != null ? Math.max(0, csvCur2 - csvPrev2) : null;
                   const { error } = await supabase.from('product_meter_readings' as any).insert({
                     meter_id: meterId,
                     plant_id: pid,
-                    current_reading: +r.current_reading,
-                    previous_reading: r.previous_reading ? +r.previous_reading : null,
+                    current_reading: csvCur2,
+                    previous_reading: csvPrev2,
                     reading_datetime: dt,
                     recorded_by: user?.id ?? null,
+                    daily_volume: csvDailyVol2,   // Bug fix: always persist computed delta
                   } as any);
                   if (error) errors.push(error.message);
                   else count++;
@@ -2050,6 +2060,9 @@ function ProductMeterRow({
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
     setSaving(true);
     const dt = new Date(customDt).toISOString();
+    // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly,
+    // mirroring the same fix already applied to locator_readings and well_readings.
+    const dailyVol = previous != null ? Math.max(0, cur - previous) : null;
     const { error } = await supabase.from('product_meter_readings' as any).insert({
       meter_id: meter.id,
       plant_id: plantId,
@@ -2057,6 +2070,7 @@ function ProductMeterRow({
       previous_reading: previous,
       reading_datetime: dt,
       recorded_by: userId,
+      daily_volume: dailyVol,   // Bug fix: always persist computed delta for Dashboard aggregation
     } as any);
     if (error) { toast.error(error.message); setSaving(false); return; }
 
