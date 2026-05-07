@@ -41,11 +41,87 @@ import {
 
 type SummaryTab = 'consumption' | 'production';
 
-function resolveVolSummary(r: any): number {
-  if (r.daily_volume != null && +r.daily_volume > 0) return +r.daily_volume;
-  if (r.current_reading != null && r.previous_reading != null)
-    return Math.max(0, +r.current_reading - +r.previous_reading);
-  return 0;
+/**
+ * Mirrors TrendChart.tsx `computeEntityDeltas` exactly.
+ *
+ * Groups readings by entityKey (locator_id / meter_id), sorts them by
+ * reading_datetime asc, then computes a replacement-aware delta per row:
+ *   • is_meter_replacement row  → delta 0, set afterRepl flag
+ *   • first row after repl      → delta 0, clear flag
+ *   • normal row with daily_volume → use daily_volume (clamped ≥ 0)
+ *   • normal row without daily_volume → current_reading − previous_reading (clamped ≥ 0)
+ *   • no predecessor at all → use previous_reading field if present, else 0
+ *
+ * Returns a Map<dateKey, Map<entityKey, volume>> ready for the pivot table.
+ */
+function computePivotFromReadings(
+  readings: any[],
+  entityKeyField: string,
+  dailyVolumeField: string | null,
+): Map<string, Map<string, number>> {
+  // Group by entity
+  const byEntity = new Map<string, any[]>();
+  readings.forEach((r) => {
+    const key = r[entityKeyField] ?? '__';
+    if (!byEntity.has(key)) byEntity.set(key, []);
+    byEntity.get(key)!.push(r);
+  });
+
+  const pivot = new Map<string, Map<string, number>>();
+
+  byEntity.forEach((rows, entityKey) => {
+    // Sort ascending so we walk the timeline forward
+    const sorted = [...rows].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+
+    const lastReading = new Map<string, number>(); // entityKey → last current_reading
+    const afterRepl   = new Set<string>();
+
+    sorted.forEach((r) => {
+      const isMR = !!r.is_meter_replacement;
+      const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+
+      if (isMR) {
+        // Replacement row: zero delta, update baseline, flag next row
+        lastReading.set(entityKey, +r.current_reading);
+        afterRepl.add(entityKey);
+        // Do NOT add any volume for this row
+        return;
+      }
+
+      if (afterRepl.has(entityKey)) {
+        // First real row after a replacement: zero delta (no valid predecessor)
+        lastReading.set(entityKey, +r.current_reading);
+        afterRepl.delete(entityKey);
+        return;
+      }
+
+      let delta = 0;
+
+      if (dailyVolumeField && r[dailyVolumeField] != null) {
+        delta = Math.max(0, +r[dailyVolumeField]);
+        lastReading.set(entityKey, +r.current_reading);
+      } else if (!lastReading.has(entityKey)) {
+        // First reading in the fetch window — use stored previous_reading if available
+        if (r.previous_reading != null && r.current_reading != null) {
+          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        lastReading.set(entityKey, +r.current_reading);
+      } else {
+        delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+        lastReading.set(entityKey, +r.current_reading);
+      }
+
+      pivot.get(dateKey)!.set(
+        entityKey,
+        (pivot.get(dateKey)!.get(entityKey) ?? 0) + delta,
+      );
+    });
+  });
+
+  return pivot;
 }
 
 function summaryPctDelta(today: number, yesterday: number): number | null {
@@ -103,7 +179,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       if (!locatorIds.length) return [];
       const { data } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -132,7 +208,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     queryFn: async () => {
       if (!meterIds.length) return [];
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -144,6 +220,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
   // Returns { dates, entities, pivot } where pivot[date][entityId] = volume
+  // Uses computePivotFromReadings (mirrors TrendChart computeEntityDeltas) so
+  // meter-replacement rows and their immediate successors are correctly zeroed.
   const consPivot = useMemo(() => {
     const sortedLocs = [...(locators ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
@@ -151,24 +229,12 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
 
-    // Group readings by locator, sorted by datetime, compute deltas
-    const byLocator = new Map<string, any[]>();
-    (consReadings ?? []).forEach((r: any) => {
-      if (!byLocator.has(r.locator_id)) byLocator.set(r.locator_id, []);
-      byLocator.get(r.locator_id)!.push(r);
-    });
-
-    // date string → locatorId → volume
-    const pivot = new Map<string, Map<string, number>>();
-
-    byLocator.forEach((readings, locId) => {
-      readings.forEach((r) => {
-        const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
-        const vol = resolveVolSummary(r);
-        pivot.get(dateKey)!.set(locId, (pivot.get(dateKey)!.get(locId) ?? 0) + vol);
-      });
-    });
+    // Replacement-aware delta pivot (locator_id keyed, daily_volume preferred)
+    const pivot = computePivotFromReadings(
+      consReadings ?? [],
+      'locator_id',
+      'daily_volume',
+    );
 
     // Fill every date in the selected range — not just dates that have readings.
     // Without this, days with zero consumption are invisible in the table.
@@ -189,21 +255,12 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
 
-    const byMeter = new Map<string, any[]>();
-    (prodReadings ?? []).forEach((r: any) => {
-      if (!byMeter.has(r.meter_id)) byMeter.set(r.meter_id, []);
-      byMeter.get(r.meter_id)!.push(r);
-    });
-
-    const pivot = new Map<string, Map<string, number>>();
-    byMeter.forEach((readings, meterId) => {
-      readings.forEach((r) => {
-        const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
-        const vol = resolveVolSummary(r);
-        pivot.get(dateKey)!.set(meterId, (pivot.get(dateKey)!.get(meterId) ?? 0) + vol);
-      });
-    });
+    // Replacement-aware delta pivot (meter_id keyed, daily_volume preferred)
+    const pivot = computePivotFromReadings(
+      prodReadings ?? [],
+      'meter_id',
+      'daily_volume',
+    );
 
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
