@@ -299,7 +299,10 @@ function DataSummaryPopup({
   const filteredChartData = useMemo(() => {
     if (!parsedFrom && !parsedTo) return chartData;
     return chartData.filter((d) => {
-      const dt = new Date(d.date);
+      // d.date is 'MMM d' format — not parseable by new Date().
+      // Use the stored isoDate (full ISO string) for reliable comparison.
+      const dt = d.isoDate ? new Date(d.isoDate) : null;
+      if (!dt) return true;
       if (parsedFrom && dt < parsedFrom) return false;
       if (parsedTo && dt > parsedTo) return false;
       return true;
@@ -808,7 +811,7 @@ export function TrendChart({
     const byDay = new Map<string, any>();
     const ensure = (d: string, sortKey: number) =>
       byDay.get(d) ?? byDay.set(d, {
-        date: d, sortKey,
+        date: d, sortKey, isoDate: new Date(sortKey).toISOString(),
         production: 0, consumption: 0, rawwater: 0,
         recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0,
@@ -891,6 +894,16 @@ export function TrendChart({
 
         if (!lastReading.has(entityKey)) {
           lastReading.set(entityKey, +r.current_reading);
+          // Bug fix: if the DB stored previous_reading, compute the delta
+          // instead of returning 0.  Without this, the first reading in the
+          // fetch window (which has no prior in-memory row) always shows 0 —
+          // causing every locator/well to report no data at the start of a
+          // long range even though readings exist in the database.
+          if (r.previous_reading != null) {
+            const rawDelta = +r.current_reading - +r.previous_reading;
+            const delta    = Math.max(0, rawDelta);
+            return { r, delta, rawDelta, isMeterReplacement: false };
+          }
           return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
         }
 
