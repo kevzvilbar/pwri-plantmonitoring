@@ -89,7 +89,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       if (!plantIds.length) return [];
       const { data } = await supabase
         .from('locators').select('id,name,code,plant_id')
-        .in('plant_id', plantIds).eq('active', true);
+        .in('plant_id', plantIds).eq('status', 'Active');
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
@@ -170,9 +170,17 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       });
     });
 
-    const dates = Array.from(pivot.keys()).sort();
-    return { dates, entities: sortedLocs, pivot };
-  }, [locators, consReadings, plantCodeById]);
+    // Fill every date in the selected range — not just dates that have readings.
+    // Without this, days with zero consumption are invisible in the table.
+    const allDates: string[] = [];
+    const cur = new Date(fromStr + 'T00:00:00');
+    const end = new Date(toStr   + 'T00:00:00');
+    while (cur <= end) {
+      allDates.push(format(cur, 'yyyy-MM-dd'));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return { dates: allDates, entities: sortedLocs, pivot };
+  }, [locators, consReadings, plantCodeById, fromStr, toStr]);
 
   const prodPivot = useMemo(() => {
     const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
@@ -197,9 +205,16 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       });
     });
 
-    const dates = Array.from(pivot.keys()).sort();
-    return { dates, entities: sortedMeters, pivot };
-  }, [productMeters, prodReadings, plantCodeById]);
+    // Fill every date in the selected range — not just dates with readings.
+    const allDates2: string[] = [];
+    const cur2 = new Date(fromStr + 'T00:00:00');
+    const end2 = new Date(toStr   + 'T00:00:00');
+    while (cur2 <= end2) {
+      allDates2.push(format(cur2, 'yyyy-MM-dd'));
+      cur2.setDate(cur2.getDate() + 1);
+    }
+    return { dates: allDates2, entities: sortedMeters, pivot };
+  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
 
   const isLoading = tab === 'consumption' ? consLoading : prodLoading;
   const { dates, entities, pivot } = tab === 'consumption' ? consPivot : prodPivot;
