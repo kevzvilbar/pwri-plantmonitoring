@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { calc } from '@/lib/calculations';
@@ -17,6 +17,433 @@ import {
   ChartMetric, DashboardViewMode, RANGE_DAYS, RangeKey, TREND_Y_LABEL,
 } from './types';
 import { useAppStore } from '@/store/appStore';
+
+// ─── helpers shared by DataSummaryPopup ──────────────────────────────────────
+
+/** Resolve a single reading row → delta volume (m³), clamped to 0. */
+function resolveReadingDelta(r: any): number {
+  if (r.daily_volume != null && +r.daily_volume > 0) return +r.daily_volume;
+  if (r.current_reading != null && r.previous_reading != null)
+    return Math.max(0, +r.current_reading - +r.previous_reading);
+  return 0;
+}
+
+/**
+ * Build a pivot:  dateKey (MMM d) → entityId → summed volume.
+ * Readings must already be sorted by reading_datetime asc.
+ */
+function buildEntityPivot(
+  readings: any[],
+  entityField: string,
+): Map<string, Map<string, number>> {
+  const pivot = new Map<string, Map<string, number>>();
+  readings.forEach((r) => {
+    if (r.is_meter_replacement) return;          // skip replacement rows
+    const dateKey = format(new Date(r.reading_datetime), 'MMM d');
+    const entityId = r[entityField] ?? '__';
+    const vol = resolveReadingDelta(r);
+    if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+    pivot.get(dateKey)!.set(entityId, (pivot.get(dateKey)!.get(entityId) ?? 0) + vol);
+  });
+  return pivot;
+}
+
+type DSMTab = 'overview' | 'production' | 'consumption';
+
+// ─── CSS class helpers (avoids repetition) ──────────────────────────────────
+const TH = 'px-3 py-2 text-right text-[10px] font-semibold text-muted-foreground whitespace-nowrap border-b border-border';
+const TH_DATE = 'px-3 py-2 text-left text-[10px] font-semibold text-muted-foreground whitespace-nowrap border-b border-border sticky left-0 bg-muted/95';
+const TH_TOTAL = 'px-3 py-2 text-right text-[10px] font-bold whitespace-nowrap border-b border-l border-border sticky right-0 bg-teal-50/95 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300';
+const TD = 'px-3 py-1.5 text-right font-mono-num tabular-nums text-[11px]';
+const TD_TOTAL_ROW = 'px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300';
+const TD_TOTAL_COL = 'px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300 sticky right-0 border-l border-border';
+
+function fmtV(v: number | null | undefined, dec = 1) {
+  if (v == null || v === 0) return <span className="text-muted-foreground/40">—</span>;
+  return v.toLocaleString(undefined, { maximumFractionDigits: dec });
+}
+
+/** Generic pivot table: Date rows × entity columns × Total column */
+function PivotTable({
+  dates,
+  entities,       // [{id, label}]
+  pivot,          // dateKey → entityId → value
+  totalLabel,
+  unit = 'm³',
+  colorClass = 'text-primary',
+}: {
+  dates: string[];
+  entities: { id: string; label: string }[];
+  pivot: Map<string, Map<string, number>>;
+  totalLabel: string;
+  unit?: string;
+  colorClass?: string;
+}) {
+  const colTotals = entities.map((e) =>
+    dates.reduce((s, d) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
+  );
+  const rowTotals = dates.map((d) =>
+    entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
+  );
+  const grandTotal = colTotals.reduce((s, v) => s + v, 0);
+
+  if (entities.length === 0) {
+    return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No entity data found.</div>;
+  }
+
+  return (
+    <div className="overflow-auto h-full">
+      <table className="w-full border-collapse text-[11px]">
+        <thead className="sticky top-0 z-20">
+          {/* Column header row */}
+          <tr className="bg-muted/95 backdrop-blur-sm">
+            <th className={TH_DATE}>Date</th>
+            {entities.map((e) => (
+              <th key={e.id} className={TH} title={e.label}>
+                <div className="truncate max-w-[120px] mx-auto text-right">{e.label}</div>
+                <div className="text-[9px] font-normal opacity-60">{unit}</div>
+              </th>
+            ))}
+            <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-[9px] font-normal opacity-80">{unit}</span></th>
+          </tr>
+          {/* TOTAL / AVG row pinned under header */}
+          <tr className="bg-teal-50/70 dark:bg-teal-950/25">
+            <td className={`${TH_DATE} bg-teal-50/70 dark:bg-teal-950/25 text-teal-700 dark:text-teal-300 font-bold text-[10px]`}>
+              TOTAL / AVG
+            </td>
+            {colTotals.map((tot, i) => (
+              <td key={entities[i].id} className={TD_TOTAL_ROW}>
+                {tot > 0 ? tot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="opacity-30">—</span>}
+              </td>
+            ))}
+            <td className={`${TD_TOTAL_ROW} sticky right-0 border-l border-border bg-teal-50/70 dark:bg-teal-950/25 font-bold`}>
+              {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          {[...dates].reverse().map((date, di) => {
+            const isEven = di % 2 === 0;
+            const rowIdx = dates.length - 1 - di;
+            const rowTotal = rowTotals[rowIdx];
+            return (
+              <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                <td className={[
+                  'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0 border-r border-border',
+                  isEven ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>
+                  {date}
+                </td>
+                {entities.map((e) => {
+                  const val = pivot.get(date)?.get(e.id) ?? null;
+                  return (
+                    <td key={e.id} className={TD}>
+                      {fmtV(val)}
+                    </td>
+                  );
+                })}
+                <td className={[
+                  TD_TOTAL_COL,
+                  colorClass,
+                  isEven ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>
+                  {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Overview tab — aggregated columns only (matches original single-column layout) */
+function OverviewTable({
+  metric,
+  chartData,
+}: {
+  metric: string;
+  chartData: any[];
+}) {
+  if (chartData.length === 0) {
+    return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>;
+  }
+
+  // Determine columns for this metric
+  type ColDef = { key: string; label: string; fmt: (d: any) => React.ReactNode; total: () => React.ReactNode };
+
+  const cols: ColDef[] = [];
+
+  if (metric === 'production' || metric === 'nrw') {
+    cols.push({
+      key: 'production', label: 'Production (m³)',
+      fmt: (d) => d.production != null ? d.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      total: () => chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+    });
+    cols.push({
+      key: 'consumption', label: 'Consumption (m³)',
+      fmt: (d) => d.consumption != null ? d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      total: () => chartData.reduce((s, d) => s + (d.consumption ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+    });
+  }
+  if (metric === 'nrw') {
+    cols.push({
+      key: 'nrw', label: 'NRW (%)',
+      fmt: (d) => <span className={d.nrw != null && d.nrw > 20 ? 'text-rose-500 font-semibold' : ''}>{d.nrw != null ? d.nrw + '%' : '—'}</span>,
+      total: () => {
+        const vals = chartData.filter((d) => d.nrw != null);
+        return vals.length ? (vals.reduce((s, d) => s + d.nrw, 0) / vals.length).toFixed(1) + '% avg' : '—';
+      },
+    });
+  }
+  if (metric === 'rawwater') {
+    cols.push({
+      key: 'rawwater', label: 'Raw Water (m³)',
+      fmt: (d) => d.rawwater != null ? d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
+      total: () => chartData.reduce((s, d) => s + (d.rawwater ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+    });
+  }
+  if (metric === 'recovery') {
+    cols.push({
+      key: 'recovery', label: 'Recovery (%)',
+      fmt: (d) => d.recovery != null ? d.recovery + '%' : '—',
+      total: () => {
+        const vals = chartData.filter((d) => d.recovery != null);
+        return vals.length ? (vals.reduce((s, d) => s + d.recovery, 0) / vals.length).toFixed(1) + '% avg' : '—';
+      },
+    });
+  }
+  if (metric === 'tds') {
+    cols.push({
+      key: 'tds', label: 'Permeate TDS (ppm)',
+      fmt: (d) => d.tds != null ? d.tds + ' ppm' : '—',
+      total: () => {
+        const vals = chartData.filter((d) => d.tds != null);
+        return vals.length ? Math.round(vals.reduce((s, d) => s + d.tds, 0) / vals.length) + ' ppm avg' : '—';
+      },
+    });
+  }
+  if (metric === 'pv') {
+    cols.push(
+      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—', total: () => chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }) },
+      { key: 'kwh', label: 'Power (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—', total: () => chartData.reduce((s, d) => s + (d.kwh ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }) },
+      { key: 'pv', label: 'PV Ratio (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—', total: () => { const p = chartData.reduce((s, d) => s + (d.production ?? 0), 0); const k = chartData.reduce((s, d) => s + (d.kwh ?? 0), 0); return p > 0 ? (k / p).toFixed(2) + ' avg' : '—'; } },
+    );
+  }
+  if (metric === 'productionCost') {
+    cols.push(
+      { key: 'powerCost', label: 'Power (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.powerCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+      { key: 'chemCost', label: 'Chemical (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.chemCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+      { key: 'totalCost', label: 'Total (₱)', fmt: (d) => d.totalCost != null ? '₱' + d.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.totalCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+      { key: 'unitCost', label: '₱/m³', fmt: (d) => d.unitCost != null ? '₱' + d.unitCost : '—', total: () => { const vals = chartData.filter((d) => d.unitCost != null); return vals.length ? '₱' + (vals.reduce((s, d) => s + d.unitCost, 0) / vals.length).toFixed(2) + ' avg' : '—'; } },
+    );
+  }
+
+  return (
+    <div className="overflow-auto h-full">
+      <table className="w-full border-collapse text-[11px]">
+        <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
+          <tr>
+            <th className={TH_DATE}>Date</th>
+            {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
+          </tr>
+          <tr className="bg-teal-50/70 dark:bg-teal-950/25">
+            <td className={`${TH_DATE} bg-teal-50/70 dark:bg-teal-950/25 text-teal-700 dark:text-teal-300 font-bold text-[10px]`}>TOTAL / AVG</td>
+            {cols.map((c) => (
+              <td key={c.key} className={TD_TOTAL_ROW}>{c.total()}</td>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[...chartData].reverse().map((d, i) => (
+            <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+              <td className={[
+                'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0',
+                i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
+              ].join(' ')}>{d.date}</td>
+              {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
+// Tab 1 (always): Overview / Prod vs Consum — aggregated daily totals
+// Tab 2: Production — pivot: Date × ProductMeter1…N × Total
+// Tab 3: Consumption — pivot: Date × Locator1…N × Total
+// For non-production/consumption metrics the Production/Consumption tabs show
+// the relevant entity breakdown that feeds that metric.
+function DataSummaryPopup({
+  open, onClose, metric, title,
+  chartData,
+  locReadings, productReadings, wellReadings, costReadings,
+  locatorNames, productMeterNames, wellNames, plantNames,
+}: {
+  open: boolean;
+  onClose: () => void;
+  metric: string;
+  title?: string;
+  chartData: any[];
+  locReadings: any[];
+  productReadings: any[];
+  wellReadings: any[];
+  costReadings: any[];
+  locatorNames?: Map<string, string>;
+  productMeterNames?: Map<string, string>;
+  wellNames?: Map<string, string>;
+  plantNames?: Map<string, string>;
+}) {
+  const [tab, setTab] = useState<DSMTab>('overview');
+
+  // Determine which secondary tabs are relevant for this metric
+  const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'rawwater';
+  const hasConsTab = metric === 'production' || metric === 'nrw';
+
+  // Tab label config
+  const overviewLabel =
+    metric === 'production' || metric === 'nrw' ? 'Prod. vs Consum.'
+    : metric === 'pv' ? 'Prod. vs Power'
+    : metric === 'productionCost' ? 'Cost Overview'
+    : 'Overview';
+
+  const prodTabLabel =
+    metric === 'rawwater' ? 'Per Well'
+    : metric === 'pv' ? 'Per Well / Meter'
+    : 'Production';
+
+  // Build entity lists and pivots
+  // --- Production entities ---
+  const prodEntities = useMemo<{ id: string; label: string }[]>(() => {
+    if (metric === 'rawwater' || metric === 'pv') {
+      // wells
+      const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
+      return ids.map((id) => ({ id, label: wellNames?.get(id) ?? `Well ${id.slice(-4)}` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    // product meters
+    const ids = Array.from(new Set((productReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
+    return ids.map((id) => ({ id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [metric, productReadings, wellReadings, productMeterNames, wellNames]);
+
+  const prodPivot = useMemo(() => {
+    const readings = (metric === 'rawwater' || metric === 'pv') ? (wellReadings ?? []) : (productReadings ?? []);
+    const field = (metric === 'rawwater' || metric === 'pv') ? 'well_id' : 'meter_id';
+    return buildEntityPivot(
+      [...readings].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+      field,
+    );
+  }, [metric, productReadings, wellReadings]);
+
+  // --- Consumption entities ---
+  const consEntities = useMemo<{ id: string; label: string }[]>(() => {
+    const ids = Array.from(new Set((locReadings ?? []).map((r: any) => r.locator_id).filter(Boolean)));
+    return ids.map((id) => ({ id, label: locatorNames?.get(id) ?? `Locator ${id.slice(-4)}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [locReadings, locatorNames]);
+
+  const consPivot = useMemo(() => buildEntityPivot(
+    [...(locReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+    'locator_id',
+  ), [locReadings]);
+
+  // All dates from chartData (overview tab) already sorted newest-first when reversed
+  const dates = chartData.map((d) => d.date);
+
+  // Tab guard: if active tab becomes irrelevant, reset
+  const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        className="max-w-[94vw] w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
+        data-testid={`dsm-popup-${metric}`}
+      >
+        {/* Header */}
+        <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0">
+          <DialogTitle className="text-sm font-semibold pb-3">
+            Data Summary — {title ?? metric}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Multi-tab data summary for {title ?? metric}.
+          </DialogDescription>
+
+          {/* Tabs row */}
+          <div className="flex gap-0 -mb-px">
+            {([
+              { key: 'overview' as DSMTab, label: overviewLabel, show: true },
+              { key: 'production' as DSMTab, label: prodTabLabel, show: hasProdTab },
+              { key: 'consumption' as DSMTab, label: 'Consumption', show: hasConsTab },
+            ] as const).filter((t) => t.show).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  'px-5 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+                  activeTab === t.key
+                    ? 'border-primary text-primary bg-background'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+                ].join(' ')}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </DialogHeader>
+
+        {/* Body */}
+        <div className="flex-1 overflow-hidden">
+          {chartData.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+              No data in selected range.
+            </div>
+          ) : (
+            <>
+              {activeTab === 'overview' && (
+                <OverviewTable metric={metric} chartData={chartData} />
+              )}
+              {activeTab === 'production' && hasProdTab && (
+                <PivotTable
+                  dates={dates}
+                  entities={prodEntities}
+                  pivot={prodPivot}
+                  totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
+                  unit="m³"
+                  colorClass="text-primary"
+                />
+              )}
+              {activeTab === 'consumption' && hasConsTab && (
+                <PivotTable
+                  dates={dates}
+                  entities={consEntities}
+                  pivot={consPivot}
+                  totalLabel="Total Cons. (m³)"
+                  unit="m³"
+                  colorClass="text-highlight"
+                />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer info bar */}
+        <div className="px-5 py-2 border-t shrink-0 flex items-center gap-3 text-[10px] text-muted-foreground bg-muted/20">
+          <span className="font-medium">{dates.length} days in range</span>
+          {activeTab === 'production' && hasProdTab && (
+            <span>· {prodEntities.length} {metric === 'rawwater' ? 'wells' : 'product meters'}</span>
+          )}
+          {activeTab === 'consumption' && hasConsTab && (
+            <span>· {consEntities.length} locators</span>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // Renders the per-cluster trend chart slot beneath a cluster's StatCards.
 //   • inline   — every chart in the cluster is rendered directly below
@@ -770,223 +1197,24 @@ export function TrendChart({
         </button>
       </div>
 
-      {/* ── Data Summary Popup Dialog ────────────────────────────────────── */}
-      <Dialog open={showSummary} onOpenChange={(v) => { if (!v) setShowSummary(false); }}>
-        <DialogContent className="max-w-[92vw] w-full max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden" data-testid={`dsm-popup-${metric}`}>
-          <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
-            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              Data Summary — {title ?? metric}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Tabular data summary for the {title ?? metric} chart over the selected range.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-auto">
-            {chartData.length === 0 ? (
-              <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data in selected range.</div>
-            ) : (
-          <div className="overflow-x-auto overflow-y-auto h-full">
-            <table className="w-full text-[10px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
-                <tr>
-                  <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-border sticky left-0 bg-muted/90">
-                    Date
-                  </th>
-                  {(metric === 'production' || metric === 'nrw') && (
-                    <>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Production (m³)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Consumption (m³)</th>
-                    </>
-                  )}
-                  {metric === 'nrw' && (
-                    <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">NRW (%)</th>
-                  )}
-                  {metric === 'rawwater' && (
-                    <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Raw Water (m³)</th>
-                  )}
-                  {metric === 'recovery' && (
-                    <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Recovery (%)</th>
-                  )}
-                  {metric === 'tds' && (
-                    <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Permeate TDS (ppm)</th>
-                  )}
-                  {metric === 'pv' && (
-                    <>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Production (m³)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Power (kWh)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">PV Ratio</th>
-                    </>
-                  )}
-                  {metric === 'productionCost' && (
-                    <>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Power (₱)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Chemical (₱)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">Total (₱)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border">₱/m³</th>
-                    </>
-                  )}
-                </tr>
-                {/* Totals / averages row */}
-                <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                  <td className="px-2 py-1 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap sticky left-0 bg-teal-50/60 dark:bg-teal-950/20">
-                    TOTAL / AVG
-                  </td>
-                  {(metric === 'production' || metric === 'nrw') && (
-                    <>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {chartData.reduce((s, d) => s + (d.consumption ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                      </td>
-                    </>
-                  )}
-                  {metric === 'nrw' && (
-                    <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                      {(() => {
-                        const vals = chartData.filter(d => d.nrw != null);
-                        return vals.length ? (vals.reduce((s, d) => s + d.nrw, 0) / vals.length).toFixed(1) + '%' : '—';
-                      })()}
-                    </td>
-                  )}
-                  {metric === 'rawwater' && (
-                    <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                      {chartData.reduce((s, d) => s + (d.rawwater ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                    </td>
-                  )}
-                  {metric === 'recovery' && (
-                    <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                      {(() => {
-                        const vals = chartData.filter(d => d.recovery != null);
-                        return vals.length ? (vals.reduce((s, d) => s + d.recovery, 0) / vals.length).toFixed(1) + '%' : '—';
-                      })()}
-                    </td>
-                  )}
-                  {metric === 'tds' && (
-                    <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                      {(() => {
-                        const vals = chartData.filter(d => d.tds != null);
-                        return vals.length ? Math.round(vals.reduce((s, d) => s + d.tds, 0) / vals.length) + ' ppm' : '—';
-                      })()}
-                    </td>
-                  )}
-                  {metric === 'pv' && (
-                    <>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {chartData.reduce((s, d) => s + (d.kwh ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {(() => {
-                          const totP = chartData.reduce((s, d) => s + (d.production ?? 0), 0);
-                          const totK = chartData.reduce((s, d) => s + (d.kwh ?? 0), 0);
-                          return totP > 0 ? (totK / totP).toFixed(2) : '—';
-                        })()}
-                      </td>
-                    </>
-                  )}
-                  {metric === 'productionCost' && (
-                    <>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        ₱{chartData.reduce((s, d) => s + (d.powerCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        ₱{chartData.reduce((s, d) => s + (d.chemCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        ₱{chartData.reduce((s, d) => s + (d.totalCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </td>
-                      <td className="px-2 py-1 text-right font-semibold font-mono-num text-teal-700 dark:text-teal-300">
-                        {(() => {
-                          const vals = chartData.filter(d => d.unitCost != null);
-                          return vals.length ? '₱' + (vals.reduce((s, d) => s + d.unitCost, 0) / vals.length).toFixed(2) : '—';
-                        })()}
-                      </td>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {[...chartData].reverse().map((d, i) => (
-                  <tr key={d.date} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                    <td className={[
-                      'px-2 py-1 whitespace-nowrap font-medium text-muted-foreground sticky left-0',
-                      i % 2 === 0 ? 'bg-background' : 'bg-muted/20',
-                    ].join(' ')}>
-                      {d.date}
-                    </td>
-                    {(metric === 'production' || metric === 'nrw') && (
-                      <>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.production != null ? d.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.consumption != null ? d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                        </td>
-                      </>
-                    )}
-                    {metric === 'nrw' && (
-                      <td className={['px-2 py-1 text-right font-mono-num tabular-nums font-medium',
-                        d.nrw != null && d.nrw > 20 ? 'text-rose-600 dark:text-rose-400' : '',
-                      ].join(' ')}>
-                        {d.nrw != null ? d.nrw + '%' : '—'}
-                      </td>
-                    )}
-                    {metric === 'rawwater' && (
-                      <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                        {d.rawwater != null ? d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                      </td>
-                    )}
-                    {metric === 'recovery' && (
-                      <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                        {d.recovery != null ? d.recovery + '%' : '—'}
-                      </td>
-                    )}
-                    {metric === 'tds' && (
-                      <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                        {d.tds != null ? d.tds + ' ppm' : '—'}
-                      </td>
-                    )}
-                    {metric === 'pv' && (
-                      <>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.production != null ? d.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.kwh != null ? d.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—'}
-                        </td>
-                      </>
-                    )}
-                    {metric === 'productionCost' && (
-                      <>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.totalCost != null ? '₱' + d.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-2 py-1 text-right font-mono-num tabular-nums">
-                          {d.unitCost != null ? '₱' + d.unitCost : '—'}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
+      {showSummary && (
+        <DataSummaryPopup
+          open={showSummary}
+          onClose={() => setShowSummary(false)}
+          metric={metric}
+          title={title}
+          chartData={chartData}
+          locReadings={locReadings ?? []}
+          productReadings={productReadings ?? []}
+          wellReadings={wellReadings ?? []}
+          costReadings={costReadings ?? []}
+          locatorNames={locatorNames}
+          productMeterNames={productMeterNames}
+          wellNames={wellNames}
+          plantNames={plantNames}
+        />
+      )}
 
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
