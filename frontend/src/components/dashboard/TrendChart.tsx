@@ -783,14 +783,16 @@ export function TrendChart({
       // Try with is_meter_replacement first; fall back gracefully if column
       // doesn't exist in this deployment (field will be undefined → false).
       const { data, error } = await (supabase.from('product_meter_readings' as never) as any)
-        .select('meter_id,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
+        // Bug fix: include daily_volume so computeEntityDeltas can use it directly,
+        // matching how locator_readings are handled (avoids boundary-read delta = 0).
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id')
         .in('plant_id', plantIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO);
       if (error) {
         if (error.message?.includes('is_meter_replacement')) {
           const { data: d2, error: e2 } = await (supabase.from('product_meter_readings' as never) as any)
-            .select('current_reading,previous_reading,reading_datetime,plant_id')
+            .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,plant_id')
             .in('plant_id', plantIds)
             .gte('reading_datetime', startISO)
             .lte('reading_datetime', endISO);
@@ -989,7 +991,11 @@ export function TrendChart({
     });
 
     // Production = sum of product meter (treated-water output) deltas.
-    computeEntityDeltas(productReadings ?? [], 'meter_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    // Bug fix: pass 'daily_volume' so the pre-computed column is used when present,
+    // matching how locator_readings are handled (line below). Without this, the first
+    // reading in any fetch window always returns delta=0 (no predecessor in memory),
+    // causing SRP Plant Jan–Mar data to be invisible on the dashboard.
+    computeEntityDeltas(productReadings ?? [], 'meter_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
