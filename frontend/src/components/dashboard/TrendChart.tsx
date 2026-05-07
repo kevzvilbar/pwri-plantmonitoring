@@ -79,86 +79,80 @@ function PivotTable({
   unit?: string;
   colorClass?: string;
 }) {
-  const colTotals = entities.map((e) =>
-    dates.reduce((s, d) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
-  );
   const rowTotals = dates.map((d) =>
     entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
   );
-  const grandTotal = colTotals.reduce((s, v) => s + v, 0);
 
   if (entities.length === 0) {
     return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No entity data found.</div>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="border-collapse text-[11px] w-full table-fixed">
-        <colgroup>
-          <col style={{ width: '72px', minWidth: '72px' }} />
-          {entities.map((e) => <col key={e.id} />)}
-          <col style={{ width: '80px', minWidth: '80px' }} />
-        </colgroup>
-        <thead className="sticky top-0 z-20">
-          {/* Column header row */}
-          <tr className="bg-muted/95 backdrop-blur-sm">
-            <th className={TH_DATE}>Date</th>
-            {entities.map((e) => (
-              <th key={e.id} className={TH} title={e.label}>
-                <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
-                <div className="text-[9px] font-normal opacity-60 mt-0.5">{unit}</div>
-              </th>
-            ))}
-            <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-[9px] font-normal opacity-80">{unit}</span></th>
-          </tr>
-          {/* TOTAL / AVG row pinned under header */}
-          <tr className="bg-teal-50/70 dark:bg-teal-950/25">
-            <td className={`${TH_DATE} bg-teal-50/70 dark:bg-teal-950/25 text-teal-700 dark:text-teal-300 font-bold text-[10px]`}>
-              TOTAL / AVG
-            </td>
-            {colTotals.map((tot, i) => (
-              <td key={entities[i].id} className={TD_TOTAL_ROW}>
-                {tot > 0 ? tot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="opacity-30">—</span>}
-              </td>
-            ))}
-            <td className={`${TD_TOTAL_ROW} sticky right-0 border-l border-border bg-teal-50/70 dark:bg-teal-950/25 font-bold`}>
-              {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-            </td>
-          </tr>
-        </thead>
-        <tbody>
-          {[...dates].reverse().map((date, di) => {
-            const isEven = di % 2 === 0;
-            const rowIdx = dates.length - 1 - di;
-            const rowTotal = rowTotals[rowIdx];
-            return (
-              <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
-                <td className={[
-                  'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0 border-r border-border',
-                  isEven ? 'bg-background' : 'bg-muted/10',
-                ].join(' ')}>
-                  {date}
-                </td>
-                {entities.map((e) => {
-                  const val = pivot.get(date)?.get(e.id) ?? null;
-                  return (
-                    <td key={e.id} className={TD}>
-                      {fmtV(val)}
-                    </td>
-                  );
-                })}
-                <td className={[
-                  TD_TOTAL_COL,
-                  colorClass,
-                  isEven ? 'bg-background' : 'bg-muted/10',
-                ].join(' ')}>
-                  {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Fixed header — never scrolls */}
+      <div className="overflow-x-auto shrink-0 border-b border-border">
+        <table className="border-collapse text-[11px] w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
+          <colgroup>
+            <col style={{ width: '72px', minWidth: '72px' }} />
+            {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
+            <col style={{ width: '80px', minWidth: '80px' }} />
+          </colgroup>
+          <thead>
+            <tr className="bg-muted/95">
+              <th className={TH_DATE}>Date</th>
+              {entities.map((e) => (
+                <th key={e.id} className={TH} title={e.label}>
+                  <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
+                  <div className="text-[9px] font-normal opacity-60 mt-0.5">{unit}</div>
+                </th>
+              ))}
+              <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-[9px] font-normal opacity-80">{unit}</span></th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      {/* Scrollable body */}
+      <div className="overflow-auto flex-1">
+        <table className="border-collapse text-[11px] w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
+          <colgroup>
+            <col style={{ width: '72px', minWidth: '72px' }} />
+            {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
+            <col style={{ width: '80px', minWidth: '80px' }} />
+          </colgroup>
+          <tbody>
+            {[...dates].reverse().map((date, di) => {
+              const isEven = di % 2 === 0;
+              const rowIdx = dates.length - 1 - di;
+              const rowTotal = rowTotals[rowIdx];
+              return (
+                <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                  <td className={[
+                    'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0 border-r border-border',
+                    isEven ? 'bg-background' : 'bg-muted/10',
+                  ].join(' ')}>
+                    {date}
+                  </td>
+                  {entities.map((e) => {
+                    const val = pivot.get(date)?.get(e.id) ?? null;
+                    return (
+                      <td key={e.id} className={TD}>
+                        {fmtV(val)}
+                      </td>
+                    );
+                  })}
+                  <td className={[
+                    TD_TOTAL_COL,
+                    colorClass,
+                    isEven ? 'bg-background' : 'bg-muted/10',
+                  ].join(' ')}>
+                    {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -176,7 +170,7 @@ function OverviewTable({
   }
 
   // Determine columns for this metric
-  type ColDef = { key: string; label: string; fmt: (d: any) => React.ReactNode; total: () => React.ReactNode };
+  type ColDef = { key: string; label: string; fmt: (d: any) => React.ReactNode };
 
   const cols: ColDef[] = [];
 
@@ -184,94 +178,81 @@ function OverviewTable({
     cols.push({
       key: 'production', label: 'Production (m³)',
       fmt: (d) => d.production != null ? d.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
-      total: () => chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
     });
     cols.push({
       key: 'consumption', label: 'Consumption (m³)',
       fmt: (d) => d.consumption != null ? d.consumption.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
-      total: () => chartData.reduce((s, d) => s + (d.consumption ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
     });
   }
   if (metric === 'nrw') {
     cols.push({
       key: 'nrw', label: 'NRW (%)',
       fmt: (d) => <span className={d.nrw != null && d.nrw > 20 ? 'text-rose-500 font-semibold' : ''}>{d.nrw != null ? d.nrw + '%' : '—'}</span>,
-      total: () => {
-        const vals = chartData.filter((d) => d.nrw != null);
-        return vals.length ? (vals.reduce((s, d) => s + d.nrw, 0) / vals.length).toFixed(1) + '% avg' : '—';
-      },
     });
   }
   if (metric === 'rawwater') {
     cols.push({
       key: 'rawwater', label: 'Raw Water (m³)',
       fmt: (d) => d.rawwater != null ? d.rawwater.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—',
-      total: () => chartData.reduce((s, d) => s + (d.rawwater ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
     });
   }
   if (metric === 'recovery') {
     cols.push({
       key: 'recovery', label: 'Recovery (%)',
       fmt: (d) => d.recovery != null ? d.recovery + '%' : '—',
-      total: () => {
-        const vals = chartData.filter((d) => d.recovery != null);
-        return vals.length ? (vals.reduce((s, d) => s + d.recovery, 0) / vals.length).toFixed(1) + '% avg' : '—';
-      },
     });
   }
   if (metric === 'tds') {
     cols.push({
       key: 'tds', label: 'Permeate TDS (ppm)',
       fmt: (d) => d.tds != null ? d.tds + ' ppm' : '—',
-      total: () => {
-        const vals = chartData.filter((d) => d.tds != null);
-        return vals.length ? Math.round(vals.reduce((s, d) => s + d.tds, 0) / vals.length) + ' ppm avg' : '—';
-      },
     });
   }
   if (metric === 'pv') {
     cols.push(
-      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—', total: () => chartData.reduce((s, d) => s + (d.production ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }) },
-      { key: 'kwh', label: 'Power (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—', total: () => chartData.reduce((s, d) => s + (d.kwh ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 }) },
-      { key: 'pv', label: 'PV Ratio (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—', total: () => { const p = chartData.reduce((s, d) => s + (d.production ?? 0), 0); const k = chartData.reduce((s, d) => s + (d.kwh ?? 0), 0); return p > 0 ? (k / p).toFixed(2) + ' avg' : '—'; } },
+      { key: 'production', label: 'Production (m³)', fmt: (d) => d.production?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
+      { key: 'kwh', label: 'Power (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
+      { key: 'pv', label: 'PV Ratio (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—' },
     );
   }
   if (metric === 'productionCost') {
     cols.push(
-      { key: 'powerCost', label: 'Power (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.powerCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-      { key: 'chemCost', label: 'Chemical (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.chemCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-      { key: 'totalCost', label: 'Total (₱)', fmt: (d) => d.totalCost != null ? '₱' + d.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—', total: () => '₱' + chartData.reduce((s, d) => s + (d.totalCost ?? 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-      { key: 'unitCost', label: '₱/m³', fmt: (d) => d.unitCost != null ? '₱' + d.unitCost : '—', total: () => { const vals = chartData.filter((d) => d.unitCost != null); return vals.length ? '₱' + (vals.reduce((s, d) => s + d.unitCost, 0) / vals.length).toFixed(2) + ' avg' : '—'; } },
+      { key: 'powerCost', label: 'Power (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
+      { key: 'chemCost', label: 'Chemical (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
+      { key: 'totalCost', label: 'Total (₱)', fmt: (d) => d.totalCost != null ? '₱' + d.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
+      { key: 'unitCost', label: '₱/m³', fmt: (d) => d.unitCost != null ? '₱' + d.unitCost : '—' },
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[11px]">
-        <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
-          <tr>
-            <th className={TH_DATE}>Date</th>
-            {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
-          </tr>
-          <tr className="bg-teal-50/70 dark:bg-teal-950/25">
-            <td className={`${TH_DATE} bg-teal-50/70 dark:bg-teal-950/25 text-teal-700 dark:text-teal-300 font-bold text-[10px]`}>TOTAL / AVG</td>
-            {cols.map((c) => (
-              <td key={c.key} className={TD_TOTAL_ROW}>{c.total()}</td>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[...chartData].reverse().map((d, i) => (
-            <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
-              <td className={[
-                'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0',
-                i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
-              ].join(' ')}>{d.date}</td>
-              {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Fixed header */}
+      <div className="overflow-x-auto shrink-0 border-b border-border">
+        <table className="w-full border-collapse text-[11px]">
+          <thead className="bg-muted/95">
+            <tr>
+              <th className={TH_DATE}>Date</th>
+              {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+        </table>
+      </div>
+      {/* Scrollable body */}
+      <div className="overflow-auto flex-1">
+        <table className="w-full border-collapse text-[11px]">
+          <tbody>
+            {[...chartData].reverse().map((d, i) => (
+              <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                <td className={[
+                  'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0',
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>{d.date}</td>
+                {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -480,13 +461,13 @@ function DataSummaryPopup({
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           {filteredChartData.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
               No data in selected range.
             </div>
           ) : (
-            <>
+            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
               {activeTab === 'overview' && (
                 <OverviewTable metric={metric} chartData={filteredChartData} />
               )}
@@ -510,7 +491,7 @@ function DataSummaryPopup({
                   colorClass="text-highlight"
                 />
               )}
-            </>
+            </div>
           )}
         </div>
 
