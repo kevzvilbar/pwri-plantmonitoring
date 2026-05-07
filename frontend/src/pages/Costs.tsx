@@ -109,6 +109,7 @@ function ImportReadingsDialog({
   const [busy, setBusy]         = useState(false);
   const [done, setDone]         = useState(false);
   const [imported, setImported] = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const [_dupRows, setDupRows]  = useState<Record<string, string>[]>([]);
   const [dupResolved, setDupResolved] = useState(false);
   const [dupConfirm, setDupConfirm]   = useState<{ label: string; isDateOnly: boolean } | null>(null);
@@ -128,7 +129,7 @@ function ImportReadingsDialog({
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false);
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false); setImportErrors([]);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = parseCSVText(ev.target?.result as string);
@@ -176,6 +177,7 @@ function ImportReadingsDialog({
     });
     setBusy(false);
     setImported(count);
+    setImportErrors(importErrors);
     setDone(true);
     if (importErrors.length) toast.error(`${count} imported, ${importErrors.length} failed`);
     else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
@@ -304,11 +306,23 @@ function ImportReadingsDialog({
             </div>
           )}
 
-          {done && (
+          {done && imported > 0 && (
             <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
               {imported} record(s) imported. Audit log written.
             </p>
+          )}
+
+          {done && importErrors.length > 0 && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1.5">
+              <p className="text-xs font-medium flex items-center gap-1.5 text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {imported} imported · {importErrors.length} failed
+              </p>
+              <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-32 overflow-y-auto">
+                {importErrors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
           )}
 
           {/* Intra-file duplicate notice */}
@@ -425,7 +439,6 @@ async function insertBillingRows(
       distribution_charge: r.distribution_charge !== '' && r.distribution_charge != null ? +r.distribution_charge : null,
       other_charges:       r.other_charges       !== '' && r.other_charges       != null ? +r.other_charges       : null,
       total_amount:        +r.total_amount,
-      provider:            r.provider            || null,
       remarks:             r.remarks             || 'Imported',
       recorded_by:         userId,
     };
