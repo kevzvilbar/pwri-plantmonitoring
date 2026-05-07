@@ -42,16 +42,14 @@ import {
 type SummaryTab = 'consumption' | 'production';
 
 /**
- * Mirrors TrendChart.tsx `computeEntityDeltas` exactly.
- * Groups readings by entityKey, walks them chronologically and computes
- * replacement-aware deltas:
- *   • is_meter_replacement row  → delta 0, set afterRepl flag
- *   • first row after repl      → delta 0, clear flag
- *   • normal row with dailyVolumeField → use that value (clamped ≥ 0)
- *   • normal row without it     → current_reading − last seen (clamped ≥ 0)
- *   • no predecessor yet        → use previous_reading field if present
- *
- * Returns a Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
+ * Replacement-aware delta pivot — mirrors TrendChart.tsx `computeEntityDeltas`.
+ * Groups readings by entityKeyField, walks them chronologically per entity and:
+ *   • is_meter_replacement row     → delta 0, set afterRepl flag
+ *   • first row after replacement  → delta 0, clear flag
+ *   • normal row w/ dailyVolumeField → use that value (clamped ≥ 0)
+ *   • normal row w/o dailyVolumeField → current − last (clamped ≥ 0)
+ *   • no predecessor yet           → current − previous_reading if available
+ * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
  */
 function computePivotFromReadings(
   readings: any[],
@@ -60,37 +58,31 @@ function computePivotFromReadings(
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   readings.forEach((r) => {
-    const key = r[entityKeyField] ?? '__';
-    if (!byEntity.has(key)) byEntity.set(key, []);
-    byEntity.get(key)!.push(r);
+    const k = r[entityKeyField] ?? '__';
+    if (!byEntity.has(k)) byEntity.set(k, []);
+    byEntity.get(k)!.push(r);
   });
-
   const pivot = new Map<string, Map<string, number>>();
-
   byEntity.forEach((rows, entityKey) => {
     const sorted = [...rows].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
     const lastReading = new Map<string, number>();
     const afterRepl   = new Set<string>();
-
     sorted.forEach((r) => {
       const isMR    = !!r.is_meter_replacement;
       const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
-
       if (isMR) {
         lastReading.set(entityKey, +r.current_reading);
         afterRepl.add(entityKey);
-        return; // zero volume for replacement row
+        return;
       }
-
       if (afterRepl.has(entityKey)) {
         lastReading.set(entityKey, +r.current_reading);
         afterRepl.delete(entityKey);
-        return; // zero volume for first-post-replacement row
+        return;
       }
-
       let delta = 0;
       if (dailyVolumeField && r[dailyVolumeField] != null) {
         delta = Math.max(0, +r[dailyVolumeField]);
@@ -103,18 +95,13 @@ function computePivotFromReadings(
         delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
         lastReading.set(entityKey, +r.current_reading);
       }
-
-      pivot.get(dateKey)!.set(
-        entityKey,
-        (pivot.get(dateKey)!.get(entityKey) ?? 0) + delta,
-      );
+      pivot.get(dateKey)!.set(entityKey, (pivot.get(dateKey)!.get(entityKey) ?? 0) + delta);
     });
   });
-
   return pivot;
 }
 
-/** Sum all values across a pivot for a given date key. */
+/** Sum all entity values in a pivot for one date key. */
 function pivotDayTotal(pivot: Map<string, Map<string, number>>, dateKey: string): number {
   let total = 0;
   pivot.get(dateKey)?.forEach((v) => { total += v; });
@@ -216,15 +203,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   });
 
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
-  // Uses computePivotFromReadings (mirrors TrendChart computeEntityDeltas) so
-  // meter-replacement rows and their immediate successors are correctly zeroed.
+  // computePivotFromReadings mirrors TrendChart computeEntityDeltas so
+  // meter-replacement rows and their successors are correctly zeroed.
   const consPivot = useMemo(() => {
     const sortedLocs = [...(locators ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-
     const pivot = computePivotFromReadings(consReadings ?? [], 'locator_id', 'daily_volume');
 
     // Fill every date in the selected range — not just dates that have readings.
@@ -245,7 +231,6 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-
     const pivot = computePivotFromReadings(prodReadings ?? [], 'meter_id', 'daily_volume');
 
     // Fill every date in the selected range — not just dates with readings.
@@ -513,56 +498,61 @@ export default function Dashboard() {
   const yesterday = new Date(format(subDays(new Date(), 1), 'yyyy-MM-dd') + 'T00:00:00').toISOString();
 
   // ----- Today aggregates from raw tables -----
-  // NOTE: locator_readings has no plant_id column — we must first fetch the
-  // locator IDs for this plant, then query readings by locator_id.
-  const { data: todayLocatorIds } = useQuery({
-    queryKey: ['dash-loc-ids', plantIds],
+  //
+  // IMPORTANT: locator_readings and well_readings do NOT have a plant_id column.
+  // Filtering them with .in('plant_id', plantIds) returns zero rows — which is
+  // why the stat cards were showing 0 m³. We must first resolve the entity IDs
+  // (locator_id / well_id) for this plant, then query by those IDs.
+
+  const { data: _locatorIds } = useQuery({
+    queryKey: ['dash-locator-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as string[];
       const { data } = await supabase
         .from('locators').select('id').in('plant_id', plantIds).eq('status', 'Active');
-      return (data ?? []).map((l: any) => l.id) as string[];
+      return (data ?? []).map((l: any) => l.id as string);
     },
     enabled: plantIds.length > 0,
   });
-  const { data: todayLocators } = useQuery({
-    queryKey: ['dash-loc-today', plantIds, todayLocatorIds],
-    queryFn: async () => {
-      if (!todayLocatorIds?.length) return [];
-      const { data } = await supabase
-        .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
-        .in('locator_id', todayLocatorIds)
-        .gte('reading_datetime', today)
-        .order('reading_datetime', { ascending: true });
-      return (data ?? []) as any[];
-    },
-    enabled: (todayLocatorIds?.length ?? 0) > 0,
-  });
-  // Raw Water source (wells) — well_readings has no plant_id column either;
-  // fetch well IDs for this plant first, then query by well_id.
-  const { data: todayWellIds } = useQuery({
+
+  const { data: _wellIds } = useQuery({
     queryKey: ['dash-well-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as string[];
       const { data } = await supabase.from('wells').select('id').in('plant_id', plantIds);
-      return (data ?? []).map((w: any) => w.id) as string[];
+      return (data ?? []).map((w: any) => w.id as string);
     },
     enabled: plantIds.length > 0,
   });
-  const { data: todayWells } = useQuery({
-    queryKey: ['dash-wells-today', plantIds, todayWellIds],
+
+  const { data: todayLocators } = useQuery({
+    queryKey: ['dash-loc-today', _locatorIds, today],
     queryFn: async () => {
-      if (!todayWellIds?.length) return [];
+      if (!_locatorIds?.length) return [];
       const { data } = await supabase
-        .from('well_readings')
-        .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
-        .in('well_id', todayWellIds)
+        .from('locator_readings')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
-    enabled: (todayWellIds?.length ?? 0) > 0,
+    enabled: (_locatorIds?.length ?? 0) > 0,
+  });
+
+  const { data: todayWells } = useQuery({
+    queryKey: ['dash-wells-today', _wellIds, today],
+    queryFn: async () => {
+      if (!_wellIds?.length) return [];
+      const { data } = await supabase
+        .from('well_readings')
+        .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .in('well_id', _wellIds)
+        .gte('reading_datetime', today)
+        .order('reading_datetime', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: (_wellIds?.length ?? 0) > 0,
   });
   // Production = sum of Product Meter deltas (treated/distributed water)
   const { data: todayProductMeters } = useQuery({
@@ -592,34 +582,34 @@ export default function Dashboard() {
   });
   // ----- Yesterday aggregates (for trend deltas on highlighted KPIs) -----
   const { data: yLocators } = useQuery({
-    queryKey: ['dash-loc-yest', plantIds, todayLocatorIds],
+    queryKey: ['dash-loc-yest', _locatorIds, yesterday, today],
     queryFn: async () => {
-      if (!todayLocatorIds?.length) return [];
+      if (!_locatorIds?.length) return [];
       const { data } = await supabase
         .from('locator_readings')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
-        .in('locator_id', todayLocatorIds)
+        .in('locator_id', _locatorIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
-    enabled: (todayLocatorIds?.length ?? 0) > 0,
+    enabled: (_locatorIds?.length ?? 0) > 0,
   });
   const { data: yWells } = useQuery({
-    queryKey: ['dash-wells-yest', plantIds, todayWellIds],
+    queryKey: ['dash-wells-yest', _wellIds, yesterday, today],
     queryFn: async () => {
-      if (!todayWellIds?.length) return [];
+      if (!_wellIds?.length) return [];
       const { data } = await supabase
         .from('well_readings')
         .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
-        .in('well_id', todayWellIds)
+        .in('well_id', _wellIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
-    enabled: (todayWellIds?.length ?? 0) > 0,
+    enabled: (_wellIds?.length ?? 0) > 0,
   });
   // Yesterday product meters for production trend delta
   const { data: yProductMeters } = useQuery({
@@ -677,25 +667,23 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
-  // ── Stat card aggregates — use the same replacement-aware delta logic as TrendChart ──
-  // todayStr key used to look up the correct day from the pivot.
-  const _todayKey = format(new Date(), 'yyyy-MM-dd');
+  // ── Stat card aggregates ────────────────────────────────────────────────────
+  // Uses computePivotFromReadings (same replacement-aware logic as TrendChart)
+  // so meter-replacement spikes don't inflate today's totals.
+  const _todayKey     = format(new Date(), 'yyyy-MM-dd');
   const _yesterdayKey = format(subDays(new Date(), 1), 'yyyy-MM-dd');
 
-  const rawWaterVol = useMemo(() => {
-    const pivot = computePivotFromReadings(todayWells ?? [], 'well_id', 'daily_volume');
-    return pivotDayTotal(pivot, _todayKey);
-  }, [todayWells, _todayKey]);
+  const rawWaterVol = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
+  ), [todayWells, _todayKey]);
 
-  const production = useMemo(() => {
-    const pivot = computePivotFromReadings(todayProductMeters ?? [], 'meter_id', 'daily_volume');
-    return pivotDayTotal(pivot, _todayKey);
-  }, [todayProductMeters, _todayKey]);
+  const production = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
+  ), [todayProductMeters, _todayKey]);
 
-  const consumption = useMemo(() => {
-    const pivot = computePivotFromReadings(todayLocators ?? [], 'locator_id', 'daily_volume');
-    return pivotDayTotal(pivot, _todayKey);
-  }, [todayLocators, _todayKey]);
+  const consumption = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
+  ), [todayLocators, _todayKey]);
 
   const kwh = (todayPower ?? []).reduce((s: number, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
 
@@ -703,20 +691,17 @@ export default function Dashboard() {
   const nrw = calc.nrw(production, consumption);
   const pv = calc.pvRatio(kwh, production);
 
-  const yRawWaterVol = useMemo(() => {
-    const pivot = computePivotFromReadings(yWells ?? [], 'well_id', 'daily_volume');
-    return pivotDayTotal(pivot, _yesterdayKey);
-  }, [yWells, _yesterdayKey]);
+  const yRawWaterVol = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(yWells ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
+  ), [yWells, _yesterdayKey]);
 
-  const yProduction = useMemo(() => {
-    const pivot = computePivotFromReadings(yProductMeters ?? [], 'meter_id', 'daily_volume');
-    return pivotDayTotal(pivot, _yesterdayKey);
-  }, [yProductMeters, _yesterdayKey]);
+  const yProduction = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
+  ), [yProductMeters, _yesterdayKey]);
 
-  const yConsumption = useMemo(() => {
-    const pivot = computePivotFromReadings(yLocators ?? [], 'locator_id', 'daily_volume');
-    return pivotDayTotal(pivot, _yesterdayKey);
-  }, [yLocators, _yesterdayKey]);
+  const yConsumption = useMemo(() => pivotDayTotal(
+    computePivotFromReadings(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
+  ), [yLocators, _yesterdayKey]);
 
   const yKwh = (yPower ?? []).reduce((s: number, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
   const dProduction = pctDelta(production, yProduction);
