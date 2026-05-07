@@ -51,12 +51,12 @@ function buildEntityPivot(
 type DSMTab = 'overview' | 'production' | 'consumption';
 
 // ─── CSS class helpers (avoids repetition) ──────────────────────────────────
-const TH = 'px-3 py-2 text-right text-[10px] font-semibold text-muted-foreground whitespace-nowrap border-b border-border';
-const TH_DATE = 'px-3 py-2 text-left text-[10px] font-semibold text-muted-foreground whitespace-nowrap border-b border-border sticky left-0 bg-muted/95';
-const TH_TOTAL = 'px-3 py-2 text-right text-[10px] font-bold whitespace-nowrap border-b border-l border-border sticky right-0 bg-teal-50/95 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300';
-const TD = 'px-3 py-1.5 text-right font-mono-num tabular-nums text-[11px]';
-const TD_TOTAL_ROW = 'px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300';
-const TD_TOTAL_COL = 'px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300 sticky right-0 border-l border-border';
+const TH = 'px-2 py-2 text-center text-[10px] font-semibold text-muted-foreground border-b border-border align-bottom';
+const TH_DATE = 'px-3 py-2 text-left text-[10px] font-semibold text-muted-foreground whitespace-nowrap border-b border-border sticky left-0 bg-muted/95 w-[72px] min-w-[72px]';
+const TH_TOTAL = 'px-2 py-2 text-center text-[10px] font-bold border-b border-l border-border sticky right-0 bg-teal-50/95 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 align-bottom w-[80px] min-w-[80px]';
+const TD = 'px-2 py-1.5 text-center font-mono-num tabular-nums text-[11px]';
+const TD_TOTAL_ROW = 'px-2 py-1.5 text-center font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300';
+const TD_TOTAL_COL = 'px-2 py-1.5 text-center font-semibold font-mono-num tabular-nums text-[11px] text-teal-700 dark:text-teal-300 sticky right-0 border-l border-border w-[80px] min-w-[80px]';
 
 function fmtV(v: number | null | undefined, dec = 1) {
   if (v == null || v === 0) return <span className="text-muted-foreground/40">—</span>;
@@ -92,16 +92,21 @@ function PivotTable({
   }
 
   return (
-    <div className="overflow-auto h-full">
-      <table className="w-full border-collapse text-[11px]">
+    <div className="overflow-x-auto">
+      <table className="border-collapse text-[11px] w-full table-fixed">
+        <colgroup>
+          <col style={{ width: '72px', minWidth: '72px' }} />
+          {entities.map((e) => <col key={e.id} />)}
+          <col style={{ width: '80px', minWidth: '80px' }} />
+        </colgroup>
         <thead className="sticky top-0 z-20">
           {/* Column header row */}
           <tr className="bg-muted/95 backdrop-blur-sm">
             <th className={TH_DATE}>Date</th>
             {entities.map((e) => (
               <th key={e.id} className={TH} title={e.label}>
-                <div className="truncate max-w-[120px] mx-auto text-right">{e.label}</div>
-                <div className="text-[9px] font-normal opacity-60">{unit}</div>
+                <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
+                <div className="text-[9px] font-normal opacity-60 mt-0.5">{unit}</div>
               </th>
             ))}
             <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-[9px] font-normal opacity-80">{unit}</span></th>
@@ -241,7 +246,7 @@ function OverviewTable({
   }
 
   return (
-    <div className="overflow-auto h-full">
+    <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[11px]">
         <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
           <tr>
@@ -299,6 +304,57 @@ function DataSummaryPopup({
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');
 
+  // Date range filter state — defaults to full range of available data
+  const allDates = chartData.map((d) => d.date as string);
+  const defaultFrom = allDates.length ? allDates[0] : '';
+  const defaultTo = allDates.length ? allDates[allDates.length - 1] : '';
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+
+  // Convert filterFrom/filterTo back to Date for comparison (use full range if empty)
+  const parsedFrom = filterFrom ? new Date(`${filterFrom}T00:00:00`) : null;
+  const parsedTo = filterTo ? new Date(`${filterTo}T23:59:59`) : null;
+
+  const filteredChartData = useMemo(() => {
+    if (!parsedFrom && !parsedTo) return chartData;
+    return chartData.filter((d) => {
+      const dt = new Date(d.date);
+      if (parsedFrom && dt < parsedFrom) return false;
+      if (parsedTo && dt > parsedTo) return false;
+      return true;
+    });
+  }, [chartData, filterFrom, filterTo]);
+
+  const filteredLocReadings = useMemo(() => {
+    if (!parsedFrom && !parsedTo) return locReadings;
+    return locReadings.filter((r) => {
+      const dt = new Date(r.reading_datetime);
+      if (parsedFrom && dt < parsedFrom) return false;
+      if (parsedTo && dt > parsedTo) return false;
+      return true;
+    });
+  }, [locReadings, filterFrom, filterTo]);
+
+  const filteredProductReadings = useMemo(() => {
+    if (!parsedFrom && !parsedTo) return productReadings;
+    return productReadings.filter((r) => {
+      const dt = new Date(r.reading_datetime);
+      if (parsedFrom && dt < parsedFrom) return false;
+      if (parsedTo && dt > parsedTo) return false;
+      return true;
+    });
+  }, [productReadings, filterFrom, filterTo]);
+
+  const filteredWellReadings = useMemo(() => {
+    if (!parsedFrom && !parsedTo) return wellReadings;
+    return wellReadings.filter((r) => {
+      const dt = new Date(r.reading_datetime);
+      if (parsedFrom && dt < parsedFrom) return false;
+      if (parsedTo && dt > parsedTo) return false;
+      return true;
+    });
+  }, [wellReadings, filterFrom, filterTo]);
+
   // Determine which secondary tabs are relevant for this metric
   const hasProdTab = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'rawwater';
   const hasConsTab = metric === 'production' || metric === 'nrw';
@@ -320,39 +376,39 @@ function DataSummaryPopup({
   const prodEntities = useMemo<{ id: string; label: string }[]>(() => {
     if (metric === 'rawwater' || metric === 'pv') {
       // wells
-      const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
+      const ids = Array.from(new Set((filteredWellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
       return ids.map((id) => ({ id, label: wellNames?.get(id) ?? `Well ${id.slice(-4)}` }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
     // product meters
-    const ids = Array.from(new Set((productReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
+    const ids = Array.from(new Set((filteredProductReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
     return ids.map((id) => ({ id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [metric, productReadings, wellReadings, productMeterNames, wellNames]);
+  }, [metric, filteredProductReadings, filteredWellReadings, productMeterNames, wellNames]);
 
   const prodPivot = useMemo(() => {
-    const readings = (metric === 'rawwater' || metric === 'pv') ? (wellReadings ?? []) : (productReadings ?? []);
+    const readings = (metric === 'rawwater' || metric === 'pv') ? (filteredWellReadings ?? []) : (filteredProductReadings ?? []);
     const field = (metric === 'rawwater' || metric === 'pv') ? 'well_id' : 'meter_id';
     return buildEntityPivot(
       [...readings].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
       field,
     );
-  }, [metric, productReadings, wellReadings]);
+  }, [metric, filteredProductReadings, filteredWellReadings]);
 
   // --- Consumption entities ---
   const consEntities = useMemo<{ id: string; label: string }[]>(() => {
-    const ids = Array.from(new Set((locReadings ?? []).map((r: any) => r.locator_id).filter(Boolean)));
+    const ids = Array.from(new Set((filteredLocReadings ?? []).map((r: any) => r.locator_id).filter(Boolean)));
     return ids.map((id) => ({ id, label: locatorNames?.get(id) ?? `Locator ${id.slice(-4)}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [locReadings, locatorNames]);
+  }, [filteredLocReadings, locatorNames]);
 
   const consPivot = useMemo(() => buildEntityPivot(
-    [...(locReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+    [...(filteredLocReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
     'locator_id',
-  ), [locReadings]);
+  ), [filteredLocReadings]);
 
-  // All dates from chartData (overview tab) already sorted newest-first when reversed
-  const dates = chartData.map((d) => d.date);
+  // All dates from filteredChartData (overview tab)
+  const dates = filteredChartData.map((d) => d.date);
 
   // Tab guard: if active tab becomes irrelevant, reset
   const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
@@ -365,12 +421,40 @@ function DataSummaryPopup({
       >
         {/* Header */}
         <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0">
-          <DialogTitle className="text-sm font-semibold pb-3">
+          <DialogTitle className="text-sm font-semibold pb-2">
             Data Summary — {title ?? metric}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Multi-tab data summary for {title ?? metric}.
           </DialogDescription>
+
+          {/* Date range filter */}
+          <div className="flex items-center gap-2 pb-2 flex-wrap">
+            <span className="text-[10px] text-muted-foreground font-medium shrink-0">Date range:</span>
+            <Input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              placeholder={defaultFrom}
+              className="h-6 w-[110px] text-[10px] px-1.5"
+            />
+            <span className="text-[10px] text-muted-foreground shrink-0">→</span>
+            <Input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              placeholder={defaultTo}
+              className="h-6 w-[110px] text-[10px] px-1.5"
+            />
+            {(filterFrom || filterTo) && (
+              <button
+                onClick={() => { setFilterFrom(''); setFilterTo(''); }}
+                className="h-6 px-2 rounded text-[10px] font-medium bg-muted text-muted-foreground hover:text-foreground border border-border transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
 
           {/* Tabs row */}
           <div className="flex gap-0 -mb-px">
@@ -396,15 +480,15 @@ function DataSummaryPopup({
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden">
-          {chartData.length === 0 ? (
+        <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
+          {filteredChartData.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
               No data in selected range.
             </div>
           ) : (
             <>
               {activeTab === 'overview' && (
-                <OverviewTable metric={metric} chartData={chartData} />
+                <OverviewTable metric={metric} chartData={filteredChartData} />
               )}
               {activeTab === 'production' && hasProdTab && (
                 <PivotTable
