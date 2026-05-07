@@ -12,15 +12,437 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, Download, FileText } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Upload, Download, FileText, AlertCircle, Loader2 } from 'lucide-react';
 
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
 import { fmtNum } from '@/lib/calculations';
+import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
+
+// ─── CSV helpers ────────────────────────────────────────────────────────────
+
+function parseCSVText(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map((line) => {
+    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function triggerTemplateDownload(filename: string, _headers: string[], exampleRow: Record<string, string>) {
+  downloadCSV(filename, [exampleRow]);
+}
+
+// ─── Import audit logger ─────────────────────────────────────────────────────
+
+async function logBillingImport(entry: {
+  user_id: string | null;
+  plant_id: string;
+  module: string;
+  file_name: string;
+  row_count: number;
+  schema_valid: boolean;
+  schema_errors: string[];
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('import_audit_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore if table missing */ }
+}
+
+// ─── Duplicate decision state (module-level, reset each import run) ──────────
+
+const _billingDupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
+function clearBillingDupDecisions() { _billingDupDecisions.clear(); }
+
+let _billingDupPromptResolver: ((d: 'overwrite' | 'skip') => void) | null = null;
+let _billingDupShowPrompt: ((label: string, isDateOnly: boolean) => void) | null = null;
+let _billingBulkDupDecision: 'overwrite' | 'skip' | null = null;
+function clearBillingBulkDupDecision() { _billingBulkDupDecision = null; }
+
+async function resolveBillingDuplicate(key: string, label: string, isDateOnly = false): Promise<'overwrite' | 'skip'> {
+  if (_billingDupDecisions.has(key)) return _billingDupDecisions.get(key)!;
+  if (_billingBulkDupDecision) {
+    _billingDupDecisions.set(key, _billingBulkDupDecision);
+    return _billingBulkDupDecision;
+  }
+  const decision = await new Promise<'overwrite' | 'skip'>((resolve) => {
+    _billingDupPromptResolver = resolve;
+    _billingDupShowPrompt?.(label, isDateOnly);
+  });
+  _billingDupDecisions.set(key, decision);
+  return decision;
+}
+
+// ─── Shared ImportReadingsDialog ─────────────────────────────────────────────
+
+interface ImportDialogProps {
+  title: string;
+  module: string;
+  plantId: string;
+  userId: string | null;
+  schemaHint: string;
+  templateFilename: string;
+  templateRow: Record<string, string>;
+  validateRow: (r: Record<string, string>, i: number) => string[];
+  insertRows: (rows: Record<string, string>[], plantId: string) => Promise<{ count: number; errors: string[] }>;
+  onClose: () => void;
+  onImported: () => void;
+}
+
+function ImportReadingsDialog({
+  title, module, plantId, userId,
+  schemaHint, templateFilename, templateRow,
+  validateRow, insertRows,
+  onClose, onImported,
+}: ImportDialogProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile]         = useState<File | null>(null);
+  const [rows, setRows]         = useState<Record<string, string>[]>([]);
+  const [errors, setErrors]     = useState<string[]>([]);
+  const [busy, setBusy]         = useState(false);
+  const [done, setDone]         = useState(false);
+  const [imported, setImported] = useState(0);
+  const [_dupRows, setDupRows]  = useState<Record<string, string>[]>([]);
+  const [dupResolved, setDupResolved] = useState(false);
+  const [dupConfirm, setDupConfirm]   = useState<{ label: string; isDateOnly: boolean } | null>(null);
+
+  useEffect(() => {
+    _billingDupShowPrompt = (label, isDateOnly) => setDupConfirm({ label, isDateOnly });
+    return () => { _billingDupShowPrompt = null; _billingDupPromptResolver = null; };
+  }, []);
+
+  const handleDupDecision = (decision: 'overwrite' | 'skip', applyToAll = false) => {
+    if (applyToAll) _billingBulkDupDecision = decision;
+    setDupConfirm(null);
+    _billingDupPromptResolver?.(decision);
+    _billingDupPromptResolver = null;
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseCSVText(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateRow(r, i + 2)));
+      setRows(parsed);
+      setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    setBusy(true);
+    clearBillingDupDecisions();
+    clearBillingBulkDupDecision();
+    const ts = new Date().toISOString();
+
+    // Intra-file duplicate detection (billing_month is the key per plant)
+    const seenKeys = new Map<string, number>();
+    const intraDups: number[] = [];
+    rows.forEach((r, i) => {
+      const key = (r.billing_month || '').trim().slice(0, 7); // YYYY-MM
+      if (seenKeys.has(key)) intraDups.push(i);
+      else seenKeys.set(key, i);
+    });
+
+    if (intraDups.length > 0 && !dupResolved) {
+      setRows(rows.filter((_r, i) => !intraDups.includes(i)));
+      setDupResolved(true);
+      setBusy(false);
+      return;
+    }
+
+    const { count, errors: importErrors } = await insertRows(rows, plantId);
+    await logBillingImport({
+      user_id: userId,
+      plant_id: plantId,
+      module,
+      file_name: file.name,
+      row_count: rows.length,
+      schema_valid: errors.length === 0,
+      schema_errors: [...errors, ...importErrors],
+      timestamp: ts,
+    });
+    setBusy(false);
+    setImported(count);
+    setDone(true);
+    if (importErrors.length) toast.error(`${count} imported, ${importErrors.length} failed`);
+    else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
+    else toast.success(`${count} bill(s) imported`);
+    if (count > 0) onImported();
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            {title}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* Download template */}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRow)}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema reference */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required.{' '}
+              <code>billing_month</code> format: <code>YYYY-MM-DD</code> (e.g. 2026-05-01).
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">
+              Select CSV file <span className="text-destructive">*</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="hidden"
+            />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0
+                ? 'border-destructive/40 bg-destructive/5'
+                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {Object.keys(rows[0]).map((h) => (
+                        <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((val, j) => (
+                          <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[120px] truncate">{val || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {done && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+              {imported} record(s) imported. Audit log written.
+            </p>
+          )}
+
+          {/* Intra-file duplicate notice */}
+          {dupResolved && !done && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Duplicate billing months within the file were removed — only the first occurrence is kept. Click <strong>Import Rows</strong> to proceed.</span>
+            </div>
+          )}
+
+          {/* DB-level duplicate confirmation */}
+          {dupConfirm && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Duplicate detected
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                A bill for <strong>"{dupConfirm.label}"</strong> already exists{' '}
+                {dupConfirm.isDateOnly ? 'for this billing month' : 'at this date'}.
+                Overwrite it, or skip this row?
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip')}>Skip</Button>
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)} title="Overwrite this and all remaining duplicates">Overwrite All</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip', true)} title="Skip this and all remaining duplicates">Skip All</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-teal-700 text-white hover:bg-teal-800"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Power Billing CSV config ─────────────────────────────────────────────────
+
+const BILLING_SCHEMA = 'billing_month* (YYYY-MM-DD), period_start, period_end, previous_reading, current_reading, multiplier, generation_charge, distribution_charge, other_charges, total_amount*, provider, remarks';
+
+const BILLING_TEMPLATE_ROW: Record<string, string> = {
+  billing_month: '2026-05-01',
+  period_start: '2026-04-01',
+  period_end: '2026-04-30',
+  previous_reading: '12000',
+  current_reading: '12950',
+  multiplier: '120',
+  generation_charge: '15000',
+  distribution_charge: '8000',
+  other_charges: '2000',
+  total_amount: '25000',
+  provider: 'VECO / NGCP',
+  remarks: '',
+};
+
+function validateBillingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.billing_month?.trim()) e.push(`Row ${i}: billing_month is required`);
+  else if (isNaN(Date.parse(r.billing_month))) e.push(`Row ${i}: billing_month must be a valid date (YYYY-MM-DD)`);
+  if (!r.total_amount?.trim() || isNaN(Number(r.total_amount)) || Number(r.total_amount) < 0)
+    e.push(`Row ${i}: total_amount is required and must be a non-negative number`);
+  if (r.period_start && isNaN(Date.parse(r.period_start))) e.push(`Row ${i}: period_start is not a valid date`);
+  if (r.period_end   && isNaN(Date.parse(r.period_end)))   e.push(`Row ${i}: period_end is not a valid date`);
+  if (r.previous_reading    && isNaN(Number(r.previous_reading)))    e.push(`Row ${i}: previous_reading must be a number`);
+  if (r.current_reading     && isNaN(Number(r.current_reading)))     e.push(`Row ${i}: current_reading must be a number`);
+  if (r.multiplier          && isNaN(Number(r.multiplier)))          e.push(`Row ${i}: multiplier must be a number`);
+  if (r.generation_charge   && isNaN(Number(r.generation_charge)))   e.push(`Row ${i}: generation_charge must be a number`);
+  if (r.distribution_charge && isNaN(Number(r.distribution_charge))) e.push(`Row ${i}: distribution_charge must be a number`);
+  if (r.other_charges       && isNaN(Number(r.other_charges)))       e.push(`Row ${i}: other_charges must be a number`);
+  return e;
+}
+
+async function insertBillingRows(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+): Promise<{ count: number; errors: string[] }> {
+  let count = 0;
+  const errors: string[] = [];
+
+  for (const r of rows) {
+    // Normalise billing_month to first-of-month YYYY-MM-DD
+    const billingMonth = r.billing_month.trim().slice(0, 7) + '-01';
+
+    // Duplicate check: same plant + same billing_month
+    const { data: existing } = await supabase
+      .from('electric_bills')
+      .select('id')
+      .eq('plant_id', plantId)
+      .eq('billing_month', billingMonth)
+      .limit(1);
+
+    const payload: Record<string, any> = {
+      plant_id: plantId,
+      billing_month: billingMonth,
+      period_start:        r.period_start        || null,
+      period_end:          r.period_end          || null,
+      previous_reading:    r.previous_reading    !== '' && r.previous_reading    != null ? +r.previous_reading    : null,
+      current_reading:     r.current_reading     !== '' && r.current_reading     != null ? +r.current_reading     : null,
+      multiplier:          r.multiplier          !== '' && r.multiplier          != null ? +r.multiplier          : 1,
+      generation_charge:   r.generation_charge   !== '' && r.generation_charge   != null ? +r.generation_charge   : null,
+      distribution_charge: r.distribution_charge !== '' && r.distribution_charge != null ? +r.distribution_charge : null,
+      other_charges:       r.other_charges       !== '' && r.other_charges       != null ? +r.other_charges       : null,
+      total_amount:        +r.total_amount,
+      provider:            r.provider            || null,
+      remarks:             r.remarks             || 'Imported',
+      recorded_by:         userId,
+    };
+
+    if (existing && existing.length > 0) {
+      const label = `${r.provider?.trim() || 'Bill'} @ ${billingMonth.slice(0, 7)}`;
+      const decision = await resolveBillingDuplicate(`${plantId}|${billingMonth}`, label, true);
+      if (decision === 'skip') continue;
+      const { error } = await supabase.from('electric_bills').update(payload).eq('id', existing[0].id);
+      if (error) errors.push(error.message); else count++;
+    } else {
+      const { error } = await supabase.from('electric_bills').insert(payload);
+      if (error) errors.push(error.message); else count++;
+    }
+  }
+  return { count, errors };
+}
 
 export default function Costs() {
   const [params, setParams] = useSearchParams();
@@ -385,144 +807,29 @@ function Power() {
     qc.invalidateQueries({ queryKey: ['tariffs'] });
   };
 
-  const importFileRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
-
-  const downloadTemplate = () => {
-    const headers = 'billing_month,period_start,period_end,previous_reading,current_reading,multiplier,generation_charge,distribution_charge,other_charges,total_amount,provider,remarks';
-    const example = '2026-05-01,2026-04-01,2026-04-30,12000,12950,120,15000,8000,2000,25000,VECO / NGCP,';
-    const blob = new Blob([`${headers}\n${example}\n`], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'power_billing_template.csv'; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = async () => {
-    if (!importFile || !plantId) { toast.error('Select a plant and a file'); return; }
-    setImporting(true);
-    try {
-      const text = await importFile.text();
-      const lines = text.trim().split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-      const rows = lines.slice(1).map(line => {
-        const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-        return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-      });
-      let inserted = 0;
-      for (const row of rows) {
-        const payload: Record<string, any> = {
-          plant_id: plantId,
-          billing_month: row.billing_month || null,
-          period_start: row.period_start || null,
-          period_end: row.period_end || null,
-          previous_reading: row.previous_reading !== '' ? +row.previous_reading : null,
-          current_reading: row.current_reading !== '' ? +row.current_reading : null,
-          multiplier: row.multiplier ? +row.multiplier : 1,
-          generation_charge: row.generation_charge !== '' ? +row.generation_charge : null,
-          distribution_charge: row.distribution_charge !== '' ? +row.distribution_charge : null,
-          other_charges: row.other_charges !== '' ? +row.other_charges : null,
-          total_amount: row.total_amount !== '' ? +row.total_amount : null,
-          provider: row.provider || null,
-          remarks: row.remarks || 'Imported',
-          recorded_by: user?.id,
-        };
-        if (!payload.billing_month || payload.total_amount == null) continue;
-        const { error } = await supabase.from('electric_bills').insert(payload);
-        if (!error) inserted++;
-      }
-      toast.success(`Imported ${inserted} of ${rows.length} bill(s)`);
-      qc.invalidateQueries({ queryKey: ['bills'] });
-      qc.invalidateQueries({ queryKey: ['tariffs'] });
-      setImportOpen(false);
-      setImportFile(null);
-    } catch (err: any) {
-      toast.error(`Import failed: ${err.message}`);
-    }
-    setImporting(false);
-  };
 
   return (
     <div className="space-y-3">
-      {/* Import Power Billing Dialog */}
-      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) setImportFile(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Upload className="w-4 h-4" />
-              Import Power Billing from CSV
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Download template row */}
-            <div className="flex items-center gap-3 p-3 border rounded-lg">
-              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={downloadTemplate}>
-                <Download className="w-3.5 h-3.5" />
-                Download Template
-              </Button>
-              <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
-            </div>
-
-            {/* Expected columns */}
-            <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
-                <FileText className="w-3.5 h-3.5" />
-                Expected Columns:
-              </div>
-              <p className="text-xs font-mono leading-relaxed">
-                <span className="font-semibold">billing_month*</span>, period_start, period_end, previous_reading, current_reading, multiplier, generation_charge, distribution_charge, other_charges, <span className="font-semibold">total_amount*</span>, provider, remarks
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Columns marked * are required. <span className="font-mono">billing_month</span> format: <span className="font-mono">YYYY-MM-DD</span> (e.g. 2026-05-01).
-              </p>
-            </div>
-
-            {/* File picker */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Select CSV file <span className="text-destructive">*</span>
-              </Label>
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="shrink-0 gap-1.5 bg-teal-700 hover:bg-teal-800 text-white"
-                  onClick={() => importFileRef.current?.click()}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Choose File
-                </Button>
-                <span className="text-xs text-muted-foreground truncate">
-                  {importFile ? importFile.name : 'No file chosen'}
-                </span>
-                <input
-                  ref={importFileRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => { setImportOpen(false); setImportFile(null); }}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-teal-700 hover:bg-teal-800 text-white"
-              disabled={!importFile || importing}
-              onClick={handleImport}
-            >
-              {importing ? 'Importing…' : 'Import Rows'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {importOpen && (
+        <ImportReadingsDialog
+          title="Import Power Billing from CSV"
+          module="power_billing"
+          plantId={plantId}
+          userId={user?.id ?? null}
+          schemaHint={BILLING_SCHEMA}
+          templateFilename="power_billing_template.csv"
+          templateRow={BILLING_TEMPLATE_ROW}
+          validateRow={validateBillingRow}
+          insertRows={(rows, pid) => insertBillingRows(rows, pid, user?.id ?? null)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            qc.invalidateQueries({ queryKey: ['bills'] });
+            qc.invalidateQueries({ queryKey: ['tariffs'] });
+          }}
+        />
+      )}
 
       <Card className="p-3 space-y-3">
         <div>
