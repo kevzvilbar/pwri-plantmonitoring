@@ -35,8 +35,11 @@ import {
 } from '@/components/ui/dialog';
 
 // ─── DataSummaryModal ─────────────────────────────────────────────────────────
+// Full-screen pivot-table popup. Rows = dates, columns = individual
+// locators (consumption) or product meters (production). Non-retractable —
+// closes only via the ✕ button or clicking outside the dialog.
 
-type SummaryTab = 'production' | 'consumption';
+type SummaryTab = 'consumption' | 'production';
 
 function resolveVolSummary(r: any): number {
   if (r.daily_volume != null && +r.daily_volume > 0) return +r.daily_volume;
@@ -61,13 +64,6 @@ function pctLabel(pct: number | null) {
   return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
 }
 
-function dayBounds(ds: string) {
-  return {
-    start: new Date(ds + 'T00:00:00').toISOString(),
-    end:   new Date(ds + 'T23:59:59').toISOString(),
-  };
-}
-
 interface DataSummaryModalProps {
   open: boolean;
   onClose: () => void;
@@ -76,56 +72,19 @@ interface DataSummaryModalProps {
 }
 
 function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummaryModalProps) {
-  const [tab, setTab]         = useState<SummaryTab>('production');
-  const [dateStr, setDateStr] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [tab, setTab] = useState<SummaryTab>('consumption');
 
-  const prevDateStr = format(subDays(new Date(dateStr + 'T12:00:00'), 1), 'yyyy-MM-dd');
-  const { start, end }         = dayBounds(dateStr);
-  const { start: pStart, end: pEnd } = dayBounds(prevDateStr);
-  const isToday = dateStr === format(new Date(), 'yyyy-MM-dd');
+  // Date range: default last 7 days
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const [fromStr, setFromStr] = useState<string>(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
+  const [toStr,   setToStr]   = useState<string>(todayStr);
 
-  // ── product meters (meta) ──────────────────────────────────────────────────
-  const { data: productMeters } = useQuery({
-    queryKey: ['summary-product-meters', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return [];
-      const { data: meters } = await (supabase.from('product_meters' as any) as any)
-        .select('id,name,plant_id').in('plant_id', plantIds);
-      return (meters ?? []) as any[];
-    },
-    enabled: open && plantIds.length > 0,
-  });
+  const startISO = new Date(fromStr + 'T00:00:00').toISOString();
+  const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
 
-  const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
-
-  const { data: prodReadings, isLoading: prodLoading } = useQuery({
-    queryKey: ['summary-prod-readings', meterIds, dateStr],
-    queryFn: async () => {
-      if (!meterIds.length) return [];
-      const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime')
-        .in('meter_id', meterIds).gte('reading_datetime', start).lte('reading_datetime', end)
-        .order('reading_datetime', { ascending: false });
-      return (data ?? []) as any[];
-    },
-    enabled: open && meterIds.length > 0,
-  });
-
-  const { data: prevProdReadings } = useQuery({
-    queryKey: ['summary-prod-readings-prev', meterIds, prevDateStr],
-    queryFn: async () => {
-      if (!meterIds.length) return [];
-      const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading')
-        .in('meter_id', meterIds).gte('reading_datetime', pStart).lte('reading_datetime', pEnd);
-      return (data ?? []) as any[];
-    },
-    enabled: open && meterIds.length > 0,
-  });
-
-  // ── locators (meta) ────────────────────────────────────────────────────────
+  // ── Locators (meta) ────────────────────────────────────────────────────────
   const { data: locators } = useQuery({
-    queryKey: ['summary-locators', plantIds],
+    queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase
@@ -139,304 +98,298 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
 
   const { data: consReadings, isLoading: consLoading } = useQuery({
-    queryKey: ['summary-cons-readings', locatorIds, dateStr],
+    queryKey: ['dsm-cons-readings', locatorIds, fromStr, toStr],
     queryFn: async () => {
       if (!locatorIds.length) return [];
       const { data } = await supabase
         .from('locator_readings')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime')
-        .in('locator_id', locatorIds).gte('reading_datetime', start).lte('reading_datetime', end)
-        .order('reading_datetime', { ascending: false });
+        .in('locator_id', locatorIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
     enabled: open && locatorIds.length > 0,
   });
 
-  const { data: prevConsReadings } = useQuery({
-    queryKey: ['summary-cons-readings-prev', locatorIds, prevDateStr],
+  // ── Product meters (meta) ──────────────────────────────────────────────────
+  const { data: productMeters } = useQuery({
+    queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
-      if (!locatorIds.length) return [];
-      const { data } = await supabase
-        .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading')
-        .in('locator_id', locatorIds).gte('reading_datetime', pStart).lte('reading_datetime', pEnd);
+      if (!plantIds.length) return [];
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id,name,plant_id').in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
-    enabled: open && locatorIds.length > 0,
+    enabled: open && plantIds.length > 0,
   });
 
-  // ── derived: production rows ───────────────────────────────────────────────
-  const prodRows = useMemo(() => {
-    const byMeter   = new Map<string, number>();
-    const prevMeter = new Map<string, number>();
-    (prodReadings    ?? []).forEach((r: any) => byMeter.set(r.meter_id,   (byMeter.get(r.meter_id)   ?? 0) + resolveVolSummary(r)));
-    (prevProdReadings ?? []).forEach((r: any) => prevMeter.set(r.meter_id, (prevMeter.get(r.meter_id) ?? 0) + resolveVolSummary(r)));
-    return (productMeters ?? []).map((m: any) => ({
-      id: m.id, name: m.name ?? `Meter ${m.id.slice(-4)}`,
-      plant: plantCodeById.get(m.plant_id) ?? m.plant_id,
-      vol:   byMeter.get(m.id) ?? 0,
-      delta: summaryPctDelta(byMeter.get(m.id) ?? 0, prevMeter.get(m.id) ?? 0),
-    })).sort((a, b) => a.plant.localeCompare(b.plant) || a.name.localeCompare(b.name));
-  }, [productMeters, prodReadings, prevProdReadings, plantCodeById]);
+  const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
-  const prodTotal     = prodRows.reduce((s, r) => s + r.vol, 0);
-  const prevProdTotal = useMemo(() => {
-    const m = new Map<string, number>();
-    (prevProdReadings ?? []).forEach((r: any) => m.set(r.meter_id, (m.get(r.meter_id) ?? 0) + resolveVolSummary(r)));
-    return Array.from(m.values()).reduce((s, v) => s + v, 0);
-  }, [prevProdReadings]);
+  const { data: prodReadings, isLoading: prodLoading } = useQuery({
+    queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
+    queryFn: async () => {
+      if (!meterIds.length) return [];
+      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime')
+        .in('meter_id', meterIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
+      return (data ?? []) as any[];
+    },
+    enabled: open && meterIds.length > 0,
+  });
 
-  // ── derived: consumption rows ──────────────────────────────────────────────
-  const consRows = useMemo(() => {
-    const byLoc   = new Map<string, number>();
-    const prevLoc = new Map<string, number>();
-    (consReadings    ?? []).forEach((r: any) => byLoc.set(r.locator_id,   (byLoc.get(r.locator_id)   ?? 0) + resolveVolSummary(r)));
-    (prevConsReadings ?? []).forEach((r: any) => prevLoc.set(r.locator_id, (prevLoc.get(r.locator_id) ?? 0) + resolveVolSummary(r)));
-    return (locators ?? []).map((l: any) => ({
-      id: l.id, name: l.name ?? l.code ?? `Locator ${l.id.slice(-4)}`,
-      code: l.code,
-      plant: plantCodeById.get(l.plant_id) ?? l.plant_id,
-      vol:        byLoc.get(l.id) ?? 0,
-      delta:      summaryPctDelta(byLoc.get(l.id) ?? 0, prevLoc.get(l.id) ?? 0),
-      hasReading: byLoc.has(l.id),
-    })).sort((a, b) => a.plant.localeCompare(b.plant) || a.name.localeCompare(b.name));
-  }, [locators, consReadings, prevConsReadings, plantCodeById]);
+  // ── Build pivot: rows = dates, columns = entities ──────────────────────────
+  // Returns { dates, entities, pivot } where pivot[date][entityId] = volume
+  const consPivot = useMemo(() => {
+    const sortedLocs = [...(locators ?? [])].sort((a, b) => {
+      const pa = plantCodeById.get(a.plant_id) ?? '';
+      const pb = plantCodeById.get(b.plant_id) ?? '';
+      return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
+    });
 
-  const consTotal = consRows.reduce((s, r) => s + r.vol, 0);
-  const nrwPct    = prodTotal > 0 ? +(((prodTotal - consTotal) / prodTotal) * 100).toFixed(1) : null;
+    // Group readings by locator, sorted by datetime, compute deltas
+    const byLocator = new Map<string, any[]>();
+    (consReadings ?? []).forEach((r: any) => {
+      if (!byLocator.has(r.locator_id)) byLocator.set(r.locator_id, []);
+      byLocator.get(r.locator_id)!.push(r);
+    });
 
-  const prodByPlant = useMemo(() => {
-    const m = new Map<string, typeof prodRows>();
-    prodRows.forEach((r) => { if (!m.has(r.plant)) m.set(r.plant, []); m.get(r.plant)!.push(r); });
-    return m;
-  }, [prodRows]);
+    // date string → locatorId → volume
+    const pivot = new Map<string, Map<string, number>>();
 
-  const consByPlant = useMemo(() => {
-    const m = new Map<string, typeof consRows>();
-    consRows.forEach((r) => { if (!m.has(r.plant)) m.set(r.plant, []); m.get(r.plant)!.push(r); });
-    return m;
-  }, [consRows]);
+    byLocator.forEach((readings, locId) => {
+      readings.forEach((r) => {
+        const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+        const vol = resolveVolSummary(r);
+        pivot.get(dateKey)!.set(locId, (pivot.get(dateKey)!.get(locId) ?? 0) + vol);
+      });
+    });
+
+    const dates = Array.from(pivot.keys()).sort();
+    return { dates, entities: sortedLocs, pivot };
+  }, [locators, consReadings, plantCodeById]);
+
+  const prodPivot = useMemo(() => {
+    const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
+      const pa = plantCodeById.get(a.plant_id) ?? '';
+      const pb = plantCodeById.get(b.plant_id) ?? '';
+      return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
+    });
+
+    const byMeter = new Map<string, any[]>();
+    (prodReadings ?? []).forEach((r: any) => {
+      if (!byMeter.has(r.meter_id)) byMeter.set(r.meter_id, []);
+      byMeter.get(r.meter_id)!.push(r);
+    });
+
+    const pivot = new Map<string, Map<string, number>>();
+    byMeter.forEach((readings, meterId) => {
+      readings.forEach((r) => {
+        const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+        const vol = resolveVolSummary(r);
+        pivot.get(dateKey)!.set(meterId, (pivot.get(dateKey)!.get(meterId) ?? 0) + vol);
+      });
+    });
+
+    const dates = Array.from(pivot.keys()).sort();
+    return { dates, entities: sortedMeters, pivot };
+  }, [productMeters, prodReadings, plantCodeById]);
+
+  const isLoading = tab === 'consumption' ? consLoading : prodLoading;
+  const { dates, entities, pivot } = tab === 'consumption' ? consPivot : prodPivot;
+  const entityIdField = tab === 'consumption' ? 'id' : 'id';
+
+  // Column totals (sum per entity across all dates)
+  const colTotals = useMemo(() =>
+    entities.map((e) =>
+      dates.reduce((s, d) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
+    ),
+  [entities, dates, pivot]);
+
+  // Row totals (sum per date across all entities)
+  const rowTotals = useMemo(() =>
+    dates.map((d) =>
+      entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
+    ),
+  [entities, dates, pivot]);
+
+  const grandTotal = colTotals.reduce((s, v) => s + v, 0);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
-        className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="max-w-[95vw] w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
         data-testid="data-summary-modal"
       >
-        {/* Header */}
-        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+        {/* ── Header ── */}
+        <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
               Data Summary
-              {isToday && (
-                <span className="text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Today</span>
-              )}
             </DialogTitle>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-              <CalendarDays className="h-3.5 w-3.5" />
+
+            {/* Date range picker */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
               <input
                 type="date"
-                value={dateStr}
-                max={format(new Date(), 'yyyy-MM-dd')}
-                onChange={(e) => e.target.value && setDateStr(e.target.value)}
+                value={fromStr}
+                max={toStr}
+                onChange={(e) => e.target.value && setFromStr(e.target.value)}
                 className="bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               />
-            </label>
-          </div>
-
-          {/* KPI banner */}
-          <div className="flex items-center gap-4 mt-2 flex-wrap">
-            {/* Production KPI */}
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[10px] text-muted-foreground">Production</span>
-              <span className="text-sm font-semibold font-mono-num text-primary">{fmtNum(prodTotal)}</span>
-              <span className="text-[10px] text-muted-foreground">m³</span>
-              {summaryPctDelta(prodTotal, prevProdTotal) != null && (
-                <span className={`flex items-center text-[10px] ${summaryPctDelta(prodTotal, prevProdTotal)! > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  <DeltaIcon pct={summaryPctDelta(prodTotal, prevProdTotal)} />
-                  {pctLabel(summaryPctDelta(prodTotal, prevProdTotal))}
-                </span>
-              )}
+              <span>→</span>
+              <input
+                type="date"
+                value={toStr}
+                min={fromStr}
+                max={todayStr}
+                onChange={(e) => e.target.value && setToStr(e.target.value)}
+                className="bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+              />
             </div>
-            <span className="text-muted-foreground text-xs">vs</span>
-            {/* Consumption KPI */}
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[10px] text-muted-foreground">Consumption</span>
-              <span className="text-sm font-semibold font-mono-num text-highlight">{fmtNum(consTotal)}</span>
-              <span className="text-[10px] text-muted-foreground">m³</span>
-            </div>
-            {/* NRW */}
-            {nrwPct != null && (
-              <>
-                <span className="text-muted-foreground text-xs">·</span>
-                <span className={`text-xs font-semibold ${nrwPct > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  NRW {nrwPct}%
-                  {nrwPct > 20 && (
-                    <span className="ml-1 text-[10px] font-normal text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-1 py-0.5 rounded">
-                      above 20% limit
-                    </span>
-                  )}
-                </span>
-              </>
-            )}
           </div>
         </DialogHeader>
 
-        {/* Tabs */}
-        <div className="flex border-b shrink-0 px-5">
-          {(['production', 'consumption'] as SummaryTab[]).map((t) => (
+        {/* ── Option toggles: Consumption / Production ── */}
+        <div className="flex border-b shrink-0 px-5 bg-muted/20">
+          {(['consumption', 'production'] as SummaryTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={[
-                'px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+                'px-5 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors',
                 tab === t
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >
-              {t === 'production' ? 'Production' : 'Consumption (Locators)'}
+              {t === 'consumption' ? (
+                <span className="flex items-center gap-1.5"><Receipt className="h-3 w-3" />Consumption</span>
+              ) : (
+                <span className="flex items-center gap-1.5"><Droplet className="h-3 w-3" />Production</span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
-
-          {/* ── PRODUCTION TAB ── */}
-          {tab === 'production' && (
-            <>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Production = sum of <strong>Product Meter</strong> deltas (treated / distributed water output).
-                Each row is one product meter, grouped by plant. % change is vs the prior day.
-              </p>
-
-              {prodLoading && <div className="text-xs text-muted-foreground text-center py-6">Loading…</div>}
-              {!prodLoading && prodRows.length === 0 && (
-                <div className="text-xs text-muted-foreground text-center py-6">No product meter readings for this date.</div>
-              )}
-
-              {!prodLoading && Array.from(prodByPlant.entries()).map(([plant, rows]) => {
-                const plantTotal = rows.reduce((s, r) => s + r.vol, 0);
-                return (
-                  <div key={plant}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{plant}</span>
-                      <span className="text-[11px] font-mono-num text-muted-foreground">{fmtNum(plantTotal)} m³</span>
-                    </div>
-                    <div className="rounded-lg border divide-y overflow-hidden">
-                      {rows.map((r) => (
-                        <div key={r.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/30 transition-colors">
-                          <div className="w-2 h-2 rounded-full bg-primary/60 shrink-0" />
-                          <span className="flex-1 min-w-0 truncate text-xs">{r.name}</span>
-                          <span className="font-mono-num text-xs tabular-nums">
-                            {r.vol > 0 ? fmtNum(r.vol) : <span className="text-muted-foreground">—</span>}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground w-8 text-right">m³</span>
-                          <span className={`flex items-center gap-0.5 text-[10px] w-14 justify-end ${r.delta == null ? 'text-muted-foreground' : r.delta > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                            <DeltaIcon pct={r.delta} />
-                            {pctLabel(r.delta)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {!prodLoading && prodRows.length > 0 && (
-                <div className="flex items-center justify-between rounded-lg px-4 py-2.5 bg-muted/40 border mt-1">
-                  <div className="flex items-center gap-2">
-                    <Droplet className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-xs font-semibold">Total Production</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold font-mono-num text-primary">{fmtNum(prodTotal)}</span>
-                    <span className="text-xs text-muted-foreground">m³</span>
-                    {summaryPctDelta(prodTotal, prevProdTotal) != null && (
-                      <span className={`flex items-center text-[10px] ${summaryPctDelta(prodTotal, prevProdTotal)! > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        <DeltaIcon pct={summaryPctDelta(prodTotal, prevProdTotal)} />
-                        {pctLabel(summaryPctDelta(prodTotal, prevProdTotal))}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
+        {/* ── Body: horizontal pivot table ── */}
+        <div className="flex-1 overflow-auto">
+          {isLoading && (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
           )}
-
-          {/* ── CONSUMPTION TAB ── */}
-          {tab === 'consumption' && (
-            <>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Consumption = sum of <strong>Locator meter</strong> deltas (billed / distributed water consumed by end-points).
-                Each row is one active locator grouped by plant. Locators without a reading today show <em>—</em>.
-                <span className="ml-1 font-medium text-foreground">
-                  {consRows.filter((r) => r.hasReading).length}/{consRows.length} locators read today.
-                </span>
-              </p>
-
-              {consLoading && <div className="text-xs text-muted-foreground text-center py-6">Loading…</div>}
-              {!consLoading && consRows.length === 0 && (
-                <div className="text-xs text-muted-foreground text-center py-6">No locator readings for this date.</div>
-              )}
-
-              {!consLoading && Array.from(consByPlant.entries()).map(([plant, rows]) => {
-                const plantTotal = rows.reduce((s, r) => s + r.vol, 0);
-                const readCount  = rows.filter((r) => r.hasReading).length;
-                return (
-                  <div key={plant}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        {plant}
-                        <span className="ml-1.5 text-[10px] font-normal normal-case">({readCount}/{rows.length} read)</span>
-                      </span>
-                      <span className="text-[11px] font-mono-num text-muted-foreground">{fmtNum(plantTotal)} m³</span>
-                    </div>
-                    <div className="rounded-lg border divide-y overflow-hidden">
-                      {rows.map((r) => (
-                        <div
-                          key={r.id}
-                          className={`flex items-center gap-3 px-3 py-2 hover:bg-muted/30 transition-colors ${!r.hasReading ? 'opacity-50' : ''}`}
-                        >
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${r.hasReading ? 'bg-highlight' : 'bg-muted-foreground/30'}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs truncate">{r.name}</div>
-                            {r.code && r.code !== r.name && (
-                              <div className="text-[10px] text-muted-foreground">{r.code}</div>
-                            )}
-                          </div>
-                          <span className="font-mono-num text-xs tabular-nums">
-                            {r.vol > 0 ? fmtNum(r.vol) : <span className="text-muted-foreground">—</span>}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground w-8 text-right">m³</span>
-                          <span className={`flex items-center gap-0.5 text-[10px] w-14 justify-end ${r.delta == null ? 'text-muted-foreground' : r.delta > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                            <DeltaIcon pct={r.delta} />
-                            {r.hasReading ? pctLabel(r.delta) : '—'}
-                          </span>
+          {!isLoading && entities.length === 0 && (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+              No {tab === 'consumption' ? 'locators' : 'product meters'} found.
+            </div>
+          )}
+          {!isLoading && entities.length > 0 && dates.length === 0 && (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+              No readings in this date range.
+            </div>
+          )}
+          {!isLoading && entities.length > 0 && dates.length > 0 && (
+            <table className="w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
+              <thead className="sticky top-0 z-20">
+                {/* Entity name header row */}
+                <tr className="bg-muted/95 backdrop-blur-sm">
+                  {/* Sticky Date column */}
+                  <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
+                    Date
+                  </th>
+                  {entities.map((e, i) => (
+                    <th
+                      key={e.id}
+                      className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
+                      title={`${plantCodeById.get(e.plant_id) ?? ''} · ${e.name ?? e.code ?? e.id}`}
+                    >
+                      <div className="truncate max-w-[110px] mx-auto">
+                        {e.name ?? e.code ?? `#${i + 1}`}
+                      </div>
+                      {plantCodeById.get(e.plant_id) && (
+                        <div className="text-[9px] font-normal text-muted-foreground/70 truncate">
+                          {plantCodeById.get(e.plant_id)}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+                      )}
+                    </th>
+                  ))}
+                  <th className="sticky right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[90px]">
+                    Total (m³)
+                  </th>
+                </tr>
 
-              {!consLoading && consRows.length > 0 && (
-                <div className="flex items-center justify-between rounded-lg px-4 py-2.5 bg-muted/40 border mt-1">
-                  <div className="flex items-center gap-2">
-                    <Receipt className="h-3.5 w-3.5 text-highlight" />
-                    <span className="text-xs font-semibold">Total Consumption</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold font-mono-num text-highlight">{fmtNum(consTotal)}</span>
-                    <span className="text-xs text-muted-foreground">m³</span>
-                  </div>
-                </div>
-              )}
-            </>
+                {/* Column totals sub-header */}
+                <tr className="bg-teal-50/60 dark:bg-teal-950/20">
+                  <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">
+                    TOTAL
+                  </td>
+                  {colTotals.map((tot, i) => (
+                    <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-teal-700 dark:text-teal-300 border-b border-border tabular-nums">
+                      {tot > 0 ? tot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/50">—</span>}
+                    </td>
+                  ))}
+                  <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">
+                    {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </td>
+                </tr>
+              </thead>
+
+              <tbody>
+                {[...dates].reverse().map((date, di) => {
+                  const rowVols = entities.map((e) => pivot.get(date)?.get(e.id) ?? null);
+                  const rowTot = rowTotals[dates.length - 1 - di];
+                  const isEven = di % 2 === 0;
+                  return (
+                    <tr
+                      key={date}
+                      className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
+                    >
+                      <td className={[
+                        'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
+                        isEven ? 'bg-background' : 'bg-muted/10',
+                      ].join(' ')}>
+                        {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
+                      </td>
+                      {rowVols.map((vol, ei) => (
+                        <td key={entities[ei].id} className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border">
+                          {vol != null && vol > 0
+                            ? vol.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                            : <span className="text-muted-foreground/40">—</span>
+                          }
+                        </td>
+                      ))}
+                      <td className={[
+                        'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border',
+                        tab === 'consumption' ? 'text-highlight' : 'text-primary',
+                        isEven ? 'bg-background' : 'bg-muted/10',
+                      ].join(' ')}>
+                        {rowTot > 0 ? rowTot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
+
+        {/* ── Footer legend ── */}
+        {!isLoading && entities.length > 0 && (
+          <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-[10px] text-muted-foreground bg-muted/20">
+            {tab === 'consumption'
+              ? <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator per day</>
+              : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter per day</>
+            }
+            <span className="ml-auto">{entities.length} {tab === 'consumption' ? 'locators' : 'meters'} · {dates.length} days</span>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
