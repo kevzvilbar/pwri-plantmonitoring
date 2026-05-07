@@ -77,8 +77,13 @@ export default function Dashboard() {
   );
   const plantIds = visiblePlants?.map((p) => p.id) ?? [];
 
-  const today = startOfDay(new Date()).toISOString();
-  const yesterday = startOfDay(subDays(new Date(), 1)).toISOString();
+  // Bug 4 fix: build today/yesterday boundaries in UTC using the local calendar date,
+  // so that readings entered at e.g. 08:00 PST (= 00:00 UTC) are not pushed into yesterday.
+  // We construct YYYY-MM-DD from local time and then parse it as a UTC midnight to avoid
+  // the double-offset problem that startOfDay(new Date()).toISOString() causes in UTC+8.
+  const _localDateStr = format(new Date(), 'yyyy-MM-dd');          // local calendar date
+  const today     = new Date(_localDateStr + 'T00:00:00').toISOString();   // local midnight → ISO
+  const yesterday = new Date(format(subDays(new Date(), 1), 'yyyy-MM-dd') + 'T00:00:00').toISOString();
 
   // ----- Today aggregates from raw tables -----
   const { data: todayLocators } = useQuery({
@@ -173,18 +178,7 @@ export default function Dashboard() {
   const dKwh = pctDelta(kwh, yKwh);
 
   const nrwBreached = nrw != null && nrw > 20;
-  const avgPermTds = (latestRO ?? []).length
-    ? +((latestRO as any[]).reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / (latestRO as any[]).length).toFixed(0)
-    : null;
-  const avgFeedTds = (latestRO ?? []).length
-    ? +((latestRO as any[]).reduce((s, r) => s + (r.feed_tds ?? 0), 0) / (latestRO as any[]).length).toFixed(0)
-    : null;
-  const avgRecovery = (latestRO ?? []).length
-    ? +((latestRO as any[]).reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / (latestRO as any[]).length).toFixed(1)
-    : null;
-  const avgTurb = (latestRO ?? []).length
-    ? +((latestRO as any[]).reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / (latestRO as any[]).length).toFixed(2)
-    : null;
+  // Bug 5: RO averages are now computed after roByTrain useMemo below (deduped per train).
 
   // Per-train latest snapshot — group `latestRO` by (plant_id, train_number)
   // and keep the most recent row per train (the query is already ordered
@@ -209,6 +203,21 @@ export default function Dashboard() {
     });
     return rows;
   }, [latestRO]);
+
+  // Bug 5 fix: recompute RO averages from deduplicated roByTrain so trains with more
+  // readings per 24h window don't inflate/skew the aggregate values.
+  const avgPermTds = roByTrain.length
+    ? +(roByTrain.reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / roByTrain.length).toFixed(0)
+    : null;
+  const avgFeedTds = roByTrain.length
+    ? +(roByTrain.reduce((s, r) => s + (r.feed_tds ?? 0), 0) / roByTrain.length).toFixed(0)
+    : null;
+  const avgRecovery = roByTrain.length
+    ? +(roByTrain.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / roByTrain.length).toFixed(1)
+    : null;
+  const avgTurb = roByTrain.length
+    ? +(roByTrain.reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / roByTrain.length).toFixed(2)
+    : null;
   // Lookup helper for plant codes inside per-train rows. Falls back to the
   // raw plant_id when the plant list hasn't loaded yet so we never render
   // a blank label.

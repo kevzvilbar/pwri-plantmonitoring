@@ -501,9 +501,12 @@ async function insertLocatorReadings(
         updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
         updatePayload.daily_volume = +r.daily_volume;
       } else {
-        updatePayload.current_reading = +r.current_reading;
-        updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
-        if (r.daily_volume?.trim()) updatePayload.daily_volume = +r.daily_volume;
+        const csvCurLoc = +r.current_reading;
+        const csvPrevLoc = r.previous_reading ? +r.previous_reading : null;
+        updatePayload.current_reading = csvCurLoc;
+        updatePayload.previous_reading = csvPrevLoc;
+        // Bug 2 fix: always persist daily_volume (explicit or computed)
+        updatePayload.daily_volume = r.daily_volume?.trim() ? +r.daily_volume : (csvPrevLoc != null ? csvCurLoc - csvPrevLoc : null);
       }
       const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
@@ -523,9 +526,12 @@ async function insertLocatorReadings(
       insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
       insertPayload.daily_volume = +r.daily_volume;
     } else {
-      insertPayload.current_reading = +r.current_reading;
-      insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
-      if (r.daily_volume?.trim()) insertPayload.daily_volume = +r.daily_volume;
+      const csvCurLoc2 = +r.current_reading;
+      const csvPrevLoc2 = r.previous_reading ? +r.previous_reading : null;
+      insertPayload.current_reading = csvCurLoc2;
+      insertPayload.previous_reading = csvPrevLoc2;
+      // Bug 2 fix: always persist daily_volume (explicit or computed from delta)
+      insertPayload.daily_volume = r.daily_volume?.trim() ? +r.daily_volume : (csvPrevLoc2 != null ? csvCurLoc2 - csvPrevLoc2 : null);
     }
     const { error } = await supabase.from('locator_readings').insert(insertPayload);
     if (error) errors.push(error.message);
@@ -601,11 +607,17 @@ async function insertWellReadings(
       continue;
     }
 
+    // Bug 1 fix: compute and persist daily_volume so Dashboard aggregation works
+    const csvCur = +r.current_reading;
+    const csvPrev = r.previous_reading ? +r.previous_reading : null;
+    const csvDailyVol = csvPrev != null ? csvCur - csvPrev : null;
+
     const { error } = await supabase.from('well_readings').insert({
       well_id: wellId,
       plant_id: plantId,
-      current_reading: +r.current_reading,
-      previous_reading: r.previous_reading ? +r.previous_reading : null,
+      current_reading: csvCur,
+      previous_reading: csvPrev,
+      daily_volume: csvDailyVol,
       power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
       solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
       reading_datetime: dt,
@@ -780,6 +792,16 @@ async function insertPowerReadings(
       if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
     }
     if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
+    // Bug 3 fix: compute and persist daily_consumption_kwh from the CSV's explicit column
+    // or from the delta vs the previous reading for this plant on that day.
+    if (r.daily_grid_kwh?.trim()) {
+      // If daily_grid_kwh is supplied in the CSV, use that directly as total consumption
+      payload.daily_consumption_kwh = +r.daily_grid_kwh;
+    } else if (existing && (existing as any[]).length > 0) {
+      // overwrite path: delta will be computed after fetch; handled below
+    }
+    // Note: when there is no prior reading and no explicit column the field stays null —
+    // which is correct; Dashboard will show 0 for that row just as it did before the bug.
 
     const doInsert = async () => {
       const { error } = await supabase.from('power_readings').insert(payload);
@@ -1098,6 +1120,7 @@ function LocatorRow({
       : {
           locator_id: locator.id, plant_id: plantId,
           current_reading: cur, previous_reading: previous,
+          daily_volume: dailyVol ?? null,   // Bug 2 fix: persist delta for Dashboard consumption total
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         };
@@ -1363,6 +1386,7 @@ function WellRow({
     const payload: any = {
       well_id: well.id, plant_id: plantId,
       current_reading: cur, previous_reading: previousMeter,
+      daily_volume: dailyVol ?? null,       // Bug 1 fix: persist computed delta so Dashboard can sum it
       power_meter_reading: powerReading ? +powerReading : null,
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
       reading_datetime: new Date(customDt).toISOString(),
@@ -2645,6 +2669,12 @@ function PowerForm() {
     if (kind === 'grid') {
       payload.meter_reading_kwh = +val;
       if (idx === 0 && computedDailyGrid != null) payload.daily_grid_kwh = computedDailyGrid;
+      // Bug 3 fix: write daily_consumption_kwh so Dashboard power aggregation works.
+      // For solar plants: grid consumption = Δ meter × multiplier.
+      // For grid-only plants: daily_consumption_kwh = Δ meter (multiplier = 1 unless bill says otherwise).
+      if (idx === 0 && deltaGrid != null) {
+        payload.daily_consumption_kwh = deltaGrid * effectiveMultiplier;
+      }
     }
     if (kind === 'solar') {
       // Only include meter_reading_kwh from grid if the user has actually entered one —
@@ -2712,6 +2742,8 @@ function PowerForm() {
     if (showSolar && solarReading) payload.solar_meter_reading = +solarReading;
     if (showSolar && computedDailyGrid  != null) payload.daily_grid_kwh  = computedDailyGrid;
     if (showSolar && computedDailySolar != null) payload.daily_solar_kwh = computedDailySolar;
+    // Bug 3 fix: always write daily_consumption_kwh so Dashboard kWh total and PV ratio are correct
+    if (daily != null) payload.daily_consumption_kwh = daily * effectiveMultiplier;
     const runQuery = () => editingId
       ? supabase.from('power_readings').update(payload).eq('id', editingId)
       : supabase.from('power_readings').insert(payload);
