@@ -1314,7 +1314,8 @@ function EntityHistoryChart({
       } else if (entityType === 'well') {
         const { data } = await supabase
           .from('well_readings')
-          .select('reading_datetime, current_reading, previous_reading')
+          // Fix: include daily_volume so stored delta is preferred over live current-previous calc
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
           .eq('well_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });

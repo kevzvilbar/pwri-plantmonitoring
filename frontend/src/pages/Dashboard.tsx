@@ -89,17 +89,36 @@ export default function Dashboard() {
   const { data: todayLocators } = useQuery({
     queryKey: ['dash-loc-today', plantIds],
     queryFn: async () => plantIds.length
-      ? (await supabase.from('locator_readings').select('daily_volume,plant_id')
+      ? (await supabase.from('locator_readings').select('daily_volume,current_reading,previous_reading,plant_id')
           .in('plant_id', plantIds).gte('reading_datetime', today)).data ?? []
       : [],
     enabled: plantIds.length > 0,
   });
+  // Raw Water source (wells) — used for Raw Water stat card and NRW denominator
   const { data: todayWells } = useQuery({
     queryKey: ['dash-wells-today', plantIds],
     queryFn: async () => plantIds.length
-      ? (await supabase.from('well_readings').select('daily_volume,plant_id')
+      ? (await supabase.from('well_readings').select('daily_volume,current_reading,previous_reading,plant_id')
           .in('plant_id', plantIds).gte('reading_datetime', today)).data ?? []
       : [],
+    enabled: plantIds.length > 0,
+  });
+  // Production = sum of Product Meter deltas (treated/distributed water)
+  // Per spec: "Production is sum of Product Meter delta or m3"
+  const { data: todayProductMeters } = useQuery({
+    queryKey: ['dash-product-meters-today', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [];
+      const { data: meters } = await (supabase.from('product_meters' as any) as any)
+        .select('id').in('plant_id', plantIds);
+      const meterIds = (meters ?? []).map((m: any) => m.id);
+      if (!meterIds.length) return [];
+      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+        .select('daily_volume,current_reading,previous_reading')
+        .in('meter_id', meterIds)
+        .gte('reading_datetime', today);
+      return (data ?? []) as any[];
+    },
     enabled: plantIds.length > 0,
   });
   const { data: todayPower } = useQuery({
@@ -114,7 +133,7 @@ export default function Dashboard() {
   const { data: yLocators } = useQuery({
     queryKey: ['dash-loc-yest', plantIds],
     queryFn: async () => plantIds.length
-      ? (await supabase.from('locator_readings').select('daily_volume')
+      ? (await supabase.from('locator_readings').select('daily_volume,current_reading,previous_reading')
           .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today)).data ?? []
       : [],
     enabled: plantIds.length > 0,
@@ -122,9 +141,27 @@ export default function Dashboard() {
   const { data: yWells } = useQuery({
     queryKey: ['dash-wells-yest', plantIds],
     queryFn: async () => plantIds.length
-      ? (await supabase.from('well_readings').select('daily_volume')
+      ? (await supabase.from('well_readings').select('daily_volume,current_reading,previous_reading')
           .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today)).data ?? []
       : [],
+    enabled: plantIds.length > 0,
+  });
+  // Yesterday product meters for production trend delta
+  const { data: yProductMeters } = useQuery({
+    queryKey: ['dash-product-meters-yest', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [];
+      const { data: meters } = await (supabase.from('product_meters' as any) as any)
+        .select('id').in('plant_id', plantIds);
+      const meterIds = (meters ?? []).map((m: any) => m.id);
+      if (!meterIds.length) return [];
+      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+        .select('daily_volume,current_reading,previous_reading')
+        .in('meter_id', meterIds)
+        .gte('reading_datetime', yesterday)
+        .lt('reading_datetime', today);
+      return (data ?? []) as any[];
+    },
     enabled: plantIds.length > 0,
   });
   const { data: yPower } = useQuery({
@@ -164,17 +201,33 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
-  const production = (todayWells ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
-  const consumption = (todayLocators ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
+  // Helper: resolve daily volume from stored daily_volume, falling back to current-previous
+  // for historical rows that were saved before the daily_volume persistence fix.
+  const resolveVol = (r: any): number => {
+    if (r.daily_volume != null && +r.daily_volume > 0) return +r.daily_volume;
+    if (r.current_reading != null && r.previous_reading != null)
+      return Math.max(0, +r.current_reading - +r.previous_reading);
+    return 0;
+  };
+  // Per spec:
+  //   Production   = sum of Product Meter deltas (treated/distributed water output)
+  //   Raw Water    = sum of Well meter deltas (groundwater pumped — used for NRW denominator)
+  //   Consumption  = sum of Locator meter deltas (billed consumption)
+  const rawWaterVol = (todayWells         ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
+  const production  = (todayProductMeters ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
+  const consumption = (todayLocators      ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
   const kwh = (todayPower ?? []).reduce((s, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
+  // NRW uses Production (product meter output) vs Consumption (locator billed)
   const nrw = calc.nrw(production, consumption);
   const pv = calc.pvRatio(kwh, production);
 
-  const yProduction = (yWells ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
-  const yConsumption = (yLocators ?? []).reduce((s, r: any) => s + (r.daily_volume ?? 0), 0);
+  const yRawWaterVol  = (yWells          ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
+  const yProduction   = (yProductMeters  ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
+  const yConsumption  = (yLocators       ?? []).reduce((s, r: any) => s + resolveVol(r), 0);
   const yKwh = (yPower ?? []).reduce((s, r: any) => s + (r.daily_consumption_kwh ?? 0), 0);
   const dProduction = pctDelta(production, yProduction);
   const dConsumption = pctDelta(consumption, yConsumption);
+  const dRawWater = pctDelta(rawWaterVol, yRawWaterVol);
   const dKwh = pctDelta(kwh, yKwh);
 
   const nrwBreached = nrw != null && nrw > 20;
@@ -375,7 +428,7 @@ export default function Dashboard() {
           calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
           onClick={handleMetricClick('nrw', 'NRW Trend')} />
         <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
-          value={fmtNum(rawWater)} unit="m³"
+          value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
           onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
         <StatCard icon={Waves} accent="text-violet-600" label="Blending"
           value={fmtNum(blending)} unit="m³" />
