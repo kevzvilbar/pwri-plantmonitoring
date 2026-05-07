@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -383,10 +383,75 @@ function Power() {
     qc.invalidateQueries({ queryKey: ['tariffs'] });
   };
 
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !plantId) { if (!plantId) toast.error('Select a plant before importing'); e.target.value = ''; return; }
+    try {
+      const text = await file.text();
+      let rows: Record<string, any>[] = [];
+      if (file.name.endsWith('.json')) {
+        const parsed = JSON.parse(text);
+        rows = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        const lines = text.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        rows = lines.slice(1).map(line => {
+          const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+        });
+      }
+      let inserted = 0;
+      for (const row of rows) {
+        const payload: Record<string, any> = {
+          plant_id: plantId,
+          billing_month: row.billing_month || row.billingMonth || null,
+          period_start: row.period_start || row.periodStart || null,
+          period_end: row.period_end || row.periodEnd || null,
+          previous_reading: row.previous_reading != null && row.previous_reading !== '' ? +row.previous_reading : null,
+          current_reading: row.current_reading != null && row.current_reading !== '' ? +row.current_reading : null,
+          multiplier: row.multiplier ? +row.multiplier : 1,
+          generation_charge: row.generation_charge != null && row.generation_charge !== '' ? +row.generation_charge : null,
+          distribution_charge: row.distribution_charge != null && row.distribution_charge !== '' ? +row.distribution_charge : null,
+          other_charges: row.other_charges != null && row.other_charges !== '' ? +row.other_charges : null,
+          total_amount: row.total_amount != null && row.total_amount !== '' ? +row.total_amount : null,
+          provider: row.provider || null,
+          remarks: row.remarks || 'Imported',
+          recorded_by: user?.id,
+        };
+        if (!payload.billing_month || payload.total_amount == null) continue;
+        const { error } = await supabase.from('electric_bills').insert(payload);
+        if (!error) inserted++;
+      }
+      toast.success(`Imported ${inserted} of ${rows.length} bill(s)`);
+      qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['tariffs'] });
+    } catch (err: any) {
+      toast.error(`Import failed: ${err.message}`);
+    }
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-3">
       <Card className="p-3 space-y-3">
-        <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+        <div>
+          <Label className="text-xs">Plant</Label>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1"><PlantPicker value={plantId} onChange={setPlantId} /></div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 h-9 text-xs whitespace-nowrap"
+              onClick={() => importRef.current?.click()}
+            >
+              Import
+            </Button>
+            <input ref={importRef} type="file" accept=".csv,.json" className="hidden" onChange={handleImport} />
+          </div>
+        </div>
 
         <div className="space-y-2">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
