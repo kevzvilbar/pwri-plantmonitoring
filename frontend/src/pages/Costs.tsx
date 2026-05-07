@@ -221,7 +221,7 @@ function ImportReadingsDialog({
             <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
             <p className="text-[10px] text-muted-foreground">
               Columns marked <strong>*</strong> are required.{' '}
-              <code>billing_month</code> format: <code>YYYY-MM-DD</code> (e.g. 2026-05-01).
+              <code>billing_month</code> accepts <code>YYYY-MM-DD</code> or <code>M/D/YYYY</code> — always stored as first of month.
             </p>
           </div>
 
@@ -407,6 +407,22 @@ function validateBillingRow(r: Record<string, string>, i: number): string[] {
   return e;
 }
 
+// Normalise any parseable date string to YYYY-MM-DD (local date, no timezone shift).
+// Handles M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD, and ISO strings.
+function normDate(val: string | undefined): string | null {
+  if (!val?.trim()) return null;
+  const s = val.trim();
+  // Already YYYY-MM-DD — return as-is to avoid any UTC shift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  // Format in local time so M/D/YYYY dates don't shift by a day
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 async function insertBillingRows(
   rows: Record<string, string>[],
   plantId: string,
@@ -416,8 +432,14 @@ async function insertBillingRows(
   const errors: string[] = [];
 
   for (const r of rows) {
-    // Normalise billing_month to first-of-month YYYY-MM-DD
-    const billingMonth = r.billing_month.trim().slice(0, 7) + '-01';
+    // Normalise billing_month → first-of-month YYYY-MM-DD regardless of input format
+    const parsedBillingDate = normDate(r.billing_month);
+    if (!parsedBillingDate) { errors.push(`billing_month invalid: "${r.billing_month}"`); continue; }
+    const billingMonth = parsedBillingDate.slice(0, 7) + '-01'; // always first of month
+
+    // Normalise all other date fields
+    const periodStart = normDate(r.period_start);
+    const periodEnd   = normDate(r.period_end);
 
     // Duplicate check: same plant + same billing_month
     const { data: existing } = await supabase
@@ -430,8 +452,8 @@ async function insertBillingRows(
     const payload: Record<string, any> = {
       plant_id: plantId,
       billing_month: billingMonth,
-      period_start:        r.period_start        || null,
-      period_end:          r.period_end          || null,
+      period_start:        periodStart,
+      period_end:          periodEnd,
       previous_reading:    r.previous_reading    !== '' && r.previous_reading    != null ? +r.previous_reading    : null,
       current_reading:     r.current_reading     !== '' && r.current_reading     != null ? +r.current_reading     : null,
       multiplier:          r.multiplier          !== '' && r.multiplier          != null ? +r.multiplier          : 1,
@@ -444,14 +466,14 @@ async function insertBillingRows(
     };
 
     if (existing && existing.length > 0) {
-      const label = `${r.provider?.trim() || 'Bill'} @ ${billingMonth.slice(0, 7)}`;
+      const label = `Bill @ ${billingMonth.slice(0, 7)}`;
       const decision = await resolveBillingDuplicate(`${plantId}|${billingMonth}`, label, true);
       if (decision === 'skip') continue;
       const { error } = await supabase.from('electric_bills').update(payload).eq('id', existing[0].id);
-      if (error) errors.push(error.message); else count++;
+      if (error) errors.push(`${billingMonth}: ${error.message}`); else count++;
     } else {
       const { error } = await supabase.from('electric_bills').insert(payload);
-      if (error) errors.push(error.message); else count++;
+      if (error) errors.push(`${billingMonth}: ${error.message}`); else count++;
     }
   }
   return { count, errors };
