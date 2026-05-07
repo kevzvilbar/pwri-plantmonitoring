@@ -705,8 +705,6 @@ export function TrendChart({
   const needsCostReadings = metric === 'productionCost';
 
   // ── Entity name lookups — fetched once per plant selection ─────────────────
-  // Used to build human-friendly meter-replacement tooltip messages like
-  // "Well 4 Raw Meter was Replaced" or "McDonalds Product Meter was Replaced".
   const { data: wellNames } = useQuery({
     queryKey: ['entity-names-wells', plantIds],
     queryFn: async () => {
@@ -754,23 +752,58 @@ export function TrendChart({
   });
 
   const supaSelect = async <T,>(table: string, cols: string) => {
-    // Supabase JS v2 narrows `from(table)` to a literal-string union
-    // pulled from the generated types. Our caller passes a string
-    // variable resolved at runtime, so we need a cast to bypass the
-    // (otherwise correct) compile-time check. The helper is used only
-    // with table names known to exist (locator_readings,
-    // well_readings, ro_train_readings, power_readings) — all
-    // validated by the unit tests below.
     const { data, error } = await supabase.from(table as never).select(cols)
       .in('plant_id', plantIds).gte('reading_datetime', startISO).lte('reading_datetime', endISO);
     if (error) throw new Error(`${table}: ${error.message}`);
     return (data as T[]) ?? [];
   };
 
+  // ── BUG FIX: locator_readings has no plant_id column ─────────────────────
+  // The previous implementation called supaSelect('locator_readings', ...)
+  // which filtered by plant_id — a column that does NOT exist on that table.
+  // This returned zero rows for every plant except SRP (which coincidentally
+  // worked due to data characteristics), causing consumption = 0 for all
+  // dates in the selected range (most visibly Jan 1 – Mar 21).
+  //
+  // Fix: two-step query that mirrors the pattern Dashboard.tsx already uses:
+  //   Step 1 — resolve the locator IDs that belong to these plants (via the
+  //             locators table, which DOES have plant_id).
+  //   Step 2 — query locator_readings filtered by those locator IDs.
+  //
+  // The locator meta query is shared with the name-lookup query above but
+  // we need the IDs before the readings query can run, so we keep it
+  // separate and gate the readings query on the result.
+  const { data: _locatorIdsForReadings } = useQuery({
+    queryKey: ['trend-loc-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as string[];
+      const { data } = await supabase
+        .from('locators')
+        .select('id')
+        .in('plant_id', plantIds)
+        .eq('status', 'Active');
+      return (data ?? []).map((l: any) => l.id as string);
+    },
+    enabled: plantIds.length > 0 && needsLocReadings,
+  });
+
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('locator_readings', 'locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id'),
-    enabled: plantIds.length > 0 && needsLocReadings,
+    queryFn: async () => {
+      const locatorIds = _locatorIdsForReadings ?? [];
+      if (!locatorIds.length) return [];
+      const { data, error } = await supabase
+        .from('locator_readings')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .in('locator_id', locatorIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
+      if (error) throw new Error(`locator_readings: ${error.message}`);
+      return (data ?? []) as any[];
+    },
+    // Wait for locator IDs to resolve before fetching readings.
+    enabled: plantIds.length > 0 && needsLocReadings && (_locatorIdsForReadings !== undefined),
   });
 
   // Product meter readings — the treated-water output meters installed on
@@ -975,8 +1008,6 @@ export function TrendChart({
 
     // ── Raw Water = sum of per-well (current − previous) deltas ────────────
     // Uses computeEntityDeltas keyed by well_id for correct per-well scoping.
-
-
     computeEntityDeltas(wellReadings ?? [], 'well_id', null).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
@@ -992,9 +1023,7 @@ export function TrendChart({
 
     // Production = sum of product meter (treated-water output) deltas.
     // Bug fix: pass 'daily_volume' so the pre-computed column is used when present,
-    // matching how locator_readings are handled (line below). Without this, the first
-    // reading in any fetch window always returns delta=0 (no predecessor in memory),
-    // causing SRP Plant Jan–Mar data to be invisible on the dashboard.
+    // matching how locator_readings are handled (avoids boundary-read delta = 0).
     computeEntityDeltas(productReadings ?? [], 'meter_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
@@ -1009,6 +1038,8 @@ export function TrendChart({
     });
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
+    // NOTE: locReadings are now fetched via locator_id (not plant_id) so all
+    // plants return data correctly — see the two-step query above.
     computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
