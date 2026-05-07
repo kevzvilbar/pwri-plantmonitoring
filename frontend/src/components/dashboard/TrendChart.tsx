@@ -29,23 +29,42 @@ function resolveReadingDelta(r: any): number {
 }
 
 /**
- * Build a pivot:  dateKey (MMM d) → entityId → summed volume.
+ * Build a pivot:  dateKey (yyyy-MM-dd) → entityId → summed volume.
  * Readings must already be sorted by reading_datetime asc.
+ * Returns the pivot map and the sorted set of unique date keys found.
  */
 function buildEntityPivot(
   readings: any[],
   entityField: string,
-): Map<string, Map<string, number>> {
+): { pivot: Map<string, Map<string, number>>; dateKeys: string[] } {
   const pivot = new Map<string, Map<string, number>>();
   readings.forEach((r) => {
     if (r.is_meter_replacement) return;          // skip replacement rows
-    const dateKey = format(new Date(r.reading_datetime), 'MMM d');
+    const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
     const entityId = r[entityField] ?? '__';
     const vol = resolveReadingDelta(r);
     if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
     pivot.get(dateKey)!.set(entityId, (pivot.get(dateKey)!.get(entityId) ?? 0) + vol);
   });
-  return pivot;
+  const dateKeys = Array.from(pivot.keys()).sort();
+  return { pivot, dateKeys };
+}
+
+/** Fill every calendar day between startIso and endIso (yyyy-MM-dd strings). */
+function fillDateRange(startIso: string, endIso: string): string[] {
+  const dates: string[] = [];
+  const cur = new Date(startIso + 'T00:00:00');
+  const end = new Date(endIso   + 'T00:00:00');
+  while (cur <= end) {
+    dates.push(format(cur, 'yyyy-MM-dd'));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+/** Format a yyyy-MM-dd key for display as "MMM d" */
+function fmtDateKey(key: string): string {
+  return format(new Date(key + 'T00:00:00'), 'MMM d');
 }
 
 type DSMTab = 'overview' | 'production' | 'consumption';
@@ -130,7 +149,7 @@ function PivotTable({
                     'px-3 py-1.5 whitespace-nowrap font-medium text-[11px] text-muted-foreground sticky left-0 border-r border-border',
                     isEven ? 'bg-background' : 'bg-muted/10',
                   ].join(' ')}>
-                    {date}
+                    {fmtDateKey(date)}
                   </td>
                   {entities.map((e) => {
                     const val = pivot.get(date)?.get(e.id) ?? null;
@@ -378,6 +397,8 @@ function DataSummaryPopup({
       field,
     );
   }, [metric, filteredProductReadings, filteredWellReadings]);
+  const prodPivotMap = prodPivot.pivot;
+  const prodDateKeys = prodPivot.dateKeys;
 
   // --- Consumption entities ---
   const consEntities = useMemo<{ id: string; label: string }[]>(() => {
@@ -386,16 +407,49 @@ function DataSummaryPopup({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [filteredLocReadings, locatorNames]);
 
-  const consPivot = useMemo(() => buildEntityPivot(
+  const consPivotResult = useMemo(() => buildEntityPivot(
     [...(filteredLocReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
     'locator_id',
   ), [filteredLocReadings]);
+  const consPivot = consPivotResult.pivot;
+  const consDateKeys = consPivotResult.dateKeys;
 
-  // All dates from filteredChartData (overview tab)
-  const dates = filteredChartData.map((d) => d.date);
+  // Derive a full calendar range of yyyy-MM-dd keys for each tab.
+  // Using only dates that have readings (from chartData or pivot keys) means
+  // days with zero data are invisible — instead we fill every day in the window.
+  const consDates = useMemo(() => {
+    if (consDateKeys.length === 0) return [];
+    // Expand from the earliest to latest reading date, bounded by filter if set
+    const start = filterFrom || consDateKeys[0];
+    const end   = filterTo   || consDateKeys[consDateKeys.length - 1];
+    return fillDateRange(start, end);
+  }, [consDateKeys, filterFrom, filterTo]);
+
+  const prodDates = useMemo(() => {
+    if (prodDateKeys.length === 0) return [];
+    const start = filterFrom || prodDateKeys[0];
+    const end   = filterTo   || prodDateKeys[prodDateKeys.length - 1];
+    return fillDateRange(start, end);
+  }, [prodDateKeys, filterFrom, filterTo]);
+
+  // Overview dates: union of all available data, or filter-bounded
+  const overviewDates = useMemo(() => {
+    const allKeys = filteredChartData
+      .filter((d) => d.isoDate)
+      .map((d) => d.isoDate.slice(0, 10) as string);
+    if (allKeys.length === 0) return [];
+    const start = filterFrom || allKeys[0];
+    const end   = filterTo   || allKeys[allKeys.length - 1];
+    return fillDateRange(start, end);
+  }, [filteredChartData, filterFrom, filterTo]);
 
   // Tab guard: if active tab becomes irrelevant, reset
   const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
+
+  // The shared "dates" for footer count — use per-tab
+  const tabDates = activeTab === 'consumption' ? consDates
+    : activeTab === 'production' ? prodDates
+    : overviewDates;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -465,20 +519,15 @@ function DataSummaryPopup({
 
         {/* Body */}
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-          {filteredChartData.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-              No data in selected range.
-            </div>
-          ) : (
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+          <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
               {activeTab === 'overview' && (
                 <OverviewTable metric={metric} chartData={filteredChartData} />
               )}
               {activeTab === 'production' && hasProdTab && (
                 <PivotTable
-                  dates={dates}
+                  dates={prodDates}
                   entities={prodEntities}
-                  pivot={prodPivot}
+                  pivot={prodPivotMap}
                   totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
                   unit="m³"
                   colorClass="text-primary"
@@ -486,7 +535,7 @@ function DataSummaryPopup({
               )}
               {activeTab === 'consumption' && hasConsTab && (
                 <PivotTable
-                  dates={dates}
+                  dates={consDates}
                   entities={consEntities}
                   pivot={consPivot}
                   totalLabel="Total Cons. (m³)"
@@ -495,12 +544,11 @@ function DataSummaryPopup({
                 />
               )}
             </div>
-          )}
         </div>
 
         {/* Footer info bar */}
         <div className="px-5 py-2 border-t shrink-0 flex items-center gap-3 text-[10px] text-muted-foreground bg-muted/20">
-          <span className="font-medium">{dates.length} days in range</span>
+          <span className="font-medium">{tabDates.length} days in range</span>
           {activeTab === 'production' && hasProdTab && (
             <span>· {prodEntities.length} {metric === 'rawwater' ? 'wells' : 'product meters'}</span>
           )}
