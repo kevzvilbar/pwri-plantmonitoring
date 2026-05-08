@@ -49,8 +49,11 @@ type StaffMember = {
 
 type PresenceState = 'active' | 'idle' | 'away' | 'offline';
 
-function getPresence(updatedAt: string, accountStatus: string): PresenceState {
+function getPresence(updatedAt: string, accountStatus: string, isOnline = false): PresenceState {
   if (accountStatus === 'Suspended' || accountStatus === 'Pending') return 'offline';
+  // Realtime Presence channel confirms the user is currently connected — trust it first.
+  if (isOnline) return 'active';
+  // Fall back to updated_at heartbeat timestamp
   const diffMin = (Date.now() - new Date(updatedAt).getTime()) / 60_000;
   if (diffMin < 15)  return 'active';
   if (diffMin < 60)  return 'idle';
@@ -117,8 +120,8 @@ function formatTime(iso: string) {
 // Chat Window
 // ---------------------------------------------------------------------------
 
-function ChatWindow({ peer, currentUserId, onClose }: {
-  peer: StaffMember; currentUserId: string; onClose: () => void;
+function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
+  peer: StaffMember; currentUserId: string; onClose: () => void; onlineIds: Set<string>;
 }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -171,7 +174,7 @@ function ChatWindow({ peer, currentUserId, onClose }: {
     } finally { setSending(false); }
   }, [input, currentUserId, peer.id, refetch]);
 
-  const presence = getPresence(peer.updated_at, peer.status);
+  const presence = getPresence(peer.updated_at, peer.status, onlineIds.has(peer.id));
   const pc = presenceConfig[presence];
 
   return (
@@ -250,11 +253,11 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
 // Detail Drawer
 // ---------------------------------------------------------------------------
 
-function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf, isAdmin }: {
+function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf, isAdmin, onlineIds }: {
   member: StaffMember; roles: any[]; plants: any[]; allStaff: StaffMember[];
-  onChat: () => void; onClose: () => void; isSelf: boolean; isAdmin: boolean;
+  onChat: () => void; onClose: () => void; isSelf: boolean; isAdmin: boolean; onlineIds: Set<string>;
 }) {
-  const presence = getPresence(member.updated_at, member.status);
+  const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRoles = roles.filter((r) => r.user_id === member.id).map((r) => r.role);
   const memberPlants = plants.filter((p) => member.plant_assignments?.includes(p.id)).map((p) => p.name);
@@ -317,10 +320,10 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 // Staff Tile
 // ---------------------------------------------------------------------------
 
-function StaffTile({ member, roles, isSelf, onChat, onDetail }: {
-  member: StaffMember; roles: any[]; isSelf: boolean; onChat: () => void; onDetail: () => void;
+function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
+  member: StaffMember; roles: any[]; isSelf: boolean; onlineIds: Set<string>; onChat: () => void; onDetail: () => void;
 }) {
-  const presence = getPresence(member.updated_at, member.status);
+  const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
 
@@ -398,6 +401,38 @@ function Staff() {
   // Re-run whenever the active operator switches so the new operator gets the heartbeat.
   }, [activeOperator?.id, user?.id, queryClient]);
 
+  // ── Supabase Realtime Presence — primary online/offline signal ──────────────
+  // Uses the Presence channel (no DB write needed). Each connected session tracks
+  // itself; we subscribe to 'sync' events to maintain a live Set of online IDs.
+  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const operatorId = activeOperator?.id ?? user?.id;
+    if (!operatorId) return;
+
+    const ch = supabase.channel('online-users', {
+      config: { presence: { key: operatorId } },
+    });
+
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState<{ user_id: string }>();
+      const ids = new Set<string>(
+        (Object.values(state) as any[])
+          .flat()
+          .map((p: any) => p.user_id as string)
+          .filter(Boolean)
+      );
+      setOnlineIds(ids);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.track({ user_id: operatorId });
+      }
+    });
+
+    return () => { supabase.removeChannel(ch); };
+  }, [activeOperator?.id, user?.id]);
+
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -452,6 +487,7 @@ function Staff() {
         {staff.map((s) => (
           <StaffTile key={s.id} member={s} roles={roles as any[]}
             isSelf={s.id === (activeOperator?.id ?? user?.id)}
+            onlineIds={onlineIds}
             onChat={() => setChatPeer(s)}
             onDetail={() => setDetailMember(s)}
           />
@@ -467,13 +503,14 @@ function Staff() {
         <DetailDrawer
           member={detailMember} roles={roles as any[]} plants={plants ?? []} allStaff={staff}
           isSelf={detailMember.id === (activeOperator?.id ?? user?.id)} isAdmin={isAdmin}
+          onlineIds={onlineIds}
           onChat={() => setChatPeer(detailMember)}
           onClose={() => setDetailMember(null)}
         />
       )}
 
       {chatPeer && user && chatPeer.id !== (activeOperator?.id ?? user.id) && (
-        <ChatWindow peer={chatPeer} currentUserId={activeOperator?.id ?? user.id} onClose={() => setChatPeer(null)} />
+        <ChatWindow peer={chatPeer} currentUserId={activeOperator?.id ?? user.id} onlineIds={onlineIds} onClose={() => setChatPeer(null)} />
       )}
     </>
   );
@@ -522,18 +559,52 @@ function OrgNode({ member, allStaff, roles, depth = 0 }: {
   );
 }
 
-function OrgChart({ staff, roles }: { staff: StaffMember[]; roles: any[] }) {
-  // Root members = those with no immediate_head_id, or whose head_id doesn't exist in the list
-  const staffIds = new Set(staff.map((s) => s.id));
-  const roots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
+function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
+  // Group into per-plant sections. Staff assigned to multiple plants appear in each.
+  // Falls back to a single unscoped tree when no plant data is available.
+  const plantsWithStaff = plants.filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
 
-  if (roots.length === 0) {
-    return <p className="text-xs text-muted-foreground text-center py-4">No reporting relationships configured.</p>;
+  if (plantsWithStaff.length === 0) {
+    // No plant info — render flat tree as before
+    const staffIds = new Set(staff.map((s) => s.id));
+    const roots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
+    if (roots.length === 0)
+      return <p className="text-xs text-muted-foreground text-center py-4">No reporting relationships configured.</p>;
+    return (
+      <div className="space-y-1">
+        {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} depth={0} />)}
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-1">
-      {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} depth={0} />)}
+    <div className="space-y-5">
+      {plantsWithStaff.map((plant) => {
+        const plantStaff = staff.filter((s) => s.plant_assignments?.includes(plant.id));
+        const plantStaffIds = new Set(plantStaff.map((s) => s.id));
+        // Roots within this plant: no head, or head is outside this plant's staff
+        const roots = plantStaff.filter(
+          (s) => !s.immediate_head_id || !plantStaffIds.has(s.immediate_head_id)
+        );
+        return (
+          <div key={plant.id} className="space-y-1">
+            {/* Plant header */}
+            <div className="flex items-center gap-2 pb-1 border-b border-dashed border-muted-foreground/20">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {plant.name}
+              </span>
+              <span className="ml-auto text-[10px] text-muted-foreground">{plantStaff.length} staff</span>
+            </div>
+            {roots.length === 0
+              ? <p className="text-xs text-muted-foreground py-2 pl-2">No reporting relationships configured for this plant.</p>
+              : roots.map((r) => (
+                  <OrgNode key={r.id} member={r} allStaff={plantStaff} roles={roles} depth={0} />
+                ))
+            }
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -803,7 +874,7 @@ function RegisterInfo() {
           <GitBranch className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold text-sm">Reporting Tree</h3>
         </div>
-        <OrgChart staff={staff} roles={roles} />
+        <OrgChart staff={staff} roles={roles} plants={plants} />
       </Card>
 
       {/* 3. Pending Approvals — admin only */}
