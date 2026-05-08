@@ -3787,6 +3787,241 @@ function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabe
   );
 }
 
+// ─── Train Operator Log Modal ─────────────────────────────────────────────────
+// Shows a paginated list of all operator data inputs for a given RO Train,
+// including the operator's name, timestamp, and key reading values.
+
+function TrainOperatorLogModal({
+  trainId,
+  trainLabel,
+  onClose,
+}: {
+  trainId: string;
+  trainLabel: string;
+  onClose: () => void;
+}) {
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
+
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ['train-operator-log', trainId],
+    queryFn: async () => {
+      // Fetch readings joined with user profile for operator name
+      const { data, error } = await (supabase
+        .from('ro_train_readings' as any)
+        .select(`
+          id,
+          reading_datetime,
+          permeate_flow,
+          product_flow,
+          net_production,
+          feed_pressure,
+          permeate_pressure,
+          recovery_rate,
+          notes,
+          recorded_by,
+          operator:user_profiles!ro_train_readings_recorded_by_fkey(first_name, last_name)
+        ` as any)
+        .eq('train_id', trainId)
+        .order('reading_datetime', { ascending: false })
+        .limit(500) as any);
+
+      if (error) {
+        // Fallback: fetch without join if FK alias not available
+        const { data: plain } = await supabase
+          .from('ro_train_readings' as any)
+          .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by' as any)
+          .eq('train_id', trainId)
+          .order('reading_datetime', { ascending: false })
+          .limit(500);
+        return (plain ?? []) as any[];
+      }
+      return (data ?? []) as any[];
+    },
+    staleTime: 30_000,
+  });
+
+  const totalPages = Math.ceil(logs.length / PAGE_SIZE);
+  const pageLogs = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const exportCSV = () => {
+    if (!logs.length) { toast.error('No logs to export'); return; }
+    const headers = ['Date/Time', 'Operator', 'Permeate Flow', 'Product Flow', 'Net Production', 'Feed Pressure', 'Permeate Pressure', 'Recovery Rate', 'Notes'];
+    const rows = logs.map((r: any) => {
+      const opName = r.operator
+        ? `${r.operator.first_name ?? ''} ${r.operator.last_name ?? ''}`.trim()
+        : (r.recorded_by ? `UID:${r.recorded_by.slice(0, 8)}` : 'Unknown');
+      return [
+        r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
+        opName,
+        r.permeate_flow ?? '',
+        r.product_flow ?? '',
+        r.net_production ?? '',
+        r.feed_pressure ?? '',
+        r.permeate_pressure ?? '',
+        r.recovery_rate ?? '',
+        (r.notes ?? '').replace(/,/g, ';'),
+      ].join(',');
+    });
+    const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `${trainLabel.replace(/\s+/g, '_')}_operator_log.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success('Log exported');
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0">
+        {/* Header */}
+        <DialogHeader className="px-5 py-4 border-b shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle className="text-base font-semibold flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-teal-600" />
+                Operator Log — {trainLabel}
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                All data entries submitted by operators for this RO Train
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 shrink-0" onClick={exportCSV}>
+              <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Stats bar */}
+        {!isLoading && logs.length > 0 && (
+          <div className="flex items-center gap-4 px-5 py-2.5 bg-muted/40 border-b shrink-0 text-xs text-muted-foreground">
+            <span><span className="font-semibold text-foreground">{logs.length}</span> total entries</span>
+            <span>·</span>
+            <span>
+              Last entry:{' '}
+              <span className="font-semibold text-foreground">
+                {logs[0]?.reading_datetime
+                  ? format(new Date(logs[0].reading_datetime), 'MMM d, yyyy HH:mm')
+                  : '—'}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* Log table */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Calendar className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm font-medium">No logs found</p>
+              <p className="text-xs mt-0.5">Operator entries will appear here once submitted.</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-background border-b z-10">
+                <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                  <th className="text-left px-4 py-2.5 font-semibold w-[140px]">Date / Time</th>
+                  <th className="text-left px-3 py-2.5 font-semibold w-[130px]">Operator</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Permeate Flow</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Net Prod.</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Feed P.</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Recovery</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {pageLogs.map((r: any, i: number) => {
+                  const opName = r.operator
+                    ? `${r.operator.first_name ?? ''} ${r.operator.last_name ?? ''}`.trim() || 'Unknown'
+                    : (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown');
+                  const initials = opName !== 'Unknown'
+                    ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+                    : '?';
+                  return (
+                    <tr key={r.id ?? i} className="hover:bg-muted/30 transition-colors">
+                      {/* Date/Time */}
+                      <td className="px-4 py-2.5 font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+                        {r.reading_datetime
+                          ? (<>
+                              <div className="text-foreground font-medium">{format(new Date(r.reading_datetime), 'MMM d, yyyy')}</div>
+                              <div>{format(new Date(r.reading_datetime), 'HH:mm')}</div>
+                            </>)
+                          : '—'}
+                      </td>
+                      {/* Operator */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[9px] font-bold shrink-0">
+                            {initials}
+                          </div>
+                          <span className="truncate max-w-[90px]" title={opName}>{opName}</span>
+                        </div>
+                      </td>
+                      {/* Permeate Flow */}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.permeate_flow != null ? (
+                          <span>{fmtNum(r.permeate_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                        ) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      {/* Net Production */}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.net_production != null ? (
+                          <span>{fmtNum(r.net_production)}<span className="text-muted-foreground ml-0.5">m³</span></span>
+                        ) : r.product_flow != null ? (
+                          <span>{fmtNum(r.product_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                        ) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      {/* Feed Pressure */}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.feed_pressure != null ? (
+                          <span>{fmtNum(r.feed_pressure)}<span className="text-muted-foreground ml-0.5">bar</span></span>
+                        ) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      {/* Recovery */}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.recovery_rate != null ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_rate)}%</span>
+                        ) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      {/* Notes */}
+                      <td className="px-3 py-2.5 max-w-[160px]">
+                        {r.notes ? (
+                          <span className="text-muted-foreground truncate block" title={r.notes}>{r.notes}</span>
+                        ) : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination footer */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-2 px-5 py-3 border-t shrink-0">
+            <span className="text-xs text-muted-foreground">
+              Page {page + 1} of {totalPages} · {logs.length} entries
+            </span>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                ← Prev
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                Next →
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Trains List ─────────────────────────────────────────────────────────────
 
 function TrainsList({ plantId }: { plantId: string }) {
@@ -3913,6 +4148,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const effectiveFilterType = (t: any) =>
     (t as any).filter_housing_type ?? (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
   const [selectedTrain, setSelectedTrain] = useState<string | null>(null);
+  const [logTrain, setLogTrain] = useState<{ id: string; label: string } | null>(null);
 
   return (
     <div className="space-y-2">
@@ -3960,7 +4196,7 @@ function TrainsList({ plantId }: { plantId: string }) {
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">{mt}</span>
                   <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">{ft}</span>
-                  <button className="text-[11px] text-teal-600 hover:underline ml-0.5" onClick={(e) => { e.stopPropagation(); navigate('/ro-trains'); }}>Open log →</button>
+                  <button className="text-[11px] text-teal-600 hover:underline ml-0.5" onClick={(e) => { e.stopPropagation(); setLogTrain({ id: t.id, label: `Train ${t.train_number}${t.name ? ' · ' + t.name : ''}` }); }}>Open log →</button>
                   <TrendingUp className={`h-3 w-3 transition-colors ${isExpanded ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
                 </div>
               </div>
@@ -4053,6 +4289,14 @@ function TrainsList({ plantId }: { plantId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {logTrain && (
+        <TrainOperatorLogModal
+          trainId={logTrain.id}
+          trainLabel={logTrain.label}
+          onClose={() => setLogTrain(null)}
+        />
+      )}
     </div>
   );
 }
