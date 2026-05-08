@@ -2783,7 +2783,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
               <Checkbox
                 checked={form.has_power_meter}
                 onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
-                className="h-4 w-4 [&]:rounded-sm"
+                className="shrink-0 h-4 w-4 [&]:rounded-sm"
                 data-testid="add-well-has-power-meter"
               />
               <Zap className="h-3 w-3 text-amber-500" />
@@ -3835,7 +3835,7 @@ function TrainOperatorLogModal({
       try {
         // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
         let q = (supabase.from('ro_train_readings' as any) as any)
-          .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
+          .select('id, reading_datetime, permeate_flow, feed_flow, feed_pressure_psi, permeate_tds, feed_tds, recovery_pct, recorded_by')
           .eq('train_id', trainId)
           .order('reading_datetime', { ascending: false })
           .limit(1000);
@@ -3889,19 +3889,18 @@ function TrainOperatorLogModal({
 
   const exportCSV = () => {
     if (!logs.length) { toast.error('No logs to export'); return; }
-    const headers = ['Date/Time', 'Operator', 'Permeate Flow', 'Product Flow', 'Net Production', 'Feed Pressure', 'Permeate Pressure', 'Recovery Rate', 'Notes'];
+    const headers = ['Date/Time', 'Operator', 'Permeate Flow (m³/h)', 'Feed Flow (m³/h)', 'Feed Pressure (psi)', 'Permeate TDS (ppm)', 'Feed TDS (ppm)', 'Recovery (%)'];
     const rows = logs.map((r: any) => {
       const opName = r._operatorName ?? 'Unknown';
       return [
         r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
         opName,
         r.permeate_flow ?? '',
-        r.product_flow ?? '',
-        r.net_production ?? '',
-        r.feed_pressure ?? '',
-        r.permeate_pressure ?? '',
-        r.recovery_rate ?? '',
-        (r.notes ?? '').replace(/,/g, ';'),
+        r.feed_flow ?? '',
+        r.feed_pressure_psi ?? '',
+        r.permeate_tds ?? '',
+        r.feed_tds ?? '',
+        r.recovery_pct ?? '',
       ].join(',');
     });
     const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
@@ -3931,7 +3930,7 @@ function TrainOperatorLogModal({
               All data entries submitted by operators for this RO Train
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 mr-8">
             <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
               <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
@@ -3994,10 +3993,10 @@ function TrainOperatorLogModal({
                   <th className="text-left px-4 py-2.5 font-semibold w-[140px]">Date / Time</th>
                   <th className="text-left px-3 py-2.5 font-semibold w-[130px]">Operator</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Permeate Flow</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Net Prod.</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Feed P.</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Feed Flow</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Feed Press.</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Perm TDS</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Recovery</th>
-                  <th className="text-left px-3 py-2.5 font-semibold">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -4028,26 +4027,24 @@ function TrainOperatorLogModal({
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.net_production != null
-                          ? <span>{fmtNum(r.net_production)}<span className="text-muted-foreground ml-0.5">m³</span></span>
-                          : r.product_flow != null
-                            ? <span>{fmtNum(r.product_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
-                            : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_pressure != null
-                          ? <span>{fmtNum(r.feed_pressure)}<span className="text-muted-foreground ml-0.5">bar</span></span>
+                        {r.feed_flow != null
+                          ? <span>{fmtNum(r.feed_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.recovery_rate != null
-                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_rate)}%</span>
+                        {r.feed_pressure_psi != null
+                          ? <span>{fmtNum(r.feed_pressure_psi)}<span className="text-muted-foreground ml-0.5">psi</span></span>
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      <td className="px-3 py-2.5 max-w-[160px]">
-                        {r.notes
-                          ? <span className="text-muted-foreground truncate block" title={r.notes}>{r.notes}</span>
-                          : <span className="text-muted-foreground/30">—</span>}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.permeate_tds != null
+                          ? <span>{fmtNum(r.permeate_tds)}<span className="text-muted-foreground ml-0.5">ppm</span></span>
+                          : <span className="text-muted-foreground/40">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.recovery_pct != null
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_pct)}%</span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
                     </tr>
                   );

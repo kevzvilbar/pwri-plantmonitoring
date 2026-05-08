@@ -852,7 +852,7 @@ function PretreatmentAndROLog() {
                 setTrainOnline(!!c);
                 if (!!c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
               }}
-              className={trainOnline ? 'data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600' : ''}
+              className={cn('shrink-0 h-4 w-4', trainOnline ? 'data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600' : '')}
             />
             <div className="flex-1 min-w-0">
               <label htmlFor="train-online" className={cn(
@@ -989,7 +989,7 @@ function PretreatmentAndROLog() {
           {isSynchronized && (
             <Card className="p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <Checkbox id="sync-bw" checked={syncBwOn} onCheckedChange={(c) => setSyncBwOn(!!c)} />
+                <Checkbox id="sync-bw" checked={syncBwOn} onCheckedChange={(c) => setSyncBwOn(!!c)} className="shrink-0 h-4 w-4" />
                 <Label htmlFor="sync-bw" className="text-sm font-semibold cursor-pointer">Train Backwash Performed?</Label>
               </div>
               {syncBwOn && (
@@ -1042,7 +1042,7 @@ function PretreatmentAndROLog() {
                         <div className="text-sm font-medium">AFM/MMF {u}</div>
                         {!isSynchronized && (
                           <div className="flex items-center gap-2">
-                            <Checkbox id={`bw-${u}`} checked={row.bw} onCheckedChange={(c) => setAfmmfField(u, { bw: !!c })} />
+                            <Checkbox id={`bw-${u}`} checked={row.bw} onCheckedChange={(c) => setAfmmfField(u, { bw: !!c })} className="shrink-0 h-4 w-4" />
                             <Label htmlFor={`bw-${u}`} className="text-xs cursor-pointer">Backwash On</Label>
                           </div>
                         )}
