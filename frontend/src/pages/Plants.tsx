@@ -3818,40 +3818,53 @@ function TrainOperatorLogModal({
     setPage(0);
   };
 
-  const fromIso = dateFrom ? new Date(dateFrom + 'T00:00:00').toISOString() : null;
-  const toIso   = dateTo   ? new Date(dateTo   + 'T23:59:59').toISOString() : null;
+  // Use date-only strings for filtering — same pattern as ReadingHistoryDialog.
+  // This avoids UTC offset cutting off records stored as local timestamps or date strings.
+  const untilNextDay = dateTo
+    ? (() => { const d = new Date(dateTo + 'T00:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()
+    : null;
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['train-operator-log', trainId, fromIso, toIso],
+    queryKey: ['train-operator-log', trainId, dateFrom, untilNextDay],
     queryFn: async () => {
-      // Try with profile join first (multiple possible FK names)
-      const joinSelects = [
-        `id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by, operator:user_profiles!ro_train_readings_recorded_by_fkey(first_name,last_name)`,
-        `id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by, operator:user_profiles(first_name,last_name)`,
-      ];
-
-      for (const sel of joinSelects) {
-        let q = (supabase.from('ro_train_readings' as any) as any)
-          .select(sel)
-          .eq('train_id', trainId)
-          .order('reading_datetime', { ascending: false })
-          .limit(1000);
-        if (fromIso) q = q.gte('reading_datetime', fromIso);
-        if (toIso)   q = q.lte('reading_datetime', toIso);
-        const { data, error } = await q;
-        if (!error && data) return data as any[];
-      }
-
-      // Final fallback: plain fetch without join
+      // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
       let q = (supabase.from('ro_train_readings' as any) as any)
         .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
         .eq('train_id', trainId)
         .order('reading_datetime', { ascending: false })
         .limit(1000);
-      if (fromIso) q = q.gte('reading_datetime', fromIso);
-      if (toIso)   q = q.lte('reading_datetime', toIso);
-      const { data: plain } = await q;
-      return (plain ?? []) as any[];
+      if (dateFrom)     q = q.gte('reading_datetime', dateFrom);
+      if (untilNextDay) q = q.lt('reading_datetime', untilNextDay);
+      const { data: readings, error } = await q;
+      if (error || !readings?.length) return [];
+
+      // Step 2: batch-fetch operator profiles for all unique recorded_by UUIDs
+      const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
+      let profileMap: Record<string, string> = {};
+      if (uids.length) {
+        // Try user_profiles table first, then profiles as fallback
+        for (const table of ['user_profiles', 'profiles']) {
+          const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
+            .select('id, first_name, last_name, full_name')
+            .in('id', uids);
+          if (!perr && pdata?.length) {
+            profileMap = Object.fromEntries(
+              (pdata as any[]).map((p: any) => {
+                const name = p.full_name?.trim() ||
+                  `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() ||
+                  'Unknown';
+                return [p.id, name];
+              })
+            );
+            break;
+          }
+        }
+      }
+
+      return (readings as any[]).map((r: any) => ({
+        ...r,
+        _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown'),
+      }));
     },
     staleTime: 30_000,
   });
@@ -3863,9 +3876,7 @@ function TrainOperatorLogModal({
     if (!logs.length) { toast.error('No logs to export'); return; }
     const headers = ['Date/Time', 'Operator', 'Permeate Flow', 'Product Flow', 'Net Production', 'Feed Pressure', 'Permeate Pressure', 'Recovery Rate', 'Notes'];
     const rows = logs.map((r: any) => {
-      const opName = r.operator
-        ? `${r.operator.first_name ?? ''} ${r.operator.last_name ?? ''}`.trim()
-        : (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown');
+      const opName = r._operatorName ?? 'Unknown';
       return [
         r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
         opName,
@@ -3985,9 +3996,7 @@ function TrainOperatorLogModal({
               </thead>
               <tbody className="divide-y">
                 {pageLogs.map((r: any, i: number) => {
-                  const opName = r.operator
-                    ? `${r.operator.first_name ?? ''} ${r.operator.last_name ?? ''}`.trim() || 'Unknown'
-                    : (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown');
+                  const opName = r._operatorName ?? 'Unknown';
                   const initials = opName !== 'Unknown'
                     ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
                     : '?';
