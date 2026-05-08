@@ -3819,9 +3819,14 @@ function TrainOperatorLogModal({
   };
 
   // Use date-only strings for filtering — same pattern as ReadingHistoryDialog.
-  // This avoids UTC offset cutting off records stored as local timestamps or date strings.
+  // Pure string arithmetic avoids UTC offset shifting the date back (e.g. UTC+8 would
+  // turn 2026-05-08T00:00:00 local → 2026-05-07T16:00:00Z, cutting off today's entries).
   const untilNextDay = dateTo
-    ? (() => { const d = new Date(dateTo + 'T00:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()
+    ? (() => {
+        const [y, m, d] = dateTo.split('-').map(Number);
+        const next = new Date(y, m - 1, d + 1);
+        return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+      })()
     : null;
 
   const { data: logs = [], isLoading } = useQuery({
@@ -3901,8 +3906,7 @@ function TrainOperatorLogModal({
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       {/* Override default DialogContent close button z-index conflict by using custom close */}
       <DialogContent
-        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden [&>button:last-of-type[aria-label='Close']]:hidden"
-        // Hide the default shadcn close (X) button since we control the header layout
+        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden [&>button[aria-label='Close']]:hidden"
         onInteractOutside={() => onClose()}
       >
         {/* Hidden title for screen-reader accessibility */}
