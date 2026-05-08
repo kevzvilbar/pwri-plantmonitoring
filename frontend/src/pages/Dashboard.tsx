@@ -167,7 +167,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
-        .order('reading_datetime', { ascending: true });
+        .order('reading_datetime', { ascending: true })
+        .limit(100000);
       return (data ?? []) as any[];
     },
     enabled: open && locatorIds.length > 0,
@@ -196,7 +197,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         .in('meter_id', meterIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
-        .order('reading_datetime', { ascending: true });
+        .order('reading_datetime', { ascending: true })
+        .limit(100000);
       return (data ?? []) as any[];
     },
     enabled: open && meterIds.length > 0,
