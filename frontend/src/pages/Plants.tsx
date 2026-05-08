@@ -2783,7 +2783,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
               <Checkbox
                 checked={form.has_power_meter}
                 onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
-                className="shrink-0 h-4 w-4 [&]:rounded-sm"
+                className="h-4 w-4 [&]:rounded-sm"
                 data-testid="add-well-has-power-meter"
               />
               <Zap className="h-3 w-3 text-amber-500" />
@@ -3835,7 +3835,7 @@ function TrainOperatorLogModal({
       try {
         // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
         let q = (supabase.from('ro_train_readings' as any) as any)
-          .select('id, reading_datetime, permeate_flow, feed_flow, feed_pressure_psi, permeate_tds, feed_tds, recovery_pct, recorded_by')
+          .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
           .eq('train_id', trainId)
           .order('reading_datetime', { ascending: false })
           .limit(1000);
@@ -3889,18 +3889,19 @@ function TrainOperatorLogModal({
 
   const exportCSV = () => {
     if (!logs.length) { toast.error('No logs to export'); return; }
-    const headers = ['Date/Time', 'Operator', 'Permeate Flow (m³/h)', 'Feed Flow (m³/h)', 'Feed Pressure (psi)', 'Permeate TDS (ppm)', 'Feed TDS (ppm)', 'Recovery (%)'];
+    const headers = ['Date/Time', 'Operator', 'Permeate Flow', 'Product Flow', 'Net Production', 'Feed Pressure', 'Permeate Pressure', 'Recovery Rate', 'Notes'];
     const rows = logs.map((r: any) => {
       const opName = r._operatorName ?? 'Unknown';
       return [
         r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
         opName,
         r.permeate_flow ?? '',
-        r.feed_flow ?? '',
-        r.feed_pressure_psi ?? '',
-        r.permeate_tds ?? '',
-        r.feed_tds ?? '',
-        r.recovery_pct ?? '',
+        r.product_flow ?? '',
+        r.net_production ?? '',
+        r.feed_pressure ?? '',
+        r.permeate_pressure ?? '',
+        r.recovery_rate ?? '',
+        (r.notes ?? '').replace(/,/g, ';'),
       ].join(',');
     });
     const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
@@ -3930,7 +3931,7 @@ function TrainOperatorLogModal({
               All data entries submitted by operators for this RO Train
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0 mr-8">
+          <div className="flex items-center gap-2 shrink-0">
             <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
               <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
@@ -3993,10 +3994,10 @@ function TrainOperatorLogModal({
                   <th className="text-left px-4 py-2.5 font-semibold w-[140px]">Date / Time</th>
                   <th className="text-left px-3 py-2.5 font-semibold w-[130px]">Operator</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Permeate Flow</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Feed Flow</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Feed Press.</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Perm TDS</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Net Prod.</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Feed P.</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Recovery</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -4027,24 +4028,26 @@ function TrainOperatorLogModal({
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_flow != null
-                          ? <span>{fmtNum(r.feed_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                        {r.net_production != null
+                          ? <span>{fmtNum(r.net_production)}<span className="text-muted-foreground ml-0.5">m³</span></span>
+                          : r.product_flow != null
+                            ? <span>{fmtNum(r.product_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                            : <span className="text-muted-foreground/40">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {r.feed_pressure != null
+                          ? <span>{fmtNum(r.feed_pressure)}<span className="text-muted-foreground ml-0.5">bar</span></span>
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_pressure_psi != null
-                          ? <span>{fmtNum(r.feed_pressure_psi)}<span className="text-muted-foreground ml-0.5">psi</span></span>
+                        {r.recovery_rate != null
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_rate)}%</span>
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.permeate_tds != null
-                          ? <span>{fmtNum(r.permeate_tds)}<span className="text-muted-foreground ml-0.5">ppm</span></span>
-                          : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.recovery_pct != null
-                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_pct)}%</span>
-                          : <span className="text-muted-foreground/40">—</span>}
+                      <td className="px-3 py-2.5 max-w-[160px]">
+                        {r.notes
+                          ? <span className="text-muted-foreground truncate block" title={r.notes}>{r.notes}</span>
+                          : <span className="text-muted-foreground/30">—</span>}
                       </td>
                     </tr>
                   );
@@ -5232,31 +5235,46 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </span>
         </div>
 
-        {/* Toggle cards — each source gets a tappable row */}
-        <div className="space-y-2">
-          {/* Solar row */}
-          <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
-          } ${!canEdit ? 'cursor-default' : ''}`}>
-            <div className="flex items-center gap-2.5">
-              <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
-                <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+        {/* Toggle cards — two columns on desktop */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Solar column */}
+          <div className="flex flex-col gap-3">
+            <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors flex-1 ${
+              hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
+            } ${!canEdit ? 'cursor-default' : ''}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
+                  <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Solar</div>
+                  <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
+                </div>
               </div>
+              <Switch
+                checked={hasSolar}
+                onCheckedChange={canEdit ? setHasSolar : undefined}
+                disabled={!canEdit}
+                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
+                data-testid="energy-power-tab-solar"
+              />
+            </label>
+            {/* Solar capacity — sits under the Solar card */}
+            {canEdit && hasSolar && (
               <div>
-                <div className="text-sm font-medium">Solar</div>
-                <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
+                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Input
+                  type="number" step="any" value={solarKw}
+                  onChange={e => setSolarKw(e.target.value)}
+                  placeholder="e.g. 50"
+                  className="h-9 text-sm mt-1"
+                  data-testid="energy-power-tab-kw"
+                />
               </div>
-            </div>
-            <Switch
-              checked={hasSolar}
-              onCheckedChange={canEdit ? setHasSolar : undefined}
-              disabled={!canEdit}
-              className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
-              data-testid="energy-power-tab-solar"
-            />
-          </label>
+            )}
+          </div>
 
-          {/* Grid row */}
+          {/* Grid column */}
           <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
             hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'
           } ${!canEdit ? 'cursor-default' : ''}`}>
@@ -5279,26 +5297,14 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </label>
         </div>
 
-        {/* Solar capacity input + Save */}
+        {/* Save button — full width row, only shown when editing */}
         {canEdit && (
-          <div className="flex items-end gap-2">
-            {hasSolar && (
-              <div className="flex-1 min-w-0">
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-9 text-sm mt-1"
-                  data-testid="energy-power-tab-kw"
-                />
-              </div>
-            )}
+          <div className="flex justify-end">
             <Button
               size="sm"
               onClick={saveEnergy}
               disabled={energySaving}
-              className={`h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800 shrink-0 ${!hasSolar ? 'ml-auto' : ''}`}
+              className="h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800"
               data-testid="save-energy-power-tab-btn"
             >
               {energySaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
