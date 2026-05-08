@@ -3805,14 +3805,14 @@ function TrainOperatorLogModal({
 
   // Date range — default last 30 days
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const thirtyDaysAgoStr = format(new Date(Date.now() - 30 * 86400_000), 'yyyy-MM-dd');
+  const thirtyDaysAgoStr = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgoStr);
   const [dateTo, setDateTo]     = useState(todayStr);
   const [rangePreset, setRangePreset] = useState<'7' | '30' | '90' | 'custom'>('30');
 
   const applyPreset = (p: '7' | '30' | '90') => {
     const days = parseInt(p);
-    setDateFrom(format(new Date(Date.now() - days * 86400_000), 'yyyy-MM-dd'));
+    setDateFrom(format(new Date(Date.now() - days * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'));
     setDateTo(todayStr);
     setRangePreset(p);
     setPage(0);
@@ -3829,49 +3829,59 @@ function TrainOperatorLogModal({
       })()
     : null;
 
-  const { data: logs = [], isLoading } = useQuery({
+  const { data: logs = [], isLoading, refetch } = useQuery({
     queryKey: ['train-operator-log', trainId, dateFrom, untilNextDay],
     queryFn: async () => {
-      // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
-      let q = (supabase.from('ro_train_readings' as any) as any)
-        .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
-        .eq('train_id', trainId)
-        .order('reading_datetime', { ascending: false })
-        .limit(1000);
-      if (dateFrom)     q = q.gte('reading_datetime', dateFrom);
-      if (untilNextDay) q = q.lt('reading_datetime', untilNextDay);
-      const { data: readings, error } = await q;
-      if (error || !readings?.length) return [];
+      try {
+        // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
+        let q = (supabase.from('ro_train_readings' as any) as any)
+          .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
+          .eq('train_id', trainId)
+          .order('reading_datetime', { ascending: false })
+          .limit(1000);
+        if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
+        if (untilNextDay) q = q.lt('reading_datetime', `${untilNextDay}T00:00:00`);
+        const { data: readings, error } = await q;
+        if (error) {
+          console.error('Error fetching readings:', error);
+          return [];
+        }
+        if (!readings?.length) return [];
 
-      // Step 2: batch-fetch operator profiles for all unique recorded_by UUIDs
-      const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
-      let profileMap: Record<string, string> = {};
-      if (uids.length) {
-        // Try user_profiles table first, then profiles as fallback
-        for (const table of ['user_profiles', 'profiles']) {
-          const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
-            .select('id, first_name, last_name, full_name')
-            .in('id', uids);
-          if (!perr && pdata?.length) {
-            profileMap = Object.fromEntries(
-              (pdata as any[]).map((p: any) => {
-                const name = p.full_name?.trim() ||
-                  `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() ||
-                  'Unknown';
-                return [p.id, name];
-              })
-            );
-            break;
+        // Step 2: batch-fetch operator profiles for all unique recorded_by UUIDs
+        const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
+        let profileMap: Record<string, string> = {};
+        if (uids.length) {
+          // Try user_profiles table first, then profiles as fallback
+          for (const table of ['user_profiles', 'profiles']) {
+            const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
+              .select('id, first_name, last_name, full_name')
+              .in('id', uids);
+            if (!perr && pdata?.length) {
+              profileMap = Object.fromEntries(
+                (pdata as any[]).map((p: any) => {
+                  const name = p.full_name?.trim() ||
+                    `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() ||
+                    'Unknown';
+                  return [p.id, name];
+                })
+              );
+              break;
+            }
           }
         }
-      }
 
-      return (readings as any[]).map((r: any) => ({
-        ...r,
-        _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown'),
-      }));
+        return (readings as any[]).map((r: any) => ({
+          ...r,
+          _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown'),
+        }));
+      } catch (err) {
+        console.error('Unexpected error in operator log query:', err);
+        return [];
+      }
     },
     staleTime: 30_000,
+    gcTime: 60_000,
   });
 
   const totalPages = Math.ceil(logs.length / PAGE_SIZE);
@@ -3904,9 +3914,8 @@ function TrainOperatorLogModal({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      {/* Override default DialogContent close button z-index conflict by using custom close */}
       <DialogContent
-        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden [&>button[aria-label='Close']]:hidden"
+        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden"
         onInteractOutside={() => onClose()}
       >
         {/* Hidden title for screen-reader accessibility */}
@@ -3926,13 +3935,6 @@ function TrainOperatorLogModal({
             <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
               <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
-            <button
-              onClick={onClose}
-              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
         </div>
 
