@@ -553,9 +553,12 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} /></div>
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
-      <div className={tab === 'trains'   ? undefined : 'hidden'}>
-        <BackwashModeCard plant={plant} />
-        <PlantComponentTypeCard plant={plant} />
+      <div className={tab === 'trains' ? 'space-y-3' : 'hidden'}>
+        {/* Two-column config row on desktop */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+          <BackwashModeCard plant={plant} />
+          <PlantComponentTypeCard plant={plant} />
+        </div>
         <TrainsList plantId={plantId} />
       </div>
       <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
@@ -5235,46 +5238,31 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </span>
         </div>
 
-        {/* Toggle cards — two columns on desktop */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Solar column */}
-          <div className="flex flex-col gap-3">
-            <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors flex-1 ${
-              hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
-            } ${!canEdit ? 'cursor-default' : ''}`}>
-              <div className="flex items-center gap-2.5">
-                <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
-                  <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Solar</div>
-                  <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
-                </div>
+        {/* Toggle cards — each source gets a tappable row */}
+        <div className="space-y-2">
+          {/* Solar row */}
+          <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+            hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
+          } ${!canEdit ? 'cursor-default' : ''}`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
+                <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
               </div>
-              <Switch
-                checked={hasSolar}
-                onCheckedChange={canEdit ? setHasSolar : undefined}
-                disabled={!canEdit}
-                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
-                data-testid="energy-power-tab-solar"
-              />
-            </label>
-            {/* Solar capacity — sits under the Solar card */}
-            {canEdit && hasSolar && (
               <div>
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-9 text-sm mt-1"
-                  data-testid="energy-power-tab-kw"
-                />
+                <div className="text-sm font-medium">Solar</div>
+                <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
               </div>
-            )}
-          </div>
+            </div>
+            <Switch
+              checked={hasSolar}
+              onCheckedChange={canEdit ? setHasSolar : undefined}
+              disabled={!canEdit}
+              className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
+              data-testid="energy-power-tab-solar"
+            />
+          </label>
 
-          {/* Grid column */}
+          {/* Grid row */}
           <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
             hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'
           } ${!canEdit ? 'cursor-default' : ''}`}>
@@ -5297,14 +5285,26 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </label>
         </div>
 
-        {/* Save button — full width row, only shown when editing */}
+        {/* Solar capacity input + Save */}
         {canEdit && (
-          <div className="flex justify-end">
+          <div className="flex items-end gap-2">
+            {hasSolar && (
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Input
+                  type="number" step="any" value={solarKw}
+                  onChange={e => setSolarKw(e.target.value)}
+                  placeholder="e.g. 50"
+                  className="h-9 text-sm mt-1"
+                  data-testid="energy-power-tab-kw"
+                />
+              </div>
+            )}
             <Button
               size="sm"
               onClick={saveEnergy}
               disabled={energySaving}
-              className="h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800"
+              className={`h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800 shrink-0 ${!hasSolar ? 'ml-auto' : ''}`}
               data-testid="save-energy-power-tab-btn"
             >
               {energySaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
