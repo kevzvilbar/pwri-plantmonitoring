@@ -3294,18 +3294,20 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
       // cutting off records that were saved in a different timezone.
       let sinceDate: string;
       let untilNextDay: string; // exclusive upper bound = day after end date
+      // Pure local-date arithmetic — avoids UTC offset shifting the date back
+      // (e.g. UTC+8 would turn 2026-05-08T00:00:00 local → 2026-05-07T16:00:00Z).
+      const _localStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const _addDay = (s: string, n: number) => {
+        const [y, m, day] = s.split('-').map(Number);
+        return _localStr(new Date(y, m - 1, day + n));
+      };
       if (days === 'custom') {
         sinceDate = appliedFrom;
-        const end = new Date(appliedTo + 'T00:00:00');
-        end.setDate(end.getDate() + 1);
-        untilNextDay = end.toISOString().slice(0, 10);
+        untilNextDay = _addDay(appliedTo, 1);
       } else {
-        const since = new Date();
-        since.setDate(since.getDate() - days);
-        sinceDate = since.toISOString().slice(0, 10);
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        untilNextDay = tomorrow.toISOString().slice(0, 10);
+        sinceDate = _localStr(new Date(Date.now() - days * 86400_000));
+        untilNextDay = _addDay(_localStr(new Date()), 1);
       }
 
       if (module === 'locator') {
