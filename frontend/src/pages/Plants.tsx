@@ -3803,40 +3803,55 @@ function TrainOperatorLogModal({
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
 
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['train-operator-log', trainId],
-    queryFn: async () => {
-      // Fetch readings joined with user profile for operator name
-      const { data, error } = await (supabase
-        .from('ro_train_readings' as any)
-        .select(`
-          id,
-          reading_datetime,
-          permeate_flow,
-          product_flow,
-          net_production,
-          feed_pressure,
-          permeate_pressure,
-          recovery_rate,
-          notes,
-          recorded_by,
-          operator:user_profiles!ro_train_readings_recorded_by_fkey(first_name, last_name)
-        ` as any)
-        .eq('train_id', trainId)
-        .order('reading_datetime', { ascending: false })
-        .limit(500) as any);
+  // Date range — default last 30 days
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const thirtyDaysAgoStr = format(new Date(Date.now() - 30 * 86400_000), 'yyyy-MM-dd');
+  const [dateFrom, setDateFrom] = useState(thirtyDaysAgoStr);
+  const [dateTo, setDateTo]     = useState(todayStr);
+  const [rangePreset, setRangePreset] = useState<'7' | '30' | '90' | 'custom'>('30');
 
-      if (error) {
-        // Fallback: fetch without join if FK alias not available
-        const { data: plain } = await supabase
-          .from('ro_train_readings' as any)
-          .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by' as any)
+  const applyPreset = (p: '7' | '30' | '90') => {
+    const days = parseInt(p);
+    setDateFrom(format(new Date(Date.now() - days * 86400_000), 'yyyy-MM-dd'));
+    setDateTo(todayStr);
+    setRangePreset(p);
+    setPage(0);
+  };
+
+  const fromIso = dateFrom ? new Date(dateFrom + 'T00:00:00').toISOString() : null;
+  const toIso   = dateTo   ? new Date(dateTo   + 'T23:59:59').toISOString() : null;
+
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ['train-operator-log', trainId, fromIso, toIso],
+    queryFn: async () => {
+      // Try with profile join first (multiple possible FK names)
+      const joinSelects = [
+        `id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by, operator:user_profiles!ro_train_readings_recorded_by_fkey(first_name,last_name)`,
+        `id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by, operator:user_profiles(first_name,last_name)`,
+      ];
+
+      for (const sel of joinSelects) {
+        let q = (supabase.from('ro_train_readings' as any) as any)
+          .select(sel)
           .eq('train_id', trainId)
           .order('reading_datetime', { ascending: false })
-          .limit(500);
-        return (plain ?? []) as any[];
+          .limit(1000);
+        if (fromIso) q = q.gte('reading_datetime', fromIso);
+        if (toIso)   q = q.lte('reading_datetime', toIso);
+        const { data, error } = await q;
+        if (!error && data) return data as any[];
       }
-      return (data ?? []) as any[];
+
+      // Final fallback: plain fetch without join
+      let q = (supabase.from('ro_train_readings' as any) as any)
+        .select('id, reading_datetime, permeate_flow, product_flow, net_production, feed_pressure, permeate_pressure, recovery_rate, notes, recorded_by')
+        .eq('train_id', trainId)
+        .order('reading_datetime', { ascending: false })
+        .limit(1000);
+      if (fromIso) q = q.gte('reading_datetime', fromIso);
+      if (toIso)   q = q.lte('reading_datetime', toIso);
+      const { data: plain } = await q;
+      return (plain ?? []) as any[];
     },
     staleTime: 30_000,
   });
@@ -3850,7 +3865,7 @@ function TrainOperatorLogModal({
     const rows = logs.map((r: any) => {
       const opName = r.operator
         ? `${r.operator.first_name ?? ''} ${r.operator.last_name ?? ''}`.trim()
-        : (r.recorded_by ? `UID:${r.recorded_by.slice(0, 8)}` : 'Unknown');
+        : (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown');
       return [
         r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
         opName,
@@ -3873,42 +3888,77 @@ function TrainOperatorLogModal({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0">
-        {/* Header */}
-        <DialogHeader className="px-5 py-4 border-b shrink-0">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <DialogTitle className="text-base font-semibold flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-teal-600" />
-                Operator Log — {trainLabel}
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                All data entries submitted by operators for this RO Train
-              </p>
+      {/* Override default DialogContent close button z-index conflict by using custom close */}
+      <DialogContent
+        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden [&>button:last-of-type[aria-label='Close']]:hidden"
+        // Hide the default shadcn close (X) button since we control the header layout
+        onInteractOutside={() => onClose()}
+      >
+        {/* Hidden title for screen-reader accessibility */}
+        <DialogTitle className="sr-only">Operator Log — {trainLabel}</DialogTitle>
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
+          <div className="min-w-0">
+            <div className="text-base font-semibold flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-teal-600 shrink-0" />
+              <span className="truncate">Operator Log — {trainLabel}</span>
             </div>
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 shrink-0" onClick={exportCSV}>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              All data entries submitted by operators for this RO Train
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
               <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
+            <button
+              onClick={onClose}
+              className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        </DialogHeader>
+        </div>
 
-        {/* Stats bar */}
-        {!isLoading && logs.length > 0 && (
-          <div className="flex items-center gap-4 px-5 py-2.5 bg-muted/40 border-b shrink-0 text-xs text-muted-foreground">
-            <span><span className="font-semibold text-foreground">{logs.length}</span> total entries</span>
-            <span>·</span>
-            <span>
-              Last entry:{' '}
-              <span className="font-semibold text-foreground">
-                {logs[0]?.reading_datetime
-                  ? format(new Date(logs[0].reading_datetime), 'MMM d, yyyy HH:mm')
-                  : '—'}
-              </span>
+        {/* ── Date Range Filter ── */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b shrink-0 flex-wrap">
+          {/* Preset pills */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5 shrink-0">
+            {(['7', '30', '90'] as const).map(p => (
+              <button key={p} onClick={() => applyPreset(p)}
+                className={`px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${rangePreset === p ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {p}d
+              </button>
+            ))}
+            <button onClick={() => setRangePreset('custom')}
+              className={`px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${rangePreset === 'custom' ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              Custom
+            </button>
+          </div>
+          {/* Date inputs */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date" value={dateFrom} max={dateTo || todayStr}
+              onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
+              className="h-7 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+            />
+            <span className="text-muted-foreground text-xs">→</span>
+            <input
+              type="date" value={dateTo} min={dateFrom} max={todayStr}
+              onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
+              className="h-7 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+            />
+          </div>
+          {/* Entry count */}
+          {!isLoading && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              <span className="font-semibold text-foreground">{logs.length}</span> {logs.length === 1 ? 'entry' : 'entries'}
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Log table */}
+        {/* ── Log table ── */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
@@ -3918,7 +3968,7 @@ function TrainOperatorLogModal({
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Calendar className="h-8 w-8 mb-2 opacity-30" />
               <p className="text-sm font-medium">No logs found</p>
-              <p className="text-xs mt-0.5">Operator entries will appear here once submitted.</p>
+              <p className="text-xs mt-0.5">Try expanding the date range or check that data has been submitted.</p>
             </div>
           ) : (
             <table className="w-full text-xs">
@@ -3943,16 +3993,12 @@ function TrainOperatorLogModal({
                     : '?';
                   return (
                     <tr key={r.id ?? i} className="hover:bg-muted/30 transition-colors">
-                      {/* Date/Time */}
                       <td className="px-4 py-2.5 font-mono text-[11px] whitespace-nowrap text-muted-foreground">
-                        {r.reading_datetime
-                          ? (<>
-                              <div className="text-foreground font-medium">{format(new Date(r.reading_datetime), 'MMM d, yyyy')}</div>
-                              <div>{format(new Date(r.reading_datetime), 'HH:mm')}</div>
-                            </>)
-                          : '—'}
+                        {r.reading_datetime ? (<>
+                          <div className="text-foreground font-medium">{format(new Date(r.reading_datetime), 'MMM d, yyyy')}</div>
+                          <div>{format(new Date(r.reading_datetime), 'HH:mm')}</div>
+                        </>) : '—'}
                       </td>
-                      {/* Operator */}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <div className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[9px] font-bold shrink-0">
@@ -3961,37 +4007,32 @@ function TrainOperatorLogModal({
                           <span className="truncate max-w-[90px]" title={opName}>{opName}</span>
                         </div>
                       </td>
-                      {/* Permeate Flow */}
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.permeate_flow != null ? (
-                          <span>{fmtNum(r.permeate_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
-                        ) : <span className="text-muted-foreground/50">—</span>}
+                        {r.permeate_flow != null
+                          ? <span>{fmtNum(r.permeate_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      {/* Net Production */}
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.net_production != null ? (
-                          <span>{fmtNum(r.net_production)}<span className="text-muted-foreground ml-0.5">m³</span></span>
-                        ) : r.product_flow != null ? (
-                          <span>{fmtNum(r.product_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
-                        ) : <span className="text-muted-foreground/50">—</span>}
+                        {r.net_production != null
+                          ? <span>{fmtNum(r.net_production)}<span className="text-muted-foreground ml-0.5">m³</span></span>
+                          : r.product_flow != null
+                            ? <span>{fmtNum(r.product_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
+                            : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      {/* Feed Pressure */}
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_pressure != null ? (
-                          <span>{fmtNum(r.feed_pressure)}<span className="text-muted-foreground ml-0.5">bar</span></span>
-                        ) : <span className="text-muted-foreground/50">—</span>}
+                        {r.feed_pressure != null
+                          ? <span>{fmtNum(r.feed_pressure)}<span className="text-muted-foreground ml-0.5">bar</span></span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      {/* Recovery */}
                       <td className="px-3 py-2.5 text-right font-mono">
-                        {r.recovery_rate != null ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_rate)}%</span>
-                        ) : <span className="text-muted-foreground/50">—</span>}
+                        {r.recovery_rate != null
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_rate)}%</span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      {/* Notes */}
                       <td className="px-3 py-2.5 max-w-[160px]">
-                        {r.notes ? (
-                          <span className="text-muted-foreground truncate block" title={r.notes}>{r.notes}</span>
-                        ) : <span className="text-muted-foreground/30">—</span>}
+                        {r.notes
+                          ? <span className="text-muted-foreground truncate block" title={r.notes}>{r.notes}</span>
+                          : <span className="text-muted-foreground/30">—</span>}
                       </td>
                     </tr>
                   );
@@ -4001,7 +4042,7 @@ function TrainOperatorLogModal({
           )}
         </div>
 
-        {/* Pagination footer */}
+        {/* ── Pagination footer ── */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between gap-2 px-5 py-3 border-t shrink-0">
             <span className="text-xs text-muted-foreground">
