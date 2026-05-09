@@ -781,7 +781,11 @@ function ProductMetersCard({ plant }: { plant: any }) {
       {meters?.map((m: any, idx: number) => (
         <Card
           key={m.id}
-          className="p-3 hover:shadow-elev transition-shadow"
+          className={`p-3 hover:shadow-elev transition-shadow border-l-2 ${
+            (m.status ?? 'Active') === 'Active'
+              ? 'border-l-emerald-400 dark:border-l-emerald-600'
+              : 'border-l-muted-foreground/30'
+          }`}
           data-testid={`product-meter-card-${m.id}`}
         >
           <div className="flex items-start gap-2">
@@ -1068,16 +1072,16 @@ function BackwashModeCard({ plant }: { plant: any }) {
   const qc = useQueryClient();
   const { isManager, user, profile } = useAuth();
   const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
+
+  // Derive the media type label dynamically from the plant setting
+  const mediaLabel = (plant as any).filter_media_type ?? 'AFM';
+
   const save = async (next: 'independent' | 'synchronized') => {
     if (next === mode) return;
     const prev = mode;
     setMode(next);
     const { error } = await supabase.from('plants').update({ backwash_mode: next }).eq('id', plant.id);
     if (error) { setMode(prev); toast.error(error.message); return; }
-    // Audit: who, when, from → to. Re-uses deletion_audit_log with kind='plant' /
-    // action='soft' (the closest valid enum values) and stores the structured
-    // change in `dependencies`. Best-effort: table may be missing pre-migration,
-    // and any insert error is logged but never blocks the user.
     const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
       || (profile as any)?.email
       || user?.email
@@ -1102,37 +1106,47 @@ function BackwashModeCard({ plant }: { plant: any }) {
     toast.success(`Backwash mode set to ${next}`);
     qc.invalidateQueries({ queryKey: ['plants'] });
   };
+
   return (
     <Card className="p-3" data-testid="backwash-mode-card">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold">AFM/MMF backwash mode</div>
-          <div className="text-[11px] text-muted-foreground">
-            {mode === 'synchronized' ? 'All units on a train backwash together (e.g. Guizo).' : 'Each unit backwashes independently.'}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          {/* Title updates dynamically based on plant media type */}
+          <div className="text-sm font-semibold">
+            {mediaLabel} Backwash Mode
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {mode === 'synchronized'
+              ? `All ${mediaLabel} units on a train backwash together.`
+              : `Each ${mediaLabel} unit backwashes independently.`}
           </div>
         </div>
-        {/* Desktop: side-by-side row · Mobile: stacked rows w/ radio indicator */}
-        <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-1 w-full sm:w-auto">
+        {/* Segmented pill toggle */}
+        <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg shrink-0 w-full sm:w-auto">
           {(['independent', 'synchronized'] as const).map((m) => {
             const active = mode === m;
             return (
-              <Button
+              <button
                 key={m}
-                size="sm"
-                variant={active ? 'default' : 'outline'}
                 disabled={!isManager}
                 onClick={() => save(m)}
-                className="capitalize justify-start sm:justify-center w-full sm:w-auto"
                 data-testid={`backwash-mode-${m}`}
+                className={[
+                  'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                  active
+                    ? 'bg-teal-700 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                  !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                ].join(' ')}
               >
                 <span
                   aria-hidden
-                  className={`mr-1.5 h-2.5 w-2.5 rounded-full border ${
-                    active ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'
+                  className={`h-2 w-2 rounded-full border ${
+                    active ? 'bg-white border-white' : 'border-muted-foreground/40'
                   }`}
                 />
-                {m}
-              </Button>
+                <span className="capitalize">{m}</span>
+              </button>
             );
           })}
         </div>
@@ -1701,7 +1715,13 @@ function LocatorsList({ plantId }: { plantId: string }) {
         return (
           <Card
             key={l.id}
-            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''}`}
+            className={`p-3 hover:shadow-elev border-l-2 transition-colors ${
+              checked ? 'ring-1 ring-primary' : ''
+            } ${
+              l.status === 'Active'
+                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                : 'border-l-muted-foreground/30'
+            }`}
             data-testid={`locator-card-${l.id}`}
           >
             <div className="flex items-start gap-2">
@@ -2434,7 +2454,11 @@ function WellsList({ plantId }: { plantId: string }) {
         return (
           <Card
             key={w.id}
-            className={`p-3 hover:shadow-elev ${checked ? 'ring-1 ring-primary' : ''} ${isBlending ? 'border-teal-400' : ''}`}
+            className={`p-3 hover:shadow-elev border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
+              w.status === 'Active'
+                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                : 'border-l-muted-foreground/30'
+            } ${isBlending ? 'border-teal-400' : ''}`}
             data-testid={`well-card-${w.id}`}
           >
             <div className="flex items-start gap-2">
@@ -3201,9 +3225,11 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // These fields may not exist in older DB schemas — we use `?? 'AFM'` fallbacks.
-  const [mediaType, setMediaType] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
-  const [filterType, setFilterType] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
+  const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
+  const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
+
+  const setMediaType = (v: 'AFM' | 'MMF') => { setMediaTypeState(v); setEditing(true); };
+  const setFilterType = (v: 'Cartridge Filter' | 'Bag Filter') => { setFilterTypeState(v); setEditing(true); };
 
   const save = async () => {
     setSaving(true);
@@ -3223,78 +3249,83 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
   };
 
   const cancel = () => {
-    setMediaType((plant as any).filter_media_type ?? 'AFM');
-    setFilterType((plant as any).filter_housing_type ?? 'Cartridge Filter');
+    setMediaTypeState((plant as any).filter_media_type ?? 'AFM');
+    setFilterTypeState((plant as any).filter_housing_type ?? 'Cartridge Filter');
     setEditing(false);
   };
 
   return (
     <Card className="p-3" data-testid="plant-component-type-card">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center gap-2 mb-3">
+        <Wrench className="h-4 w-4 text-chart-6 shrink-0" />
         <div>
-          <div className="text-sm font-semibold flex items-center gap-2">
-            <Wrench className="h-4 w-4 text-chart-6" /> Plant-wide Component Types
-          </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-3 flex-wrap">
-            <span>
-              Media filter:{' '}
-              <span className="font-medium text-foreground">
-                {(plant as any).filter_media_type ?? 'AFM'}
-              </span>
-            </span>
-            <span>
-              Pre-filter:{' '}
-              <span className="font-medium text-foreground">
-                {(plant as any).filter_housing_type ?? 'Cartridge Filter'}
-              </span>
-            </span>
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            Applies universally — reflected in all train labels &amp; forms.
-          </div>
+          <div className="text-sm font-semibold">Plant-wide Component Types</div>
+          <div className="text-[10px] text-muted-foreground">Applies universally — reflected in all train labels &amp; forms.</div>
         </div>
-        {isManager && !editing && (
-          <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="edit-component-types-btn">
-            <Wrench className="h-3 w-3 mr-1" />Edit
-          </Button>
-        )}
       </div>
 
-      {editing && (
-        <div className="mt-2 space-y-1.5">
-          {/* Media filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground w-20 shrink-0">Media</span>
-            <div className="flex gap-1 flex-1">
-              {(['AFM', 'MMF'] as const).map((opt) => (
-                <Button key={opt} size="sm" variant={mediaType === opt ? 'default' : 'outline'}
-                  onClick={() => setMediaType(opt)} data-testid={`media-type-${opt}`}
-                  className="flex-1 h-7 text-xs px-2">
+      <div className="space-y-2">
+        {/* Media filter row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground w-16 shrink-0">Media</span>
+          <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg flex-1">
+            {(['AFM', 'MMF'] as const).map((opt) => {
+              const active = mediaType === opt;
+              return (
+                <button
+                  key={opt}
+                  disabled={!isManager}
+                  onClick={() => { if (isManager) setMediaType(opt); }}
+                  data-testid={`media-type-${opt}`}
+                  className={[
+                    'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                    active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                  ].join(' ')}
+                >
+                  <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
                   {opt}
-                </Button>
-              ))}
-            </div>
+                </button>
+              );
+            })}
           </div>
-          {/* Pre-filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground w-20 shrink-0">Pre-filter</span>
-            <div className="flex gap-1 flex-1">
-              {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => (
-                <Button key={opt} size="sm" variant={filterType === opt ? 'default' : 'outline'}
-                  onClick={() => setFilterType(opt)} data-testid={`filter-type-${opt.replace(' ', '-')}`}
-                  className="flex-1 h-7 text-xs px-2">
+        </div>
+
+        {/* Pre-filter row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground w-16 shrink-0">Pre-filter</span>
+          <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg flex-1">
+            {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => {
+              const active = filterType === opt;
+              return (
+                <button
+                  key={opt}
+                  disabled={!isManager}
+                  onClick={() => { if (isManager) setFilterType(opt); }}
+                  data-testid={`filter-type-${opt.replace(' ', '-')}`}
+                  className={[
+                    'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                    active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                  ].join(' ')}
+                >
+                  <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
                   {opt === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
-                </Button>
-              ))}
-            </div>
+                </button>
+              );
+            })}
           </div>
-          <div className="flex gap-1.5 justify-end pt-0.5">
-            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3">
-              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-              Save
-            </Button>
-          </div>
+        </div>
+      </div>
+
+      {/* Save / Cancel — only shown when manager has made changes */}
+      {isManager && editing && (
+        <div className="flex gap-1.5 justify-end pt-2.5">
+          <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
+          <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3 bg-teal-700 text-white hover:bg-teal-800">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save
+          </Button>
         </div>
       )}
     </Card>
@@ -4232,7 +4263,13 @@ function TrainsList({ plantId }: { plantId: string }) {
         const effectiveStatus = deriveTrainStatus(t);
         const isExpanded = selectedTrain === t.id;
         return (
-          <Card key={t.id} className="p-3" data-testid={`train-card-${t.id}`}>
+          <Card key={t.id} className={`p-3 border-l-2 ${
+            effectiveStatus === 'Running'
+              ? 'border-l-emerald-400 dark:border-l-emerald-600'
+              : effectiveStatus === 'Maintenance'
+                ? 'border-l-amber-400 dark:border-l-amber-500'
+                : 'border-l-muted-foreground/30'
+          }`} data-testid={`train-card-${t.id}`}>
             <div className="flex justify-between items-start gap-2">
               <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setSelectedTrain(isExpanded ? null : t.id)}>
                 <div className="font-medium text-sm">
@@ -5232,31 +5269,46 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </span>
         </div>
 
-        {/* Toggle cards — each source gets a tappable row */}
-        <div className="space-y-2">
-          {/* Solar row */}
-          <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
-          } ${!canEdit ? 'cursor-default' : ''}`}>
-            <div className="flex items-center gap-2.5">
-              <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
-                <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+        {/* Toggle cards — grid: single col on mobile, 2-col on sm+ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Solar column */}
+          <div className="space-y-2">
+            <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+              hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
+            } ${!canEdit ? 'cursor-default' : ''}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
+                  <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Solar</div>
+                  <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
+                </div>
               </div>
+              <Switch
+                checked={hasSolar}
+                onCheckedChange={canEdit ? setHasSolar : undefined}
+                disabled={!canEdit}
+                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
+                data-testid="energy-power-tab-solar"
+              />
+            </label>
+            {/* Solar capacity — lives directly under Solar, only when solar is on */}
+            {hasSolar && canEdit && (
               <div>
-                <div className="text-sm font-medium">Solar</div>
-                <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
+                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Input
+                  type="number" step="any" value={solarKw}
+                  onChange={e => setSolarKw(e.target.value)}
+                  placeholder="e.g. 50"
+                  className="h-9 text-sm mt-1"
+                  data-testid="energy-power-tab-kw"
+                />
               </div>
-            </div>
-            <Switch
-              checked={hasSolar}
-              onCheckedChange={canEdit ? setHasSolar : undefined}
-              disabled={!canEdit}
-              className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
-              data-testid="energy-power-tab-solar"
-            />
-          </label>
+            )}
+          </div>
 
-          {/* Grid row */}
+          {/* Grid column */}
           <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
             hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'
           } ${!canEdit ? 'cursor-default' : ''}`}>
@@ -5279,26 +5331,14 @@ function PowerMetersCard({ plant }: { plant: any }) {
           </label>
         </div>
 
-        {/* Solar capacity input + Save */}
+        {/* Save button — full-width row, always at bottom */}
         {canEdit && (
-          <div className="flex items-end gap-2">
-            {hasSolar && (
-              <div className="flex-1 min-w-0">
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-9 text-sm mt-1"
-                  data-testid="energy-power-tab-kw"
-                />
-              </div>
-            )}
+          <div className="flex justify-end">
             <Button
               size="sm"
               onClick={saveEnergy}
               disabled={energySaving}
-              className={`h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800 shrink-0 ${!hasSolar ? 'ml-auto' : ''}`}
+              className="h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800"
               data-testid="save-energy-power-tab-btn"
             >
               {energySaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
