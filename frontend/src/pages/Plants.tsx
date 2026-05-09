@@ -476,6 +476,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
         </div>
       </Card>
 
+      {/* Plant Configuration — outside all tabs, always visible below hero */}
+      <PlantMeterConfigCard plant={plant} />
+
       {/* Edit Plant Info Dialog */}
       {editingInfo && (
         <Dialog open onOpenChange={(o) => { if (!o && !infoSaving) setEditingInfo(false); }}>
@@ -554,12 +557,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>
-        {/* Meter config card spans full width above the 2-col component cards */}
-        <PlantMeterConfigCard plant={plant} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-          <PlantComponentTypeCard plant={plant} />
-          <BackwashModeCard plant={plant} />
-        </div>
         <TrainsList plantId={plantId} />
       </div>
       <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
@@ -572,29 +569,24 @@ function ProductMetersStat({ plantId }: { plantId: string }) {
   const { data: meters } = useQuery({
     queryKey: ['product-meters', plantId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('product_meters' as any).select('id').eq('plant_id', plantId);
+      // Fetch status so we can count Active vs total correctly
+      let { data, error } = await supabase
+        .from('product_meters' as any).select('id, status').eq('plant_id', plantId);
+      // status column may not exist yet — fall back to id only
+      if (error?.message?.includes('status')) {
+        const { data: fallback } = await supabase
+          .from('product_meters' as any).select('id').eq('plant_id', plantId);
+        return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
+      }
       return (data ?? []) as any[];
     },
   });
-  const { data: readingCounts } = useQuery({
-    queryKey: ['product-meters-active', plantId],
-    queryFn: async () => {
-      if (!meters?.length) return {} as Record<string, boolean>;
-      const ids = meters.map((m: any) => m.id);
-      const { data } = await supabase
-        .from('product_meter_readings' as any).select('meter_id').in('meter_id', ids);
-      const seen = new Set((data ?? []).map((r: any) => r.meter_id));
-      return Object.fromEntries(ids.map((id: string) => [id, seen.has(id)])) as Record<string, boolean>;
-    },
-    enabled: !!meters?.length,
-  });
   const total = meters?.length ?? 0;
-  const active = Object.values(readingCounts ?? {}).filter(Boolean).length;
+  const active = (meters ?? []).filter((m: any) => (m.status ?? 'Active') === 'Active').length;
   return (
     <div>
       <div className="font-mono-num text-lg font-bold">
-        <span className={active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className={active === total && total > 0 ? 'text-emerald-300' : active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
         <span className="opacity-40 font-normal text-base">/{total}</span>
       </div>
       <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
@@ -1358,7 +1350,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
         <div className="flex items-center gap-2.5">
           <Gauge className="h-4 w-4 text-teal-600 shrink-0" />
           <div>
-            <div className="text-sm font-semibold">Plant meter configuration</div>
+            <div className="text-sm font-semibold">Plant Configuration</div>
             {!open && (
               <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>RO: {roFlags}</span>
@@ -1757,7 +1749,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
               </div>
             )}
             <p className="text-[11px] text-muted-foreground mt-2">
-              Power meter names are configured in the <strong className="font-medium">Power tab</strong> below.
+              Power meter names (Solar/Grid meter count &amp; labels) are configured in the <strong className="font-medium">Power tab</strong>.
             </p>
           </div>
 
@@ -1787,6 +1779,20 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                 canEdit={canEdit}
                 accentColor="blue"
               />
+            </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Component Types & Backwash ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Component Types & Backwash</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <PlantComponentTypeCard plant={plant} embedded />
+              <BackwashModeCard plant={plant} />
             </div>
           </div>
 
@@ -3729,7 +3735,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           )}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-          {[
+          {([
             ['Drilling depth', `${(latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m`],
             ['SWL', `${latest?.static_water_level_m ?? '—'} m`],
             ['PWL', `${latest?.pumping_water_level_m ?? '—'} m`],
@@ -3737,10 +3743,10 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
             ['Motor HP', latest?.motor_hp ?? '—'],
             ['TDS', `${latest?.tds_ppm ?? '—'} ppm`],
             ['Turbidity', `${latest?.turbidity_ntu ?? '—'} NTU`],
-          ].map(([k, v]) => (
+          ] as [string, string | number | null | undefined][]).map(([k, val]) => (
             <div key={k}>
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
-              <div className="font-mono-num font-medium">{v}</div>
+              <div className="font-mono-num font-medium">{val ?? '—'}</div>
             </div>
           ))}
           {latest?.date_gathered && (
@@ -3962,7 +3968,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
 
 // ─── Plant-level component type card ────────────────────────────────────────
 
-function PlantComponentTypeCard({ plant }: { plant: any }) {
+function PlantComponentTypeCard({ plant, embedded = false }: { plant: any; embedded?: boolean }) {
   const qc = useQueryClient();
   const { isManager } = useAuth();
   const [editing, setEditing] = useState(false);
@@ -4000,8 +4006,8 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
     setEditing(false);
   };
 
-  return (
-    <Card className="p-3 flex flex-col" data-testid="plant-component-type-card">
+  const inner = (
+    <>
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <Wrench className="h-4 w-4 text-chart-6 shrink-0" />
@@ -4112,8 +4118,11 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
           </Button>
         </div>
       )}
-    </Card>
+    </>
   );
+
+  if (embedded) return <div className="flex flex-col" data-testid="plant-component-type-card">{inner}</div>;
+  return <Card className="p-3 flex flex-col" data-testid="plant-component-type-card">{inner}</Card>;
 }
 
 // ─── Edit Train Dialog ───────────────────────────────────────────────────────
@@ -6040,42 +6049,6 @@ function PowerMetersCard({ plant }: { plant: any }) {
   return (
     <div className="space-y-3">
 
-      {/* ── Energy Sources — read-only summary; edit in Trains tab ── */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-yellow-500" />
-            <h3 className="font-semibold text-sm">Energy Sources</h3>
-          </div>
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide bg-muted px-2 py-0.5 rounded">
-            {hasSolar && hasGrid ? 'Solar + Grid' : hasSolar ? 'Solar only' : hasGrid ? 'Grid only' : 'None'}
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div className={`flex items-center gap-2.5 p-3 rounded-lg border ${hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'}`}>
-            <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
-              <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-            </div>
-            <div>
-              <div className="text-sm font-medium">Solar</div>
-              <div className="text-[11px] text-muted-foreground">{hasSolar ? (meterConfig.solar_capacity_kw ? `${meterConfig.solar_capacity_kw} kW` : 'Enabled') : 'Not configured'}</div>
-            </div>
-          </div>
-          <div className={`flex items-center gap-2.5 p-3 rounded-lg border ${hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'}`}>
-            <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasGrid ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-muted'}`}>
-              <GridPylonIcon className={`h-4 w-4 ${hasGrid ? 'text-blue-500' : 'text-muted-foreground'}`} />
-            </div>
-            <div>
-              <div className="text-sm font-medium">Grid</div>
-              <div className="text-[11px] text-muted-foreground">{hasGrid ? 'Enabled' : 'Not configured'}</div>
-            </div>
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          To change energy sources, go to the <strong className="font-medium">Trains tab → Meter Configuration</strong>.
-        </p>
-      </Card>
-
       {/* ── Meter Configuration ── */}
       <Card className="p-4 space-y-4">
         {/* Header */}
@@ -6090,7 +6063,7 @@ function PowerMetersCard({ plant }: { plant: any }) {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Configure meters per source. Names appear in <strong>Operations → Power</strong>.
+          Configure meters per source. Names appear in <strong>Operations → Power</strong>. Energy sources are configured in <strong>Plant Configuration</strong> above.
         </p>
 
         {/* Meter panels — stacked on mobile, side-by-side on sm+ */}
