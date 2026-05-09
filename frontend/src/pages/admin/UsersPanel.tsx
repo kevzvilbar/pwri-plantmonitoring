@@ -21,26 +21,54 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
-import { Search, Hourglass, UserPlus } from 'lucide-react';
+import {
+  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const ALL_ROLES = ['Operator', 'Technician', 'Supervisor', 'Manager', 'Admin'] as const;
 type AppRole = typeof ALL_ROLES[number];
+
+const ROLE_ORDER: AppRole[] = ['Admin', 'Manager', 'Supervisor', 'Technician', 'Operator'];
+const ROLE_PLURAL: Record<AppRole, string> = {
+  Admin: 'Admins',
+  Manager: 'Managers',
+  Supervisor: 'Supervisors',
+  Technician: 'Technicians',
+  Operator: 'Operators',
+};
+
+// ── Avatar color by role ───────────────────────────────────────────────────────
+
+const ROLE_AVATAR: Record<string, string> = {
+  Admin: 'bg-[#CECBF6] text-[#3C3489]',
+  Manager: 'bg-[#9FE1CB] text-[#085041]',
+  Supervisor: 'bg-[#B5D4F4] text-[#0C447C]',
+  Technician: 'bg-[#FAC775] text-[#633806]',
+  Operator: 'bg-[#D3D1C7] text-[#444441]',
+};
+
+function initials(first?: string, last?: string, username?: string): string {
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  if (first) return first.slice(0, 2).toUpperCase();
+  if (username) return username.slice(0, 2).toUpperCase();
+  return '??';
+}
+
+function primaryRole(roles: string[]): AppRole | null {
+  for (const r of ROLE_ORDER) if (roles.includes(r)) return r;
+  return null;
+}
 
 // ── Role selector ─────────────────────────────────────────────────────────────
 
 function RoleSelector({ userId, currentRoles, onChanged }: {
   userId: string; currentRoles: string[]; onChanged: () => void;
 }) {
-  const primaryRole: AppRole = (() => {
-    const r = new Set(currentRoles);
-    for (const role of ['Admin', 'Manager', 'Supervisor', 'Technician', 'Operator'] as AppRole[]) {
-      if (r.has(role)) return role;
-    }
-    return 'Operator';
-  })();
+  const pRole: AppRole = primaryRole(currentRoles) ?? 'Operator';
 
   const handleChange = async (newRole: AppRole) => {
-    if (newRole === primaryRole) return;
+    if (newRole === pRole) return;
     const { error: delError } = await supabase.from('user_roles').delete().eq('user_id', userId);
     if (delError) { toast.error(delError.message); return; }
     const { error: insError } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
@@ -50,7 +78,7 @@ function RoleSelector({ userId, currentRoles, onChanged }: {
   };
 
   return (
-    <Select value={primaryRole} onValueChange={(v) => handleChange(v as AppRole)}>
+    <Select value={pRole} onValueChange={(v) => handleChange(v as AppRole)}>
       <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
       <SelectContent>
         {ALL_ROLES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}
@@ -70,12 +98,10 @@ function CreateUserDialog({ open, onClose, onCreated }: {
     email: '', password: '', first_name: '', last_name: '',
     middle_name: '', suffix: '', username: '', designation: '',
   });
-  // Plant assignment inside dialog
-  const [plantId, setPlantId] = useState('');        // single plant (Operator)
-  const [plantIds, setPlantIds] = useState<string[]>([]); // multi-plant (others)
+  const [plantId, setPlantId] = useState('');
+  const [plantIds, setPlantIds] = useState<string[]>([]);
 
   const isOperator = form.designation === OPERATOR_DESIGNATION;
-
   const field = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -83,7 +109,6 @@ function CreateUserDialog({ open, onClose, onCreated }: {
     setForm({ email: '', password: '', first_name: '', last_name: '', middle_name: '', suffix: '', username: '', designation: '' });
     setPlantId(''); setPlantIds([]); setBusy(false);
   };
-
   const handleClose = () => { reset(); onClose(); };
 
   const handleSubmit = async () => {
@@ -97,44 +122,25 @@ function CreateUserDialog({ open, onClose, onCreated }: {
     setBusy(true);
     const assignedPlants = isOperator ? [plantId] : plantIds;
     try {
-      // Save current admin session so we can restore it after creating the user
       const { data: adminSession } = await supabase.auth.getSession();
-
-      // 1. Create the auth user
-      const { error: upErr } = await supabase.auth.signUp({
-        email: form.email, password: form.password,
-      });
+      const { error: upErr } = await supabase.auth.signUp({ email: form.email, password: form.password });
       if (upErr) throw new Error(upErr.message);
-
-      // 2. Sign in as the new user to call the RPC
-      const { error: inErr } = await supabase.auth.signInWithPassword({
-        email: form.email, password: form.password,
-      });
+      const { error: inErr } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (inErr) throw new Error(inErr.message);
-
-      // 3. Complete onboarding profile
       const { error: rpErr } = await supabase.rpc('complete_onboarding', {
-        _username: form.username,
-        _first_name: form.first_name,
-        _middle_name: form.middle_name || null,
-        _last_name: form.last_name,
-        _suffix: form.suffix || null,
-        _designation: form.designation || null,
+        _username: form.username, _first_name: form.first_name,
+        _middle_name: form.middle_name || null, _last_name: form.last_name,
+        _suffix: form.suffix || null, _designation: form.designation || null,
         _plant_assignments: assignedPlants,
       });
       if (rpErr) throw new Error(rpErr.message);
-
-      // 4. Sign out the new user
       await supabase.auth.signOut();
-
-      // 5. Restore admin session
       if (adminSession.session?.refresh_token) {
         await supabase.auth.setSession({
           access_token: adminSession.session.access_token,
           refresh_token: adminSession.session.refresh_token,
         });
       }
-
       toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
       setBusy(false); onCreated(); handleClose();
     } catch (err: any) {
@@ -163,11 +169,13 @@ function CreateUserDialog({ open, onClose, onCreated }: {
             </div>
             <div>
               <Label>Designation</Label>
-              <DesignationCombobox value={form.designation} onChange={(v) => { setForm((f) => ({ ...f, designation: v })); setPlantId(''); setPlantIds([]); }} placeholder="Select or type a designation…" />
+              <DesignationCombobox
+                value={form.designation}
+                onChange={(v) => { setForm((f) => ({ ...f, designation: v })); setPlantId(''); setPlantIds([]); }}
+                placeholder="Select or type a designation…"
+              />
             </div>
           </div>
-
-          {/* Plant assignment — conditional on designation */}
           {form.designation && (
             <div className="space-y-2 pt-1 border-t">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -176,7 +184,7 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               {isOperator ? (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {(plants ?? []).map((p) => (
-                    <label key={p.id} className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/40'}`}>
+                    <label key={p.id} className={cn('flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors', plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/40')}>
                       <input type="radio" name="create-plant" value={p.id} checked={plantId === p.id} onChange={() => setPlantId(p.id)} className="accent-accent" />
                       <span className="text-sm">{p.name}</span>
                     </label>
@@ -186,7 +194,7 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               ) : (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {(plants ?? []).map((p) => (
-                    <label key={p.id} className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/40'}`}>
+                    <label key={p.id} className={cn('flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors', plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/40')}>
                       <Checkbox checked={plantIds.includes(p.id)} onCheckedChange={() => setPlantIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])} />
                       <span className="text-sm">{p.name}</span>
                     </label>
@@ -196,7 +204,6 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               )}
             </div>
           )}
-
           <p className="text-xs text-muted-foreground">
             Created with <strong>Operator</strong> role, placed in the approval queue.
           </p>
@@ -207,6 +214,174 @@ function CreateUserDialog({ open, onClose, onCreated }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── User tile (compact grid card) ─────────────────────────────────────────────
+
+function UserTile({ s, userRoles, plantName, existingDesignations, updateDesignation, approveUser, invalidate }: {
+  s: any;
+  userRoles: string[];
+  plantName: (id: string) => string;
+  existingDesignations: string[];
+  updateDesignation: (uid: string, designation: string) => Promise<void>;
+  approveUser: (uid: string, label: string) => Promise<void>;
+  invalidate: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const pRole = primaryRole(userRoles);
+  const avatarCls = ROLE_AVATAR[pRole ?? 'Operator'];
+  const assignments: string[] = s.plant_assignments ?? [];
+  const isOperator = s.designation === OPERATOR_DESIGNATION;
+  const awaiting = s.confirmed === false || s.status === 'Pending';
+  const access = accessLevelFromRoles(userRoles);
+
+  const displayName = `${s.first_name ?? ''} ${s.last_name ?? ''} ${s.suffix ?? ''}`.trim() || s.username ?? '—';
+  const userLabel = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.username ?? 'user';
+
+  const visiblePlants = assignments.slice(0, 3);
+  const overflowCount = assignments.length - 3;
+
+  const statusDotCls =
+    s.status === 'Active' ? 'bg-green-500' :
+    s.status === 'Suspended' ? 'bg-red-500' : 'bg-amber-400';
+
+  return (
+    <div
+      className={cn(
+        'group relative flex flex-col rounded-xl border bg-card text-card-foreground transition-shadow',
+        expanded ? 'shadow-md' : 'hover:shadow-sm',
+      )}
+      data-testid={`admin-user-card-${s.id}`}
+    >
+      {/* ── Top section ── */}
+      <div className="p-3 flex flex-col gap-2 flex-1">
+        {/* Status dot + name row */}
+        <div className="flex items-start gap-2">
+          {/* Avatar */}
+          <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0', avatarCls)}>
+            {initials(s.first_name, s.last_name, s.username)}
+          </div>
+
+          {/* Name / handle */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-medium leading-tight truncate">{displayName}</span>
+              {access.label === 'Elevated' && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 shrink-0">
+                  <Zap className="w-2.5 h-2.5" /> Elevated
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate">@{s.username ?? '—'}</div>
+          </div>
+
+          {/* Status dot */}
+          <div className="flex items-center gap-1 shrink-0 mt-0.5" title={s.status}>
+            <span className={cn('w-2 h-2 rounded-full', statusDotCls)} />
+          </div>
+        </div>
+
+        {/* Plant tags */}
+        {assignments.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {visiblePlants.map((id) => (
+              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground border border-border/60">
+                {plantName(id)}
+              </span>
+            ))}
+            {overflowCount > 0 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
+                +{overflowCount}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Role badges */}
+        {userRoles.length === 0 && (
+          <Badge variant="secondary" className="text-[9px] w-fit">No role</Badge>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="px-3 pb-3 flex items-center justify-between gap-1 border-t pt-2 mt-auto">
+        <span className="text-[10.5px] text-muted-foreground truncate max-w-[100px]" title={s.designation ?? ''}>
+          {s.designation || <span className="italic opacity-50">No designation</span>}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {awaiting && (
+            <Button
+              size="sm"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => approveUser(s.id, userLabel)}
+              data-testid={`approve-user-${s.id}`}
+            >
+              Approve
+            </Button>
+          )}
+          <PlantAssignmentEditor
+            userId={s.id}
+            userLabel={userLabel}
+            currentPlantIds={assignments}
+            singlePlantOnly={isOperator}
+            invalidateKeys={[['admin-users'], ['staff']]}
+            trigger={
+              <button
+                className="h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                title="Edit plants"
+                aria-label="Edit plants"
+              >
+                <Building2 className="w-3 h-3" />
+              </button>
+            }
+          />
+          <DeleteEntityMenu
+            kind="user" id={s.id} label={userLabel}
+            canSoftDelete={s.status === 'Active'} canHardDelete
+            invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]}
+            compact
+            trigger={
+              <button
+                className="h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                title="More options"
+                aria-label="More options"
+              >
+                <MoreVertical className="w-3 h-3" />
+              </button>
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Role group section ────────────────────────────────────────────────────────
+
+function RoleGroup({ role, users, ...tileProps }: {
+  role: AppRole | 'No role';
+  users: any[];
+} & Omit<React.ComponentProps<typeof UserTile>, 's' | 'userRoles'> & {
+  rolesOf: (uid: string) => string[];
+}) {
+  const { rolesOf, ...rest } = tileProps as any;
+  const label = role === 'No role' ? 'No role' : ROLE_PLURAL[role as AppRole];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
+        <div className="flex-1 h-px bg-border/60" />
+      </div>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2">
+        {users.map((s) => (
+          <UserTile key={s.id} s={s} userRoles={rolesOf(s.id)} {...rest} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -237,13 +412,10 @@ export function UsersPanel() {
     try {
       const { data: actor } = await supabase.auth.getUser();
       await supabase.from('plant_assignment_audit' as any).insert({
-        user_id: userId,
-        admin_id: actor.user?.id ?? null,
-        new_plant_ids: newPlants,
-        justification,
-        changed_at: new Date().toISOString(),
+        user_id: userId, admin_id: actor.user?.id ?? null,
+        new_plant_ids: newPlants, justification, changed_at: new Date().toISOString(),
       } as any);
-    } catch { /* audit table may not exist yet — non-blocking */ }
+    } catch { /* non-blocking */ }
   };
 
   const invalidate = () => {
@@ -286,14 +458,49 @@ export function UsersPanel() {
     );
   }, [staff, query, pendingOnly]);
 
+  // Group users by primary role
+  const grouped = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const r of [...ROLE_ORDER, 'No role']) map[r] = [];
+    for (const s of filtered) {
+      const pr = primaryRole(rolesOf(s.id)) ?? 'No role';
+      map[pr].push(s);
+    }
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, roles]);
+
+  const tileProps = {
+    rolesOf,
+    plantName,
+    existingDesignations,
+    updateDesignation,
+    approveUser,
+    invalidate,
+  };
+
+  const activeGroups = [...ROLE_ORDER, 'No role' as const].filter((r) => grouped[r]?.length > 0);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {/* Toolbar */}
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
           <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input placeholder="Search by name, username, designation…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8" data-testid="admin-users-search" />
+          <Input
+            placeholder="Search by name, username, designation…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-8"
+            data-testid="admin-users-search"
+          />
         </div>
-        <Button size="sm" variant={pendingOnly ? 'default' : 'outline'} onClick={() => setPendingOnly((v) => !v)} data-testid="admin-users-pending-filter">
+        <Button
+          size="sm"
+          variant={pendingOnly ? 'default' : 'outline'}
+          onClick={() => setPendingOnly((v) => !v)}
+          data-testid="admin-users-pending-filter"
+        >
           <Hourglass className="h-3 w-3 mr-1" /> Pending {pendingCount > 0 && `· ${pendingCount}`}
         </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="admin-create-user-btn">
@@ -301,89 +508,19 @@ export function UsersPanel() {
         </Button>
       </div>
 
-      {filtered.map((s: any) => {
-        const userRoles = rolesOf(s.id);
-        const access = accessLevelFromRoles(userRoles);
-        const awaiting = s.confirmed === false || s.status === 'Pending';
-        const isOperator = s.designation === OPERATOR_DESIGNATION;
-        const assignments: string[] = s.plant_assignments ?? [];
-        return (
-          <Card key={s.id} className="p-3 space-y-2" data-testid={`admin-user-card-${s.id}`}>
-            <div className="flex justify-between items-start gap-2">
-              <div className="min-w-0 space-y-1">
-                <div className="font-medium text-sm truncate flex items-center gap-1.5 flex-wrap">
-                  <span>{s.first_name} {s.last_name} {s.suffix}</span>
-                  {awaiting && (
-                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100" data-testid={`pending-badge-${s.id}`}>
-                      <Hourglass className="h-2.5 w-2.5 mr-0.5" /> Awaiting approval
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground truncate">@{s.username ?? '—'}</div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {userRoles.length === 0 && <Badge variant="secondary" className="text-[10px]">No role</Badge>}
-                  {userRoles.map((r) => <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>)}
-                  <StatusPill tone={access.tone}>{access.label}</StatusPill>
-                </div>
-                {/* Plant assignments display */}
-                {assignments.length > 0 && (
-                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                    <span className="text-[10px] text-muted-foreground">Plants:</span>
-                    {assignments.map((id) => (
-                      <Badge key={id} variant="secondary" className="text-[10px]">{plantName(id)}</Badge>
-                    ))}
-                    {isOperator && assignments.length > 1 && (
-                      <Badge variant="destructive" className="text-[10px]">⚠ Multiple plants (Operator should have 1)</Badge>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {awaiting && (
-                  <Button size="sm" onClick={() => approveUser(s.id, `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user'))} data-testid={`approve-user-${s.id}`}>
-                    Approve
-                  </Button>
-                )}
-                <StatusPill tone={s.status === 'Active' ? 'accent' : s.status === 'Pending' ? 'warn' : 'muted'}>{s.status}</StatusPill>
-                <DeleteEntityMenu
-                  kind="user" id={s.id}
-                  label={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user')}
-                  canSoftDelete={s.status === 'Active'} canHardDelete
-                  invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]} compact
-                />
-              </div>
-            </div>
-
-            {/* Designation + Role row */}
-            <div className="grid grid-cols-2 gap-2 items-center pt-1 border-t">
-              <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
-                <span className="text-xs text-muted-foreground">Designation</span>
-                <DesignationCombobox value={s.designation ?? ''} onChange={(v) => updateDesignation(s.id, v)} extraOptions={existingDesignations} data-testid={`admin-designation-${s.id}`} />
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                <span className="text-xs text-muted-foreground">Role</span>
-                <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 text-xs pt-1">
-              <span className="text-muted-foreground">
-                {assignments.length} plant{assignments.length === 1 ? '' : 's'} assigned
-                {isOperator && <span className="text-amber-600 ml-1">(Operator: single plant only)</span>}
-              </span>
-              <PlantAssignmentEditor
-                userId={s.id}
-                userLabel={`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user')}
-                currentPlantIds={assignments}
-                singlePlantOnly={isOperator}
-                invalidateKeys={[['admin-users'], ['staff']]}
-              />
-            </div>
-          </Card>
-        );
-      })}
-
-      {filtered.length === 0 && (
+      {/* Role-grouped grid */}
+      {activeGroups.length > 0 ? (
+        <div className="space-y-6">
+          {activeGroups.map((role) => (
+            <RoleGroup
+              key={role}
+              role={role as AppRole | 'No role'}
+              users={grouped[role]}
+              {...tileProps}
+            />
+          ))}
+        </div>
+      ) : (
         <Card className="p-4 text-center text-xs text-muted-foreground">
           {pendingOnly ? 'No pending approvals.' : 'No users found.'}
         </Card>
