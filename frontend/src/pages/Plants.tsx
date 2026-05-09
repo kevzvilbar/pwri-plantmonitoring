@@ -1561,7 +1561,7 @@ function MeterDetailButton({
 
 function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
-  const { isManager, isAdmin, user } = useAuth();
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
   const [adding, setAdding] = useState(false);
   const [showLocatorCsv, setShowLocatorCsv] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
@@ -1575,7 +1575,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
     if (deleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
     setDeleteBusy(true);
     try {
-      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'locator', entity_id: deleteTarget.id, entity_label: deleteTarget.name, action: 'hard', reason: deleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'locator', entity_id: deleteTarget.id, entity_label: deleteTarget.name, action: 'hard', reason: deleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
     } catch {}
     const { error } = await supabase.from('locators').delete().eq('id', deleteTarget.id);
     setDeleteBusy(false);
@@ -1593,7 +1593,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
     const { error } = await supabase.from('locators').update({ status: newStatus }).eq('id', l.id);
     if (error) { toast.error(error.message); return; }
     await logStatusChange({
-      user_id: user?.id ?? null,
+      user_id: activeOperator?.id ?? user?.id ?? null,
       plant_id: l.plant_id,
       entity_type: 'Locator',
       entity_id: l.id,
@@ -1639,7 +1639,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
         entity_label: r.name ?? null,
         action: 'hard',
         reason: bulk ? `[BULK] ${reason}` : reason,
-        performed_by: user?.id ?? null,
+        performed_by: activeOperator?.id ?? user?.id ?? null,
         forced: false,
       }));
       await supabase.from('deletion_audit_log' as any).insert(payload as any);
@@ -1888,7 +1888,7 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
     }
   };
 
-  const { user } = useAuth();
+  const { user, activeOperator } = useAuth();
 
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
@@ -1902,7 +1902,7 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
     // Audit status flip
     if (form.status && form.status !== locator.status) {
       await logStatusChange({
-        user_id: user?.id ?? null,
+        user_id: activeOperator?.id ?? user?.id ?? null,
         plant_id: locator.plant_id,
         entity_type: 'Locator',
         entity_id: locator.id,
@@ -2167,7 +2167,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
 }
 
 export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose }: { kind: 'locator' | 'well'; assetId: string; plantId: string; oldSerial: string | null; onClose: () => void }) {
-  const { user } = useAuth();
+  const { user, activeOperator } = useAuth();
   const [form, setForm] = useState({
     replacement_date: format(new Date(), 'yyyy-MM-dd'),
     old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
@@ -2176,7 +2176,7 @@ export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose 
     if (!form.new_serial) { toast.error('New serial required'); return; }
     const payload: any = {
       plant_id: plantId, replacement_date: form.replacement_date,
-      replaced_by: user?.id, remarks: form.remarks || null,
+      replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
     };
     if (kind === 'locator') {
       Object.assign(payload, {
@@ -2231,11 +2231,7 @@ export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose 
 
 function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
-  const { isManager, isAdmin, user } = useAuth();
-  const [adding, setAdding] = useState(false);
-  const [editingWell, setEditingWell] = useState<any | null>(null);
-  const [showWellCsv, setShowWellCsv] = useState(false);
-  const [wellDeleteTarget, setWellDeleteTarget] = useState<any | null>(null);
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
   const [wellDeleteReason, setWellDeleteReason] = useState('');
   const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
 
@@ -2244,7 +2240,7 @@ function WellsList({ plantId }: { plantId: string }) {
     if (wellDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
     setWellDeleteBusy(true);
     try {
-      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'well', entity_id: wellDeleteTarget.id, entity_label: wellDeleteTarget.name, action: 'hard', reason: wellDeleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'well', entity_id: wellDeleteTarget.id, entity_label: wellDeleteTarget.name, action: 'hard', reason: wellDeleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
     } catch {}
     const { error } = await supabase.from('wells').delete().eq('id', wellDeleteTarget.id);
     setWellDeleteBusy(false);
@@ -2267,7 +2263,7 @@ function WellsList({ plantId }: { plantId: string }) {
     const { error } = await supabase.from('wells').update({ status: newStatus }).eq('id', w.id);
     if (error) { toast.error(error.message); return; }
     await logStatusChange({
-      user_id: user?.id ?? null,
+      user_id: activeOperator?.id ?? user?.id ?? null,
       plant_id: w.plant_id,
       entity_type: 'Well',
       entity_id: w.id,
@@ -2329,7 +2325,7 @@ function WellsList({ plantId }: { plantId: string }) {
         entity_label: r.name ?? null,
         action: 'hard',
         reason: bulk ? `[BULK] ${reason}` : reason,
-        performed_by: user?.id ?? null,
+        performed_by: activeOperator?.id ?? user?.id ?? null,
         forced: false,
       }));
       await supabase.from('deletion_audit_log' as any).insert(payload as any);
@@ -2391,7 +2387,7 @@ function WellsList({ plantId }: { plantId: string }) {
       if (next) {
         const { error } = await supabase
           .from('well_blending')
-          .upsert({ well_id: w.id, plant_id: plantId, tagged_at: new Date().toISOString(), tagged_by: user?.id ?? null }, { onConflict: 'well_id' });
+          .upsert({ well_id: w.id, plant_id: plantId, tagged_at: new Date().toISOString(), tagged_by: activeOperator?.id ?? user?.id ?? null }, { onConflict: 'well_id' });
         if (error) throw new Error(error.message);
       } else {
         const { error } = await supabase
@@ -3160,7 +3156,7 @@ function EditElectricMeterDialog({ well, onClose }: { well: any; onClose: () => 
 }
 
 function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any; onClose: () => void }) {
-  const { user } = useAuth();
+  const { user, activeOperator } = useAuth();
   const [form, setForm] = useState({
     date_gathered: format(new Date(), 'yyyy-MM-dd'),
     drilling_depth_m: (latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '',
@@ -3184,7 +3180,7 @@ function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any
       motor_hp: num(form.motor_hp),
       tds_ppm: num(form.tds_ppm),
       turbidity_ntu: num(form.turbidity_ntu),
-      recorded_by: user?.id, remarks: form.remarks || null,
+      recorded_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
     } as any);
     if (error) { toast.error(error.message); return; }
     // Keep wells.drilling_depth_m in sync with the latest entry
@@ -4174,7 +4170,7 @@ function TrainsList({ plantId }: { plantId: string }) {
   const plant = plants?.find((p) => p.id === plantId);
 
   const qc = useQueryClient();
-  const { isManager, isAdmin, user } = useAuth();
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
   const { data: trains } = useQuery({
     queryKey: ['ro-trains', plantId],
     queryFn: async () =>
@@ -4249,7 +4245,7 @@ function TrainsList({ plantId }: { plantId: string }) {
     if (trainDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
     setTrainDeleteBusy(true);
     try {
-      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'ro_train', entity_id: trainDeleteTarget.id, entity_label: `Train ${trainDeleteTarget.train_number}`, action: 'hard', reason: trainDeleteReason.trim(), performed_by: user?.id ?? null, forced: false }] as any);
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'ro_train', entity_id: trainDeleteTarget.id, entity_label: `Train ${trainDeleteTarget.train_number}`, action: 'hard', reason: trainDeleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
     } catch {}
     const { error } = await supabase.from('ro_trains').delete().eq('id', trainDeleteTarget.id);
     setTrainDeleteBusy(false);
@@ -4273,7 +4269,7 @@ function TrainsList({ plantId }: { plantId: string }) {
     const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
     if (error) { toast.error(error.message); return; }
     await logStatusChange({
-      user_id: user?.id ?? null,
+      user_id: activeOperator?.id ?? user?.id ?? null,
       plant_id: t.plant_id,
       entity_type: 'RO Train',
       entity_id: t.id,
