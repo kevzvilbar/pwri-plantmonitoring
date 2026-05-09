@@ -554,8 +554,10 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>
-        <BackwashModeCard plant={plant} />
-        <PlantComponentTypeCard plant={plant} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <BackwashModeCard plant={plant} />
+          <PlantComponentTypeCard plant={plant} />
+        </div>
         <TrainsList plantId={plantId} />
       </div>
       <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
@@ -1108,8 +1110,8 @@ function BackwashModeCard({ plant }: { plant: any }) {
   };
 
   return (
-    <Card className="p-3" data-testid="backwash-mode-card">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <Card className="p-3 flex flex-col" data-testid="backwash-mode-card">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 flex-1">
         <div className="min-w-0">
           {/* Title updates dynamically based on plant media type */}
           <div className="text-sm font-semibold">
@@ -3228,6 +3230,10 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
   const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
   const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
 
+  // Independent collapse state for each row
+  const [mediaOpen, setMediaOpen]   = useState(true);
+  const [filterOpen, setFilterOpen] = useState(true);
+
   const setMediaType = (v: 'AFM' | 'MMF') => { setMediaTypeState(v); setEditing(true); };
   const setFilterType = (v: 'Cartridge Filter' | 'Bag Filter') => { setFilterTypeState(v); setEditing(true); };
 
@@ -3239,7 +3245,6 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
       .eq('id', plant.id);
     setSaving(false);
     if (error) {
-      // Column may not exist yet — show a friendly note instead of crashing
       toast.error(`Could not save plant-level type: ${error.message}. Apply DB migration to add filter_media_type / filter_housing_type columns to plants.`);
       return;
     }
@@ -3255,66 +3260,104 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
   };
 
   return (
-    <Card className="p-3" data-testid="plant-component-type-card">
+    <Card className="p-3 flex flex-col" data-testid="plant-component-type-card">
+      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <Wrench className="h-4 w-4 text-chart-6 shrink-0" />
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-semibold">Plant-wide Component Types</div>
           <div className="text-[10px] text-muted-foreground">Applies universally — reflected in all train labels &amp; forms.</div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        {/* Media filter row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground w-16 shrink-0">Media</span>
-          <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg flex-1">
-            {(['AFM', 'MMF'] as const).map((opt) => {
-              const active = mediaType === opt;
-              return (
-                <button
-                  key={opt}
-                  disabled={!isManager}
-                  onClick={() => { if (isManager) setMediaType(opt); }}
-                  data-testid={`media-type-${opt}`}
-                  className={[
-                    'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
-                    active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                    !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
-                  ].join(' ')}
-                >
-                  <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+      <div className="space-y-1.5 flex-1">
+        {/* ── Media filter collapsible row ── */}
+        <div className="rounded-md border border-border/60 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setMediaOpen(o => !o)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Media</span>
+              {/* Current value badge — visible when collapsed */}
+              {!mediaOpen && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                  {mediaType}
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${mediaOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {mediaOpen && (
+            <div className="p-2">
+              <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg">
+                {(['AFM', 'MMF'] as const).map((opt) => {
+                  const active = mediaType === opt;
+                  return (
+                    <button
+                      key={opt}
+                      disabled={!isManager}
+                      onClick={() => { if (isManager) setMediaType(opt); }}
+                      data-testid={`media-type-${opt}`}
+                      className={[
+                        'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                        active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Pre-filter row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground w-16 shrink-0">Pre-filter</span>
-          <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg flex-1">
-            {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => {
-              const active = filterType === opt;
-              return (
-                <button
-                  key={opt}
-                  disabled={!isManager}
-                  onClick={() => { if (isManager) setFilterType(opt); }}
-                  data-testid={`filter-type-${opt.replace(' ', '-')}`}
-                  className={[
-                    'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
-                    active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                    !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
-                  ].join(' ')}
-                >
-                  <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
-                  {opt === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
-                </button>
-              );
-            })}
-          </div>
+        {/* ── Pre-filter collapsible row ── */}
+        <div className="rounded-md border border-border/60 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFilterOpen(o => !o)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Pre-filter</span>
+              {!filterOpen && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                  {filterType === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${filterOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {filterOpen && (
+            <div className="p-2">
+              <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg">
+                {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => {
+                  const active = filterType === opt;
+                  return (
+                    <button
+                      key={opt}
+                      disabled={!isManager}
+                      onClick={() => { if (isManager) setFilterType(opt); }}
+                      data-testid={`filter-type-${opt.replace(' ', '-')}`}
+                      className={[
+                        'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                        active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
+                      {opt === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
