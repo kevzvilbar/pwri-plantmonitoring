@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,6 +76,8 @@ function SignInForm() {
   // Operator picklist state
   const [pickList, setPickList] = useState<PickEntry[]>([]);
   const [signedInPlantId, setSignedInPlantId] = useState<string | null>(null);
+  // Zustand setter — persists the chosen operator across the whole app
+  const setActiveOperatorId = useAppStore((s) => s.setActiveOperatorId);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +145,13 @@ function SignInForm() {
   };
 
   const handlePickUsername = (u: PickEntry) => {
-    toast.success(`Welcome, ${u.first_name ?? u.username}!`);
+    // ── Critical fix ────────────────────────────────────────────────────────
+    // Without this, activeOperatorId stays null → activeOperator falls back to
+    // the auth-owner profile (always Reynan on a shared email) → every log
+    // entry, form submission, and "you" badge shows the wrong person.
+    setActiveOperatorId(u.id);
+
+    toast.success(`Now recording as ${u.first_name ?? u.username}!`);
     void logLoginAttempt({
       emailAttempted: email.trim(),
       success: true,
