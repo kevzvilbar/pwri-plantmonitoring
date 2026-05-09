@@ -210,7 +210,7 @@ export function OperatorSwitcher() {
                 </p>
               ) : (
                 peers.map((p) => {
-                  const isSelf = p.id === user?.id;
+                  const isSelf = p.id === (activeOperatorId ?? user?.id);
                   const isActive = (activeOperatorId ?? user?.id) === p.id;
                   const isPending = pendingId === p.id;
                   return (
