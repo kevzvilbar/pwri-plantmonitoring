@@ -706,6 +706,14 @@ export function TrendChart({
   const [locatorSearch, setLocatorSearch] = useState('');
   const [showLocatorFilter, setShowLocatorFilter] = useState(false);
 
+  // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
+  type RoDrillMode = 'default' | 'by-train' | 'by-hour';
+  const [roDrillMode, setRoDrillMode] = useState<RoDrillMode>('default');
+  const hasRoDrill = metric === 'tds' || metric === 'recovery';
+  const [selectedTrainIds, setSelectedTrainIds] = useState<Set<string> | null>(null);
+  const [trainSearch, setTrainSearch] = useState('');
+  const [showTrainFilter, setShowTrainFilter] = useState(false);
+
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -888,7 +896,19 @@ export function TrendChart({
 
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('ro_train_readings', 'recovery_pct,permeate_tds,reading_datetime'),
+    queryFn: () => supaSelect<any>('ro_train_readings', 'train_id,recovery_pct,permeate_tds,reading_datetime,plant_id'),
+    enabled: plantIds.length > 0 && needsRoReadings,
+  });
+
+  // RO train name lookup
+  const { data: roTrainNames } = useQuery({
+    queryKey: ['entity-names-ro-trains', plantIds],
+    queryFn: async () => {
+      const { data } = await supabase.from('ro_trains' as never).select('id, name').in('plant_id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((t: any) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
+      return map;
+    },
     enabled: plantIds.length > 0 && needsRoReadings,
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
@@ -1245,6 +1265,110 @@ export function TrendChart({
     });
   }, [hasConsumptionDrill, drillMode, locReadings, visibleEntities]);
 
+  // ── RO drill helpers ─────────────────────────────────────────────────────
+  // Full list of trains found in the fetched roReadings
+  const roTrainEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    if (!hasRoDrill) return [];
+    const ids = Array.from(new Set((roReadings ?? []).map((r: any) => r.train_id).filter(Boolean)));
+    return ids
+      .map((id, i) => ({
+        id,
+        label: roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}`,
+        color: DRILL_COLORS[i % DRILL_COLORS.length],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [hasRoDrill, roReadings, roTrainNames]);
+
+  const visibleTrainEntities = useMemo(
+    () => selectedTrainIds === null
+      ? roTrainEntities
+      : roTrainEntities.filter((e) => selectedTrainIds.has(e.id)),
+    [roTrainEntities, selectedTrainIds],
+  );
+
+  const filteredTrainList = useMemo(
+    () => trainSearch.trim() === ''
+      ? roTrainEntities
+      : roTrainEntities.filter((e) =>
+          e.label.toLowerCase().includes(trainSearch.trim().toLowerCase()),
+        ),
+    [roTrainEntities, trainSearch],
+  );
+
+  const allTrainsSelected = selectedTrainIds === null || selectedTrainIds.size === roTrainEntities.length;
+  const noTrainsSelected  = selectedTrainIds !== null && selectedTrainIds.size === 0;
+
+  function toggleTrain(id: string) {
+    setSelectedTrainIds((prev) => {
+      const current = prev ?? new Set(roTrainEntities.map((e) => e.id));
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next.size === roTrainEntities.length ? null : next;
+    });
+  }
+  function selectAllTrains() { setSelectedTrainIds(null); }
+  function clearAllTrains()  { setSelectedTrainIds(new Set()); }
+
+  const valueKey = metric === 'tds' ? 'permeate_tds' : 'recovery_pct';
+  const roUnit   = metric === 'tds' ? 'ppm' : '%';
+
+  /** Build per-train daily-average drill data */
+  const roTrainDrillData = useMemo(() => {
+    if (!hasRoDrill || roDrillMode !== 'by-train') return [];
+    const readings = (roReadings ?? []).filter((r: any) => {
+      if (!r.train_id) return false;
+      return selectedTrainIds === null || selectedTrainIds.has(r.train_id);
+    });
+    // dateKey → trainId → { sum, count }
+    const acc = new Map<string, Map<string, { sum: number; count: number }>>();
+    readings.forEach((r: any) => {
+      const val = r[valueKey];
+      if (val == null) return;
+      const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      if (!acc.has(dk)) acc.set(dk, new Map());
+      const trainAcc = acc.get(dk)!;
+      const tid = r.train_id;
+      const prev = trainAcc.get(tid) ?? { sum: 0, count: 0 };
+      trainAcc.set(tid, { sum: prev.sum + +val, count: prev.count + 1 });
+    });
+    const dateKeys = Array.from(acc.keys()).sort();
+    if (dateKeys.length === 0) return [];
+    const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
+    return allDates.map((dk) => {
+      const row: any = { date: fmtDateKey(dk), isoDate: dk };
+      visibleTrainEntities.forEach(({ id }) => {
+        const a = acc.get(dk)?.get(id);
+        row[id] = a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null;
+      });
+      return row;
+    });
+  }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric]);
+
+  /** Build hourly-average drill data (aggregated across all visible trains) */
+  const roHourDrillData = useMemo(() => {
+    if (!hasRoDrill || roDrillMode !== 'by-hour') return [];
+    const readings = (roReadings ?? []).filter((r: any) => {
+      if (selectedTrainIds !== null && r.train_id && !selectedTrainIds.has(r.train_id)) return false;
+      return true;
+    });
+    // hourKey (0-23) → { sum, count }
+    const acc = new Map<number, { sum: number; count: number }>();
+    readings.forEach((r: any) => {
+      const val = r[valueKey];
+      if (val == null) return;
+      const hour = new Date(r.reading_datetime).getHours();
+      const prev = acc.get(hour) ?? { sum: 0, count: 0 };
+      acc.set(hour, { sum: prev.sum + +val, count: prev.count + 1 });
+    });
+    return Array.from({ length: 24 }, (_, h) => {
+      const a = acc.get(h);
+      return {
+        date: `${String(h).padStart(2, '0')}:00`,
+        value: a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null,
+      };
+    });
+  }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
+
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
   // the fields that are actually plotted for this metric and had a negative
@@ -1555,9 +1679,167 @@ export function TrendChart({
             )}
           </div>
         )}
+        {/* RO Drill controls — TDS / Recovery */}
+        {hasRoDrill && (
+          <div className="flex items-center gap-0.5 shrink-0" title="Drill into RO train data">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">RO:</span>
+            <button
+              onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); }}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                roDrillMode === 'default'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Default — daily average"
+            >
+              <BarChart2 className="h-3 w-3" />
+              Daily
+            </button>
+            <button
+              onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                roDrillMode === 'by-train'
+                  ? 'bg-chart-2 text-white border-chart-2'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Per Train — daily average per RO train"
+            >
+              <ChevronsDown className="h-3 w-3" />
+              Per Train
+            </button>
+            <button
+              onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                roDrillMode === 'by-hour'
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="By Hour — hourly average across date range"
+            >
+              <ChevronsUp className="h-3 w-3" />
+              Hourly
+            </button>
+            {/* Train filter — visible in by-train or by-hour mode */}
+            {roDrillMode !== 'default' && (
+              <button
+                onClick={() => setShowTrainFilter((v) => !v)}
+                className={[
+                  'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                  showTrainFilter
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : !allTrainsSelected
+                      ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+                title="Filter trains"
+              >
+                <Filter className="h-3 w-3" />
+                {!allTrainsSelected && (
+                  <span className="font-semibold">
+                    {selectedTrainIds?.size ?? roTrainEntities.length}/{roTrainEntities.length}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Locator filter panel — shown when drill mode is active and filter is open ── */}
+      {/* ── Train filter panel ─────────────────────────────────────────────── */}
+      {hasRoDrill && roDrillMode !== 'default' && showTrainFilter && (
+        <div className="mb-2 rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-foreground shrink-0">Filter Trains</span>
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={selectAllTrains}
+                className={[
+                  'h-5 px-2 rounded text-[10px] font-medium border transition-colors leading-none',
+                  allTrainsSelected
+                    ? 'bg-teal-700 text-white border-teal-700'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >All</button>
+              <button
+                onClick={clearAllTrains}
+                className={[
+                  'h-5 px-2 rounded text-[10px] font-medium border transition-colors leading-none',
+                  noTrainsSelected
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >None</button>
+              <button
+                onClick={() => setShowTrainFilter(false)}
+                className="h-5 w-5 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Close filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {roTrainEntities.length > 6 && (
+            <div className="relative">
+              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={trainSearch}
+                onChange={(e) => setTrainSearch(e.target.value)}
+                placeholder="Search trains…"
+                className="w-full h-6 pl-6 pr-2 rounded border border-border bg-background text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {trainSearch && (
+                <button onClick={() => setTrainSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-1 max-h-[130px] overflow-y-auto pr-0.5">
+            {filteredTrainList.length === 0 && (
+              <span className="text-[11px] text-muted-foreground py-1">No trains match search.</span>
+            )}
+            {filteredTrainList.map((entity) => {
+              const isActive = selectedTrainIds === null || selectedTrainIds.has(entity.id);
+              return (
+                <button
+                  key={entity.id}
+                  onClick={() => toggleTrain(entity.id)}
+                  title={entity.label}
+                  className={[
+                    'flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-all leading-none max-w-[180px]',
+                    isActive
+                      ? 'text-white border-transparent shadow-sm'
+                      : 'bg-background text-muted-foreground border-border hover:border-foreground/30',
+                  ].join(' ')}
+                  style={isActive ? { backgroundColor: entity.color, borderColor: entity.color } : {}}
+                >
+                  {isActive && <Check className="h-2.5 w-2.5 shrink-0" />}
+                  <span className="truncate">{entity.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-[10px] text-muted-foreground flex items-center gap-2 pt-0.5 border-t border-border/50">
+            <span>
+              {allTrainsSelected
+                ? `All ${roTrainEntities.length} trains shown`
+                : noTrainsSelected
+                  ? 'No trains selected — chart will be empty'
+                  : `${selectedTrainIds!.size} of ${roTrainEntities.length} trains shown`}
+            </span>
+            {!allTrainsSelected && !noTrainsSelected && (
+              <button onClick={selectAllTrains} className="ml-auto text-[10px] text-primary hover:underline">Reset</button>
+            )}
+          </div>
+        </div>
+      }
       {hasConsumptionDrill && drillMode !== 'default' && showLocatorFilter && (
         <div className="mb-2 rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-1.5" data-testid={`locator-filter-panel-${metric}`}>
           {/* Header row */}
@@ -1705,7 +1987,49 @@ export function TrendChart({
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
-          {(hasConsumptionDrill && drillMode === 'drilldown') ? (
+          {(hasRoDrill && roDrillMode === 'by-train') ? (
+            <LineChart data={roTrainDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {visibleTrainEntities.map(({ id, label, color }) => (
+                <Line
+                  key={id}
+                  type="monotone"
+                  dataKey={id}
+                  name={label}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+            </LineChart>
+          ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
+            <LineChart data={roHourDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Hour of day', position: 'insideBottom', offset: -2, fontSize: 9 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                name={metric === 'tds' ? 'Avg Permeate TDS (ppm)' : 'Avg Recovery (%)'}
+                stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                connectNulls
+              />
+            </LineChart>
+          ) : (hasConsumptionDrill && drillMode === 'drilldown') ? (
             <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -1793,10 +2117,10 @@ export function TrendChart({
               {metric === 'rawwater' && (
                 <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
               )}
-              {metric === 'recovery' && (
+              {metric === 'recovery' && roDrillMode === 'default' && (
                 <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
               )}
-              {metric === 'tds' && (
+              {metric === 'tds' && roDrillMode === 'default' && (
                 <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
               )}
               {metric === 'pv' && (<>
