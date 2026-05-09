@@ -59,6 +59,8 @@ async function fetchUserDeps(id: string): Promise<DependencySnapshot> {
     countRefs('incidents', 'recorded_by', id),
     countRefs('locator_readings', 'recorded_by', id),
     countRefs('power_readings', 'recorded_by', id),
+    // Self-referential FK: other users who report to this user
+    countRefs('user_profiles', 'immediate_head_id', id),
   ]);
   const [roles, ...rest] = checks;
   const refs: Dependency[] = [
@@ -70,9 +72,14 @@ async function fetchUserDeps(id: string): Promise<DependencySnapshot> {
     { table: 'incidents', count: rest[5] },
     { table: 'locator_readings', count: rest[6] },
     { table: 'power_readings', count: rest[7] },
+    // Show reporting references as informational (not blocking — we nullify them automatically)
+    { table: 'user_profiles (reports to this user)', column: 'immediate_head_id', count: rest[8] },
   ].filter((r) => r.count > 0);
+  // immediate_head_id refs are NOT blocking — they'll be cleared automatically before delete.
+  // Blocking is determined only by the other refs (operational data logs).
+  const blockingRefs = refs.filter((r) => !r.table.startsWith('user_profiles'));
   const total = refs.reduce((a, b) => a + b.count, 0);
-  return { blocking: refs.length > 0, total_references: total, references: refs, role_rows: roles };
+  return { blocking: blockingRefs.length > 0, total_references: total, references: refs, role_rows: roles };
 }
 
 /** Build a dependency snapshot for a plant by querying Supabase directly */
@@ -175,6 +182,13 @@ export function DeleteEntityMenu({
       setBusy(true);
       const cap = copy.label[0].toUpperCase() + copy.label.slice(1);
       if (kind === 'user') {
+        // Clear self-referential FK: nullify immediate_head_id on users who report to this user.
+        // Must happen before the profile delete or Postgres will throw a FK constraint error.
+        const { error: headErr } = await supabase
+          .from('user_profiles')
+          .update({ immediate_head_id: null })
+          .eq('immediate_head_id', id);
+        if (headErr) throw new Error(`Could not clear reporting references: ${headErr.message}`);
         // Remove roles first, then profile (FK order)
         const { error: rolesErr } = await supabase.from('user_roles').delete().eq('user_id', id);
         if (rolesErr) throw new Error(rolesErr.message);
