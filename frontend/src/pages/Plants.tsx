@@ -2304,6 +2304,14 @@ function WellsList({ plantId }: { plantId: string }) {
   const [blendingBusy, setBlendingBusy] = useState<Set<string>>(new Set());
   // Per-well power-meter toggle in-flight indicator.
   const [powerBusy, setPowerBusy] = useState<Set<string>>(new Set());
+  // Add-well dialog visibility.
+  const [adding, setAdding] = useState(false);
+  // Well targeted for single deletion.
+  const [wellDeleteTarget, setWellDeleteTarget] = useState<any>(null);
+  // Well being edited.
+  const [editingWell, setEditingWell] = useState<any>(null);
+  // CSV import dialog visibility.
+  const [showWellCsv, setShowWellCsv] = useState(false);
 
   const toggle = (id: string) => {
     const next = new Set(selected);
