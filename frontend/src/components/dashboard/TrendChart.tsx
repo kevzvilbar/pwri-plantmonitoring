@@ -5,7 +5,7 @@ import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronsDown, ChevronsUp, BarChart2 } from 'lucide-react';
+import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -700,6 +700,12 @@ export function TrendChart({
   const [drillMode, setDrillMode] = useState<DrillMode>('default');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
 
+  // Locator filter for drill modes — null means "all selected" (default)
+  // When the user opens drill mode, all locators start selected.
+  const [selectedLocatorIds, setSelectedLocatorIds] = useState<Set<string> | null>(null);
+  const [locatorSearch, setLocatorSearch] = useState('');
+  const [showLocatorFilter, setShowLocatorFilter] = useState(false);
+
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -1136,7 +1142,7 @@ export function TrendChart({
       wellNames, locatorNames, productMeterNames, plantNames]);
 
   // ── Drill-mode locator data ───────────────────────────────────────────────
-  // drillEntities: sorted list of {id, label, color} for all active locators.
+  // drillEntities: full sorted list of {id, label, color} for all active locators.
   const drillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (!hasConsumptionDrill) return [];
     const ids = Array.from(new Set((locReadings ?? []).map((r: any) => r.locator_id).filter(Boolean)));
@@ -1149,11 +1155,50 @@ export function TrendChart({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [hasConsumptionDrill, locReadings, locatorNames]);
 
-  // drilldownData: one row per day, each locator gets its own key (locator id → delta)
+  // visibleEntities: subset of drillEntities that pass the current locator selection.
+  // null selectedLocatorIds = all visible.
+  const visibleEntities = useMemo(
+    () => selectedLocatorIds === null
+      ? drillEntities
+      : drillEntities.filter((e) => selectedLocatorIds.has(e.id)),
+    [drillEntities, selectedLocatorIds],
+  );
+
+  // filteredLocatorList: drillEntities filtered by search string (for the picker UI)
+  const filteredLocatorList = useMemo(
+    () => locatorSearch.trim() === ''
+      ? drillEntities
+      : drillEntities.filter((e) =>
+          e.label.toLowerCase().includes(locatorSearch.trim().toLowerCase()),
+        ),
+    [drillEntities, locatorSearch],
+  );
+
+  // Helpers for the locator selector
+  const allSelected = selectedLocatorIds === null || selectedLocatorIds.size === drillEntities.length;
+  const noneSelected = selectedLocatorIds !== null && selectedLocatorIds.size === 0;
+
+  function toggleLocator(id: string) {
+    setSelectedLocatorIds((prev) => {
+      // null → all selected; clicking one = keep only that one
+      const current = prev ?? new Set(drillEntities.map((e) => e.id));
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      // If all are manually selected, normalise back to null
+      return next.size === drillEntities.length ? null : next;
+    });
+  }
+
+  function selectAllLocators() { setSelectedLocatorIds(null); }
+  function clearAllLocators() { setSelectedLocatorIds(new Set()); }
+
+  // drilldownData: one row per day, each VISIBLE locator gets its own key
   const drilldownData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drilldown') return [];
-    // Build per-entity daily deltas using computeEntityDeltas approach
-    // We re-use the existing buildEntityPivot which already handles meter replacements
     const sorted = [...(locReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
@@ -1162,28 +1207,26 @@ export function TrendChart({
     const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
     return allDates.map((dateKey) => {
       const row: any = { date: fmtDateKey(dateKey), isoDate: dateKey };
-      drillEntities.forEach(({ id }) => {
+      visibleEntities.forEach(({ id }) => {
         row[id] = pivot.get(dateKey)?.get(id) ?? null;
       });
-      // total for tooltip reference
-      row._total = drillEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
+      row._total = visibleEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, locReadings, drillEntities]);
+  }, [hasConsumptionDrill, drillMode, locReadings, visibleEntities]);
 
-  // drillupData: one row per month, each locator gets monthly sum
+  // drillupData: one row per month, each VISIBLE locator gets monthly sum
   const drillupData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drillup') return [];
     const sorted = [...(locReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
     const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
-    // Group by month (yyyy-MM)
     const byMonth = new Map<string, Map<string, number>>();
     dateKeys.forEach((dk) => {
-      const monthKey = dk.slice(0, 7); // 'yyyy-MM'
+      const monthKey = dk.slice(0, 7);
       if (!byMonth.has(monthKey)) byMonth.set(monthKey, new Map());
-      drillEntities.forEach(({ id }) => {
+      visibleEntities.forEach(({ id }) => {
         const v = pivot.get(dk)?.get(id) ?? 0;
         byMonth.get(monthKey)!.set(id, (byMonth.get(monthKey)!.get(id) ?? 0) + v);
       });
@@ -1194,13 +1237,13 @@ export function TrendChart({
         date: format(new Date(`${mk}-01T00:00:00`), 'MMM yyyy'),
         isoDate: `${mk}-01`,
       };
-      drillEntities.forEach(({ id }) => {
+      visibleEntities.forEach(({ id }) => {
         row[id] = byMonth.get(mk)!.get(id) ?? null;
       });
-      row._total = drillEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
+      row._total = visibleEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, locReadings, drillEntities]);
+  }, [hasConsumptionDrill, drillMode, locReadings, visibleEntities]);
 
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
@@ -1467,7 +1510,7 @@ export function TrendChart({
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
               title="Default — daily total consumption"
-              onClick={() => setDrillMode('default')}
+              onClick={() => { setDrillMode('default'); setShowLocatorFilter(false); }}
             >
               <BarChart2 className="h-3 w-3" />
               Daily
@@ -1486,9 +1529,142 @@ export function TrendChart({
               <ChevronsDown className="h-3 w-3" />
               Per Locator
             </button>
+
+            {/* Locator filter button — only visible in drill modes */}
+            {drillMode !== 'default' && (
+              <button
+                onClick={() => setShowLocatorFilter((v) => !v)}
+                data-testid={`drill-filter-${metric}`}
+                className={[
+                  'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                  showLocatorFilter
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : !allSelected
+                      ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+                title="Filter locators"
+              >
+                <Filter className="h-3 w-3" />
+                {!allSelected && (
+                  <span className="font-semibold">
+                    {selectedLocatorIds?.size ?? drillEntities.length}/{drillEntities.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* ── Locator filter panel — shown when drill mode is active and filter is open ── */}
+      {hasConsumptionDrill && drillMode !== 'default' && showLocatorFilter && (
+        <div className="mb-2 rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-1.5" data-testid={`locator-filter-panel-${metric}`}>
+          {/* Header row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-foreground shrink-0">Filter Locators</span>
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={selectAllLocators}
+                className={[
+                  'h-5 px-2 rounded text-[10px] font-medium border transition-colors leading-none',
+                  allSelected
+                    ? 'bg-teal-700 text-white border-teal-700'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >
+                All
+              </button>
+              <button
+                onClick={clearAllLocators}
+                className={[
+                  'h-5 px-2 rounded text-[10px] font-medium border transition-colors leading-none',
+                  noneSelected
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >
+                None
+              </button>
+              <button
+                onClick={() => setShowLocatorFilter(false)}
+                className="h-5 w-5 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Close filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* Search box */}
+          {drillEntities.length > 6 && (
+            <div className="relative">
+              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={locatorSearch}
+                onChange={(e) => setLocatorSearch(e.target.value)}
+                placeholder="Search locators…"
+                className="w-full h-6 pl-6 pr-2 rounded border border-border bg-background text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {locatorSearch && (
+                <button
+                  onClick={() => setLocatorSearch('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Locator chip grid */}
+          <div className="flex flex-wrap gap-1 max-h-[130px] overflow-y-auto pr-0.5">
+            {filteredLocatorList.length === 0 && (
+              <span className="text-[11px] text-muted-foreground py-1">No locators match search.</span>
+            )}
+            {filteredLocatorList.map((entity) => {
+              const isActive = selectedLocatorIds === null || selectedLocatorIds.has(entity.id);
+              return (
+                <button
+                  key={entity.id}
+                  onClick={() => toggleLocator(entity.id)}
+                  title={entity.label}
+                  className={[
+                    'flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-all leading-none max-w-[180px]',
+                    isActive
+                      ? 'text-white border-transparent shadow-sm'
+                      : 'bg-background text-muted-foreground border-border hover:border-foreground/30',
+                  ].join(' ')}
+                  style={isActive ? { backgroundColor: entity.color, borderColor: entity.color } : {}}
+                >
+                  {isActive && <Check className="h-2.5 w-2.5 shrink-0" />}
+                  <span className="truncate">{entity.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Summary footer */}
+          <div className="text-[10px] text-muted-foreground flex items-center gap-2 pt-0.5 border-t border-border/50">
+            <span>
+              {allSelected
+                ? `All ${drillEntities.length} locators shown`
+                : noneSelected
+                  ? 'No locators selected — chart will be empty'
+                  : `${selectedLocatorIds!.size} of ${drillEntities.length} locators shown`}
+            </span>
+            {!allSelected && !noneSelected && (
+              <button
+                onClick={selectAllLocators}
+                className="ml-auto text-[10px] text-primary hover:underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
       {showSummary && (
@@ -1539,7 +1715,7 @@ export function TrendChart({
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              {drillEntities.map(({ id, label, color }) => (
+              {visibleEntities.map(({ id, label, color }) => (
                 <Line
                   key={id}
                   type="monotone"
@@ -1562,7 +1738,7 @@ export function TrendChart({
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              {drillEntities.map(({ id, label, color }) => (
+              {visibleEntities.map(({ id, label, color }) => (
                 <Bar
                   key={id}
                   dataKey={id}
