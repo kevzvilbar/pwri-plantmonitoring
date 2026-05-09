@@ -3926,22 +3926,18 @@ function TrainOperatorLogModal({
         const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
         let profileMap: Record<string, string> = {};
         if (uids.length) {
-          // Try user_profiles table first, then profiles as fallback.
-          // Select all name-like columns; use first non-empty value found.
+          // user_profiles columns: id, first_name, last_name, username (no full_name/email).
+          // Selecting non-existent columns causes Supabase to return an error (perr truthy),
+          // which was silently swallowing all results and falling back to UID for every row.
           for (const table of ['user_profiles', 'profiles']) {
             const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
-              .select('id, first_name, last_name, full_name, username, email')
+              .select('id, first_name, last_name, username')
               .in('id', uids);
             if (!perr && pdata?.length) {
               profileMap = Object.fromEntries(
                 (pdata as any[]).map((p: any) => {
-                  const name =
-                    p.full_name?.trim() ||
-                    `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() ||
-                    p.username?.trim() ||
-                    // Show only the local part of the email (before @) to keep it readable
-                    p.email?.trim().split('@')[0] ||
-                    '';
+                  const fullName = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim();
+                  const name = fullName || p.username?.trim() || '';
                   return [p.id, name || null];
                 }).filter(([, name]) => name)
               );
