@@ -3926,23 +3926,44 @@ function TrainOperatorLogModal({
         const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
         let profileMap: Record<string, string> = {};
         if (uids.length) {
-          // Try user_profiles table first, then profiles as fallback
+          // Try user_profiles table first, then profiles as fallback.
+          // Select all name-like columns; use first non-empty value found.
           for (const table of ['user_profiles', 'profiles']) {
             const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
-              .select('id, first_name, last_name, full_name')
+              .select('id, first_name, last_name, full_name, username, email')
               .in('id', uids);
             if (!perr && pdata?.length) {
               profileMap = Object.fromEntries(
                 (pdata as any[]).map((p: any) => {
-                  const name = p.full_name?.trim() ||
+                  const name =
+                    p.full_name?.trim() ||
                     `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() ||
-                    'Unknown';
-                  return [p.id, name];
-                })
+                    p.username?.trim() ||
+                    // Show only the local part of the email (before @) to keep it readable
+                    p.email?.trim().split('@')[0] ||
+                    '';
+                  return [p.id, name || null];
+                }).filter(([, name]) => name)
               );
-              break;
+              if (Object.keys(profileMap).length) break;
             }
           }
+        }
+
+        // Step 3: for any UIDs still unresolved, attempt a final lookup via
+        // auth.users email metadata (admin API — may be unavailable in some setups).
+        const unresolvedUids = uids.filter((uid) => !profileMap[uid]);
+        if (unresolvedUids.length) {
+          try {
+            const { data: authUsers } = await (supabase.auth as any).admin?.listUsers?.() ?? {};
+            if (authUsers?.users?.length) {
+              for (const u of authUsers.users) {
+                if (unresolvedUids.includes(u.id) && u.email) {
+                  profileMap[u.id] = u.email.split('@')[0];
+                }
+              }
+            }
+          } catch { /* admin API not available — skip silently */ }
         }
 
         return (readings as any[]).map((r: any) => ({
