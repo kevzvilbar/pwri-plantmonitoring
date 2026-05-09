@@ -1344,29 +1344,37 @@ export function TrendChart({
     });
   }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric]);
 
-  /** Build hourly-average drill data (aggregated across all visible trains) */
+  /** Build hourly drill data — one row per hour (00–23), one column per date.
+   *  Each date becomes its own line so the user can see both the hour-of-day
+   *  pattern AND which specific date each reading belongs to. */
   const roHourDrillData = useMemo(() => {
-    if (!hasRoDrill || roDrillMode !== 'by-hour') return [];
+    if (!hasRoDrill || roDrillMode !== 'by-hour') return { rows: [], dateKeys: [] as string[] };
     const readings = (roReadings ?? []).filter((r: any) => {
       if (selectedTrainIds !== null && r.train_id && !selectedTrainIds.has(r.train_id)) return false;
       return true;
     });
-    // hourKey (0-23) → { sum, count }
-    const acc = new Map<number, { sum: number; count: number }>();
+    // dateKey → hour (0-23) → { sum, count }
+    const acc = new Map<string, Map<number, { sum: number; count: number }>>();
     readings.forEach((r: any) => {
       const val = r[valueKey];
       if (val == null) return;
-      const hour = new Date(r.reading_datetime).getHours();
-      const prev = acc.get(hour) ?? { sum: 0, count: 0 };
-      acc.set(hour, { sum: prev.sum + +val, count: prev.count + 1 });
+      const dt = new Date(r.reading_datetime);
+      const dk = format(dt, 'yyyy-MM-dd');
+      const hour = dt.getHours();
+      if (!acc.has(dk)) acc.set(dk, new Map());
+      const prev = acc.get(dk)!.get(hour) ?? { sum: 0, count: 0 };
+      acc.get(dk)!.set(hour, { sum: prev.sum + +val, count: prev.count + 1 });
     });
-    return Array.from({ length: 24 }, (_, h) => {
-      const a = acc.get(h);
-      return {
-        date: `${String(h).padStart(2, '0')}:00`,
-        value: a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null,
-      };
+    const dateKeys = Array.from(acc.keys()).sort();
+    const rows = Array.from({ length: 24 }, (_, h) => {
+      const row: any = { hour: `${String(h).padStart(2, '0')}:00` };
+      dateKeys.forEach((dk) => {
+        const a = acc.get(dk)!.get(h);
+        row[dk] = a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null;
+      });
+      return row;
     });
+    return { rows, dateKeys };
   }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
 
   // ── Per-day negative-value index ────────────────────────────────────────
@@ -2011,23 +2019,28 @@ export function TrendChart({
               ))}
             </LineChart>
           ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
-            <LineChart data={roHourDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <LineChart data={roHourDrillData.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Hour of day', position: 'insideBottom', offset: -2, fontSize: 9 }} />
+              <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Hour of day', position: 'insideBottom', offset: -2, fontSize: 9 }} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
+                formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
+                labelFormatter={(label) => `Hour: ${label}`}
               />
-              <Line
-                type="monotone"
-                dataKey="value"
-                name={metric === 'tds' ? 'Avg Permeate TDS (ppm)' : 'Avg Recovery (%)'}
-                stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                connectNulls
-              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {roHourDrillData.dateKeys.map((dk, i) => (
+                <Line
+                  key={dk}
+                  type="monotone"
+                  dataKey={dk}
+                  name={fmtDateKey(dk)}
+                  stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
             </LineChart>
           ) : (hasConsumptionDrill && drillMode === 'drilldown') ? (
             <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
