@@ -1344,77 +1344,40 @@ export function TrendChart({
     });
   }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric]);
 
-  /** Build hourly drill data.
-   *  - avgRows: single averaged line across all visible trains — default view.
-   *  - trainRows / trainKeys: one line per visible train for the per-train split.
-   *  The tooltip always shows which dates contributed to each hour bucket. */
+  /** Build hourly drill data — one row per actual datetime slot, in chronological
+   *  order. Each slot label is "MMM d, ha" (e.g. "May 3, 1pm"). The value is the
+   *  average across all visible trains that have a reading in that exact hour.
+   *  Filtering by train selector controls which trains contribute to the average. */
   const roHourDrillData = useMemo(() => {
-    const empty = { avgRows: [], trainRows: [], trainKeys: [] as { id: string; label: string; color: string }[] };
-    if (!hasRoDrill || roDrillMode !== 'by-hour') return empty;
+    if (!hasRoDrill || roDrillMode !== 'by-hour') return [];
 
     const readings = (roReadings ?? []).filter((r: any) => {
       if (selectedTrainIds !== null && r.train_id && !selectedTrainIds.has(r.train_id)) return false;
-      return true;
+      return r[valueKey] != null;
     });
 
-    // hour (0-23) → { sum, count, dates: Set<yyyy-MM-dd> }  (overall average)
-    const avgAcc = new Map<number, { sum: number; count: number; dates: Set<string> }>();
-    // train_id → hour → { sum, count }
-    const trainAcc = new Map<string, Map<number, { sum: number; count: number }>>();
-
+    // slotKey: "yyyy-MM-dd HH" — one bucket per calendar hour
+    const acc = new Map<string, { sum: number; count: number; ts: number }>();
     readings.forEach((r: any) => {
-      const val = r[valueKey];
-      if (val == null) return;
       const dt = new Date(r.reading_datetime);
-      const hour = dt.getHours();
-      const dk = format(dt, 'yyyy-MM-dd');
-      const v = +val;
-
-      // overall
-      const ap = avgAcc.get(hour) ?? { sum: 0, count: 0, dates: new Set<string>() };
-      ap.sum += v; ap.count += 1; ap.dates.add(dk);
-      avgAcc.set(hour, ap);
-
-      // per-train
-      if (r.train_id) {
-        if (!trainAcc.has(r.train_id)) trainAcc.set(r.train_id, new Map());
-        const tp = trainAcc.get(r.train_id)!.get(hour) ?? { sum: 0, count: 0 };
-        trainAcc.get(r.train_id)!.set(hour, { sum: tp.sum + v, count: tp.count + 1 });
-      }
+      const slotKey = format(dt, 'yyyy-MM-dd HH');
+      const prev = acc.get(slotKey) ?? { sum: 0, count: 0, ts: dt.setMinutes(0, 0, 0) };
+      acc.set(slotKey, { sum: prev.sum + +r[valueKey], count: prev.count + 1, ts: prev.ts });
     });
 
     const dec = metric === 'tds' ? 0 : 1;
 
-    // avgRows — single line, tooltip carries date range info
-    const avgRows = Array.from({ length: 24 }, (_, h) => {
-      const a = avgAcc.get(h);
-      const dates = a ? Array.from(a.dates).sort() : [];
-      return {
-        hour: `${String(h).padStart(2, '0')}:00`,
-        avg: a ? +(a.sum / a.count).toFixed(dec) : null,
-        // carry human-readable date range for tooltip
-        _dateRange: dates.length === 0 ? ''
-          : dates.length === 1 ? fmtDateKey(dates[0])
-          : `${fmtDateKey(dates[0])} – ${fmtDateKey(dates[dates.length - 1])}`,
-      };
-    });
-
-    // trainRows — one key per visible train
-    const trainKeys = visibleTrainEntities.filter((e) => trainAcc.has(e.id));
-    const trainRows = Array.from({ length: 24 }, (_, h) => {
-      const row: any = { hour: `${String(h).padStart(2, '0')}:00` };
-      trainKeys.forEach(({ id }) => {
-        const a = trainAcc.get(id)?.get(h);
-        row[id] = a ? +(a.sum / a.count).toFixed(dec) : null;
+    return Array.from(acc.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([, { sum, count, ts }]) => {
+        const dt = new Date(ts);
+        return {
+          // X-axis label: "May 3, 1pm"
+          label: format(dt, 'MMM d, haaa').replace('am', 'am').replace('pm', 'pm'),
+          value: +(sum / count).toFixed(dec),
+        };
       });
-      return row;
-    });
-
-    return { avgRows, trainRows, trainKeys };
-  }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, visibleTrainEntities, valueKey, metric]);
-
-  // Secondary RO hourly sub-mode: 'avg' (default) or 'per-train'
-  const [roHourSplit, setRoHourSplit] = useState<'avg' | 'per-train'>('avg');
+  }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
 
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
@@ -1731,7 +1694,7 @@ export function TrendChart({
           <div className="flex items-center gap-0.5 shrink-0" title="Drill into RO train data">
             <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">RO:</span>
             <button
-              onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); setRoHourSplit('avg'); }}
+              onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); }}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 roDrillMode === 'default'
@@ -1744,7 +1707,7 @@ export function TrendChart({
               Daily
             </button>
             <button
-              onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); setRoHourSplit('avg'); }}
+              onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); }}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 roDrillMode === 'by-train'
@@ -1769,31 +1732,6 @@ export function TrendChart({
               <ChevronsUp className="h-3 w-3" />
               Hourly
             </button>
-            {/* Avg / Per-Train sub-toggle — only in hourly mode */}
-            {roDrillMode === 'by-hour' && (
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setRoHourSplit('avg')}
-                  className={[
-                    'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                    roHourSplit === 'avg'
-                      ? 'bg-teal-700 text-white border-teal-700'
-                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-                  ].join(' ')}
-                  title="Show overall hourly average"
-                >Avg</button>
-                <button
-                  onClick={() => setRoHourSplit('per-train')}
-                  className={[
-                    'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                    roHourSplit === 'per-train'
-                      ? 'bg-chart-2 text-white border-chart-2'
-                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-                  ].join(' ')}
-                  title="Split by train"
-                >Per Train</button>
-              </div>
-            )}
             {/* Train filter — visible in by-train or by-hour mode */}
             {roDrillMode !== 'default' && (
               <button
@@ -2083,32 +2021,32 @@ export function TrendChart({
               ))}
             </LineChart>
           ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
-            <LineChart
-              data={roHourSplit === 'per-train' ? roHourDrillData.trainRows : roHourDrillData.avgRows}
-              margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-            >
+            <LineChart data={roHourDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Hour of day', position: 'insideBottom', offset: -2, fontSize: 9 }} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 9 }}
+                stroke="hsl(var(--muted-foreground))"
+                interval={Math.max(0, Math.floor(roHourDrillData.length / 12) - 1)}
+                angle={-35}
+                textAnchor="end"
+                height={48}
+              />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
-                labelFormatter={(label, payload) => {
-                  const dateRange = payload?.[0]?.payload?._dateRange;
-                  return dateRange ? `${label}  ·  ${dateRange}` : `Hour: ${label}`;
-                }}
+                formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
+                labelFormatter={(label) => label}
               />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              {roHourSplit === 'per-train'
-                ? roHourDrillData.trainKeys.map(({ id, label, color }) => (
-                    <Line key={id} type="monotone" dataKey={id} name={label}
-                      stroke={color} strokeWidth={1.5} dot={false} connectNulls />
-                  ))
-                : <Line type="monotone" dataKey="avg"
-                    name={metric === 'tds' ? 'Avg TDS (ppm)' : 'Avg Recovery (%)'}
-                    stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
-                    strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              }
+              <Line
+                type="monotone"
+                dataKey="value"
+                name={metric === 'tds' ? 'Avg TDS (ppm)' : 'Avg Recovery (%)'}
+                stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
             </LineChart>
           ) : (hasConsumptionDrill && drillMode === 'drilldown') ? (
             <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
