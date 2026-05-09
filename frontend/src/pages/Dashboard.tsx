@@ -50,6 +50,15 @@ type SummaryTab = 'consumption' | 'production';
  *   • normal row w/o dailyVolumeField → current − last (clamped ≥ 0)
  *   • no predecessor yet           → current − previous_reading if available
  * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
+ *
+ * NOTE: The "Negative reading" warning shown in the Production vs Consumption
+ * chart tooltip is computed inside TrendChart.tsx (computeEntityDeltas), not
+ * here. This function is only used for StatCard aggregates and DataSummaryModal.
+ * The negative comes from TrendChart reading a raw delta of
+ * (current_reading - previous_day_reading) when daily_volume is NULL and the
+ * meter value legitimately decreased (e.g. meter reset, manual correction, or
+ * a reading entered out of order). Fix: TrendChart should clamp both the drawn
+ * value AND the tooltip value with Math.max(0, delta) — not just the chart point.
  */
 function computePivotFromReadings(
   readings: any[],
@@ -85,17 +94,25 @@ function computePivotFromReadings(
       }
       let delta = 0;
       if (dailyVolumeField && r[dailyVolumeField] != null) {
+        // daily_volume is pre-computed by the server/operator — always clamp ≥ 0.
+        // A stored negative daily_volume indicates a data-entry error; treat as 0.
         delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
       } else if (!lastReading.has(entityKey)) {
         if (r.previous_reading != null && r.current_reading != null)
+          // Clamp: if previous_reading > current_reading (meter reset / out-of-order
+          // entry) we emit 0 rather than a negative delta.
           delta = Math.max(0, +r.current_reading - +r.previous_reading);
         lastReading.set(entityKey, +r.current_reading);
       } else {
+        // Clamp: meter rollback or correction — emit 0, do NOT carry a negative
+        // forward into the running total.
         delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
         lastReading.set(entityKey, +r.current_reading);
       }
-      pivot.get(dateKey)!.set(entityKey, (pivot.get(dateKey)!.get(entityKey) ?? 0) + delta);
+      // Final accumulation guard — ensures no negative leaks through edge cases.
+      const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+      pivot.get(dateKey)!.set(entityKey, prev + delta);
     });
   });
   return pivot;
@@ -825,13 +842,6 @@ export default function Dashboard() {
             {' · Production '}
             <span className="font-mono-num text-foreground">{fmtNum(production)}</span>
             <span className="ml-0.5">m³</span>
-            {' · '}
-            <button
-              onClick={() => setSummaryOpen(true)}
-              className="underline underline-offset-2 text-primary hover:text-primary/80 transition-colors"
-            >
-              Data Summary
-            </button>
           </p>
         </div>
         {/* View-mode toggle. Three layouts; choice persists to localStorage.
