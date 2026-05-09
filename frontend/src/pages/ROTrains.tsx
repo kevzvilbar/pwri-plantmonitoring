@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { usePlantMeterConfig } from '@/pages/Plants';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -473,6 +474,16 @@ function PretreatmentAndROLog() {
   const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const isSynchronized = (plant as any)?.backwash_mode === 'synchronized';
 
+  // ── Meter configuration — controls which inputs are shown to operators ──────
+  // Reads from plant_meter_config (set by managers in Plants → Trains tab).
+  // Safe defaults keep all fields visible if config not yet saved (backwards compat).
+  const { config: meterCfg } = usePlantMeterConfig(plantId || null);
+  const showFeedMeter      = meterCfg.ro_has_feed_meter;
+  const showPermeateMeter  = meterCfg.ro_has_permeate_meter;
+  const showRejectMeter    = meterCfg.ro_has_reject_meter;
+  const showPowerMeter     = meterCfg.ro_has_per_train_electricity;
+  const productionLabel    = meterCfg.ro_production_source === 'permeate' ? 'Permeate / Production' : 'Permeate / Product';
+
   const { data: trains } = useQuery({
     queryKey: ['pretreat-trains', plantId],
     queryFn: async () => plantId
@@ -638,9 +649,10 @@ function PretreatmentAndROLog() {
   })();
 
   // Inferred flags (not user-typed, computed from the other two)
-  const emFeedInferred = emFeedFlow === null && emEntered === 2 && emPermFlow !== null && emRejFlow !== null;
+  // Also mark as inferred when the meter is disabled in plant config (always auto-computed).
+  const emFeedInferred = !showFeedMeter || (emFeedFlow === null && emEntered === 2 && emPermFlow !== null && emRejFlow !== null);
   const emPermInferred = emPermFlow === null && emEntered === 2 && emFeedFlow !== null && emRejFlow !== null;
-  const emRejInferred  = emRejFlow  === null && emEntered >= 1 && effRejFlow !== null && !(emFeedFlow === null && emPermFlow === null);
+  const emRejInferred  = !showRejectMeter || (emRejFlow  === null && emEntered >= 1 && effRejFlow !== null && !(emFeedFlow === null && emPermFlow === null));
 
   // Recovery uses effective flows (EM > meter-derived)
   const recovery    = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
@@ -1276,26 +1288,34 @@ function PretreatmentAndROLog() {
             <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">RO Vessel</h4>
 
             {/* Column headers */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {showFeedMeter && (
               <div className="flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-1.5">
                 <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
                 <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Feed / Raw</span>
               </div>
+              )}
+              {showPermeateMeter && (
               <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Permeate / Product</span>
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{productionLabel}</span>
               </div>
+              )}
+              {showRejectMeter && (
               <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5">
                 <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
                 <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Reject / Concentrate</span>
               </div>
+              )}
             </div>
 
             {/* ── Water Meter ─────────────────────────────────────────────── */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter</p>
-                <p className="text-[10px] text-muted-foreground/60 italic">Leave one stream blank — it will be inferred</p>
+                <p className="text-[10px] text-muted-foreground/60 italic">
+                  {(!showFeedMeter || !showRejectMeter) ? 'Missing meter auto-inferred' : 'Leave one stream blank — it will be inferred'}
+                </p>
               </div>
               {/* Auto-computed duration from datetime diff */}
               <div className="flex items-center gap-2 mb-1">
@@ -1308,9 +1328,18 @@ function PretreatmentAndROLog() {
                   <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
                 )}
               </div>
-              {/* current / prev (auto) / Δ / flow columns */}
-              <div className="grid grid-cols-3 gap-2">
+              {/* Inferred-meter notice banner */}
+              {(!showFeedMeter || !showRejectMeter) && (
+                <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 text-[10px] text-blue-700 dark:text-blue-300 mb-1">
+                  {!showFeedMeter && showPermeateMeter && showRejectMeter && 'Feed meter disabled — feed volume auto-inferred as permeate + reject.'}
+                  {showFeedMeter && !showRejectMeter && 'Reject meter disabled — reject volume auto-inferred as feed − permeate.'}
+                  {!showFeedMeter && !showRejectMeter && 'Feed and reject meters disabled — only permeate logged.'}
+                </div>
+              )}
+              {/* current / prev (auto) / Δ / flow columns — only configured meters */}
+              <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {/* Feed */}
+                {showFeedMeter && (
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
@@ -1331,7 +1360,9 @@ function PretreatmentAndROLog() {
                     <ComputedInput value={feedFlowMeter != null ? String(feedFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
+                )}
                 {/* Permeate */}
+                {showPermeateMeter && (
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
@@ -1343,7 +1374,7 @@ function PretreatmentAndROLog() {
                   </div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                      Permeate Volume{permInferred ? ' (inferred)' : ''} (m³)
+                      {meterCfg.ro_production_source === 'permeate' ? 'Production (Permeate)' : 'Permeate Volume'}{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
                     <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
                   </div>
@@ -1352,7 +1383,9 @@ function PretreatmentAndROLog() {
                     <ComputedInput value={permFlowMeter != null ? String(permFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
+                )}
                 {/* Reject */}
+                {showRejectMeter && (
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
@@ -1373,6 +1406,7 @@ function PretreatmentAndROLog() {
                     <ComputedInput value={rejFlowMeter != null ? String(rejFlowMeter) : ''} className="text-foreground font-medium" />
                   </div>
                 </div>
+                )}
               </div>
             </div>
 
@@ -1417,8 +1451,9 @@ function PretreatmentAndROLog() {
                   {emEntered === 3 && 'All three manually entered'}
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {/* Feed EM */}
+                {showFeedMeter && (
                 <div className="space-y-1">
                   <Label className={cn('text-[11px]', emFeedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                     Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
@@ -1434,10 +1469,12 @@ function PretreatmentAndROLog() {
                       className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   )}
                 </div>
+                )}
                 {/* Permeate EM */}
+                {showPermeateMeter && (
                 <div className="space-y-1">
                   <Label className={cn('text-[11px]', emPermInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
-                    Permeate Flowrate{emPermInferred ? ' (computed)' : ''}
+                    {meterCfg.ro_production_source === 'permeate' ? 'Production Flowrate' : 'Permeate Flowrate'}{emPermInferred ? ' (computed)' : ''}
                   </Label>
                   {emPermInferred ? (
                     <ComputedInput
@@ -1456,7 +1493,9 @@ function PretreatmentAndROLog() {
                     <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
                   </div>
                 </div>
+                )}
                 {/* Reject EM */}
+                {showRejectMeter && (
                 <div className="space-y-1">
                   <Label className={cn('text-[11px]', emRejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
                     Reject Flowrate{emRejInferred ? ' (computed)' : ''}
@@ -1472,6 +1511,7 @@ function PretreatmentAndROLog() {
                       className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
                   )}
                 </div>
+                )}
               </div>
             </div>
 
@@ -1517,9 +1557,12 @@ function PretreatmentAndROLog() {
           </Card>
 
           {/* ── Power Meter ──────────────────────────────────────────────────── */}
+          {/* Show when per-train electricity meter is enabled in meter config.
+              When disabled, plant-level power is tracked via Operations → Power tab instead. */}
+          {showPowerMeter && (
           <Card className="p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter</h4>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter (per train)</h4>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
                 <span>Duration:</span>
                 <span className="font-mono font-medium">{autoDurationMin != null ? `${autoDurationMin} min` : '—'}</span>
@@ -1547,6 +1590,12 @@ function PretreatmentAndROLog() {
               </div>
             </div>
           </Card>
+          )}
+          {!showPowerMeter && (
+          <div className="rounded-md border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
+            ⚡ Per-train power meter not configured for this plant — energy consumption is tracked plant-wide in the <strong className="font-medium">Power tab</strong>.
+          </div>
+          )}
 
           <Card className="p-3 space-y-2">
             <Label className="text-[11px] text-muted-foreground">Remarks</Label>

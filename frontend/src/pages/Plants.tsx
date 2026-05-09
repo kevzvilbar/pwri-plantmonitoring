@@ -554,7 +554,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {/* Meter config card spans full width above the 2-col component cards */}
+        <PlantMeterConfigCard plant={plant} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
           <PlantComponentTypeCard plant={plant} />
           <BackwashModeCard plant={plant} />
         </div>
@@ -1068,6 +1070,741 @@ function _PMEditTrigger({
 const ProductMeterNameInline = Object.assign(_ProductMeterNameInline, {
   EditTrigger: _PMEditTrigger,
 });
+
+// ─── Plant Meter Config — shared type & hook ─────────────────────────────────
+// Stored in `plant_meter_config` table (plant_id PK, config jsonb, updated_at).
+// Falls back to sensible defaults so existing data keeps working unchanged.
+
+export interface PlantMeterConfig {
+  // RO Train flow meters
+  ro_has_feed_meter: boolean;
+  ro_has_permeate_meter: boolean;
+  ro_has_reject_meter: boolean;
+  // RO production source
+  ro_production_source: 'permeate' | 'product';
+  // Per-train utility meters
+  ro_has_per_train_electricity: boolean;
+  ro_has_per_train_water: boolean;
+  // Wells — electricity metering
+  wells_shared_electric_groups: Array<{ id: string; name: string; members: string[] }>; // member = well id
+  wells_dedicated_electric_ids: string[];   // well ids with dedicated meter
+  wells_no_electric: boolean;
+  // Locators — bulk/product metering
+  locators_dedicated_bulk_ids: string[];    // locator ids with own bulk meter
+  locators_shared_bulk_groups: Array<{ id: string; name: string; members: string[] }>;
+  locators_no_bulk: boolean;
+  // Energy sources (moved here from plants table but mirrored for backwards compat)
+  has_solar: boolean;
+  has_grid: boolean;
+  solar_capacity_kw: number | null;
+  // Power meter names (from plant_power_config)
+  solar_meter_count: number;
+  solar_meter_names: string[];
+  grid_meter_count: number;
+  grid_meter_names: string[];
+  // NRW / product distribution
+  nrw_enabled: boolean;
+  has_billed_volume_meter: boolean;
+}
+
+const DEFAULT_METER_CONFIG: PlantMeterConfig = {
+  ro_has_feed_meter: true,
+  ro_has_permeate_meter: true,
+  ro_has_reject_meter: true,
+  ro_production_source: 'product',
+  ro_has_per_train_electricity: false,
+  ro_has_per_train_water: false,
+  wells_shared_electric_groups: [],
+  wells_dedicated_electric_ids: [],
+  wells_no_electric: false,
+  locators_dedicated_bulk_ids: [],
+  locators_shared_bulk_groups: [],
+  locators_no_bulk: false,
+  has_solar: false,
+  has_grid: true,
+  solar_capacity_kw: null,
+  solar_meter_count: 1,
+  solar_meter_names: [],
+  grid_meter_count: 1,
+  grid_meter_names: [],
+  nrw_enabled: false,
+  has_billed_volume_meter: false,
+};
+
+const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
+
+export function usePlantMeterConfig(plantId: string | null | undefined) {
+  const qc = useQueryClient();
+
+  const { data: config, isLoading } = useQuery<PlantMeterConfig>({
+    queryKey: ['plant-meter-config', plantId],
+    enabled: !!plantId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      // Try DB first
+      try {
+        const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+          .select('config')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        if (!error && data?.config) {
+          return { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
+        }
+      } catch { /* table may not exist yet */ }
+      // Fall back to localStorage
+      try {
+        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
+        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
+      } catch { /* ignore */ }
+      return DEFAULT_METER_CONFIG;
+    },
+  });
+
+  const saveConfig = async (next: PlantMeterConfig) => {
+    let savedToDb = false;
+    try {
+      const { error } = await (supabase.from('plant_meter_config' as any) as any)
+        .upsert({ plant_id: plantId, config: next, updated_at: new Date().toISOString() }, { onConflict: 'plant_id' });
+      if (!error) savedToDb = true;
+    } catch { /* table missing */ }
+    try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
+    qc.setQueryData(['plant-meter-config', plantId], next);
+    qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
+    return savedToDb;
+  };
+
+  return { config: config ?? DEFAULT_METER_CONFIG, isLoading, saveConfig };
+}
+
+// ─── PlantMeterConfigCard ─────────────────────────────────────────────────────
+// Full meter configuration panel for managers. Lives at the top of the Trains tab.
+// Sections: RO Trains | Wells | Locators | Product/NRW | Power/Energy.
+// Uses 2-col tile layout on tablet+, single col on mobile.
+
+function MeterToggleTile({
+  icon, title, subtitle, checked, onToggle, canEdit,
+  accentColor = 'teal',
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  checked: boolean;
+  onToggle: (v: boolean) => void;
+  canEdit: boolean;
+  accentColor?: 'teal' | 'amber' | 'blue' | 'purple';
+}) {
+  const colors = {
+    teal:   { on: 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50', icon: 'bg-teal-100 dark:bg-teal-900/40', sw: 'data-[state=checked]:bg-teal-700' },
+    amber:  { on: 'border-amber-400/60 bg-amber-50/70 dark:bg-amber-950/20 dark:border-amber-700/50', icon: 'bg-amber-100 dark:bg-amber-900/40', sw: 'data-[state=checked]:bg-amber-600' },
+    blue:   { on: 'border-blue-400/60 bg-blue-50/70 dark:bg-blue-950/20 dark:border-blue-700/50', icon: 'bg-blue-100 dark:bg-blue-900/40', sw: 'data-[state=checked]:bg-blue-600' },
+    purple: { on: 'border-purple-400/60 bg-purple-50/70 dark:bg-purple-950/20 dark:border-purple-700/50', icon: 'bg-purple-100 dark:bg-purple-900/40', sw: 'data-[state=checked]:bg-purple-600' },
+  }[accentColor];
+
+  return (
+    <label className={[
+      'flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors',
+      checked ? colors.on : 'border-border bg-muted/30',
+      canEdit ? 'cursor-pointer' : 'cursor-default',
+    ].join(' ')}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${checked ? colors.icon : 'bg-muted'}`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate">{title}</div>
+          <div className="text-[11px] text-muted-foreground leading-tight">{subtitle}</div>
+        </div>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={canEdit ? onToggle : undefined}
+        disabled={!canEdit}
+        className={`h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 ${colors.sw}`}
+      />
+    </label>
+  );
+}
+
+function MeterGroupChips({
+  label,
+  groupName,
+  members,
+  allEntities,
+  entityLabel,
+  onMembersChange,
+  onGroupNameChange,
+  canEdit,
+}: {
+  label: string;
+  groupName: string;
+  members: string[];
+  allEntities: Array<{ id: string; name: string }>;
+  entityLabel: string;
+  onMembersChange: (ids: string[]) => void;
+  onGroupNameChange: (name: string) => void;
+  canEdit: boolean;
+}) {
+  const available = allEntities.filter(e => !members.includes(e.id));
+  return (
+    <div className="rounded-md border bg-muted/20 p-2.5 space-y-2">
+      {canEdit ? (
+        <Input
+          value={groupName}
+          onChange={e => onGroupNameChange(e.target.value)}
+          placeholder="Group name (e.g. Main Pump House)"
+          className="h-7 text-xs"
+        />
+      ) : (
+        <p className="text-xs font-medium text-foreground">{groupName || label}</p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {members.map(id => {
+          const e = allEntities.find(x => x.id === id);
+          return (
+            <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border border-teal-200 dark:border-teal-800">
+              {e?.name ?? id}
+              {canEdit && (
+                <button
+                  onClick={() => onMembersChange(members.filter(m => m !== id))}
+                  className="ml-0.5 opacity-60 hover:opacity-100"
+                  aria-label={`Remove ${e?.name}`}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </span>
+          );
+        })}
+        {canEdit && available.length > 0 && (
+          <Select onValueChange={id => onMembersChange([...members, id])}>
+            <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+              <Plus className="h-2.5 w-2.5 mr-1" />Add {entityLabel}
+            </SelectTrigger>
+            <SelectContent>
+              {available.map(e => (
+                <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlantMeterConfigCard({ plant }: { plant: any }) {
+  const { isManager, isAdmin } = useAuth();
+  const canEdit = isManager || isAdmin;
+  const { config: savedConfig, isLoading, saveConfig } = usePlantMeterConfig(plant.id);
+  const [cfg, setCfg] = useState<PlantMeterConfig>(DEFAULT_METER_CONFIG);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // Sync with DB data
+  useEffect(() => { setCfg(savedConfig); }, [savedConfig]);
+
+  // Pull wells and locators for group chip editors
+  const { data: wells = [] } = useQuery({
+    queryKey: ['wells-list', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('wells').select('id, name').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const { data: locators = [] } = useQuery({
+    queryKey: ['locators-list', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+
+  const update = (patch: Partial<PlantMeterConfig>) => setCfg(c => ({ ...c, ...patch }));
+
+  const doSave = async () => {
+    setSaving(true);
+    // Mirror energy sources back to the plants table for backwards compat
+    await supabase.from('plants').update({
+      has_solar: cfg.has_solar,
+      has_grid: cfg.has_grid,
+      solar_capacity_kw: cfg.solar_capacity_kw,
+    }).eq('id', plant.id);
+    const savedToDb = await saveConfig(cfg);
+    setSaving(false);
+    toast.success(savedToDb ? 'Meter configuration saved' : 'Meter configuration saved (local — run migration to persist to DB)');
+  };
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading meter config…
+    </div>
+  );
+
+  // Summary badge shown on the collapsed header
+  const roFlags = [
+    cfg.ro_has_feed_meter && 'Feed',
+    cfg.ro_has_permeate_meter && 'Perm',
+    cfg.ro_has_reject_meter && 'Reject',
+  ].filter(Boolean).join(' · ') || 'None';
+
+  return (
+    <Card className="p-0 overflow-hidden" data-testid="plant-meter-config-card">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <Gauge className="h-4 w-4 text-teal-600 shrink-0" />
+          <div>
+            <div className="text-sm font-semibold">Plant meter configuration</div>
+            {!open && (
+              <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                <span>RO: {roFlags}</span>
+                <span>Prod: {cfg.ro_production_source === 'permeate' ? 'Permeate' : 'Product meter'}</span>
+                {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
+                <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {!canEdit && <span className="text-[10px] bg-muted px-2 py-0.5 rounded font-medium text-muted-foreground">View only</span>}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+          {/* ══ SECTION: RO Trains ══ */}
+          <div className="pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">RO Trains — Flow meters</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-blue-500" />}
+                title="Feed meter"
+                subtitle="Raw input flow into RO train"
+                checked={cfg.ro_has_feed_meter}
+                onToggle={v => update({ ro_has_feed_meter: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-teal-600" />}
+                title="Permeate meter"
+                subtitle="Filtered / product-side output"
+                checked={cfg.ro_has_permeate_meter}
+                onToggle={v => update({ ro_has_permeate_meter: v })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-amber-500" />}
+                title="Reject meter"
+                subtitle="Brine / concentrate output"
+                checked={cfg.ro_has_reject_meter}
+                onToggle={v => update({ ro_has_reject_meter: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+            </div>
+            {!cfg.ro_has_reject_meter && (
+              <p className="mt-2 text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md px-2.5 py-1.5">
+                No reject meter — reject flow auto-inferred as feed − permeate. Operators won't see a reject meter input.
+              </p>
+            )}
+            {!cfg.ro_has_feed_meter && cfg.ro_has_permeate_meter && cfg.ro_has_reject_meter && (
+              <p className="mt-2 text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md px-2.5 py-1.5">
+                No feed meter — feed flow auto-inferred as permeate + reject.
+              </p>
+            )}
+          </div>
+
+          {/* ── Production source ── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Production volume source</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                { val: 'product', label: 'Dedicated product meter', sub: 'Separate meter for finished product' },
+                { val: 'permeate', label: 'Permeate meter = production', sub: 'No product meter — permeate IS production' },
+              ] as const).map(opt => (
+                <label key={opt.val} className={[
+                  'flex items-center gap-3 p-3 rounded-lg border transition-colors',
+                  cfg.ro_production_source === opt.val ? 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50' : 'border-border bg-muted/30',
+                  canEdit ? 'cursor-pointer' : 'cursor-default',
+                ].join(' ')}>
+                  <div className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center ${cfg.ro_production_source === opt.val ? 'border-teal-600' : 'border-muted-foreground/40'}`}>
+                    {cfg.ro_production_source === opt.val && <div className="h-2 w-2 rounded-full bg-teal-600" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    <div className="text-[11px] text-muted-foreground">{opt.sub}</div>
+                  </div>
+                  {canEdit && (
+                    <input type="radio" className="sr-only" checked={cfg.ro_production_source === opt.val}
+                      onChange={() => update({ ro_production_source: opt.val })} />
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Per-train utility meters ── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Per-train utility meters</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Electricity meter per train"
+                subtitle="Each train has its own kWh meter"
+                checked={cfg.ro_has_per_train_electricity}
+                onToggle={v => update({ ro_has_per_train_electricity: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                title="Water meter per train"
+                subtitle="Each train has its own flow meter"
+                checked={cfg.ro_has_per_train_water}
+                onToggle={v => update({ ro_has_per_train_water: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Wells ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Droplet className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Raw water — wells</span>
+              <span className="text-[10px] text-muted-foreground ml-1">(each well always has its own water meter)</span>
+            </div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Electricity metering</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Shared electric meter"
+                subtitle="Multiple wells / colboxes share one kWh meter"
+                checked={cfg.wells_shared_electric_groups.length > 0}
+                onToggle={v => update({ wells_shared_electric_groups: v ? [{ id: crypto.randomUUID(), name: 'Group 1', members: [] }] : [] })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Dedicated meter (per well)"
+                subtitle="Some wells have their own kWh meter"
+                checked={cfg.wells_dedicated_electric_ids.length > 0}
+                onToggle={v => update({ wells_dedicated_electric_ids: v ? (wells[0] ? [wells[0].id] : []) : [] })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-muted-foreground" />}
+                title="No electricity metering"
+                subtitle="Some wells have no kWh meter at all"
+                checked={cfg.wells_no_electric}
+                onToggle={v => update({ wells_no_electric: v })}
+                canEdit={canEdit}
+                accentColor="teal"
+              />
+            </div>
+
+            {/* Shared electric groups */}
+            {cfg.wells_shared_electric_groups.length > 0 && (
+              <div className="space-y-2 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Shared meter groups</p>
+                {cfg.wells_shared_electric_groups.map((grp, gi) => (
+                  <div key={grp.id} className="relative">
+                    <MeterGroupChips
+                      label={grp.name}
+                      groupName={grp.name}
+                      members={grp.members}
+                      allEntities={wells}
+                      entityLabel="well"
+                      canEdit={canEdit}
+                      onGroupNameChange={name => {
+                        const next = [...cfg.wells_shared_electric_groups];
+                        next[gi] = { ...grp, name };
+                        update({ wells_shared_electric_groups: next });
+                      }}
+                      onMembersChange={members => {
+                        const next = [...cfg.wells_shared_electric_groups];
+                        next[gi] = { ...grp, members };
+                        update({ wells_shared_electric_groups: next });
+                      }}
+                    />
+                    {canEdit && (
+                      <button
+                        onClick={() => update({ wells_shared_electric_groups: cfg.wells_shared_electric_groups.filter((_, i) => i !== gi) })}
+                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
+                        aria-label="Remove group"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => update({ wells_shared_electric_groups: [...cfg.wells_shared_electric_groups, { id: crypto.randomUUID(), name: `Group ${cfg.wells_shared_electric_groups.length + 1}`, members: [] }] })}>
+                    <Plus className="h-3 w-3" />Add group
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Dedicated electric wells */}
+            {cfg.wells_dedicated_electric_ids.length > 0 && (
+              <div className="space-y-1 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Wells with dedicated meter</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cfg.wells_dedicated_electric_ids.map(id => {
+                    const w = wells.find(x => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+                        {w?.name ?? id}
+                        {canEdit && (
+                          <button onClick={() => update({ wells_dedicated_electric_ids: cfg.wells_dedicated_electric_ids.filter(x => x !== id) })} className="ml-0.5 opacity-60 hover:opacity-100">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {canEdit && wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).length > 0 && (
+                    <Select onValueChange={id => update({ wells_dedicated_electric_ids: [...cfg.wells_dedicated_electric_ids, id] })}>
+                      <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+                        <Plus className="h-2.5 w-2.5 mr-1" />Add well
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).map(w => (
+                          <SelectItem key={w.id} value={w.id} className="text-xs">{w.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Locators ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Locators / distribution</span>
+              <span className="text-[10px] text-muted-foreground ml-1">(each locator always has its own water meter)</span>
+            </div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Bulk / product metering</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-teal-600" />}
+                title="Dedicated bulk meter"
+                subtitle="Some locators have their own bulk meter"
+                checked={cfg.locators_dedicated_bulk_ids.length > 0}
+                onToggle={v => update({ locators_dedicated_bulk_ids: v ? (locators[0] ? [locators[0].id] : []) : [] })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-purple-500" />}
+                title="Shared bulk meter group"
+                subtitle="Multiple locators share one bulk meter"
+                checked={cfg.locators_shared_bulk_groups.length > 0}
+                onToggle={v => update({ locators_shared_bulk_groups: v ? [{ id: crypto.randomUUID(), name: 'South Cluster', members: [] }] : [] })}
+                canEdit={canEdit}
+                accentColor="purple"
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-muted-foreground" />}
+                title="No bulk meter (some locators)"
+                subtitle="Certain locators only track water meter"
+                checked={cfg.locators_no_bulk}
+                onToggle={v => update({ locators_no_bulk: v })}
+                canEdit={canEdit}
+                accentColor="teal"
+              />
+            </div>
+
+            {/* Dedicated bulk locators */}
+            {cfg.locators_dedicated_bulk_ids.length > 0 && (
+              <div className="space-y-1 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Locators with dedicated bulk meter</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cfg.locators_dedicated_bulk_ids.map(id => {
+                    const l = locators.find(x => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border border-teal-200 dark:border-teal-800">
+                        {l?.name ?? id}
+                        {canEdit && (
+                          <button onClick={() => update({ locators_dedicated_bulk_ids: cfg.locators_dedicated_bulk_ids.filter(x => x !== id) })} className="ml-0.5 opacity-60 hover:opacity-100">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {canEdit && locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).length > 0 && (
+                    <Select onValueChange={id => update({ locators_dedicated_bulk_ids: [...cfg.locators_dedicated_bulk_ids, id] })}>
+                      <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+                        <Plus className="h-2.5 w-2.5 mr-1" />Add locator
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).map(l => (
+                          <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Shared bulk locator groups */}
+            {cfg.locators_shared_bulk_groups.length > 0 && (
+              <div className="space-y-2 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Shared bulk meter groups <span className="font-normal opacity-70">(for reference / reporting only — each locator still logs separately)</span></p>
+                {cfg.locators_shared_bulk_groups.map((grp, gi) => (
+                  <div key={grp.id} className="relative">
+                    <MeterGroupChips
+                      label={grp.name}
+                      groupName={grp.name}
+                      members={grp.members}
+                      allEntities={locators}
+                      entityLabel="locator"
+                      canEdit={canEdit}
+                      onGroupNameChange={name => {
+                        const next = [...cfg.locators_shared_bulk_groups];
+                        next[gi] = { ...grp, name };
+                        update({ locators_shared_bulk_groups: next });
+                      }}
+                      onMembersChange={members => {
+                        const next = [...cfg.locators_shared_bulk_groups];
+                        next[gi] = { ...grp, members };
+                        update({ locators_shared_bulk_groups: next });
+                      }}
+                    />
+                    {canEdit && (
+                      <button
+                        onClick={() => update({ locators_shared_bulk_groups: cfg.locators_shared_bulk_groups.filter((_, i) => i !== gi) })}
+                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
+                        aria-label="Remove group"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => update({ locators_shared_bulk_groups: [...cfg.locators_shared_bulk_groups, { id: crypto.randomUUID(), name: `Cluster ${cfg.locators_shared_bulk_groups.length + 1}`, members: [] }] })}>
+                    <Plus className="h-3 w-3" />Add group
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Energy / Power ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Energy sources</span>
+              <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded ml-1">
+                {cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar only' : 'Grid only'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Sun className="h-4 w-4 text-yellow-500" />}
+                title="Solar"
+                subtitle="Photovoltaic energy source"
+                checked={cfg.has_solar}
+                onToggle={v => update({ has_solar: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<GridPylonIcon className="h-4 w-4 text-blue-500" />}
+                title="Grid"
+                subtitle="Utility / mains power supply"
+                checked={cfg.has_grid}
+                onToggle={v => update({ has_grid: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+            {cfg.has_solar && canEdit && (
+              <div className="mt-2">
+                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Input
+                  type="number" step="any" value={cfg.solar_capacity_kw ?? ''}
+                  onChange={e => update({ solar_capacity_kw: e.target.value ? +e.target.value : null })}
+                  placeholder="e.g. 50"
+                  className="h-9 text-sm mt-1 max-w-[180px]"
+                />
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Power meter names are configured in the <strong className="font-medium">Power tab</strong> below.
+            </p>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: NRW / Product ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production & NRW</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<BarChart2 className="h-4 w-4 text-teal-600" />}
+                title="Enable NRW calculation"
+                subtitle="Auto-compute non-revenue water"
+                checked={cfg.nrw_enabled}
+                onToggle={v => update({ nrw_enabled: v })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                title="Billed volume meter"
+                subtitle="Separate meter for billed / sold water"
+                checked={cfg.has_billed_volume_meter}
+                onToggle={v => update({ has_billed_volume_meter: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+          </div>
+
+          {/* Save button */}
+          {canEdit && (
+            <Button onClick={doSave} disabled={saving} className="w-full h-10 bg-teal-700 text-white hover:bg-teal-800 text-sm" data-testid="save-meter-config-btn">
+              {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save meter configuration
+            </Button>
+          )}
+          {!canEdit && (
+            <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 // ─── BackwashModeCard ─────────────────────────────────────────────────────────
 function BackwashModeCard({ plant }: { plant: any }) {
@@ -5219,9 +5956,11 @@ function PowerHistoryChart({ plantId, hasSolar, hasGrid }: { plantId: string; ha
 
 // ─── PowerMetersCard ──────────────────────────────────────────────────────────
 // Lives in Plant Detail > Power tab.
-// Manages: solar meter count + names, grid meter count + names.
-// Config is persisted to plant_power_config (keyed by plant_id).
-// Falls back to localStorage when table doesn't exist yet.
+// Energy sources are now the single source of truth in PlantMeterConfigCard
+// (Trains tab). This card reads from usePlantMeterConfig for hasSolar/hasGrid
+// and only manages the power meter names / count (solar meters, grid meters).
+// The old standalone saveEnergy() path is preserved for back-compat but the
+// canonical save is through the unified meter config.
 
 const POWER_CONFIG_KEY = (plantId: string) => `power_config_${plantId}`;
 
@@ -5230,33 +5969,14 @@ function PowerMetersCard({ plant }: { plant: any }) {
   const { isAdmin, isManager } = useAuth();
   const canEdit = isAdmin || isManager;
 
-  // ── Energy source toggles (moved here from the hero card) ──
-  const [hasSolar, setHasSolar] = useState<boolean>(!!plant.has_solar);
-  const [hasGrid,  setHasGrid]  = useState<boolean>(plant.has_grid !== false);
-  const [solarKw,  setSolarKw]  = useState<string>(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
-  const [energySaving, setEnergySaving] = useState(false);
+  // ── Energy sources — read from unified meter config (Trains tab) ──
+  // These toggles are now the canonical home in PlantMeterConfigCard.
+  // The Power tab shows them as read-only with a link back.
+  const { config: meterConfig } = usePlantMeterConfig(plant.id);
+  const hasSolar = meterConfig.has_solar;
+  const hasGrid  = meterConfig.has_grid;
 
-  // Keep in sync if plant prop refreshes
-  useEffect(() => {
-    setHasSolar(!!plant.has_solar);
-    setHasGrid(plant.has_grid !== false);
-    setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
-  }, [plant.has_solar, plant.has_grid, plant.solar_capacity_kw]);
-
-  const saveEnergy = async () => {
-    setEnergySaving(true);
-    const { error } = await supabase.from('plants').update({
-      has_solar: hasSolar,
-      has_grid: hasGrid,
-      solar_capacity_kw: solarKw ? +solarKw : null,
-    }).eq('id', plant.id);
-    setEnergySaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Energy sources updated');
-    qc.invalidateQueries({ queryKey: ['plants'] });
-  };
-
-  // ── Meter config ──
+  // ── Meter config (names) — still owned here ──
   const { data: savedConfig, isLoading } = useQuery({
     queryKey: ['plant-power-config', plant.id],
     queryFn: async () => {
@@ -5320,9 +6040,8 @@ function PowerMetersCard({ plant }: { plant: any }) {
   return (
     <div className="space-y-3">
 
-      {/* ── Energy Sources ── */}
-      <Card className="p-4 space-y-4">
-        {/* Header */}
+      {/* ── Energy Sources — read-only summary; edit in Trains tab ── */}
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-yellow-500" />
@@ -5332,84 +6051,29 @@ function PowerMetersCard({ plant }: { plant: any }) {
             {hasSolar && hasGrid ? 'Solar + Grid' : hasSolar ? 'Solar only' : hasGrid ? 'Grid only' : 'None'}
           </span>
         </div>
-
-        {/* Toggle cards — grid: single col on mobile, 2-col on sm+ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Solar column */}
-          <div className="space-y-2">
-            <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-              hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'
-            } ${!canEdit ? 'cursor-default' : ''}`}>
-              <div className="flex items-center gap-2.5">
-                <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
-                  <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Solar</div>
-                  <div className="text-[11px] text-muted-foreground">Photovoltaic energy source</div>
-                </div>
-              </div>
-              <Switch
-                checked={hasSolar}
-                onCheckedChange={canEdit ? setHasSolar : undefined}
-                disabled={!canEdit}
-                className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
-                data-testid="energy-power-tab-solar"
-              />
-            </label>
-            {/* Solar capacity — lives directly under Solar, only when solar is on */}
-            {hasSolar && canEdit && (
-              <div>
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
-                <Input
-                  type="number" step="any" value={solarKw}
-                  onChange={e => setSolarKw(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="h-9 text-sm mt-1"
-                  data-testid="energy-power-tab-kw"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Grid column */}
-          <label className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'
-          } ${!canEdit ? 'cursor-default' : ''}`}>
-            <div className="flex items-center gap-2.5">
-              <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasGrid ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-muted'}`}>
-                <GridPylonIcon className={`h-4 w-4 ${hasGrid ? 'text-blue-500' : 'text-muted-foreground'}`} />
-              </div>
-              <div>
-                <div className="text-sm font-medium">Grid</div>
-                <div className="text-[11px] text-muted-foreground">Utility power supply</div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className={`flex items-center gap-2.5 p-3 rounded-lg border ${hasSolar ? 'border-yellow-400/60 bg-yellow-50/60 dark:bg-yellow-950/20 dark:border-yellow-700/40' : 'border-border bg-muted/30'}`}>
+            <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasSolar ? 'bg-yellow-100 dark:bg-yellow-900/40' : 'bg-muted'}`}>
+              <Sun className={`h-4 w-4 ${hasSolar ? 'text-yellow-500' : 'text-muted-foreground'}`} />
             </div>
-            <Switch
-              checked={hasGrid}
-              onCheckedChange={canEdit ? setHasGrid : undefined}
-              disabled={!canEdit}
-              className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 shrink-0"
-              data-testid="energy-power-tab-grid"
-            />
-          </label>
-        </div>
-
-        {/* Save button — full-width row, always at bottom */}
-        {canEdit && (
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              onClick={saveEnergy}
-              disabled={energySaving}
-              className="h-9 px-5 text-sm bg-teal-700 text-white hover:bg-teal-800"
-              data-testid="save-energy-power-tab-btn"
-            >
-              {energySaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Save
-            </Button>
+            <div>
+              <div className="text-sm font-medium">Solar</div>
+              <div className="text-[11px] text-muted-foreground">{hasSolar ? (meterConfig.solar_capacity_kw ? `${meterConfig.solar_capacity_kw} kW` : 'Enabled') : 'Not configured'}</div>
+            </div>
           </div>
-        )}
+          <div className={`flex items-center gap-2.5 p-3 rounded-lg border ${hasGrid ? 'border-blue-400/60 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-700/40' : 'border-border bg-muted/30'}`}>
+            <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${hasGrid ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-muted'}`}>
+              <GridPylonIcon className={`h-4 w-4 ${hasGrid ? 'text-blue-500' : 'text-muted-foreground'}`} />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Grid</div>
+              <div className="text-[11px] text-muted-foreground">{hasGrid ? 'Enabled' : 'Not configured'}</div>
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          To change energy sources, go to the <strong className="font-medium">Trains tab → Meter Configuration</strong>.
+        </p>
       </Card>
 
       {/* ── Meter Configuration ── */}
@@ -5520,3 +6184,4 @@ function PowerMetersCard({ plant }: { plant: any }) {
     </div>
   );
 }
+
