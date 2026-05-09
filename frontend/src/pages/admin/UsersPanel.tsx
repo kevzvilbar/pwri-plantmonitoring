@@ -237,8 +237,8 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
   const awaiting = s.confirmed === false || s.status === 'Pending';
   const access = accessLevelFromRoles(userRoles);
 
-  const displayName = `${s.first_name ?? ''} ${s.last_name ?? ''} ${s.suffix ?? ''}`.trim() || s.username ?? '—';
-  const userLabel = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.username ?? 'user';
+  const displayName = `${s.first_name ?? ''} ${s.last_name ?? ''} ${s.suffix ?? ''}`.trim() || (s.username ?? '—');
+  const userLabel = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user');
 
   const visiblePlants = assignments.slice(0, 3);
   const overflowCount = assignments.length - 3;
