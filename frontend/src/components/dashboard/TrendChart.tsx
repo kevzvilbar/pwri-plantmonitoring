@@ -894,17 +894,45 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsWellReadings,
   });
 
-  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
-    queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('ro_train_readings', 'train_id,recovery_pct,permeate_tds,reading_datetime,plant_id'),
+  // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
+  // Two-step query: resolve train IDs for these plants first, then fetch readings
+  // filtered by train_id. This mirrors the locator_readings fix above.
+  const { data: _roTrainIdsForReadings } = useQuery({
+    queryKey: ['trend-ro-train-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as string[];
+      const { data } = await (supabase.from('ro_trains' as never) as any)
+        .select('id')
+        .in('plant_id', plantIds);
+      return (data ?? []).map((t: any) => t.id as string);
+    },
     enabled: plantIds.length > 0 && needsRoReadings,
   });
 
-  // RO train name lookup
+  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
+    queryKey: ['trend-ro', metric, startKey, endKey, plantIds, _roTrainIdsForReadings],
+    queryFn: async () => {
+      const trainIds = _roTrainIdsForReadings ?? [];
+      if (!trainIds.length) return [];
+      const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
+        .select('train_id,recovery_pct,permeate_tds,reading_datetime')
+        .in('train_id', trainIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
+      if (error) throw new Error(`ro_train_readings: ${error.message}`);
+      return (data ?? []) as any[];
+    },
+    enabled: plantIds.length > 0 && needsRoReadings && (_roTrainIdsForReadings !== undefined),
+  });
+
+  // RO train name lookup — reuses the IDs already fetched above
   const { data: roTrainNames } = useQuery({
     queryKey: ['entity-names-ro-trains', plantIds],
     queryFn: async () => {
-      const { data } = await supabase.from('ro_trains' as never).select('id, name').in('plant_id', plantIds);
+      const { data } = await (supabase.from('ro_trains' as never) as any)
+        .select('id, name')
+        .in('plant_id', plantIds);
       const map = new Map<string, string>();
       (data ?? []).forEach((t: any) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
       return map;
@@ -1357,11 +1385,14 @@ export function TrendChart({
     });
 
     // slotKey: "yyyy-MM-dd HH" — one bucket per calendar hour
+    // ts is computed without mutating dt (dt.setMinutes mutates and returns ms)
     const acc = new Map<string, { sum: number; count: number; ts: number }>();
     readings.forEach((r: any) => {
       const dt = new Date(r.reading_datetime);
       const slotKey = format(dt, 'yyyy-MM-dd HH');
-      const prev = acc.get(slotKey) ?? { sum: 0, count: 0, ts: dt.setMinutes(0, 0, 0) };
+      // Build a clean on-the-hour timestamp without mutating dt
+      const slotTs = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), 0, 0, 0).getTime();
+      const prev = acc.get(slotKey) ?? { sum: 0, count: 0, ts: slotTs };
       acc.set(slotKey, { sum: prev.sum + +r[valueKey], count: prev.count + 1, ts: prev.ts });
     });
 
