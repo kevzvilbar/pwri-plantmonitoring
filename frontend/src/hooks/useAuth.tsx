@@ -28,6 +28,10 @@ interface AuthContextValue {
   /** The currently selected shift operator profile.
    *  Falls back to own profile when no override is set. */
   activeOperator: Profile | null;
+  /** The raw ID stored in Zustand — null means "no override, use own profile".
+   *  Expose this so UI components can mark (you) against the *active* operator
+   *  rather than always the auth-owner (which breaks on shared-email accounts). */
+  activeOperatorId: string | null;
   roles: Role[];
   isAdmin: boolean;
   isManager: boolean;
@@ -114,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeOperator = operatorProfile ?? profile;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, activeOperator, roles, isAdmin, isManager, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, activeOperator, activeOperatorId, roles, isAdmin, isManager, loading, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );
