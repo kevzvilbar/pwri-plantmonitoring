@@ -894,17 +894,45 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsWellReadings,
   });
 
-  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
-    queryKey: ['trend-ro', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('ro_train_readings', 'train_id,recovery_pct,permeate_tds,reading_datetime,plant_id'),
+  // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
+  // Two-step query: resolve train IDs for these plants first, then fetch readings
+  // filtered by train_id. This mirrors the locator_readings fix above.
+  const { data: _roTrainIdsForReadings } = useQuery({
+    queryKey: ['trend-ro-train-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as string[];
+      const { data } = await (supabase.from('ro_trains' as never) as any)
+        .select('id')
+        .in('plant_id', plantIds);
+      return (data ?? []).map((t: any) => t.id as string);
+    },
     enabled: plantIds.length > 0 && needsRoReadings,
   });
 
-  // RO train name lookup
+  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
+    queryKey: ['trend-ro', metric, startKey, endKey, plantIds, _roTrainIdsForReadings],
+    queryFn: async () => {
+      const trainIds = _roTrainIdsForReadings ?? [];
+      if (!trainIds.length) return [];
+      const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
+        .select('train_id,recovery_pct,permeate_tds,reading_datetime')
+        .in('train_id', trainIds)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
+      if (error) throw new Error(`ro_train_readings: ${error.message}`);
+      return (data ?? []) as any[];
+    },
+    enabled: plantIds.length > 0 && needsRoReadings && (_roTrainIdsForReadings !== undefined),
+  });
+
+  // RO train name lookup — reuses the IDs already fetched above
   const { data: roTrainNames } = useQuery({
     queryKey: ['entity-names-ro-trains', plantIds],
     queryFn: async () => {
-      const { data } = await supabase.from('ro_trains' as never).select('id, name').in('plant_id', plantIds);
+      const { data } = await (supabase.from('ro_trains' as never) as any)
+        .select('id, name')
+        .in('plant_id', plantIds);
       const map = new Map<string, string>();
       (data ?? []).forEach((t: any) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
       return map;
@@ -1344,37 +1372,42 @@ export function TrendChart({
     });
   }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric]);
 
-  /** Build hourly drill data — one row per hour (00–23), one column per date.
-   *  Each date becomes its own line so the user can see both the hour-of-day
-   *  pattern AND which specific date each reading belongs to. */
+  /** Build hourly drill data — one row per actual datetime slot, in chronological
+   *  order. Each slot label is "MMM d, ha" (e.g. "May 3, 1pm"). The value is the
+   *  average across all visible trains that have a reading in that exact hour.
+   *  Filtering by train selector controls which trains contribute to the average. */
   const roHourDrillData = useMemo(() => {
-    if (!hasRoDrill || roDrillMode !== 'by-hour') return { rows: [], dateKeys: [] as string[] };
+    if (!hasRoDrill || roDrillMode !== 'by-hour') return [];
+
     const readings = (roReadings ?? []).filter((r: any) => {
       if (selectedTrainIds !== null && r.train_id && !selectedTrainIds.has(r.train_id)) return false;
-      return true;
+      return r[valueKey] != null;
     });
-    // dateKey → hour (0-23) → { sum, count }
-    const acc = new Map<string, Map<number, { sum: number; count: number }>>();
+
+    // slotKey: "yyyy-MM-dd HH" — one bucket per calendar hour
+    // ts is computed without mutating dt (dt.setMinutes mutates and returns ms)
+    const acc = new Map<string, { sum: number; count: number; ts: number }>();
     readings.forEach((r: any) => {
-      const val = r[valueKey];
-      if (val == null) return;
       const dt = new Date(r.reading_datetime);
-      const dk = format(dt, 'yyyy-MM-dd');
-      const hour = dt.getHours();
-      if (!acc.has(dk)) acc.set(dk, new Map());
-      const prev = acc.get(dk)!.get(hour) ?? { sum: 0, count: 0 };
-      acc.get(dk)!.set(hour, { sum: prev.sum + +val, count: prev.count + 1 });
+      const slotKey = format(dt, 'yyyy-MM-dd HH');
+      // Build a clean on-the-hour timestamp without mutating dt
+      const slotTs = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), 0, 0, 0).getTime();
+      const prev = acc.get(slotKey) ?? { sum: 0, count: 0, ts: slotTs };
+      acc.set(slotKey, { sum: prev.sum + +r[valueKey], count: prev.count + 1, ts: prev.ts });
     });
-    const dateKeys = Array.from(acc.keys()).sort();
-    const rows = Array.from({ length: 24 }, (_, h) => {
-      const row: any = { hour: `${String(h).padStart(2, '0')}:00` };
-      dateKeys.forEach((dk) => {
-        const a = acc.get(dk)!.get(h);
-        row[dk] = a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null;
+
+    const dec = metric === 'tds' ? 0 : 1;
+
+    return Array.from(acc.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([, { sum, count, ts }]) => {
+        const dt = new Date(ts);
+        return {
+          // X-axis label: "May 3, 1pm"
+          label: format(dt, 'MMM d, haaa').replace('am', 'am').replace('pm', 'pm'),
+          value: +(sum / count).toFixed(dec),
+        };
       });
-      return row;
-    });
-    return { rows, dateKeys };
   }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
 
   // ── Per-day negative-value index ────────────────────────────────────────
@@ -1705,7 +1738,7 @@ export function TrendChart({
               Daily
             </button>
             <button
-              onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+              onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); }}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 roDrillMode === 'by-train'
@@ -2019,28 +2052,32 @@ export function TrendChart({
               ))}
             </LineChart>
           ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
-            <LineChart data={roHourDrillData.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <LineChart data={roHourDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Hour of day', position: 'insideBottom', offset: -2, fontSize: 9 }} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 9 }}
+                stroke="hsl(var(--muted-foreground))"
+                interval={Math.max(0, Math.floor(roHourDrillData.length / 12) - 1)}
+                angle={-35}
+                textAnchor="end"
+                height={48}
+              />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
-                labelFormatter={(label) => `Hour: ${label}`}
+                formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
+                labelFormatter={(label) => label}
               />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              {roHourDrillData.dateKeys.map((dk, i) => (
-                <Line
-                  key={dk}
-                  type="monotone"
-                  dataKey={dk}
-                  name={fmtDateKey(dk)}
-                  stroke={DRILL_COLORS[i % DRILL_COLORS.length]}
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                />
-              ))}
+              <Line
+                type="monotone"
+                dataKey="value"
+                name={metric === 'tds' ? 'Avg TDS (ppm)' : 'Avg Recovery (%)'}
+                stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
             </LineChart>
           ) : (hasConsumptionDrill && drillMode === 'drilldown') ? (
             <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
