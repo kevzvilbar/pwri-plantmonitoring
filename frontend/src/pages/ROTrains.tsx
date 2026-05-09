@@ -421,7 +421,11 @@ type AfmRow = {
 
 function PretreatmentAndROLog() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  // ── Use activeOperator, not user ──────────────────────────────────────────
+  // On shared-email accounts (e.g. resourcespilipinaswater@gmail.com) user.id
+  // is always the auth-owner (Reynan). activeOperator reflects whoever was
+  // selected on the operator-picker screen or switched via OperatorSwitcher.
+  const { activeOperator } = useAuth();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
@@ -709,7 +713,7 @@ function PretreatmentAndROLog() {
       recovery_pct: recovery,
       rejection_pct: rejection,
       salt_passage_pct: saltPassage,
-      recorded_by: user?.id,
+      recorded_by: activeOperator?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
@@ -782,7 +786,7 @@ function PretreatmentAndROLog() {
       hpp_target_pressure_psi: hppTarget ? +hppTarget : null,
       bag_filters_changed: +bagsChanged || 0,
       remarks: remarks || null,
-      recorded_by: user?.id,
+      recorded_by: activeOperator?.id,
     });
     if (pretreatError) { toast.error(`Pre-treatment error: ${pretreatError.message}`); return; }
 
@@ -2145,10 +2149,10 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
 
 function CIPLog() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  // ── Use activeOperator, not user — same shared-email fix as PretreatmentAndROLog
+  const { activeOperator } = useAuth();
   const [plantId, setPlantId] = useState('');
   const [trainId, setTrainId] = useState('');
-  const [v, setV] = useState({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
 
   const { data: trains } = useQuery({
     queryKey: ['cip-trains', plantId],
@@ -2221,7 +2225,7 @@ function CIPLog() {
       start_datetime: v.start ? new Date(v.start).toISOString() : null,
       end_datetime:   v.end   ? new Date(v.end).toISOString()   : null,
       sls_g: v.sls ? +v.sls : null, hcl_l: v.hcl ? +v.hcl : null, caustic_soda_kg: v.caustic ? +v.caustic : null,
-      conducted_by: user?.id, remarks: v.remarks || null,
+      conducted_by: activeOperator?.id, remarks: v.remarks || null,
     });
     if (error) { toast.error(error.message); return; }
     toast.success('CIP logged'); qc.invalidateQueries();
@@ -2568,7 +2572,8 @@ function ChemCard({
 
 function ChemDosingForm() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  // ── Use activeOperator, not user — same shared-email fix as PretreatmentAndROLog
+  const { activeOperator } = useAuth();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -2631,7 +2636,7 @@ function ChemDosingForm() {
       anti_scalant_l: +v.anti_scalant_l || 0, soda_ash_kg: +v.soda_ash_kg || 0,
       free_chlorine_reagent_pcs: +v.free_chlorine_reagent_pcs || 0,
       product_water_free_cl_ppm: avgResidual,
-      calculated_cost: +cost.toFixed(2), recorded_by: user?.id,
+      calculated_cost: +cost.toFixed(2), recorded_by: activeOperator?.id,
     }).select('id').single();
     if (error || !inserted) { toast.error(error?.message ?? 'Save failed'); return; }
     if (samples.length > 0) {
@@ -2887,7 +2892,8 @@ function ChemInventory() {
 
 function AddStockDialog() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  // ── Use activeOperator, not user — same shared-email fix
+  const { activeOperator } = useAuth();
   const [open, setOpen] = useState(false);
   const [plantId, setPlantId] = useState('');
   const [name, setName] = useState('');
@@ -2905,7 +2911,7 @@ function AddStockDialog() {
     if (!plantId || !finalName || !qty || !finalUnit) { toast.error('Plant, chemical, unit and quantity required'); return; }
     const { error } = await supabase.from('chemical_deliveries').insert({
       plant_id: plantId, chemical_name: finalName, quantity: +qty, unit: finalUnit,
-      supplier: supplier || null, delivery_date: date, remarks: remarks || null, recorded_by: user?.id,
+      supplier: supplier || null, delivery_date: date, remarks: remarks || null, recorded_by: activeOperator?.id,
     });
     if (error) { toast.error(error.message); return; }
     const { data: existing } = await supabase.from('chemical_inventory')
