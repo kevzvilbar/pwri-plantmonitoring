@@ -5,6 +5,7 @@ import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ChevronsDown, ChevronsUp, BarChart2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -17,6 +18,25 @@ import {
   ChartMetric, DashboardViewMode, RANGE_DAYS, RangeKey, TREND_Y_LABEL,
 } from './types';
 import { useAppStore } from '@/store/appStore';
+
+// ─── Drill mode ──────────────────────────────────────────────────────────────
+type DrillMode = 'default' | 'drilldown' | 'drillup';
+
+// Palette for per-locator lines in drill views (cycles if more locators than colors)
+const DRILL_COLORS = [
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  'hsl(var(--chart-6))',
+  '#f59e0b',
+  '#8b5cf6',
+  '#ec4899',
+  '#14b8a6',
+  '#f97316',
+  '#84cc16',
+];
 
 // ─── helpers shared by DataSummaryPopup ──────────────────────────────────────
 
@@ -676,6 +696,10 @@ export function TrendChart({
   // Toggle for the inline data summary table
   const [showSummary, setShowSummary] = useState(false);
 
+  // Drill mode: 'default' = daily sum, 'drilldown' = per-locator daily, 'drillup' = monthly per-locator
+  const [drillMode, setDrillMode] = useState<DrillMode>('default');
+  const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
+
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -1111,6 +1135,73 @@ export function TrendChart({
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
       wellNames, locatorNames, productMeterNames, plantNames]);
 
+  // ── Drill-mode locator data ───────────────────────────────────────────────
+  // drillEntities: sorted list of {id, label, color} for all active locators.
+  const drillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    if (!hasConsumptionDrill) return [];
+    const ids = Array.from(new Set((locReadings ?? []).map((r: any) => r.locator_id).filter(Boolean)));
+    return ids
+      .map((id, i) => ({
+        id,
+        label: locatorNames?.get(id) ?? `Locator ${id.slice(-4)}`,
+        color: DRILL_COLORS[i % DRILL_COLORS.length],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [hasConsumptionDrill, locReadings, locatorNames]);
+
+  // drilldownData: one row per day, each locator gets its own key (locator id → delta)
+  const drilldownData = useMemo(() => {
+    if (!hasConsumptionDrill || drillMode !== 'drilldown') return [];
+    // Build per-entity daily deltas using computeEntityDeltas approach
+    // We re-use the existing buildEntityPivot which already handles meter replacements
+    const sorted = [...(locReadings ?? [])].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    if (dateKeys.length === 0) return [];
+    const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
+    return allDates.map((dateKey) => {
+      const row: any = { date: fmtDateKey(dateKey), isoDate: dateKey };
+      drillEntities.forEach(({ id }) => {
+        row[id] = pivot.get(dateKey)?.get(id) ?? null;
+      });
+      // total for tooltip reference
+      row._total = drillEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
+      return row;
+    });
+  }, [hasConsumptionDrill, drillMode, locReadings, drillEntities]);
+
+  // drillupData: one row per month, each locator gets monthly sum
+  const drillupData = useMemo(() => {
+    if (!hasConsumptionDrill || drillMode !== 'drillup') return [];
+    const sorted = [...(locReadings ?? [])].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    // Group by month (yyyy-MM)
+    const byMonth = new Map<string, Map<string, number>>();
+    dateKeys.forEach((dk) => {
+      const monthKey = dk.slice(0, 7); // 'yyyy-MM'
+      if (!byMonth.has(monthKey)) byMonth.set(monthKey, new Map());
+      drillEntities.forEach(({ id }) => {
+        const v = pivot.get(dk)?.get(id) ?? 0;
+        byMonth.get(monthKey)!.set(id, (byMonth.get(monthKey)!.get(id) ?? 0) + v);
+      });
+    });
+    const monthKeys = Array.from(byMonth.keys()).sort();
+    return monthKeys.map((mk) => {
+      const row: any = {
+        date: format(new Date(`${mk}-01T00:00:00`), 'MMM yyyy'),
+        isoDate: `${mk}-01`,
+      };
+      drillEntities.forEach(({ id }) => {
+        row[id] = byMonth.get(mk)!.get(id) ?? null;
+      });
+      row._total = drillEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
+      return row;
+    });
+  }, [hasConsumptionDrill, drillMode, locReadings, drillEntities]);
+
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
   // the fields that are actually plotted for this metric and had a negative
@@ -1348,6 +1439,55 @@ export function TrendChart({
         >
           Data Summary
         </button>
+
+        {/* Drill controls — only for charts that have consumption data */}
+        {hasConsumptionDrill && (
+          <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Cons.:</span>
+            <button
+              onClick={() => setDrillMode(drillMode === 'drillup' ? 'default' : 'drillup')}
+              data-testid={`drill-up-${metric}`}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                drillMode === 'drillup'
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Drill Up — monthly consumption per locator"
+            >
+              <ChevronsUp className="h-3 w-3" />
+              Monthly
+            </button>
+            <button
+              data-testid={`drill-default-${metric}`}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                drillMode === 'default'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Default — daily total consumption"
+              onClick={() => setDrillMode('default')}
+            >
+              <BarChart2 className="h-3 w-3" />
+              Daily
+            </button>
+            <button
+              onClick={() => setDrillMode(drillMode === 'drilldown' ? 'default' : 'drilldown')}
+              data-testid={`drill-down-${metric}`}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                drillMode === 'drilldown'
+                  ? 'bg-chart-2 text-white border-chart-2'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Drill Down — daily consumption per locator"
+            >
+              <ChevronsDown className="h-3 w-3" />
+              Per Locator
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
@@ -1378,7 +1518,7 @@ export function TrendChart({
             </div>
           </div>
         )}
-        {!queryError && !isFetching && chartData.length === 0 && (
+        {!queryError && !isFetching && chartData.length === 0 && drilldownData.length === 0 && drillupData.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
@@ -1389,7 +1529,51 @@ export function TrendChart({
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
-          {metric === 'nrw' ? (
+          {(hasConsumptionDrill && drillMode === 'drilldown') ? (
+            <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {drillEntities.map(({ id, label, color }) => (
+                <Line
+                  key={id}
+                  type="monotone"
+                  dataKey={id}
+                  name={label}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+            </ComposedChart>
+          ) : (hasConsumptionDrill && drillMode === 'drillup') ? (
+            <ComposedChart data={drillupData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {drillEntities.map(({ id, label, color }) => (
+                <Bar
+                  key={id}
+                  dataKey={id}
+                  name={label}
+                  fill={color}
+                  stackId="monthly"
+                  maxBarSize={48}
+                />
+              ))}
+            </ComposedChart>
+          ) : metric === 'nrw' ? (
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
