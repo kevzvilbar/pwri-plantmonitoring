@@ -506,7 +506,7 @@ async function insertLocatorReadings(
         updatePayload.current_reading = csvCurLoc;
         updatePayload.previous_reading = csvPrevLoc;
         // Bug 2 fix: always persist daily_volume (explicit or computed)
-        updatePayload.daily_volume = r.daily_volume?.trim() ? +r.daily_volume : (csvPrevLoc != null ? csvCurLoc - csvPrevLoc : null);
+        updatePayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (csvPrevLoc != null ? Math.max(0, csvCurLoc - csvPrevLoc) : null);
       }
       const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
@@ -531,7 +531,7 @@ async function insertLocatorReadings(
       insertPayload.current_reading = csvCurLoc2;
       insertPayload.previous_reading = csvPrevLoc2;
       // Bug 2 fix: always persist daily_volume (explicit or computed from delta)
-      insertPayload.daily_volume = r.daily_volume?.trim() ? +r.daily_volume : (csvPrevLoc2 != null ? csvCurLoc2 - csvPrevLoc2 : null);
+      insertPayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (csvPrevLoc2 != null ? Math.max(0, csvCurLoc2 - csvPrevLoc2) : null);
     }
     const { error } = await supabase.from('locator_readings').insert(insertPayload);
     if (error) errors.push(error.message);
@@ -607,10 +607,12 @@ async function insertWellReadings(
       continue;
     }
 
-    // Bug 1 fix: compute and persist daily_volume so Dashboard aggregation works
+    // Compute and persist daily_volume so Dashboard/TrendChart aggregation works.
+    // Clamp to 0: a negative delta (meter rollback) must not be stored as negative
+    // daily_volume because TrendChart uses daily_volume directly when it is present.
     const csvCur = +r.current_reading;
     const csvPrev = r.previous_reading ? +r.previous_reading : null;
-    const csvDailyVol = csvPrev != null ? csvCur - csvPrev : null;
+    const csvDailyVol = csvPrev != null ? Math.max(0, csvCur - csvPrev) : null;
 
     const { error } = await supabase.from('well_readings').insert({
       well_id: wellId,
@@ -963,17 +965,32 @@ function LocatorReadingForm() {
     enabled: !!plantId,
   });
 
+  // BUG FIX: locator_readings has NO plant_id column — filtering by it returns 0 rows.
+  // Two-step query: resolve active locator IDs for this plant, then fetch readings
+  // by locator_id. This mirrors the fix already applied in TrendChart and Dashboard.
+  const { data: _locatorIds } = useQuery({
+    queryKey: ['op-locator-ids', plantId],
+    queryFn: async () => {
+      if (!plantId) return [] as string[];
+      const { data } = await supabase
+        .from('locators').select('id').eq('plant_id', plantId).eq('status', 'Active');
+      return (data ?? []).map((l: any) => l.id as string);
+    },
+    enabled: !!plantId,
+  });
+
   const { data: recentReadings } = useQuery({
     queryKey: ['op-loc-recent', plantId],
     queryFn: async () => {
-      if (!plantId) return [];
+      const locatorIds = _locatorIds ?? [];
+      if (!locatorIds.length) return [];
       const start = new Date(); start.setDate(start.getDate() - 30);
       return (await supabase.from('locator_readings')
-        .select('*').eq('plant_id', plantId)
+        .select('*').in('locator_id', locatorIds)
         .gte('reading_datetime', start.toISOString())
         .order('reading_datetime', { ascending: false })).data ?? [];
     },
-    enabled: !!plantId,
+    enabled: !!plantId && (_locatorIds !== undefined),
   });
 
   const { latestByLocator, todayByLocator, avgByLocator } = useMemo(() => {
@@ -1120,7 +1137,9 @@ function LocatorRow({
       : {
           locator_id: locator.id, plant_id: plantId,
           current_reading: cur, previous_reading: previous,
-          daily_volume: dailyVol ?? null,   // Bug 2 fix: persist delta for Dashboard consumption total
+          // Clamp to 0: a negative raw delta (meter rollback) should never be stored as
+          // a negative daily_volume — TrendChart uses this field directly when present.
+          daily_volume: dailyVol != null ? Math.max(0, dailyVol) : null,
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         };
@@ -1386,7 +1405,9 @@ function WellRow({
     const payload: any = {
       well_id: well.id, plant_id: plantId,
       current_reading: cur, previous_reading: previousMeter,
-      daily_volume: dailyVol ?? null,       // Bug 1 fix: persist computed delta so Dashboard can sum it
+      // Clamp to 0: a negative raw delta (meter rollback) should never be stored as a
+      // negative daily_volume — TrendChart uses this field directly when it is non-null.
+      daily_volume: dailyVol != null ? Math.max(0, dailyVol) : null,
       power_meter_reading: powerReading ? +powerReading : null,
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
       reading_datetime: new Date(customDt).toISOString(),
@@ -3485,17 +3506,33 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     const dtIso = new Date(editRow.datetime).toISOString();
 
     if (module === 'well') {
+      // Recalculate daily_volume so TrendChart/Dashboard totals stay correct after edits.
+      const wellRow = rows?.find((r: any) => r.id === editRow.id);
+      const wellPrev = wellRow?.previous_reading ?? null;
+      const wellCur = +editRow.value;
+      const wellDailyVol = editRow.isMeterReplacement
+        ? 0
+        : wellPrev != null ? wellCur - wellPrev : null;
       ({ error } = await (supabase.from('well_readings') as any).update({
-        current_reading: +editRow.value,
+        current_reading: wellCur,
         power_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
+        daily_volume: wellDailyVol,  // keep daily_volume in sync
       }).eq('id', editRow.id));
     } else if (module === 'locator') {
+      // Recalculate daily_volume so TrendChart/Dashboard always use an up-to-date delta.
+      const locRow = rows?.find((r: any) => r.id === editRow.id);
+      const prevReading = locRow?.previous_reading ?? null;
+      const newCur = +editRow.value;
+      const newDailyVol = editRow.isMeterReplacement
+        ? 0
+        : prevReading != null ? Math.max(0, newCur - prevReading) : null;
       ({ error } = await (supabase.from('locator_readings') as any).update({
-        current_reading: +editRow.value,
+        current_reading: newCur,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
+        daily_volume: newDailyVol,  // keep daily_volume in sync
       }).eq('id', editRow.id));
     } else if (module === 'power') {
       ({ error } = await (supabase.from('power_readings') as any).update({
