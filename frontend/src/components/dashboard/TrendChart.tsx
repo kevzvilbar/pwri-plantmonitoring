@@ -969,10 +969,14 @@ export function TrendChart({
         }
 
         if (dailyVolumeField && r[dailyVolumeField] != null) {
-          const rawDelta = +r[dailyVolumeField];
-          const delta    = Math.max(0, rawDelta);
+          const storedVol = +r[dailyVolumeField];
+          const delta     = Math.max(0, storedVol);
           lastReading.set(entityKey, +r.current_reading);
-          return { r, delta, rawDelta, isMeterReplacement: false };
+          // daily_volume is the operator-recorded value — do NOT pass it as a
+          // rawDelta that triggers the negative-reading warning. The value is
+          // already the ground truth; clamping it to 0 is the correct display.
+          // Return rawDelta = null so accumulateRaw never fires for this path.
+          return { r, delta, rawDelta: null, isMeterReplacement: false };
         }
 
         if (!lastReading.has(entityKey)) {
@@ -1180,16 +1184,9 @@ export function TrendChart({
     const chartRow = chartData.find((d) => d.date === label);
     const replacements: string[] = chartRow?._meterReplacements ?? [];
 
-    // Build a quick lookup from dataKey → rawValue for affected fields
-    const rawOverride = new Map(warnings.map((w) => {
-      // Match label back to dataKey by finding the payload entry with the same name
-      const entry = payload.find((p: any) => p.name === w.label);
-      return [entry?.dataKey, w.rawValue];
-    }));
-
-    // Warnings that are NOT covered by a meter replacement (genuine negatives)
-    // A warning is "covered" if the value is 0 on the chart (i.e. clamped) AND
-    // there are replacements on this day — the zero was caused by the replacement.
+    // Warnings that are NOT covered by a meter replacement (genuine negatives).
+    // A warning is "covered" if there are replacements on this day — the zero
+    // was caused by the replacement, not a true data anomaly.
     const genuineNegatives = replacements.length > 0
       ? warnings.filter((w) => {
           const entry = payload.find((p: any) => p.name === w.label);
@@ -1212,26 +1209,19 @@ export function TrendChart({
       }}>
         <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
         {payload.map((entry: any) => {
-          const override = rawOverride.get(entry.dataKey);
-          // On replacement days the chart plots 0 (adjusted/offset value).
-          // Show 0 — which IS the correct adjusted reading — not the raw negative.
-          const displayValue = (override !== undefined && replacements.length === 0)
-            ? override
-            : entry.value;
-          const isNegative = displayValue != null && displayValue < 0;
+          // Always display the actual chart value (already clamped to ≥ 0 at
+          // the data layer). Never replace it with a raw negative partial delta
+          // from a single locator — entry.value is the correct aggregated total.
+          const displayValue = entry.value;
           return (
             <p key={entry.dataKey} style={{
               margin: '1px 0',
               color: entry.color ?? entry.stroke,
             }}>
               {entry.name}:{' '}
-              <span style={isNegative ? { fontWeight: 600 } : undefined}>
+              <span>
                 {displayValue != null ? displayValue.toLocaleString() : '—'}
               </span>
-              {/* Only show "chart: 0" hint when value was clamped AND it's a genuine negative */}
-              {override !== undefined && replacements.length === 0 && (
-                <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>(chart: 0)</span>
-              )}
             </p>
           );
         })}
