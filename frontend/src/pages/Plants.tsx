@@ -555,8 +555,8 @@ function PlantDetail({ plantId }: { plantId: string }) {
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <BackwashModeCard plant={plant} />
           <PlantComponentTypeCard plant={plant} />
+          <BackwashModeCard plant={plant} />
         </div>
         <TrainsList plantId={plantId} />
       </div>
@@ -3230,9 +3230,9 @@ function PlantComponentTypeCard({ plant }: { plant: any }) {
   const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
   const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
 
-  // Independent collapse state for each row
-  const [mediaOpen, setMediaOpen]   = useState(true);
-  const [filterOpen, setFilterOpen] = useState(true);
+  // Independent collapse state for each row — collapsed by default
+  const [mediaOpen, setMediaOpen]   = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const setMediaType = (v: 'AFM' | 'MMF') => { setMediaTypeState(v); setEditing(true); };
   const setFilterType = (v: 'Cartridge Filter' | 'Bag Filter') => { setFilterTypeState(v); setEditing(true); };
@@ -4279,22 +4279,22 @@ function TrainsList({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center gap-2">
+      <div className="flex justify-between items-center gap-2 pt-1">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           RO Trains{' '}
           <span className="font-normal">
             ({trains ? `${trains.filter((t: any) => deriveTrainStatus(t) === 'Running').length}/${trains.length}` : '0/0'})
           </span>
         </h3>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {isManager && (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setShowAddTrain(true)}>
-              <Plus className="h-3 w-3 mr-1" />Add
+            <Button size="sm" variant="outline" className="h-8 px-3 text-xs gap-1.5" onClick={() => setShowAddTrain(true)}>
+              <Plus className="h-3.5 w-3.5" />Add
             </Button>
           )}
           {isAdmin && (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setShowTrainCsv(true)}>
-              <Upload className="h-3 w-3" />
+            <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => setShowTrainCsv(true)} title="Import CSV">
+              <Upload className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
