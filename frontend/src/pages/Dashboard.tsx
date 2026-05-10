@@ -941,10 +941,10 @@ export default function Dashboard() {
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
           value={`₱${fmtNum(powerCost, 0)}`}
-          onClick={handleMetricClick('powerCost', 'Power Cost Trend')} />
+          onClick={handleMetricClick('productionCost', 'Production Cost Trend')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
           value={`₱${fmtNum(chemCost, 0)}`}
-          onClick={handleMetricClick('chemCost', 'Chemical Cost Trend')} />
+          onClick={handleMetricClick('productionCost', 'Production Cost Trend')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
           trend={dKwh} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
@@ -955,8 +955,6 @@ export default function Dashboard() {
       <ClusterCharts
         metrics={[
           ...COST_CHART_METRICS,
-          { metric: 'powerCost', title: 'Power Cost Trend' },
-          { metric: 'chemCost',  title: 'Chemical Cost Trend' },
         ]}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
