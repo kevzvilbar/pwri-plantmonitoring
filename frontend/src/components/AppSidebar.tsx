@@ -4,8 +4,8 @@ import {
   Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -111,6 +111,11 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+
+        {/* Toggle button — pinned to the sidebar footer, always visible */}
+        <SidebarFooter className="p-2 border-t border-sidebar-border">
+          <SidebarTrigger className="w-full" />
+        </SidebarFooter>
     </Sidebar>
   );
 }
