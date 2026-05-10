@@ -264,6 +264,16 @@ function OverviewTable({
       { key: 'unitCost', label: '₱/m³', fmt: (d) => d.unitCost != null ? '₱' + d.unitCost : '—' },
     );
   }
+  if (metric === 'chemCost') {
+    cols.push(
+      { key: 'chemCost', label: 'Chemical Cost (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
+    );
+  }
+  if (metric === 'powerCost') {
+    cols.push(
+      { key: 'powerCost', label: 'Power Cost (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -389,6 +399,8 @@ function DataSummaryPopup({
     metric === 'production' || metric === 'nrw' ? 'Prod. vs Consum.'
     : metric === 'pv' ? 'Prod. vs Power'
     : metric === 'productionCost' ? 'Cost Overview'
+    : metric === 'chemCost' ? 'Chemical Cost'
+    : metric === 'powerCost' ? 'Power Cost'
     : 'Overview';
 
   const prodTabLabel =
@@ -742,7 +754,7 @@ export function TrendChart({
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
-  const needsCostReadings = metric === 'productionCost';
+  const needsCostReadings = metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost';
   // needsPermeateProduction: we may need permeate_meter_delta from ro_train_readings
   // as the production source for plants where permeate_is_production = true.
   const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv';
@@ -1635,6 +1647,12 @@ export function TrendChart({
         { rawField: 'chemCost',  chartField: 'chemCost',  label: 'Chemical (₱)' },
         { rawField: 'totalCost', chartField: 'totalCost', label: 'Total (₱)' },
       ],
+      chemCost: [
+        { rawField: 'chemCost', chartField: 'chemCost', label: 'Chemical Cost (₱)' },
+      ],
+      powerCost: [
+        { rawField: 'powerCost', chartField: 'powerCost', label: 'Power Cost (₱)' },
+      ],
     };
 
     const fields = checks[metric] ?? [];
@@ -2275,7 +2293,7 @@ export function TrendChart({
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
               <div className="text-[11px] mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power + chemicals (production_costs rollup)' : 'wells'}.
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost' ? 'power + chemicals (production_costs rollup)' : 'wells'}.
               </div>
             </div>
           </div>
@@ -2388,6 +2406,24 @@ export function TrendChart({
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3, fill: "#16a34a" }} name="NRW %" />
             </ComposedChart>
+          ) : metric === 'chemCost' ? (
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip content={<NegativeAwareTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--highlight))' }} name="Chemical Cost (₱)" connectNulls />
+            </LineChart>
+          ) : metric === 'powerCost' ? (
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <Tooltip content={<NegativeAwareTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--chart-6))' }} name="Power Cost (₱)" connectNulls />
+            </LineChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
             // ₱/m³ unit cost on the right. Unit cost lives in a different
