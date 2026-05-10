@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Download, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
 
 import { StatusPill } from '@/components/StatusPill';
 import { ExportButton } from '@/components/ExportButton';
@@ -507,14 +507,29 @@ export default function Costs() {
 
 function ChemicalPrices() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
+  const canEdit = isManager || isAdmin;
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
+
+  // ── Add form state ───────────────────────────────────────────────────────────
   const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+
+  // ── Inline edit state ────────────────────────────────────────────────────────
+  const [editId, setEditId]     = useState<string | null>(null);
+  const [editV, setEditV]       = useState({ chemical_name: '', unit_price: '', effective_date: '' });
+  const [saving, setSaving]     = useState(false);
+
+  // ── Delete confirm state ─────────────────────────────────────────────────────
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const { data } = useQuery({
     queryKey: ['chem-prices'],
     queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
   });
+
+  // ── Add new price ────────────────────────────────────────────────────────────
   const submit = async () => {
     const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
     const finalUnit = v.unit === '__custom__' ? v.customUnit.trim() : v.unit;
@@ -527,9 +542,61 @@ function ChemicalPrices() {
     toast.success('Price added');
     setV({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
     qc.invalidateQueries({ queryKey: ['chem-prices'] });
+    qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
   };
+
+  // ── Start editing a row ──────────────────────────────────────────────────────
+  const startEdit = (p: any) => {
+    setDeleteId(null);
+    setEditId(p.id);
+    setEditV({
+      chemical_name: p.chemical_name ?? '',
+      unit_price: String(p.unit_price ?? ''),
+      effective_date: p.effective_date ?? '',
+    });
+  };
+
+  const cancelEdit = () => setEditId(null);
+
+  // ── Save edited row ──────────────────────────────────────────────────────────
+  const saveEdit = async () => {
+    if (!editId) return;
+    const price = parseFloat(editV.unit_price);
+    if (!editV.chemical_name.trim() || isNaN(price) || price < 0 || !editV.effective_date) {
+      toast.error('Chemical name, price (≥ 0) and date are required');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('chemical_prices').update({
+      chemical_name:  editV.chemical_name.trim(),
+      unit_price:     price,
+      effective_date: editV.effective_date,
+      updated_by:     user?.id,
+    }).eq('id', editId);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Price updated');
+    setEditId(null);
+    qc.invalidateQueries({ queryKey: ['chem-prices'] });
+    qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
+  };
+
+  // ── Delete a row ─────────────────────────────────────────────────────────────
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    const { error } = await supabase.from('chemical_prices').delete().eq('id', deleteId);
+    setDeleting(false);
+    setDeleteId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Price record deleted');
+    qc.invalidateQueries({ queryKey: ['chem-prices'] });
+    qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
+  };
+
   return (
     <div className="space-y-3">
+      {/* ── Add price form ─────────────────────────────────────────────────── */}
       <Card className="p-3 space-y-2">
         <h4 className="text-sm font-semibold">Add price</h4>
         <div className="grid grid-cols-2 gap-2">
@@ -568,23 +635,145 @@ function ChemicalPrices() {
             <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} />
           </div>
         </div>
-        <Button onClick={submit} className="w-full" size="sm">Add price</Button>
+        <Button onClick={submit} className="w-full bg-teal-700 hover:bg-teal-800 text-white" size="sm">Add price</Button>
       </Card>
+
+      {/* ── Price history table ────────────────────────────────────────────── */}
       <Card className="p-3">
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-semibold">Price history</h4>
           <ExportButton table="chemical_prices" label="Export" />
         </div>
-        <div className="grid grid-cols-[1fr_100px_90px] gap-2 text-[10px] text-muted-foreground pb-1 border-b">
-          <div>Chemical</div><div className="text-right">Price</div><div className="text-right">Date</div>
+
+        {/* Column headers */}
+        <div className={`grid gap-2 text-[10px] text-muted-foreground pb-1 border-b ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
+          <div>Chemical</div>
+          <div className="text-right">Price</div>
+          <div className="text-right">Date</div>
+          {canEdit && <div />}
         </div>
-        {data?.map((p: any) => (
-          <div key={p.id} className="grid grid-cols-[1fr_100px_90px] gap-2 text-xs py-1.5 border-b last:border-0 items-center">
-            <span>{p.chemical_name}</span>
-            <span className="font-mono-num font-semibold text-right">₱{(+p.unit_price).toFixed(2)}</span>
-            <span className="text-muted-foreground font-mono-num text-right">{p.effective_date}</span>
-          </div>
-        ))}
+
+        {/* Rows */}
+        {data?.map((p: any) => {
+          const isEditing = editId === p.id;
+          const isPendingDelete = deleteId === p.id;
+
+          // ── Inline edit row ──────────────────────────────────────────────
+          if (isEditing) {
+            return (
+              <div key={p.id} className="py-2 border-b last:border-0 space-y-2">
+                <div className="grid grid-cols-[1fr_90px_80px] gap-2 items-start">
+                  <Input
+                    className="h-7 text-xs"
+                    value={editV.chemical_name}
+                    onChange={(e) => setEditV({ ...editV, chemical_name: e.target.value })}
+                    placeholder="Chemical name"
+                  />
+                  <Input
+                    className="h-7 text-xs font-mono-num"
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editV.unit_price}
+                    onChange={(e) => setEditV({ ...editV, unit_price: e.target.value })}
+                    placeholder="Price"
+                  />
+                  <Input
+                    className="h-7 text-xs"
+                    type="date"
+                    value={editV.effective_date}
+                    onChange={(e) => setEditV({ ...editV, effective_date: e.target.value })}
+                  />
+                </div>
+                <div className="flex gap-1.5 justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={cancelEdit}
+                    disabled={saving}
+                  >
+                    <X className="h-3 w-3" /> Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1 bg-teal-700 hover:bg-teal-800 text-white"
+                    onClick={saveEdit}
+                    disabled={saving}
+                  >
+                    {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+
+          // ── Delete confirm row ───────────────────────────────────────────
+          if (isPendingDelete) {
+            return (
+              <div key={p.id} className="py-2 border-b last:border-0">
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5 space-y-2">
+                  <p className="text-xs text-destructive font-medium">
+                    Delete <strong>{p.chemical_name}</strong> — ₱{(+p.unit_price).toFixed(2)} ({p.effective_date})?
+                  </p>
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs flex-1"
+                      onClick={() => setDeleteId(null)}
+                      disabled={deleting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs flex-1 gap-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                      onClick={confirmDelete}
+                      disabled={deleting}
+                    >
+                      {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // ── Normal read row ──────────────────────────────────────────────
+          return (
+            <div key={p.id} className={`grid gap-2 text-xs py-1.5 border-b last:border-0 items-center ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
+              <span>{p.chemical_name}</span>
+              <span className="font-mono-num font-semibold text-right">₱{(+p.unit_price).toFixed(2)}</span>
+              <span className="text-muted-foreground font-mono-num text-right">{p.effective_date}</span>
+              {canEdit && (
+                <div className="flex gap-1 justify-end">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    title="Edit"
+                    onClick={() => startEdit(p)}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    title="Delete"
+                    onClick={() => { setEditId(null); setDeleteId(p.id); }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
         {!data?.length && <p className="text-xs text-muted-foreground py-2 text-center">No prices yet</p>}
       </Card>
     </div>
