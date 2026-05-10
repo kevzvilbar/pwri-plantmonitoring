@@ -931,8 +931,8 @@ export function TrendChart({
       // If the DB hasn't been migrated yet those columns don't exist and Supabase
       // returns a schema-cache error — fall back to the legacy select so the chart
       // never breaks on un-migrated deployments.
-      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,permeate_production_date,reading_datetime';
-      const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime';
+      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,permeate_production_date,reading_datetime,is_meter_replacement';
+      const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime,is_meter_replacement';
       const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date'];
       const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
 
