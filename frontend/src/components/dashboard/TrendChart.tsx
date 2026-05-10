@@ -1079,7 +1079,16 @@ export function TrendChart({
       readings: any[],
       entityKeyField: string,
       dailyVolumeField: string | null,
+      options?: { skipAfterRepl?: boolean },
     ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
+      // skipAfterRepl=true: the replacement row already sets lastReading to the
+      // new meter's starting value, so the very next reading can diff against it
+      // normally (e.g. RO permeate: repl=227,368 → next=228,106 → delta=737.7).
+      // skipAfterRepl=false (default): the row immediately after a replacement is
+      // zeroed as a safety net for meter types where the replacement reading may
+      // not be a reliable baseline (locators, wells, product meters).
+      const skipAfterRepl = options?.skipAfterRepl ?? false;
+
       const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
@@ -1093,7 +1102,7 @@ export function TrendChart({
 
         if (isMR) {
           lastReading.set(entityKey, +r.current_reading);
-          afterRepl.add(entityKey);
+          if (!skipAfterRepl) afterRepl.add(entityKey);
           return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
         }
 
@@ -1233,18 +1242,33 @@ export function TrendChart({
           row._permeateSourcePlants.add(plantId);
         });
       } else {
-        // ── FALLBACK PATH (columns still NULL) ───────────────────────────────
+        // ── FALLBACK PATH (permeate_meter_delta columns still NULL) ──────────
+        // Use computeEntityDeltas on the raw cumulative permeate_meter odometer.
+        //
+        // CRITICAL: do NOT pre-filter out is_meter_replacement rows before
+        // passing to computeEntityDeltas. If removed, lastReading for that train
+        // stays at the old meter value. The next real reading on the new meter
+        // (e.g. 227,368) then diffs against the old value (72,691) producing a
+        // massive false spike (~154K m3).
+        //
+        // Instead, include replacement rows with current_reading = permeate_meter
+        // (the new meter start value). computeEntityDeltas sees isMR=true and
+        // resets lastReading to the new baseline. skipAfterRepl=true means the
+        // immediately following reading diffs against that new baseline normally
+        // (e.g. Mar 5: 228,106 − 227,368 = 737.7) instead of being zeroed.
         const permeateRoReadings = (roReadings ?? [])
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
-            // Respect is_meter_replacement — skip flagged rows (zeroes their delta)
             return plantId && permeateIsProductionPlants.has(plantId)
-              && r.permeate_meter != null && !r.is_meter_replacement;
+              && r.permeate_meter != null;
+            // NOTE: is_meter_replacement rows are intentionally kept here
           })
           .map((r: any) => ({ ...r, current_reading: +r.permeate_meter }));
 
-        computeEntityDeltas(permeateRoReadings, 'train_id', null).forEach(({ r, delta }) => {
+        computeEntityDeltas(permeateRoReadings, 'train_id', null, { skipAfterRepl: true }).forEach(({ r, delta, isMeterReplacement }) => {
+          // replacement row and first post-replacement row both return delta=0
           if (delta === 0) return;
+          if (isMeterReplacement) return;
           const plantId = _trainPlantMap.get(r.train_id)!;
           const dt = new Date(r.reading_datetime);
           const key = format(dt, 'MMM d');
