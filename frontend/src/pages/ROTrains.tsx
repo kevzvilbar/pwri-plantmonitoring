@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, Download, FileText, AlertCircle, Loader2, X, ChevronDown } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, Loader2, X, ChevronDown, Pencil, History, Trash2 } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 
@@ -3422,16 +3422,18 @@ function ToggleSwitch({ label, active, onClick }: { label: string; active: boole
 }
 
 function ChemicalDosing() {
-  const [active, setActive] = useState<'dosing' | 'inventory'>('dosing');
+  const [active, setActive] = useState<'dosing' | 'inventory' | 'history'>('dosing');
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-4">
         <ToggleSwitch label="Dosing"    active={active === 'dosing'}    onClick={() => setActive('dosing')} />
         <ToggleSwitch label="Inventory" active={active === 'inventory'} onClick={() => setActive('inventory')} />
+        <ToggleSwitch label="History"   active={active === 'history'}   onClick={() => setActive('history')} />
       </div>
       <div>
         {active === 'dosing'    && <ChemDosingForm />}
         {active === 'inventory' && <ChemInventory />}
+        {active === 'history'   && <DosingHistoryLog />}
       </div>
     </div>
   );
@@ -4112,6 +4114,412 @@ function ChemDosingForm() {
           <Button onClick={submit} className="h-9 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save Dosing</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Chemical Dosing Historical Log ──────────────────────────────────────────
+function DosingHistoryLog() {
+  const qc = useQueryClient();
+  const { isManager, activeOperator } = useAuth();
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+
+  // ── Filters ────────────────────────────────────────────────────────────────
+  const [filterPlantId, setFilterPlantId] = useState(selectedPlantId ?? '');
+  const [days, setDays] = useState<'7' | '30' | '90' | 'custom'>('30');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo]   = useState('');
+
+  // Sync global plant selector
+  useEffect(() => {
+    if (selectedPlantId && !filterPlantId) setFilterPlantId(selectedPlantId);
+  }, [selectedPlantId]);
+
+  const { from, to } = useMemo(() => {
+    if (days === 'custom') return { from: customFrom, to: customTo };
+    const now  = new Date();
+    const past = new Date(now); past.setDate(past.getDate() - +days);
+    return { from: past.toISOString(), to: now.toISOString() };
+  }, [days, customFrom, customTo]);
+
+  // ── Data fetch ─────────────────────────────────────────────────────────────
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ['dosing-history', filterPlantId, from, to],
+    queryFn: async () => {
+      let q = supabase
+        .from('chemical_dosing_logs')
+        .select('id, plant_id, log_datetime, chlorine_kg, smbs_kg, anti_scalant_l, soda_ash_kg, free_chlorine_reagent_pcs, product_water_free_cl_ppm, calculated_cost, recorded_by')
+        .order('log_datetime', { ascending: false })
+        .limit(200);
+      if (filterPlantId) q = q.eq('plant_id', filterPlantId);
+      if (from) q = q.gte('log_datetime', from);
+      if (to)   q = q.lte('log_datetime', to);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const plantName = (id: string) => plants?.find(p => p.id === id)?.name ?? id;
+
+  // ── Prices for cost display ────────────────────────────────────────────────
+  const { data: prices } = useQuery({
+    queryKey: ['chem-current-prices'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => { if (!(p.chemical_name in map)) map[p.chemical_name] = p.unit_price; });
+      return map;
+    },
+  });
+
+  // ── Edit state ─────────────────────────────────────────────────────────────
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editV, setEditV]   = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (row: any) => {
+    setEditId(row.id);
+    setEditV({
+      log_datetime: row.log_datetime ? format(new Date(row.log_datetime), "yyyy-MM-dd'T'HH:mm") : '',
+      chlorine_kg:               String(row.chlorine_kg    ?? ''),
+      smbs_kg:                   String(row.smbs_kg        ?? ''),
+      anti_scalant_l:            String(row.anti_scalant_l ?? ''),
+      soda_ash_kg:               String(row.soda_ash_kg    ?? ''),
+      free_chlorine_reagent_pcs: String(row.free_chlorine_reagent_pcs ?? ''),
+      product_water_free_cl_ppm: String(row.product_water_free_cl_ppm ?? ''),
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editId) return;
+    setSaving(true);
+    const num = (k: string) => editV[k] !== '' ? +editV[k] : null;
+    const costCalc = DOSING_KEYS.reduce((s, c) => {
+      const qty = num(c.key) ?? 0;
+      return s + qty * (prices?.[c.name] ?? 0);
+    }, 0);
+    const { error } = await supabase.from('chemical_dosing_logs').update({
+      log_datetime:               new Date(editV.log_datetime).toISOString(),
+      chlorine_kg:                num('chlorine_kg')               ?? 0,
+      smbs_kg:                    num('smbs_kg')                   ?? 0,
+      anti_scalant_l:             num('anti_scalant_l')            ?? 0,
+      soda_ash_kg:                num('soda_ash_kg')               ?? 0,
+      free_chlorine_reagent_pcs:  num('free_chlorine_reagent_pcs') ?? 0,
+      product_water_free_cl_ppm:  num('product_water_free_cl_ppm'),
+      calculated_cost:            +costCalc.toFixed(2),
+    }).eq('id', editId);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Dosing record updated');
+    setEditId(null);
+    qc.invalidateQueries({ queryKey: ['dosing-history'] });
+    qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
+  };
+
+  // ── Delete state ───────────────────────────────────────────────────────────
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteRow = async (id: string) => {
+    setDeleting(true);
+    const { error } = await supabase.from('chemical_dosing_logs').delete().eq('id', id);
+    setDeleting(false);
+    setPendingDeleteId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Record deleted');
+    qc.invalidateQueries({ queryKey: ['dosing-history'] });
+    qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
+  };
+
+  // ── Aggregate totals strip ─────────────────────────────────────────────────
+  const totals = useMemo(() => {
+    if (!logs?.length) return null;
+    return logs.reduce((acc: any, r: any) => ({
+      chlorine_kg:   acc.chlorine_kg   + (+r.chlorine_kg   || 0),
+      smbs_kg:       acc.smbs_kg       + (+r.smbs_kg       || 0),
+      anti_scalant_l:acc.anti_scalant_l+ (+r.anti_scalant_l|| 0),
+      soda_ash_kg:   acc.soda_ash_kg   + (+r.soda_ash_kg   || 0),
+      cost:          acc.cost          + (+r.calculated_cost|| 0),
+    }), { chlorine_kg: 0, smbs_kg: 0, anti_scalant_l: 0, soda_ash_kg: 0, cost: 0 });
+  }, [logs]);
+
+  const FIELD_LABELS: { key: string; label: string; unit: string }[] = [
+    { key: 'chlorine_kg',               label: 'Chlorine',    unit: 'kg' },
+    { key: 'smbs_kg',                   label: 'SMBS',        unit: 'kg' },
+    { key: 'anti_scalant_l',            label: 'Anti Scalant',unit: 'L'  },
+    { key: 'soda_ash_kg',               label: 'Soda Ash',    unit: 'kg' },
+    { key: 'free_chlorine_reagent_pcs', label: 'Free Cl',     unit: 'pcs'},
+    { key: 'product_water_free_cl_ppm', label: 'Avg Cl ppm',  unit: 'ppm'},
+  ];
+
+  return (
+    <div className="space-y-3">
+
+      {/* ── Filter bar ──────────────────────────────────────────────────────── */}
+      <Card className="p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <History className="h-4 w-4 text-teal-600 shrink-0" />
+          <h4 className="text-sm font-semibold text-foreground">Dosing History</h4>
+          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+            <ExportButton table="chemical_dosing_logs" label="Export" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {/* Plant filter */}
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Plant</Label>
+            <Select value={filterPlantId} onValueChange={setFilterPlantId}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All plants" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All plants</SelectItem>
+                {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Period filter */}
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Period</Label>
+            <Select value={days} onValueChange={(v: any) => setDays(v)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Custom date range */}
+        {days === 'custom' && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[11px] text-muted-foreground">From</Label>
+              <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">To</Label>
+              <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-8 text-xs" />
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Aggregate totals ────────────────────────────────────────────────── */}
+      {totals && (
+        <div className="rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 p-3 space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
+            Period Totals — {logs?.length ?? 0} record{logs?.length !== 1 ? 's' : ''}
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
+            {totals.chlorine_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Chlorine</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.chlorine_kg, 2)} kg</p>
+              </div>
+            )}
+            {totals.smbs_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">SMBS</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.smbs_kg, 2)} kg</p>
+              </div>
+            )}
+            {totals.anti_scalant_l > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Anti Scalant</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.anti_scalant_l, 2)} L</p>
+              </div>
+            )}
+            {totals.soda_ash_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Soda Ash</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.soda_ash_kg, 2)} kg</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total Cost</p>
+              <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">₱ {fmtNum(totals.cost, 2)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Log table ───────────────────────────────────────────────────────── */}
+      {isLoading && (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading records…
+        </div>
+      )}
+
+      {!isLoading && !logs?.length && (
+        <Card className="p-6 text-center text-sm text-muted-foreground">
+          No dosing records found for this period.
+        </Card>
+      )}
+
+      {!isLoading && !!logs?.length && (
+        <div className="space-y-2">
+          {logs.map((row: any) => {
+            const isEditing = editId === row.id;
+            const isPendingDelete = pendingDeleteId === row.id;
+            const rowCost = DOSING_KEYS.reduce((s, c) => s + (+row[c.key] || 0) * (prices?.[c.name] ?? 0), 0);
+
+            return (
+              <Card key={row.id} className={cn(
+                'p-3 space-y-2 transition-colors',
+                isEditing && 'border-teal-400 dark:border-teal-600 bg-teal-50/30 dark:bg-teal-950/10',
+              )}>
+                {/* ── Row header ── */}
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="space-y-0.5">
+                    {/* Date & plant */}
+                    {isEditing ? (
+                      <Input
+                        type="datetime-local"
+                        value={editV.log_datetime}
+                        onChange={e => setEditV({ ...editV, log_datetime: e.target.value })}
+                        className="h-7 text-xs w-48"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-foreground font-mono-num">
+                        {row.log_datetime ? format(new Date(row.log_datetime), 'MMM dd, yyyy  HH:mm') : '—'}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">{plantName(row.plant_id)}</p>
+                  </div>
+
+                  {/* Cost badge + action buttons */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isEditing && (
+                      <span className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded px-1.5 py-0.5">
+                        ₱ {fmtNum(row.calculated_cost ?? rowCost, 2)}
+                      </span>
+                    )}
+
+                    {/* Edit / Save / Cancel */}
+                    {isManager && !isEditing && !isPendingDelete && (
+                      <button
+                        onClick={() => startEdit(row)}
+                        disabled={!!editId || deleting}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                        title="Edit record"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                    {isEditing && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-[10px] bg-teal-700 text-white hover:bg-teal-800"
+                          onClick={saveEdit}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => setEditId(null)}
+                          disabled={saving}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+
+                    {/* Delete confirm */}
+                    {isManager && !isEditing && (
+                      isPendingDelete ? (
+                        <>
+                          <button
+                            onClick={() => deleteRow(row.id)}
+                            disabled={deleting}
+                            className="px-1.5 py-0.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-[10px] font-semibold"
+                          >
+                            {deleting ? <Loader2 className="h-2.5 w-2.5 animate-spin inline" /> : 'Yes'}
+                          </button>
+                          <button
+                            onClick={() => setPendingDeleteId(null)}
+                            className="px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground text-[10px]"
+                          >
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setPendingDeleteId(row.id)}
+                          disabled={!!editId || deleting}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                          title="Delete record"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Chemical values grid ── */}
+                {isEditing ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/40">
+                    {FIELD_LABELS.map(({ key, label, unit }) => (
+                      <div key={key}>
+                        <Label className="text-[10px] text-muted-foreground">{label}</Label>
+                        <div className="relative">
+                          <Input
+                            type="number" step="any"
+                            value={editV[key] ?? ''}
+                            onChange={e => setEditV({ ...editV, [key]: e.target.value })}
+                            className="h-7 text-xs pr-7"
+                            placeholder="0"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">{unit}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {DOSING_KEYS.map(({ key, name, unit }) => {
+                      const val = +row[key] || 0;
+                      if (!val) return null;
+                      return (
+                        <span key={key} className="text-[11px] text-foreground font-mono-num">
+                          <span className="text-muted-foreground">{name}: </span>
+                          {fmtNum(val, 2)} {unit}
+                        </span>
+                      );
+                    })}
+                    {(+row.free_chlorine_reagent_pcs || 0) > 0 && (
+                      <span className="text-[11px] text-foreground font-mono-num">
+                        <span className="text-muted-foreground">Free Cl: </span>
+                        {row.free_chlorine_reagent_pcs} pcs
+                      </span>
+                    )}
+                    {row.product_water_free_cl_ppm != null && (
+                      <span className="text-[11px] text-foreground font-mono-num">
+                        <span className="text-muted-foreground">Avg ppm: </span>
+                        {fmtNum(+row.product_water_free_cl_ppm, 2)}
+                      </span>
+                    )}
+                    {/* Show empty state if no chemicals were entered */}
+                    {DOSING_KEYS.every(({ key }) => !+row[key]) && (
+                      <span className="text-[11px] text-muted-foreground italic">No chemicals logged</span>
+                    )}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
