@@ -80,6 +80,24 @@ function triggerTemplateDownload(filename: string, headers: string[], exampleRow
   downloadCSV(filename, [exampleRow]);
 }
 
+// ─── Date normaliser ─────────────────────────────────────────────────────────
+// Handles the formats users commonly export from Excel / Google Sheets:
+//   "2025-12-31 0:00"   → "2025-12-31T00:00"  (space sep, no leading zero)
+//   "2025-12-31 8:30"   → "2025-12-31T08:30"
+//   "2025-12-31T08:30"  → unchanged (already ISO)
+//   "2025-12-31"        → unchanged (date-only)
+//   ""                  → ""
+// Without this, new Date("2025-12-31 0:00") returns Invalid Date in many
+// environments (Node, Firefox strict mode) and every insert silently fails.
+function normalizeDatetime(raw: string): string {
+  if (!raw?.trim()) return '';
+  // Replace space separator with T
+  let s = raw.trim().replace(' ', 'T');
+  // Zero-pad single-digit hour: "T0:" → "T00:", "T8:" → "T08:"
+  s = s.replace(/T(\d):/, 'T0$1:');
+  return s;
+}
+
 // ─── Import audit logger ────────────────────────────────────────────────────
 
 async function logReadingImport(entry: {
@@ -513,7 +531,7 @@ function validateLocatorReadingRow(r: Record<string, string>, i: number): string
     e.push(`Row ${i}: previous_reading must be a number`);
   if (r.daily_volume && !isDirect && isNaN(Number(r.daily_volume)))
     e.push(`Row ${i}: daily_volume must be a number`);
-  if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+  if (r.reading_datetime && isNaN(Date.parse(normalizeDatetime(r.reading_datetime))))
     e.push(`Row ${i}: reading_datetime is not a valid date`);
   return e;
 }
@@ -534,7 +552,7 @@ async function insertLocatorReadings(
   for (const r of rows) {
     const locatorId = nameToId[r.locator_name?.trim().toLowerCase()];
     if (!locatorId) { errors.push(`Locator not found: "${r.locator_name}"`); continue; }
-    const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const dt = r.reading_datetime ? new Date(normalizeDatetime(r.reading_datetime)).toISOString() : new Date().toISOString();
     const dtMin = dt.slice(0, 16); // minute-level key
 
     // Check for existing reading at the same datetime
@@ -620,7 +638,7 @@ function validateWellReadingRow(r: Record<string, string>, i: number): string[] 
     e.push(`Row ${i}: power_meter_reading must be a number`);
   if (r.solar_meter_reading && isNaN(Number(r.solar_meter_reading)))
     e.push(`Row ${i}: solar_meter_reading must be a number`);
-  if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+  if (r.reading_datetime && isNaN(Date.parse(normalizeDatetime(r.reading_datetime))))
     e.push(`Row ${i}: reading_datetime is not a valid date`);
   return e;
 }
@@ -640,7 +658,7 @@ async function insertWellReadings(
   for (const r of rows) {
     const wellId = nameToId[r.well_name?.trim().toLowerCase()];
     if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
-    const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+    const dt = r.reading_datetime ? new Date(normalizeDatetime(r.reading_datetime)).toISOString() : new Date().toISOString();
     const dtMin = dt.slice(0, 16);
 
     // Duplicate check
@@ -712,7 +730,7 @@ function validateBlendingRow(r: Record<string, string>, i: number): string[] {
   if (r.event_date && isNaN(Date.parse(r.event_date)))
     e.push(`Row ${i}: event_date is not a valid date (use YYYY-MM-DD)`);
   // Fix #7 — reading_datetime was never validated; a bad value silently becomes Invalid Date
-  if (r.reading_datetime?.trim() && isNaN(Date.parse(r.reading_datetime)))
+  if (r.reading_datetime?.trim() && isNaN(Date.parse(normalizeDatetime(r.reading_datetime))))
     e.push(`Row ${i}: reading_datetime is not a valid date (use YYYY-MM-DDTHH:mm)`);
   return e;
 }
@@ -797,7 +815,7 @@ function validatePowerRow(r: Record<string, string>, i: number): string[] {
   if (!r.plant_name?.trim()) e.push(`Row ${i}: plant_name is required`);
   if (!r.meter_reading_kwh?.trim() || isNaN(Number(r.meter_reading_kwh)))
     e.push(`Row ${i}: meter_reading_kwh is required and must be a number`);
-  if (!r.reading_datetime?.trim() || isNaN(Date.parse(r.reading_datetime)))
+  if (!r.reading_datetime?.trim() || isNaN(Date.parse(normalizeDatetime(r.reading_datetime))))
     e.push(`Row ${i}: reading_datetime is required and must be a valid datetime`);
   if (r.solar_meter_reading && isNaN(Number(r.solar_meter_reading)))
     e.push(`Row ${i}: solar_meter_reading must be a number`);
@@ -828,7 +846,7 @@ async function insertPowerReadings(
       ? (plantNameToId[r.plant_name.trim().toLowerCase()] ?? plantId)
       : plantId;
 
-    const dt = new Date(r.reading_datetime).toISOString();
+    const dt = new Date(normalizeDatetime(r.reading_datetime)).toISOString();
     // Power readings are one-per-day: use date-only key for duplicate detection
     // (matches manual entry which uses windowKind: 'day')
     const dtDate = dt.slice(0, 10); // YYYY-MM-DD
@@ -2024,7 +2042,7 @@ function ProductForm() {
                   e.push(`Row ${i}: current_reading must be a number`);
                 if (r.previous_reading && isNaN(Number(r.previous_reading)))
                   e.push(`Row ${i}: previous_reading must be a number`);
-                if (r.reading_datetime && isNaN(Date.parse(r.reading_datetime)))
+                if (r.reading_datetime && isNaN(Date.parse(normalizeDatetime(r.reading_datetime))))
                   e.push(`Row ${i}: reading_datetime is not a valid date`);
                 return e;
               }}
@@ -2043,7 +2061,7 @@ function ProductForm() {
                 for (const r of rows) {
                   const meterId = nameToId[r.meter_name?.trim().toLowerCase()];
                   if (!meterId) { errors.push(`Meter not found: "${r.meter_name}"`); continue; }
-                  const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
+                  const dt = r.reading_datetime ? new Date(normalizeDatetime(r.reading_datetime)).toISOString() : new Date().toISOString();
                   const dtMin = dt.slice(0, 16);
 
                   // Duplicate check
