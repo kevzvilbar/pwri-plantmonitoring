@@ -260,9 +260,15 @@ async function insertROTrainReadings(
     const remarksVal = r.remarks?.trim();
     if (remarksVal)         optionalPayload.remarks                  = remarksVal;
     if (userId)             optionalPayload.recorded_by              = userId;
-    // DB column is `permeate_meter` (single cumulative odometer snapshot).
-    // TrendChart computes the delta via computeEntityDeltas (curr - prev per train).
+    // permeate_meter: cumulative odometer snapshot (curr reading).
+    // permeate_meter_prev: the previous odometer snapshot supplied in the CSV.
+    // permeate_meter_delta: curr - prev, pre-computed and saved so TrendChart
+    //   can use it directly — no sequential in-memory diffing needed, which
+    //   broke the first reading in every fetch window (delta was always 0).
+    // permeate_production_date: cutoff-adjusted day label this delta belongs to.
     if (permCurr !== null)  optionalPayload.permeate_meter           = permCurr;
+    if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
+    if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
     if (permeateDayLabel)   optionalPayload.permeate_production_date = permeateDayLabel;
 
     // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
@@ -270,7 +276,8 @@ async function insertROTrainReadings(
     // DBs degrade gracefully instead of failing every row.
     const OPTIONAL_KEYS = [
       'remarks', 'recorded_by',
-      'permeate_meter', 'permeate_production_date',
+      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+      'permeate_production_date',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
