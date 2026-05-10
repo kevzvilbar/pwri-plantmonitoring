@@ -4755,7 +4755,10 @@ function TrainOperatorLogModal({
         // Columns added by migration — may not exist in un-migrated DBs.
         // Try full select first; if Supabase returns a schema error for any
         // new column, fall back to the original safe set so logs always load.
-        const FULL_COLS = [
+        // Column tiers — each retry drops only the columns that failed.
+        // This way is_meter_replacement stays in the query once it exists in DB,
+        // even if other newer columns (remarks, reject_flow etc.) are still missing.
+        const ALL_COLS = [
           'id', 'reading_datetime', 'recorded_by',
           'permeate_flow', 'feed_flow', 'reject_flow',
           'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
@@ -4764,22 +4767,27 @@ function TrainOperatorLogModal({
           'recovery_pct',
           'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
           'is_meter_replacement', 'remarks',
-        ].join(',');
-        // SAFE_COLS: columns that have always existed — safe on un-migrated DBs.
-        // permeate_meter is original so always safe; permeate_meter_prev is new.
-        // Delta is computed in-memory from sorted rows when permeate_meter_delta absent.
-        const SAFE_COLS = [
+        ];
+        // Tier 2: drop purely-optional display columns but keep is_meter_replacement
+        // and permeate meter columns which are needed for functionality.
+        const TIER2_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow',
+          'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
+          'permeate_meter', 'permeate_meter_delta',
+          'is_meter_replacement',
+        ];
+        // Tier 3: absolute minimum — original columns only, no migration deps
+        const TIER3_COLS = [
           'id', 'reading_datetime', 'recorded_by',
           'permeate_flow', 'feed_flow',
           'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
           'permeate_meter',
-        ].join(',');
-        const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'is_meter_replacement', 'remarks', 'reject_flow', 'reject_pressure_psi', 'suction_pressure_psi', 'reject_tds', 'feed_ph', 'permeate_ph', 'temperature_c', 'turbidity_ntu'];
-        const isNewColErr = (msg: string) => NEW_COLS.some(c => msg.includes(c));
+        ];
 
-        const buildQ = (cols: string) => {
+        const buildQ = (cols: string[]) => {
           let q = (supabase.from('ro_train_readings' as any) as any)
-            .select(cols)
+            .select(cols.join(','))
             .eq('train_id', trainId)
             .order('reading_datetime', { ascending: false })
             .limit(2000);
@@ -4788,17 +4796,14 @@ function TrainOperatorLogModal({
           return q;
         };
 
-        let { data: readings, error } = await buildQ(FULL_COLS);
-        if (error) {
-          if (isNewColErr(error.message)) {
-            // Un-migrated DB — retry with safe columns only
-            const { data: d2, error: e2 } = await buildQ(SAFE_COLS);
-            if (e2) { console.error('operator log fetch (fallback):', e2); return []; }
-            readings = d2;
-          } else {
-            console.error('operator log fetch:', error);
-            return [];
-          }
+        // Try each tier in order — stop at first success
+        let readings: any[] | null = null;
+        for (const tier of [ALL_COLS, TIER2_COLS, TIER3_COLS]) {
+          const { data, error } = await buildQ(tier);
+          if (!error) { readings = data ?? []; break; }
+          // If the error isn't about a missing column, stop retrying — it's a real error
+          const isMissingCol = error.message.includes('column') || error.message.includes('does not exist');
+          if (!isMissingCol) { console.error('operator log fetch:', error); break; }
         }
         if (!readings?.length) return [];
 
