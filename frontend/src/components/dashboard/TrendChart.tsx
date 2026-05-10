@@ -996,7 +996,7 @@ export function TrendChart({
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,multiplier,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
 
@@ -1306,7 +1306,9 @@ export function TrendChart({
       if (r.permeate_tds != null) { row.tds += +r.permeate_tds; row.tdsSamples += 1; }
     });
 
-    // Power = sequential delta of meter_reading_kwh, exactly like locator.
+    // Power = daily_consumption_kwh (already Δ × multiplier, saved by Operations).
+    // If daily_consumption_kwh is null (legacy rows without the saved pre-multiplied
+    // value), fall back to computing raw meter delta and applying the row's multiplier.
     computeEntityDeltas(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
@@ -1314,7 +1316,12 @@ export function TrendChart({
       })),
       'plant_id',
       'daily_consumption_kwh',
-    ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    ).forEach(({ r, delta: rawComputedDelta, rawDelta, isMeterReplacement }) => {
+      // rawComputedDelta is either daily_consumption_kwh (multiplied) or Δ meter (raw).
+      // Only apply multiplier in the fallback (raw delta) path.
+      const mult = +(r.multiplier ?? 1) || 1;
+      const hasDailyKwh = r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0;
+      const delta = hasDailyKwh ? rawComputedDelta : rawComputedDelta * mult;
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -1804,11 +1811,11 @@ export function TrendChart({
         background: 'hsl(var(--card))',
         border: '1px solid hsl(var(--border))',
         borderRadius: 8, fontSize: 11, padding: '8px 10px',
-        minWidth: 188, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        minWidth: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
       }}>
         <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
         <p style={{ margin: '1px 0', color: '#f59e0b' }}>
-          Grid PV: <strong>{gridPv != null ? `${gridPv} kWh/m³` : '—'}</strong>
+          Grid PV: <strong>{gridPv != null ? `${gridPv} kWh/m³` : '0 kWh/m³'}</strong>
         </p>
         {hasSolar && (
           <p style={{ margin: '1px 0', color: '#22c55e' }}>
@@ -1822,11 +1829,9 @@ export function TrendChart({
           <p style={{ margin: '1px 0', color: '#f59e0b' }}>
             Grid Power: <span>{row.kwh > 0 ? row.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
           </p>
-          {hasSolar && (
-            <p style={{ margin: '1px 0', color: '#22c55e' }}>
-              Solar Power: <span>{row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh</span>
-            </p>
-          )}
+          <p style={{ margin: '1px 0', color: '#22c55e' }}>
+            Solar: <span>{row.solarKwh > 0 ? row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
+          </p>
         </div>
       </div>
     );
@@ -2410,9 +2415,20 @@ export function TrendChart({
               <YAxis
                 tick={{ fontSize: 10 }}
                 stroke="#f59e0b"
-                width={40}
-                domain={[0, 'auto']}
-                tickFormatter={(v) => `${v}`}
+                width={44}
+                domain={[
+                  0,
+                  (dataMax: number) => {
+                    // For small PV ratios (e.g. 0.4–1.5 kWh/m³), 'auto' may give
+                    // a too-large max. Round up to the nearest sensible tick.
+                    if (dataMax <= 0) return 2;
+                    if (dataMax < 1)  return Math.ceil(dataMax * 10) / 10 + 0.1;
+                    if (dataMax < 4)  return Math.ceil(dataMax * 4)  / 4;
+                    return Math.ceil(dataMax);
+                  },
+                ]}
+                tickCount={6}
+                tickFormatter={(v) => +v.toFixed(2) === 0 ? '0' : v.toFixed(v < 1 ? 2 : 1)}
                 label={{ value: 'kWh/m³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
               />
               <Tooltip content={<PvTooltip />} />
