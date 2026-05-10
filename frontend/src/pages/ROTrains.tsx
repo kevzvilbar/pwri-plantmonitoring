@@ -182,6 +182,11 @@ export function getPermeateDayLabel(isoDatetime: string, cutoffHHmm: string): st
   }
 }
 
+// conflictMode controls what happens when a reading already exists for this train+hour:
+//   'skip'      — leave existing row untouched, record as skipped (default / legacy behaviour)
+//   'overwrite' — UPDATE the existing row with the new values
+type ConflictMode = 'skip' | 'overwrite';
+
 async function insertROTrainReadings(
   rows: Record<string, string>[],
   plantId: string,
@@ -189,14 +194,17 @@ async function insertROTrainReadings(
   options?: {
     permeateIsProduction?: boolean;
     permeateCutoffTime?: string; // HH:mm
+    conflictMode?: ConflictMode;
   },
-): Promise<{ count: number; errors: string[] }> {
+): Promise<{ count: number; skipped: number; errors: string[] }> {
   const { data: trains } = await supabase
     .from('ro_trains').select('id, train_number').eq('plant_id', plantId);
   const numToId: Record<string, string> = {};
   (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
 
+  const conflictMode: ConflictMode = options?.conflictMode ?? 'skip';
   let count = 0;
+  let skipped = 0;
   const errors: string[] = [];
   for (const r of rows) {
     const trainId = numToId[r.train_number?.trim()];
@@ -213,8 +221,10 @@ async function insertROTrainReadings(
       .gte('reading_datetime', `${dtMin}:00`)
       .lte('reading_datetime', `${dtMin}:59`).limit(1);
 
-    if (existing && existing.length > 0) {
-      errors.push(`Skipped: Train ${r.train_number} already has a reading at ${dtMin}`);
+    const existingId: string | null = existing?.[0]?.id ?? null;
+
+    if (existingId && conflictMode === 'skip') {
+      skipped++;
       continue;
     }
 
@@ -260,15 +270,9 @@ async function insertROTrainReadings(
     const remarksVal = r.remarks?.trim();
     if (remarksVal)         optionalPayload.remarks                  = remarksVal;
     if (userId)             optionalPayload.recorded_by              = userId;
-    // permeate_meter: cumulative odometer snapshot (curr reading).
-    // permeate_meter_prev: the previous odometer snapshot supplied in the CSV.
-    // permeate_meter_delta: curr - prev, pre-computed and saved so TrendChart
-    //   can use it directly — no sequential in-memory diffing needed, which
-    //   broke the first reading in every fetch window (delta was always 0).
-    // permeate_production_date: cutoff-adjusted day label this delta belongs to.
+    // DB column is `permeate_meter` (single cumulative odometer snapshot).
+    // TrendChart computes the delta via computeEntityDeltas (curr - prev per train).
     if (permCurr !== null)  optionalPayload.permeate_meter           = permCurr;
-    if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
-    if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
     if (permeateDayLabel)   optionalPayload.permeate_production_date = permeateDayLabel;
 
     // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
@@ -276,22 +280,34 @@ async function insertROTrainReadings(
     // DBs degrade gracefully instead of failing every row.
     const OPTIONAL_KEYS = [
       'remarks', 'recorded_by',
-      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
-      'permeate_production_date',
+      'permeate_meter', 'permeate_production_date',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
 
-    const { error } = await supabase
-      .from('ro_train_readings')
-      .insert({ ...corePayload, ...optionalPayload });
+    // ── Insert or overwrite ──────────────────────────────────────────────────
+    const doWrite = async (payload: Record<string, any>) => {
+      if (existingId) {
+        // Overwrite: UPDATE the existing row by id
+        const { error } = await supabase
+          .from('ro_train_readings')
+          .update(payload)
+          .eq('id', existingId);
+        return error;
+      }
+      // Insert new row
+      const { error } = await supabase
+        .from('ro_train_readings')
+        .insert(payload);
+      return error;
+    };
+
+    const error = await doWrite({ ...corePayload, ...optionalPayload });
 
     if (error) {
       if (isOptionalColError(error.message)) {
         // One or more optional columns not yet in DB — retry with core only
-        const { error: e2 } = await supabase
-          .from('ro_train_readings')
-          .insert(corePayload);
+        const e2 = await doWrite(corePayload);
         if (e2) errors.push(e2.message); else count++;
       } else {
         errors.push(error.message);
@@ -300,7 +316,7 @@ async function insertROTrainReadings(
       count++;
     }
   }
-  return { count, errors };
+  return { count, skipped, errors };
 }
 
 // ─── ImportROReadingsDialog ───────────────────────────────────────────────────
@@ -325,7 +341,16 @@ function ImportROReadingsDialog({
   const [busy, setBusy]               = useState(false);
   const [done, setDone]               = useState(false);
   const [imported, setImported]       = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  // Conflict resolution state
+  // 'pending' → first import ran, found conflicts, waiting for user choice
+  // 'resolved' → user resolved conflicts (skip-all or overwrite-all or per-row)
+  type ConflictState = 'none' | 'pending';
+  const [conflictState, setConflictState] = useState<ConflictState>('none');
+  // Rows that were skipped due to duplicates — kept for targeted overwrite
+  const [conflictRows, setConflictRows] = useState<Record<string, string>[]>([]);
 
   // Local editable cut-off time — seeded from meterConfig (manager can change before import)
   const [localCutoff, setLocalCutoff] = useState(
@@ -337,6 +362,7 @@ function ImportROReadingsDialog({
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f); setDone(false); setErrors([]); setRows([]); setImportErrors([]);
+    setConflictState('none'); setConflictRows([]);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = parseROCSVText(ev.target?.result as string);
@@ -348,28 +374,47 @@ function ImportROReadingsDialog({
     reader.readAsText(f);
   };
 
-  const doImport = async () => {
-    if (!file || rows.length === 0 || errors.length > 0) return;
+  // Run import with a given conflict mode; collect which rows were skipped for
+  // the conflict UI so the user can choose skip/overwrite per-batch or all-at-once.
+  const runImport = async (targetRows: Record<string, string>[], mode: ConflictMode) => {
     if (!plantId) { toast.error('Select a plant first'); return; }
     setBusy(true);
-    const { count, errors: insertErrs } = await insertROTrainReadings(
-      rows, plantId, userId,
-      {
-        permeateIsProduction: permeateIsProduction,
-        permeateCutoffTime: localCutoff,
-      }
+    const { count, skipped, errors: insertErrs } = await insertROTrainReadings(
+      targetRows, plantId, userId,
+      { permeateIsProduction, permeateCutoffTime: localCutoff, conflictMode: mode },
     );
     setBusy(false);
-    setImported(count);
-    setDone(true);
+    setImported(prev => prev + count);
+    setSkippedCount(skipped);
     setImportErrors(insertErrs);
-    if (insertErrs.length) toast.error(`${count} imported, ${insertErrs.length} failed`);
-    else if (count === 0) toast.info('No rows imported — all were duplicates.');
-    else toast.success(`${count} RO reading(s) imported`);
-    if (count > 0) onImported();
+
+    if (skipped > 0 && mode === 'skip') {
+      // Find which rows were skipped so we can offer resolution
+      // A row was skipped if it didn't produce an error and wasn't counted
+      // We re-identify them by re-checking what was not inserted
+      // Simple approach: track skipped rows by collecting them in insertROTrainReadings
+      // For now we know `skipped` count — show the conflict UI
+      setConflictRows(targetRows); // all rows passed; overwrite will re-attempt all
+      setConflictState('pending');
+      setDone(true);
+    } else {
+      setConflictState('none');
+      setDone(true);
+      if (insertErrs.length) toast.error(`${count} imported, ${insertErrs.length} failed`);
+      else if (count === 0 && skipped === 0) toast.info('No rows imported.');
+      else toast.success(`${count} RO reading(s) imported${skipped > 0 ? `, ${skipped} skipped` : ''}`);
+      if (count > 0) onImported();
+    }
   };
 
-  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+  const doImport = () => runImport(rows, 'skip');
+  const doOverwriteAll = () => { setDone(false); setImported(0); runImport(rows, 'overwrite'); };
+  const doSkipAll = () => {
+    setConflictState('none');
+    toast.info(`${skippedCount} duplicate(s) skipped.`);
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0 && conflictState === 'none' && !done;
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
@@ -537,12 +582,50 @@ function ImportROReadingsDialog({
             </div>
           )}
 
+          {/* ── Conflict resolution UI ── */}
+          {done && conflictState === 'pending' && skippedCount > 0 && (
+            <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                    {skippedCount} duplicate{skippedCount !== 1 ? 's' : ''} found
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                    {imported > 0 && <>{imported} new row{imported !== 1 ? 's' : ''} imported. </>}
+                    These readings already exist in the database. What would you like to do?
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                  disabled={busy}
+                  onClick={doSkipAll}
+                >
+                  Skip All
+                </Button>
+                <Button
+                  size="sm"
+                  className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={busy}
+                  onClick={doOverwriteAll}
+                >
+                  {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  Overwrite All
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Result */}
-          {done && (
+          {done && conflictState === 'none' && (
             <div className="space-y-2">
               <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} skipped/failed` : ''}. 
+                {imported} record(s) imported{skippedCount > 0 ? `, ${skippedCount} skipped` : ''}{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}.
               </p>
               {importErrors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
@@ -559,15 +642,17 @@ function ImportROReadingsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={doImport}
-            disabled={!canSubmit}
-            className="bg-teal-700 text-white hover:bg-teal-800"
-          >
-            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          {conflictState !== 'pending' && (
+            <Button
+              onClick={doImport}
+              disabled={!canSubmit}
+              className="bg-teal-700 text-white hover:bg-teal-800"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
