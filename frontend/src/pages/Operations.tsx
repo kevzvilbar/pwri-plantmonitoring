@@ -844,6 +844,27 @@ async function insertPowerReadings(
   const plantNameToId: Record<string, string> = {};
   (allPlants ?? []).forEach((p: any) => { plantNameToId[p.name.trim().toLowerCase()] = p.id; });
 
+  // Pre-fetch CT multiplier per plant from the most recent electric bill.
+  // daily_consumption_kwh must be Δ × multiplier so TrendChart PV ratios are correct.
+  // Cache by plantId to avoid N+1 queries across rows in the same CSV.
+  const multiplierCache: Record<string, number> = {};
+  const getMultiplier = async (pid: string): Promise<number> => {
+    if (multiplierCache[pid] != null) return multiplierCache[pid];
+    try {
+      const { data } = await supabase
+        .from('electric_bills')
+        .select('multiplier')
+        .eq('plant_id', pid)
+        .order('billing_month', { ascending: false })
+        .limit(1);
+      const m = data?.[0]?.multiplier != null ? +(data[0].multiplier) : 1;
+      multiplierCache[pid] = m > 0 ? m : 1;
+    } catch {
+      multiplierCache[pid] = 1;
+    }
+    return multiplierCache[pid];
+  };
+
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
@@ -893,6 +914,12 @@ async function insertPowerReadings(
     }
     if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
 
+    // Fetch CT multiplier for this plant so daily_consumption_kwh = Δ × multiplier,
+    // matching what manual entry writes. Without this, CSV-imported rows store the
+    // raw meter Δ (e.g. 15) instead of actual kWh (e.g. 9,000), causing TrendChart
+    // PV ratios to render as ~0.
+    const rowMultiplier = await getMultiplier(rowPlantId);
+
     // Fix #1 — daily_consumption_kwh was only set when daily_grid_kwh was in the CSV.
     // For shared-meter plants (or any plant without explicit daily_grid_kwh), we must
     // fetch the previous reading for this plant-day and compute the delta ourselves.
@@ -902,11 +929,11 @@ async function insertPowerReadings(
     // uses plant_name to distinguish, but the caller must ensure only one row per
     // physical meter per day is present in the file.
     if (r.daily_grid_kwh?.trim()) {
-      // Explicit column supplied — use it directly
-      payload.daily_consumption_kwh = +r.daily_grid_kwh;
+      // Explicit column supplied — apply multiplier (column stores raw Δ, not multiplied)
+      payload.daily_consumption_kwh = +r.daily_grid_kwh * rowMultiplier;
     } else {
       // No explicit column: look up the most recent prior reading for this plant
-      // (outside today's window) and compute Δ meter_reading_kwh.
+      // (outside today's window), compute Δ meter_reading_kwh, then multiply.
       try {
         const { data: prevReading } = await supabase
           .from('power_readings')
@@ -917,7 +944,7 @@ async function insertPowerReadings(
           .limit(1);
         if (prevReading && prevReading.length > 0) {
           const delta = +r.meter_reading_kwh - (prevReading[0] as any).meter_reading_kwh;
-          if (delta >= 0) payload.daily_consumption_kwh = delta;
+          if (delta >= 0) payload.daily_consumption_kwh = delta * rowMultiplier;
           // Negative delta = meter rollback; leave daily_consumption_kwh null so
           // the row is visible but excluded from Dashboard totals (same behaviour
           // as manual entry with the meter-replacement flag).
@@ -3714,7 +3741,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
     } else if (module === 'power') {
       // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
       // totals would drift after any history correction.  Re-derive it the same way
-      // the initial insert does: find the predecessor row and compute Δ meter reading.
+      // the initial insert does: find the predecessor row, compute Δ meter reading,
+      // then apply the CT multiplier so PV ratios stay correct.
       const editedDt = new Date(dtIso).toISOString();
       const editedDate = editedDt.slice(0, 10);
       let recomputedConsumption: number | null = null;
@@ -3728,7 +3756,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
           .limit(1);
         if (pred && pred.length > 0) {
           const delta = +editRow.value - (pred[0] as any).meter_reading_kwh;
-          if (delta >= 0) recomputedConsumption = delta;
+          if (delta >= 0) recomputedConsumption = delta * multiplier;
         }
       } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
       const powerUpdatePayload: Record<string, any> = {
@@ -4113,13 +4141,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
                           <td className="px-3 py-1.5 text-right font-mono-num text-yellow-600">
                             {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
                           </td>
-                          {/* Δ Solar */}
+                          {/* Δ Solar — for direct-mode plants solar_meter_reading is null;
+                              fall back to daily_solar_kwh which is the stored daily value */}
                           <td className="px-3 py-1.5 text-right font-mono-num">
                             {isSolarRepl
                               ? <span className="text-orange-500 font-medium">0</span>
                               : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
                                 ? fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)
-                                : '—'
+                                : r.daily_solar_kwh != null && +r.daily_solar_kwh > 0
+                                  ? <span className="text-yellow-600">{fmtNum(+r.daily_solar_kwh)}</span>
+                                  : '—'
                             }
                           </td>
                           {/* Solar Repl. toggle */}
