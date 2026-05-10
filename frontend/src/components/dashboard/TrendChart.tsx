@@ -942,14 +942,19 @@ export function TrendChart({
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-      if (error) {
-        if (isNewColError(error.message)) {
-          const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
-            .select(LEGACY_SELECT)
-            .in('train_id', trainIds)
-            .gte('reading_datetime', startISO)
-            .lte('reading_datetime', endISO)
-            .order('reading_datetime', { ascending: true });
+     if (error) {
+       if (isNewColError(error.message)) {
+       const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
+          .select(LEGACY_SELECT)
+          .in('train_id', trainIds)
+          .gte('reading_datetime', startISO)
+          .lte('reading_datetime', endISO)
+          .order('reading_datetime', { ascending: true });
+      if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
+      return (d2 ?? []) as any[];
+     }
+     throw new Error(`ro_train_readings: ${error.message}`);
+ }
           if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
           return (d2 ?? []) as any[];
         }
@@ -1203,8 +1208,23 @@ export function TrendChart({
         (r: any) => r.permeate_meter_delta != null || r.permeate_production_date != null,
       );
 
+      // DEBUG — remove after confirming production shows correctly
+      console.log('[Permeate Production]', {
+        roReadingsCount: (roReadings ?? []).length,
+        hasSavedDelta,
+        permeateIsProductionPlants: Array.from(permeateIsProductionPlants),
+        sampleRow: (roReadings ?? [])[0],
+      });
+
       if (hasSavedDelta) {
         // ── PRIMARY: use saved delta + production date ───────────────────────
+        // KEY RULE: ensure() uses "MMM d" display strings as map keys (e.g. "Mar 5").
+        // Every other data source derives this key via format(new Date(reading_datetime), 'MMM d').
+        // We must do the same — construct a datetime from permeate_production_date and
+        // use the reading's original time component so the key matches exactly.
+        // Using T12:00:00 as anchor causes timezone drift vs other sources that use
+        // the raw reading_datetime — so we build the key from reading_datetime directly,
+        // but override which calendar day it belongs to via permeate_production_date.
         (roReadings ?? []).forEach((r: any) => {
           const plantId = _trainPlantMap.get(r.train_id);
           if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
@@ -1218,14 +1238,18 @@ export function TrendChart({
           }
           if (delta === null || delta === 0) return;
 
-          // Resolve production day: prefer cutoff-adjusted label, fall back to
-          // calendar date of reading_datetime (correct for daily 00:00 readings).
-          const dayLabel: string = r.permeate_production_date
-            ?? format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-
-          // ensure() keys by display label "MMM d"; anchor sortKey at noon so
-          // multiple readings on the same day don't produce duplicate chart keys.
-          const dt = new Date(`${dayLabel}T12:00:00`);
+          // Build the chart key the same way ALL other sources do:
+          //   format(new Date(reading_datetime), 'MMM d')
+          // When permeate_production_date differs from the reading's calendar date
+          // (hourly cross-midnight case), substitute the date part but keep the
+          // reading_datetime's time so the JS Date parses in the same local timezone.
+          let dt: Date;
+          if (r.permeate_production_date) {
+            const readingTime = r.reading_datetime.slice(11) || '00:00:00'; // HH:mm:ss...
+            dt = new Date(`${r.permeate_production_date}T${readingTime}`);
+          } else {
+            dt = new Date(r.reading_datetime);
+          }
           const key = format(dt, 'MMM d');
           const row = ensure(key, dt.getTime());
           row.production += delta;
