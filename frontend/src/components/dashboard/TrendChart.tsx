@@ -728,6 +728,11 @@ export function TrendChart({
   const [trainSearch, setTrainSearch] = useState('');
   const [showTrainFilter, setShowTrainFilter] = useState(false);
 
+  // ── Production Cost line toggles ─────────────────────────────────────────
+  // Default: only show Prod Cost (sum). Power Cost + Chem Cost lines hidden.
+  const [showPowerCostLine, setShowPowerCostLine] = useState(false);
+  const [showChemCostLine, setShowChemCostLine] = useState(false);
+
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -754,7 +759,7 @@ export function TrendChart({
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
-  const needsCostReadings = metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost';
+  const needsCostReadings = metric === 'productionCost';
   // needsPermeateProduction: we may need permeate_meter_delta from ro_train_readings
   // as the production source for plants where permeate_is_production = true.
   const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv';
@@ -1919,6 +1924,37 @@ export function TrendChart({
           Data Summary
         </button>
 
+        {/* Production Cost line toggles — show/hide Power Cost and Chem Cost breakdown lines */}
+        {metric === 'productionCost' && (
+          <div className="flex items-center gap-0.5 shrink-0" title="Toggle cost breakdown lines">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Show:</span>
+            <button
+              onClick={() => setShowPowerCostLine((v) => !v)}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                showPowerCostLine
+                  ? 'bg-chart-6 text-white border-chart-6'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Toggle Power Cost line"
+            >
+              Power ₱
+            </button>
+            <button
+              onClick={() => setShowChemCostLine((v) => !v)}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                showChemCostLine
+                  ? 'bg-highlight text-white border-highlight'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Toggle Chemical Cost line"
+            >
+              Chem ₱
+            </button>
+          </div>
+        )}
+
         {/* Drill controls — only for charts that have consumption data */}
         {hasConsumptionDrill && (
           <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
@@ -2425,11 +2461,8 @@ export function TrendChart({
               <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--chart-6))' }} name="Power Cost (₱)" connectNulls />
             </LineChart>
           ) : metric === 'productionCost' ? (
-            // Two-axis composed chart: absolute ₱ amounts on the left,
-            // ₱/m³ unit cost on the right. Unit cost lives in a different
-            // magnitude bucket (single-digit ₱/m³ vs thousands of ₱) so
-            // sharing one axis would either flatten the unit-cost line or
-            // crush the totals. Dashed stroke flags it as a derived ratio.
+            // Production Cost chart: always shows Total (Prod Cost = Power + Chem).
+            // Power Cost and Chemical Cost breakdown lines are toggled via buttons above.
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -2437,9 +2470,13 @@ export function TrendChart({
               <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `₱${v}`} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Total (₱)" />
-              <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" />
-              <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
+              <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱)" connectNulls />
+              {showPowerCostLine && (
+                <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" connectNulls />
+              )}
+              {showChemCostLine && (
+                <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" connectNulls />
+              )}
               <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
             </ComposedChart>
           ) : metric === 'pv' ? (
