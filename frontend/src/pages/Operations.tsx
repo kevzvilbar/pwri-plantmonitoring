@@ -675,15 +675,18 @@ async function insertWellReadings(
       const ovwCur = +r.current_reading;
       const ovwPrev = r.previous_reading ? +r.previous_reading : null;
       const ovwDailyVol = ovwPrev != null ? Math.max(0, ovwCur - ovwPrev) : null;
-      const { error } = await supabase.from('well_readings').update({
+      const ovwPayload: Record<string, any> = {
         current_reading: ovwCur,
         previous_reading: ovwPrev,
         power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
-        solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
         reading_datetime: dt,
         recorded_by: userId,
-        daily_volume: ovwDailyVol,  // Fix #5: keep daily_volume in sync on overwrite
-      }).eq('id', existing[0].id);
+        daily_volume: ovwDailyVol,
+      };
+      // Only include solar_meter_reading when the CSV column is present and non-empty;
+      // sending it as null when the DB column doesn't exist yet crashes the whole import.
+      if (r.solar_meter_reading?.trim()) ovwPayload.solar_meter_reading = +r.solar_meter_reading;
+      const { error } = await supabase.from('well_readings').update(ovwPayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
       continue;
     }
@@ -695,17 +698,20 @@ async function insertWellReadings(
       errors.push(`Well "${r.well_name}" @ ${dt.slice(0, 10)}: negative delta (${rawWellDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
     const csvDailyVol = rawWellDelta != null ? Math.max(0, rawWellDelta) : null;
 
-    const { error } = await supabase.from('well_readings').insert({
+    const insertPayload: Record<string, any> = {
       well_id: wellId,
       plant_id: plantId,
       current_reading: csvCur,
       previous_reading: csvPrev,
       daily_volume: csvDailyVol,
       power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
-      solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
       reading_datetime: dt,
       recorded_by: userId,
-    });
+    };
+    // Only include solar_meter_reading when the CSV column is present and non-empty;
+    // sending it as null when the DB column doesn't exist yet crashes the whole import.
+    if (r.solar_meter_reading?.trim()) insertPayload.solar_meter_reading = +r.solar_meter_reading;
+    const { error } = await supabase.from('well_readings').insert(insertPayload);
     if (error) errors.push(error.message);
     else count++;
   }
