@@ -926,12 +926,9 @@ export function TrendChart({
       const trainIds = _roTrainIdsForReadings ?? [];
       if (!trainIds.length) return [];
       const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
-        // DB columns (set by ROTrains.tsx on save):
-        //   permeate_meter_reading — current cumulative reading
-        //   permeate_meter_prev    — previous cumulative reading
-        //   permeate_meter_delta   — pre-computed delta (curr - prev), may be null on older rows
-        // We prefer the pre-computed delta; fall back to curr - prev if it is null.
-        .select('train_id,recovery_pct,permeate_tds,permeate_meter_delta,permeate_meter_reading,permeate_meter_prev,reading_datetime')
+        // permeate_meter is a single cumulative odometer column (like well meters).
+        // Delta is computed in code via computeEntityDeltas keyed by train_id.
+        .select('train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime')
         .in('train_id', trainIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -1167,22 +1164,20 @@ export function TrendChart({
       }
     });
 
-    // Step 2: accumulate permeate_meter_delta from ro_train_readings for plants
-    // where permeate_is_production = true.  Sum across all trains per plant per day.
+    // Step 2: accumulate permeate meter deltas for plants where permeate_is_production = true.
+    // permeate_meter is a cumulative odometer — use computeEntityDeltas (keyed by train_id)
+    // exactly like well meters, so meter replacements and boundary reads are handled correctly.
     if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
-      // Group permeate deltas by day-key, accumulating across trains for the same plant.
-      (roReadings ?? []).forEach((r: any) => {
-        // Use pre-computed delta when available; fall back to curr - prev for older rows.
-        const permDelta = r.permeate_meter_delta != null
-          ? +r.permeate_meter_delta
-          : (r.permeate_meter_reading != null && r.permeate_meter_prev != null)
-            ? +r.permeate_meter_reading - +r.permeate_meter_prev
-            : null;
-        if (permDelta == null) return;
-        const plantId = _trainPlantMap.get(r.train_id);
-        if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
-        const delta = Math.max(0, permDelta);
+      const permeateRoReadings = (roReadings ?? [])
+        .filter((r: any) => {
+          const plantId = _trainPlantMap.get(r.train_id);
+          return plantId && permeateIsProductionPlants.has(plantId) && r.permeate_meter != null;
+        })
+        .map((r: any) => ({ ...r, current_reading: +r.permeate_meter }));
+
+      computeEntityDeltas(permeateRoReadings, 'train_id', null).forEach(({ r, delta }) => {
         if (delta === 0) return;
+        const plantId = _trainPlantMap.get(r.train_id)!;
         const dt = new Date(r.reading_datetime);
         const key = format(dt, 'MMM d');
         const row = ensure(key, dt.getTime());
