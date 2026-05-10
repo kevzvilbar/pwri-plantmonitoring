@@ -1206,6 +1206,8 @@ export function TrendChart({
               ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
               : null;
           if (!delta) return;
+          // Respect is_meter_replacement flag — zero out this reading's contribution
+          if (r.is_meter_replacement) return;
 
           // Build chart key EXACTLY like every other source:
           //   format(new Date(reading_datetime), 'MMM d')
@@ -1230,7 +1232,9 @@ export function TrendChart({
         const permeateRoReadings = (roReadings ?? [])
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
-            return plantId && permeateIsProductionPlants.has(plantId) && r.permeate_meter != null;
+            // Respect is_meter_replacement — skip flagged rows (zeroes their delta)
+            return plantId && permeateIsProductionPlants.has(plantId)
+              && r.permeate_meter != null && !r.is_meter_replacement;
           })
           .map((r: any) => ({ ...r, current_reading: +r.permeate_meter }));
 
