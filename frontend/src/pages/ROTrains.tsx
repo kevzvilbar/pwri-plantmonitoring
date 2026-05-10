@@ -1042,7 +1042,7 @@ function PretreatmentAndROLog() {
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => (await supabase.from('ro_train_readings')
-      .select('reading_datetime, power_meter_reading_kwh')
+      .select('reading_datetime, power_meter_reading_kwh, permeate_meter')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
@@ -1073,11 +1073,11 @@ function PretreatmentAndROLog() {
     return diff > 0 ? +diff.toFixed(1) : null;
   }, [prevRO, dt]);
 
-  // Previous meter readings: feed/permeate/reject are local-only — DB stores computed volumes,
-  // not raw meter odometer values, so they stay null and the operator enters them manually.
-  // Power is different: we now persist power_meter_reading_kwh so prev is auto-filled.
+  // Previous meter readings: feed/reject are local-only (operator enters manually).
+  // Permeate and power are persisted as odometer snapshots so the next session
+  // auto-fills the "previous reading" and the delta computes without manual re-entry.
   const prevFeedMeter  = null;
-  const prevPermMeter  = null;
+  const prevPermMeter: number | null = prevRO?.permeate_meter ?? null;
   const prevRejMeter   = null;
   const prevPowerMeter: number | null = prevRO?.power_meter_reading_kwh ?? null;
 
@@ -1259,6 +1259,8 @@ function PretreatmentAndROLog() {
     const EXCLUDED_KEYS = new Set([
       'feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr',
     ]);
+    // Note: permeate_meter_curr stays excluded from the generic roValues spread —
+    // we persist it explicitly as permeate_meter below (the real DB column name).
 
     // ── Volume-weighted power allocation for shared meters ───────────────────
     // When this train shares a physical power meter with sibling trains
@@ -1281,6 +1283,9 @@ function PretreatmentAndROLog() {
       recovery_pct: recovery,
       rejection_pct: rejection,
       salt_passage_pct: saltPassage,
+      // Permeate meter — persist raw odometer so next session can auto-fill prevPermMeter
+      // and TrendChart can compute the delta via computeEntityDeltas (like well meters).
+      permeate_meter: permCurr && !isNaN(permCurr) ? permCurr : null,
       // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
       power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
       // Delta & derived — null when prevPowerMeter not yet established (first reading)
