@@ -954,18 +954,18 @@ export function TrendChart({
   });
 
   // ── Plant meter config — fetch permeate_is_production flag per plant ────────
-  // When true, the plant has no dedicated product meter; its RO permeate meter
-  // IS the production source.  We fetch this for all metrics that display
-  // Production (m³) so the chartData computation can swap sources correctly.
+  // The entire PlantMeterConfig is stored as a single JSONB blob in the `config`
+  // column (not as individual columns) — mirrors usePlantMeterConfig in Plants.tsx.
+  // permeate_is_production lives at config.permeate_is_production inside that blob.
   const { data: permeateIsProductionPlants } = useQuery({
     queryKey: ['plant-meter-config-permeate', plantIds],
     queryFn: async () => {
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id, permeate_is_production')
+        .select('plant_id, config')
         .in('plant_id', plantIds);
       const set = new Set<string>();
       (data ?? []).forEach((row: any) => {
-        if (row.permeate_is_production) set.add(row.plant_id);
+        if (row.config?.permeate_is_production) set.add(row.plant_id);
       });
       return set;
     },
