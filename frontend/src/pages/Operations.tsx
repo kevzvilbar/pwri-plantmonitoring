@@ -683,8 +683,8 @@ async function insertWellReadings(
         recorded_by: userId,
         daily_volume: ovwDailyVol,
       };
-      // Only include solar_meter_reading when the CSV column is present and non-empty;
-      // sending it as null when the DB column doesn't exist yet crashes the whole import.
+      // Only include solar_meter_reading when non-empty — sending null for a missing
+      // DB column causes Supabase to reject the entire row with a schema cache error.
       if (r.solar_meter_reading?.trim()) ovwPayload.solar_meter_reading = +r.solar_meter_reading;
       const { error } = await supabase.from('well_readings').update(ovwPayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
@@ -708,8 +708,8 @@ async function insertWellReadings(
       reading_datetime: dt,
       recorded_by: userId,
     };
-    // Only include solar_meter_reading when the CSV column is present and non-empty;
-    // sending it as null when the DB column doesn't exist yet crashes the whole import.
+    // Only include solar_meter_reading when non-empty — sending null for a missing
+    // DB column causes Supabase to reject the entire row with a schema cache error.
     if (r.solar_meter_reading?.trim()) insertPayload.solar_meter_reading = +r.solar_meter_reading;
     const { error } = await supabase.from('well_readings').insert(insertPayload);
     if (error) errors.push(error.message);
@@ -3998,6 +3998,16 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                         : 'hover:bg-muted/40',
                       ].join(' ')}
                     >
+                      {canEditDelete && (
+                        <td className="px-2 py-1.5 w-8">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-teal-700 cursor-pointer"
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           {dateStr}
