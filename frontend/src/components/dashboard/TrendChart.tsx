@@ -741,6 +741,9 @@ export function TrendChart({
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
   const needsPowerReadings = metric === 'pv';
   const needsCostReadings = metric === 'productionCost';
+  // needsPermeateProduction: we may need permeate_meter_delta from ro_train_readings
+  // as the production source for plants where permeate_is_production = true.
+  const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv';
 
   // ── Entity name lookups — fetched once per plant selection ─────────────────
   const { data: wellNames } = useQuery({
@@ -777,7 +780,8 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsProductMeterReadings,
   });
 
-  // Plant names are used for power meter replacement messages (one power meter per plant).
+  // Plant names are used for power meter replacement messages and for the permeate-source
+  // tooltip note when permeate_is_production = true.
   const { data: plantNames } = useQuery({
     queryKey: ['entity-names-plants', plantIds],
     queryFn: async () => {
@@ -786,7 +790,7 @@ export function TrendChart({
       (data ?? []).forEach((p: any) => map.set(p.id, p.name));
       return map;
     },
-    enabled: plantIds.length > 0 && needsPowerReadings,
+    enabled: plantIds.length > 0 && (needsPowerReadings || needsPermeateProduction),
   });
 
   const supaSelect = async <T,>(table: string, cols: string) => {
@@ -897,17 +901,24 @@ export function TrendChart({
   // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
   // Two-step query: resolve train IDs for these plants first, then fetch readings
   // filtered by train_id. This mirrors the locator_readings fix above.
-  const { data: _roTrainIdsForReadings } = useQuery({
+  // Also builds a trainId→plantId map used to route permeate_meter_delta back to
+  // the correct plant when permeate_is_production is active.
+  const { data: _roTrainMeta } = useQuery({
     queryKey: ['trend-ro-train-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return [] as string[];
+      if (!plantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
       const { data } = await (supabase.from('ro_trains' as never) as any)
-        .select('id')
+        .select('id, plant_id')
         .in('plant_id', plantIds);
-      return (data ?? []).map((t: any) => t.id as string);
+      const rows = data ?? [];
+      const trainPlantMap = new Map<string, string>();
+      rows.forEach((t: any) => trainPlantMap.set(t.id, t.plant_id));
+      return { ids: rows.map((t: any) => t.id as string), trainPlantMap };
     },
-    enabled: plantIds.length > 0 && needsRoReadings,
+    enabled: plantIds.length > 0,
   });
+  const _roTrainIdsForReadings = _roTrainMeta?.ids;
+  const _trainPlantMap = _roTrainMeta?.trainPlantMap ?? new Map<string, string>();
 
   const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds, _roTrainIdsForReadings],
@@ -915,7 +926,9 @@ export function TrendChart({
       const trainIds = _roTrainIdsForReadings ?? [];
       if (!trainIds.length) return [];
       const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
-        .select('train_id,recovery_pct,permeate_tds,reading_datetime')
+        // permeate_meter_delta fetched for all metrics: used as the production source
+        // when plant_meter_config.permeate_is_production = true (production/nrw/pv).
+        .select('train_id,recovery_pct,permeate_tds,permeate_meter_delta,reading_datetime')
         .in('train_id', trainIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -923,7 +936,7 @@ export function TrendChart({
       if (error) throw new Error(`ro_train_readings: ${error.message}`);
       return (data ?? []) as any[];
     },
-    enabled: plantIds.length > 0 && needsRoReadings && (_roTrainIdsForReadings !== undefined),
+    enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
   });
 
   // RO train name lookup — reuses the IDs already fetched above
@@ -937,7 +950,26 @@ export function TrendChart({
       (data ?? []).forEach((t: any) => map.set(t.id, t.name ?? `Train ${String(t.id).slice(-4)}`));
       return map;
     },
-    enabled: plantIds.length > 0 && needsRoReadings,
+    enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction),
+  });
+
+  // ── Plant meter config — fetch permeate_is_production flag per plant ────────
+  // When true, the plant has no dedicated product meter; its RO permeate meter
+  // IS the production source.  We fetch this for all metrics that display
+  // Production (m³) so the chartData computation can swap sources correctly.
+  const { data: permeateIsProductionPlants } = useQuery({
+    queryKey: ['plant-meter-config-permeate', plantIds],
+    queryFn: async () => {
+      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+        .select('plant_id, permeate_is_production')
+        .in('plant_id', plantIds);
+      const set = new Set<string>();
+      (data ?? []).forEach((row: any) => {
+        if (row.permeate_is_production) set.add(row.plant_id);
+      });
+      return set;
+    },
+    enabled: plantIds.length > 0 && needsPermeateProduction,
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
@@ -988,6 +1020,10 @@ export function TrendChart({
         // _meterReplacements: list of human-readable entity names replaced on this day.
         // e.g. ["Well 4 Raw Meter", "McDonalds Product Meter"]
         _meterReplacements: [] as string[],
+        // _permeateSourcePlants: set of plant IDs whose production came from the permeate
+        // meter on this day. Populated only for plants with permeate_is_production = true.
+        // Converted to plant names in the final map step for tooltip display.
+        _permeateSourcePlants: null as Set<string> | null,
       }).get(d);
 
     // ── Unified meter-replacement-aware delta helper ────────────────────────
@@ -1103,10 +1139,19 @@ export function TrendChart({
       }
     });
 
-    // Production = sum of product meter (treated-water output) deltas.
-    // Bug fix: pass 'daily_volume' so the pre-computed column is used when present,
-    // matching how locator_readings are handled (avoids boundary-read delta = 0).
-    computeEntityDeltas(productReadings ?? [], 'meter_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    // ── Production source routing ─────────────────────────────────────────────
+    // Plants where permeate_is_production = true use the RO permeate meter delta
+    // as their production volume instead of a dedicated product meter.
+    // Multi-plant selections mix sources: Plant A → permeate delta, Plant B → product meter.
+    // Both contributions accumulate into the same `production` field so the line
+    // stays a single unified series.
+
+    // Step 1: accumulate product meter readings only for plants that use a product meter.
+    computeEntityDeltas(
+      (productReadings ?? []).filter((r: any) => !(permeateIsProductionPlants?.has(r.plant_id))),
+      'meter_id',
+      'daily_volume',
+    ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -1118,6 +1163,26 @@ export function TrendChart({
         if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
       }
     });
+
+    // Step 2: accumulate permeate_meter_delta from ro_train_readings for plants
+    // where permeate_is_production = true.  Sum across all trains per plant per day.
+    if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
+      // Group permeate deltas by day-key, accumulating across trains for the same plant.
+      (roReadings ?? []).forEach((r: any) => {
+        if (r.permeate_meter_delta == null) return;
+        const plantId = _trainPlantMap.get(r.train_id);
+        if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
+        const delta = Math.max(0, +r.permeate_meter_delta);
+        if (delta === 0) return;
+        const dt = new Date(r.reading_datetime);
+        const key = format(dt, 'MMM d');
+        const row = ensure(key, dt.getTime());
+        row.production += delta;
+        // Track which plant names contributed via permeate source (for tooltip note).
+        if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+        row._permeateSourcePlants.add(plantId);
+      });
+    }
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
     // NOTE: locReadings are now fetched via locator_id (not plant_id) so all
@@ -1178,16 +1243,24 @@ export function TrendChart({
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, ...d }) => ({
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, _permeateSourcePlants, ...d }) => ({
         ...d,
         recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
         tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
         nrw: calc.nrw(d.production, d.consumption),
         unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
         // _meterReplacements is already in ...d — preserved here for the tooltip
+        // _permeateSourceNames: sorted plant names whose production came from the permeate
+        // meter on this day. Empty array when no permeate-source plant contributed.
+        _permeateSourceNames: _permeateSourcePlants
+          ? Array.from(_permeateSourcePlants)
+              .map((id) => plantNames?.get(id) ?? id)
+              .sort()
+          : [] as string[],
       }));
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
-      wellNames, locatorNames, productMeterNames, plantNames]);
+      wellNames, locatorNames, productMeterNames, plantNames,
+      permeateIsProductionPlants, _trainPlantMap]);
 
   // ── Drill-mode locator data ───────────────────────────────────────────────
   // drillEntities: full sorted list of {id, label, color} for all active locators.
@@ -1479,9 +1552,10 @@ export function TrendChart({
     if (!active || !payload?.length) return null;
     const warnings = negativeByDate.get(label as string) ?? [];
 
-    // Meter replacements for this date — from chartData row
+    // Meter replacements and permeate source info — from chartData row
     const chartRow = chartData.find((d) => d.date === label);
     const replacements: string[] = chartRow?._meterReplacements ?? [];
+    const permeateSourceNames: string[] = chartRow?._permeateSourceNames ?? [];
 
     // Warnings that are NOT covered by a meter replacement (genuine negatives).
     // A warning is "covered" if there are replacements on this day — the zero
@@ -1566,6 +1640,26 @@ export function TrendChart({
             <span style={{ fontSize: 10, lineHeight: 1.4 }}>
               <strong>Negative reading:</strong>{' '}
               {genuineNegatives.map((w) => w.label).join(', ')}
+            </span>
+          </div>
+        )}
+
+        {/* ── Permeate-source note — shown when ≥1 plant uses permeate_is_production ── */}
+        {permeateSourceNames.length > 0 && (
+          <div style={{
+            marginTop: 6,
+            paddingTop: 5,
+            borderTop: '1px solid hsl(var(--border))',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 5,
+            color: 'hsl(var(--muted-foreground))',
+          }}>
+            <span style={{ fontSize: 11, lineHeight: 1 }}>💧</span>
+            <span style={{ fontSize: 10, lineHeight: 1.4 }}>
+              <span style={{ opacity: 0.85 }}>
+                Source: Permeate meter ({permeateSourceNames.join(', ')})
+              </span>
             </span>
           </div>
         )}
