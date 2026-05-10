@@ -1094,6 +1094,8 @@ export interface PlantMeterConfig {
   solar_meter_names: string[];
   grid_meter_count: number;
   grid_meter_names: string[];
+  // Default solar input mode for Operations entry form
+  default_solar_input_mode: 'raw' | 'direct';
   // NRW / product distribution
   nrw_enabled: boolean;
   has_billed_volume_meter: boolean;
@@ -1126,6 +1128,7 @@ const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   solar_meter_names: [],
   grid_meter_count: 1,
   grid_meter_names: [],
+  default_solar_input_mode: 'raw',
   nrw_enabled: false,
   has_billed_volume_meter: false,
   permeate_is_production: false,
@@ -1831,7 +1834,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
               />
             </div>
             {cfg.has_solar && canEdit && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
                 <Input
                   type="number" step="any" value={cfg.solar_capacity_kw ?? ''}
@@ -1839,6 +1842,45 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                   placeholder="e.g. 50"
                   className="h-9 text-sm mt-1 max-w-[180px]"
                 />
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Solar reading input mode
+                    <span className="ml-1 text-[10px] opacity-70">(used in Operations entry form)</span>
+                  </Label>
+                  <div className="flex items-center rounded-md border border-yellow-200 dark:border-yellow-800/40 overflow-hidden text-[11px] font-medium w-fit">
+                    <button
+                      type="button"
+                      onClick={() => update({ default_solar_input_mode: 'raw' })}
+                      className={[
+                        'px-3 py-1.5 transition-colors',
+                        cfg.default_solar_input_mode !== 'direct'
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30',
+                      ].join(' ')}
+                      title="Cumulative meter reading — Δ auto-computed from previous"
+                    >
+                      Raw Meter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update({ default_solar_input_mode: 'direct' })}
+                      className={[
+                        'px-3 py-1.5 transition-colors border-l border-yellow-200 dark:border-yellow-800/40',
+                        cfg.default_solar_input_mode === 'direct'
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30',
+                      ].join(' ')}
+                      title="Enter daily kWh directly — no cumulative meter needed"
+                    >
+                      Direct kWh
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {cfg.default_solar_input_mode === 'direct'
+                      ? 'Operators enter daily solar kWh directly (e.g. from inverter display).'
+                      : 'Operators enter a cumulative meter reading; Δ is auto-computed.'}
+                  </p>
+                </div>
               </div>
             )}
             <p className="text-[11px] text-muted-foreground mt-2">

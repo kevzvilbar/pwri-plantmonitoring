@@ -18,6 +18,32 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge } from 'lucide-react';
+
+// High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
+function GridPylonIcon({ className = 'h-3 w-3' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <line x1="4" y1="22" x2="20" y2="22" />
+      <line x1="8" y1="22" x2="10" y2="14" />
+      <line x1="16" y1="22" x2="14" y2="14" />
+      <line x1="8" y1="22" x2="14" y2="14" />
+      <line x1="16" y1="22" x2="10" y2="14" />
+      <line x1="10" y1="14" x2="11" y2="8" />
+      <line x1="14" y1="14" x2="13" y2="8" />
+      <line x1="10" y1="14" x2="13" y2="8" />
+      <line x1="14" y1="14" x2="11" y2="8" />
+      <line x1="11" y1="8" x2="11.8" y2="4" />
+      <line x1="13" y1="8" x2="12.2" y2="4" />
+      <line x1="11" y1="8" x2="12.2" y2="4" />
+      <line x1="13" y1="8" x2="11.8" y2="4" />
+      <line x1="7" y1="6" x2="17" y2="6" />
+      <line x1="12" y1="4" x2="12" y2="6" />
+      <line x1="7" y1="6" x2="7" y2="8" />
+      <line x1="17" y1="6" x2="17" y2="8" />
+    </svg>
+  );
+}
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -2775,6 +2801,32 @@ function PowerForm() {
     enabled: !!plantId,
   });
 
+  // Load plant meter config to get default_solar_input_mode (set in Plants → Energy Sources)
+  const { data: meterConfig } = useQuery({
+    queryKey: ['plant-meter-config', plantId],
+    queryFn: async () => {
+      if (!plantId) return null;
+      try {
+        const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+          .select('config').eq('plant_id', plantId).maybeSingle();
+        if (!error && data?.config) return data.config as any;
+      } catch { /* table may not exist */ }
+      try {
+        const raw = localStorage.getItem(`plant_meter_config_${plantId}`);
+        if (raw) return JSON.parse(raw);
+      } catch { /* ignore */ }
+      return null;
+    },
+    enabled: !!plantId,
+  });
+
+  // When plant changes, sync solarInputMode to the plant's configured default
+  useEffect(() => {
+    const mode = meterConfig?.default_solar_input_mode;
+    if (mode === 'direct' || mode === 'raw') setSolarInputMode(mode);
+    else setSolarInputMode('raw');
+  }, [plantId, meterConfig?.default_solar_input_mode]);
+
   const solarMeterCount = (powerConfig?.solar_meter_count as number) ?? 1;
   const gridMeterCount  = (powerConfig?.grid_meter_count  as number) ?? 1;
   const solarMeterNames: string[] = powerConfig?.solar_meter_names ?? [];
@@ -3102,18 +3154,13 @@ function PowerForm() {
                   <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wide">Solar</span>
                   <span className="text-[10px] text-muted-foreground ml-auto">{solarMeterCount} meter{solarMeterCount !== 1 ? 's' : ''}</span>
                 </div>
-
-                {/* Solar input mode toggle — clears all solar inputs on switch */}
-                <div className="flex items-center rounded-md border border-yellow-200 dark:border-yellow-800/40 overflow-hidden text-[10px] font-medium w-fit">
-                  <button type="button"
-                    onClick={() => { setSolarInputMode('raw'); setSolarMeterReadings(['', '', '', '', '']); setSolarReading(''); }}
-                    className={`px-2.5 py-1 transition-colors ${solarInputMode === 'raw' ? 'bg-yellow-500 text-white' : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30'}`}
-                    title="Cumulative meter reading — Δ auto-computed from previous">Raw Meter</button>
-                  <button type="button"
-                    onClick={() => { setSolarInputMode('direct'); setSolarMeterReadings(['', '', '', '', '']); setSolarReading(''); }}
-                    className={`px-2.5 py-1 transition-colors border-l border-yellow-200 dark:border-yellow-800/40 ${solarInputMode === 'direct' ? 'bg-yellow-500 text-white' : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30'}`}
-                    title="Enter daily kWh directly — no previous reading needed">Direct kWh</button>
-                </div>
+                {/* Input mode hint — set in Plants → Energy Sources, not editable here */}
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  Mode: <span className="font-medium text-yellow-600 dark:text-yellow-400">
+                    {solarInputMode === 'direct' ? 'Direct kWh' : 'Raw Meter'}
+                  </span>
+                  <span className="opacity-60 ml-1">(configure in Plants → Energy Sources)</span>
+                </p>
 
                 {Array.from({ length: solarMeterCount }).map((_, idx) => {
                   const meterLabel = getSolarLabel(idx);
@@ -3188,7 +3235,7 @@ function PowerForm() {
               {/* ── Grid column ── */}
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 pb-1 border-b border-blue-200 dark:border-blue-800/40">
-                  <Zap className="h-3 w-3 text-blue-500" />
+                  <GridPylonIcon className="h-3 w-3 text-blue-500" />
                   <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Grid</span>
                   <span className="text-[10px] text-muted-foreground ml-auto">{gridMeterCount} meter{gridMeterCount !== 1 ? 's' : ''}</span>
                 </div>
@@ -3205,7 +3252,7 @@ function PowerForm() {
                   return (
                     <div key={`grid-${idx}`}>
                       <Label className="flex items-center gap-1 text-xs">
-                        <Zap className="h-2.5 w-2.5 text-blue-400" />
+                        <GridPylonIcon className="h-2.5 w-2.5 text-blue-400" />
                         {meterLabel}
                       </Label>
                       <div className="flex items-center gap-2">
@@ -3240,7 +3287,7 @@ function PowerForm() {
                 {/* Grid column total Δ (×multiplier) */}
                 {deltaGrid != null && gridMeterCount > 1 && (
                   <div className="rounded border border-blue-200 bg-blue-50/60 dark:border-blue-800/30 dark:bg-blue-950/10 px-2 py-1 text-[11px] flex items-center gap-1.5 mt-1">
-                    <Zap className="h-3 w-3 text-blue-500" />
+                    <GridPylonIcon className="h-3 w-3 text-blue-500" />
                     <span className="text-muted-foreground">Total Δ</span>
                     {effectiveMultiplier !== 1 && <span className="text-[10px] text-amber-500">×{effectiveMultiplier}</span>}
                     <span className={`font-mono-num font-semibold ml-auto ${deltaGrid >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-destructive'}`}>
@@ -3260,7 +3307,7 @@ function PowerForm() {
                 {deltaSolar != null ? `${fmtNum(deltaSolar)} kWh` : '—'}
               </span>
               <span className="text-muted-foreground/40 mx-0.5">|</span>
-              <Zap className="h-3 w-3 text-blue-500 shrink-0" />
+              <GridPylonIcon className="h-3 w-3 text-blue-500 shrink-0" />
               <span className={deltaGrid != null ? 'font-mono-num font-medium text-blue-700 dark:text-blue-400' : 'text-muted-foreground/50'}>
                 {deltaGrid != null ? `${fmtNum(deltaGrid * effectiveMultiplier)} kWh` : '—'}
               </span>
@@ -3318,7 +3365,7 @@ function PowerForm() {
               return (
                 <div key={`grid-ns-${idx}`}>
                   <Label className="flex items-center gap-1.5">
-                    <Zap className="h-3 w-3 text-blue-500" />
+                    <GridPylonIcon className="h-3 w-3 text-blue-500" />
                     {meterLabel}
                     {isFirst && editingId && <span className="text-xs text-highlight ml-1">(editing)</span>}
                   </Label>
@@ -3387,7 +3434,7 @@ function PowerForm() {
               </span>
               {/* Raw grid meter reading */}
               <span className="font-mono-num text-blue-600" title="Grid meter reading">
-                <Zap className="inline h-3 w-3 mr-0.5 text-blue-400" />
+                <GridPylonIcon className="inline h-3 w-3 mr-0.5 text-blue-400" />
                 {fmtNum(r.meter_reading_kwh)}
               </span>
               {/* Grid Δ (after multiplier) */}
