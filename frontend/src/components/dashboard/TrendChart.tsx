@@ -713,6 +713,7 @@ export function TrendChart({
   // ── Production Cost line toggles ─────────────────────────────────────────
   const [showPowerCostLine, setShowPowerCostLine] = useState(true);
   const [showChemCostLine,  setShowChemCostLine]  = useState(true);
+  const [showTotalCostLine, setShowTotalCostLine] = useState(true);
 
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
@@ -2022,6 +2023,43 @@ export function TrendChart({
           Data Summary
         </button>
 
+        {/* Production Cost line toggles — Prod Cost / Power / Chem */}
+        {metric === 'productionCost' && (
+          <div className="flex items-center gap-0.5 shrink-0 ml-1">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Show:</span>
+            <button
+              onClick={() => setShowTotalCostLine((v) => !v)}
+              title="Toggle Production Cost (Power + Chem) line"
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                showTotalCostLine
+                  ? 'bg-accent text-accent-foreground border-accent'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+            >Prod</button>
+            <button
+              onClick={() => setShowPowerCostLine((v) => !v)}
+              title="Toggle Power Cost (₱/m³) line"
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                showPowerCostLine
+                  ? 'border-[hsl(var(--chart-6))] text-[hsl(var(--chart-6))] bg-[hsl(var(--chart-6))]/10'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+            >Power</button>
+            <button
+              onClick={() => setShowChemCostLine((v) => !v)}
+              title="Toggle Chemical Cost (₱/m³) line"
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                showChemCostLine
+                  ? 'border-[hsl(var(--highlight))] text-[hsl(var(--highlight))] bg-[hsl(var(--highlight))]/10'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+            >Chem</button>
+          </div>
+        )}
+
         {/* Drill controls — only for charts that have consumption data */}
         {hasConsumptionDrill && (
           <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
@@ -2396,7 +2434,25 @@ export function TrendChart({
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
               <div className="text-[11px] mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power readings + tariff (Costs → Power) + chem cost (Costs → Rollup)' : 'wells'}.
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.
+              </div>
+            </div>
+          </div>
+        )}
+        {/* productionCost-specific: data exists but all cost values are null (missing tariff or production) */}
+        {!queryError && !isFetching && metric === 'productionCost' && chartData.length > 0
+          && chartData.every((d) => d.totalCost == null) && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="rounded-md border border-amber-300 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-800 px-4 py-3 text-xs text-amber-800 dark:text-amber-200 text-left pointer-events-auto max-w-sm shadow-sm">
+              <div className="font-semibold mb-1">Cost data incomplete</div>
+              <div className="text-[11px] space-y-1 opacity-90">
+                <p>Power cost requires all three of the following in this date range:</p>
+                <ul className="list-disc list-inside space-y-0.5 mt-1">
+                  <li><strong>Power readings</strong> — log kWh in Operations</li>
+                  <li><strong>Tariff rate</strong> — add a bill in Costs → Power tab</li>
+                  <li><strong>Production volume</strong> — log product meter readings</li>
+                </ul>
+                <p className="mt-1 opacity-75">Check: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">SELECT * FROM power_tariffs WHERE plant_id = '…'</code></p>
               </div>
             </div>
           </div>
@@ -2556,7 +2612,9 @@ export function TrendChart({
                 ]}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱/m³)" connectNulls />
+              {showTotalCostLine && (
+                <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱/m³)" connectNulls />
+              )}
               {showPowerCostLine && (
                 <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱/m³)" connectNulls />
               )}
