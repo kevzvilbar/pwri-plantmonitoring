@@ -33,37 +33,43 @@ const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 function parseCSVLine(line: string): string[] {
   const fields: string[] = [];
   let i = 0;
-  while (i <= line.length) {
+  const len = line.length;
+  while (i < len) {
     if (line[i] === '"') {
-      // Quoted field
-      i++; // skip opening quote
+      // Quoted field — consume opening quote
+      i++;
       let val = '';
-      while (i < line.length) {
+      while (i < len) {
         if (line[i] === '"' && line[i + 1] === '"') {
-          val += '"'; i += 2; // escaped quote
+          val += '"'; i += 2;          // escaped double-quote
         } else if (line[i] === '"') {
-          i++; break; // closing quote
+          i++; break;                  // closing quote
         } else {
           val += line[i++];
         }
       }
       fields.push(val.trim());
-      if (line[i] === ',') i++; // skip comma after closing quote
+      if (i < len && line[i] === ',') i++; // skip field separator
     } else {
       // Unquoted field — read until next comma
       const start = i;
-      while (i < line.length && line[i] !== ',') i++;
+      while (i < len && line[i] !== ',') i++;
       fields.push(line.slice(start, i).trim());
-      if (line[i] === ',') i++;
+      if (i < len && line[i] === ',') i++; // skip field separator
     }
   }
+  // Handle trailing comma (empty last field) e.g. "a,b," → ["a","b",""]
+  if (len > 0 && line[len - 1] === ',') fields.push('');
   return fields;
 }
 
 function parseCSVText(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
+  // Strip UTF-8 BOM (\uFEFF) — Excel adds it when saving as CSV; it silently
+  // attaches to the first column header and makes that header unrecognisable.
+  const clean = text.replace(/^\uFEFF/, '').trim();
+  const lines = clean.split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = parseCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, ''));
+  const headers = parseCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim());
   return lines.slice(1).filter((l) => l.trim()).map((line) => {
     const vals = parseCSVLine(line);
     return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
@@ -507,12 +513,12 @@ async function insertLocatorReadings(
   const { data: locators } = await supabase
     .from('locators').select('id, name').eq('plant_id', plantId);
   const nameToId: Record<string, string> = {};
-  (locators ?? []).forEach((l: any) => { nameToId[l.name.toLowerCase()] = l.id; });
+  (locators ?? []).forEach((l: any) => { nameToId[l.name.trim().toLowerCase()] = l.id; });
 
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
-    const locatorId = nameToId[r.locator_name?.toLowerCase()];
+    const locatorId = nameToId[r.locator_name?.trim().toLowerCase()];
     if (!locatorId) { errors.push(`Locator not found: "${r.locator_name}"`); continue; }
     const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
     const dtMin = dt.slice(0, 16); // minute-level key
@@ -613,12 +619,12 @@ async function insertWellReadings(
   const { data: wells } = await supabase
     .from('wells').select('id, name').eq('plant_id', plantId);
   const nameToId: Record<string, string> = {};
-  (wells ?? []).forEach((w: any) => { nameToId[w.name.toLowerCase()] = w.id; });
+  (wells ?? []).forEach((w: any) => { nameToId[w.name.trim().toLowerCase()] = w.id; });
 
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
-    const wellId = nameToId[r.well_name?.toLowerCase()];
+    const wellId = nameToId[r.well_name?.trim().toLowerCase()];
     if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
     const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
     const dtMin = dt.slice(0, 16);
@@ -705,12 +711,12 @@ async function insertBlendingReadings(
   const { data: wells } = await supabase
     .from('wells').select('id, name').eq('plant_id', plantId);
   const nameToId: Record<string, string> = {};
-  (wells ?? []).forEach((w: any) => { nameToId[w.name.toLowerCase()] = w.id; });
+  (wells ?? []).forEach((w: any) => { nameToId[w.name.trim().toLowerCase()] = w.id; });
 
   let count = 0;
   const errors: string[] = [];
   for (const r of rows) {
-    const wellId = nameToId[r.well_name?.toLowerCase()];
+    const wellId = nameToId[r.well_name?.trim().toLowerCase()];
     if (!wellId) { errors.push(`Well not found: "${r.well_name}"`); continue; }
     const eventDate = r.event_date || new Date().toISOString().slice(0, 10);
 
@@ -798,7 +804,7 @@ async function insertPowerReadings(
   // Resolve plant names → IDs (supports multi-plant CSVs via plant_name column)
   const { data: allPlants } = await supabase.from('plants' as any).select('id, name');
   const plantNameToId: Record<string, string> = {};
-  (allPlants ?? []).forEach((p: any) => { plantNameToId[p.name.toLowerCase()] = p.id; });
+  (allPlants ?? []).forEach((p: any) => { plantNameToId[p.name.trim().toLowerCase()] = p.id; });
 
   let count = 0;
   const errors: string[] = [];
@@ -2016,12 +2022,12 @@ function ProductForm() {
                   .eq('plant_id', pid);
                 const nameToId: Record<string, string> = {};
                 ((meterList ?? []) as any[]).forEach((m: any) => {
-                  nameToId[m.name.toLowerCase()] = m.id;
+                  nameToId[m.name.trim().toLowerCase()] = m.id;
                 });
                 let count = 0;
                 const errors: string[] = [];
                 for (const r of rows) {
-                  const meterId = nameToId[r.meter_name?.toLowerCase()];
+                  const meterId = nameToId[r.meter_name?.trim().toLowerCase()];
                   if (!meterId) { errors.push(`Meter not found: "${r.meter_name}"`); continue; }
                   const dt = r.reading_datetime ? new Date(r.reading_datetime).toISOString() : new Date().toISOString();
                   const dtMin = dt.slice(0, 16);
