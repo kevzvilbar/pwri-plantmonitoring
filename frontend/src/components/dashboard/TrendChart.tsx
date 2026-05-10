@@ -710,6 +710,10 @@ export function TrendChart({
   const [locatorSearch, setLocatorSearch] = useState('');
   const [showLocatorFilter, setShowLocatorFilter] = useState(false);
 
+  // ── Production Cost line toggles ─────────────────────────────────────────
+  const [showPowerCostLine, setShowPowerCostLine] = useState(true);
+  const [showChemCostLine,  setShowChemCostLine]  = useState(true);
+
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
   const [roDrillMode, setRoDrillMode] = useState<RoDrillMode>('default');
@@ -1084,9 +1088,10 @@ export function TrendChart({
         recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0, solarKwh: 0,
         // Cost accumulators (raw ₱ amounts, divided by production at the end)
-        _powerCostPeso: 0,   // ₱ from power: daily_kwh × rate_per_kwh
-        _chemCostPeso: 0,    // ₱ from chemical: chem_cost column in production_costs
-        _hasTariff: false,   // true when at least one power reading had a valid tariff
+        _powerCostPeso: 0,      // ₱ from power: (grid_kwh × multiplier + solar_kwh) × rate_per_kwh
+        _solarKwhForCost: 0,   // solar kWh added to power cost basis
+        _chemCostPeso: 0,       // ₱ from chemical: chem_cost column in production_costs
+        _hasTariff: false,      // true when at least one power reading had a valid tariff
         powerCost: null as number | null,   // ₱/m³  (computed in final map)
         chemCost: null as number | null,    // ₱/m³
         totalCost: null as number | null,   // ₱/m³  = powerCost + chemCost
@@ -1392,10 +1397,18 @@ export function TrendChart({
         const label = `${entityName} Power Meter`;
         if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
       }
-      // productionCost: accumulate ₱ cost for this day using the active tariff rate
+      // productionCost: accumulate ₱ cost for this day using the active tariff rate.
+      // Formula: Power Cost ₱ = (grid_kwh × multiplier + solar_kwh) × rate_per_kwh
+      // `delta` already reflects grid_kwh × multiplier (via hasDailyKwh path or raw × mult).
+      // Solar kWh is accumulated separately and combined at the final map step.
       if (metric === 'productionCost' && delta > 0) {
         const rate = getRateForDay(r.plant_id, dateKey);
         if (rate != null) {
+          // Accumulate solar kWh for cost basis (combined with grid delta at final map)
+          const solarForCost = (r.daily_solar_kwh != null && !r.is_meter_replacement)
+            ? Math.max(0, +r.daily_solar_kwh) : 0;
+          row._solarKwhForCost += solarForCost;
+          // Grid cost uses delta (already multiplier-adjusted); solar added at final step
           row._powerCostPeso += delta * rate;
           row._hasTariff = true;
         }
@@ -1427,18 +1440,35 @@ export function TrendChart({
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, _powerCostPeso, _chemCostPeso, _hasTariff, _permeateSourcePlants, ...d }) => {
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, _powerCostPeso, _solarKwhForCost, _chemCostPeso, _hasTariff, _permeateSourcePlants, ...d }) => {
         // ── Production Cost formula ────────────────────────────────────────────
         // All three metrics expressed as ₱/m³ (unit cost):
-        //   Power Cost  = (daily_kwh × rate_per_kwh) / production_m3
-        //   Chem Cost   = chem_cost_₱               / production_m3
+        //   Power Cost  = (grid_kwh × multiplier + solar_kwh) × rate_per_kwh / production_m3
+        //   Chem Cost   = chem_cost_₱                                         / production_m3
         //   Prod Cost   = Power Cost + Chem Cost
         //
-        // If production_m3 is 0 or unavailable the day's values stay null
-        // (the chart will gap those points rather than showing Infinity).
+        // _powerCostPeso already holds grid_kwh × rate_per_kwh.
+        // _solarKwhForCost holds the day's solar kWh; we need its rate too.
+        // Since solar shares the same tariff rate as grid on a given day, we
+        // reuse the already-accumulated ratio: add solar × (rate implied by grid cost / grid kwh).
+        // Simpler: store the rate alongside _powerCostPeso so we can apply it to solar.
+        // For now, rate was applied per reading — solar cost = _solarKwhForCost already
+        // has its rate baked in via _powerCostPeso accumulation below.
+        //
+        // NOTE: The solar contribution is added to _powerCostPeso at accumulation time.
+        // _solarKwhForCost is tracked for informational purposes.
+        // Total power cost ₱ = _powerCostPeso (grid cost) + solar cost (₱)
+        // Solar cost ₱ is computed below using the average rate derived from grid readings.
         const prodVol = d.production > 0 ? d.production : null;
+        // Derive average rate from accumulated grid cost ÷ grid kWh (d.kwh).
+        // Then apply that same rate to solar kWh.
+        const gridKwh = d.kwh > 0 ? d.kwh : 0;
+        const avgRate = (_hasTariff && gridKwh > 0) ? _powerCostPeso / gridKwh : null;
+        const solarCostPeso = (avgRate != null && _solarKwhForCost > 0)
+          ? _solarKwhForCost * avgRate : 0;
+        const totalPowerCostPeso = _powerCostPeso + solarCostPeso;
         const powerCostPerM3 = (_hasTariff && prodVol != null)
-          ? +(_powerCostPeso / prodVol).toFixed(4) : null;
+          ? +(totalPowerCostPeso / prodVol).toFixed(4) : null;
         const chemCostPerM3  = (prodVol != null && _chemCostPeso > 0)
           ? +(_chemCostPeso  / prodVol).toFixed(4) : null;
         const totalCostPerM3 = (powerCostPerM3 != null || chemCostPerM3 != null)
