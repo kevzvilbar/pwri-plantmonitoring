@@ -1467,6 +1467,25 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                 accentColor="blue"
               />
             </div>
+
+            {/* Shared power meter group notice — shown when per-train kWh is enabled */}
+            {cfg.ro_has_per_train_electricity && (
+              <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 shrink-0" /> Shared Power Meter Groups
+                </p>
+                <p className="opacity-80 leading-relaxed">
+                  If multiple trains share <em>one physical meter</em> (e.g. Umapad Colbox 1/2/3),
+                  set <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">shared_power_meter_group</code> to
+                  the same label on each train (via CSV import or SQL).
+                  Operators enter the <strong>same meter reading</strong> on each train — the delta is stored per-train;
+                  volume-weighted kWh attribution runs in reporting queries.
+                </p>
+                <p className="text-[10px] opacity-60 font-mono">
+                  SQL: UPDATE ro_trains SET shared_power_meter_group = 'colbox' WHERE plant_id = '…' AND train_number IN (1,2,3);
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-border/50" />
@@ -5603,6 +5622,10 @@ function getTrainCsvHeaders(
     afmCol, 'num_booster_pumps',
     housingCol,
     'num_controllers', 'num_hp_pumps',
+    // Power meter topology — leave blank for trains with individual meters.
+    // Trains sharing one physical meter get the SAME non-empty group label
+    // e.g. "colbox" for Umapad Colbox 1/2/3. Used for volume-weighted kWh allocation.
+    'shared_power_meter_group',
   ];
 }
 
@@ -5623,6 +5646,7 @@ function TrainCsvImportDialog({ plantId, onClose,
     `${housingCol} = ${isBagFilter ? 'Filter Housing' : 'Cartridge Filter Housing'}`,
     'num_controllers = Controllers',
     'num_hp_pumps = High Pressure Pumps',
+    'shared_power_meter_group = same label on trains that share one physical power meter (leave blank if each train has its own)',
   ].join(' · ');
 
   const [rows, setRows] = useState<Record<string, string>[]>([]);
@@ -5644,6 +5668,10 @@ function TrainCsvImportDialog({ plantId, onClose,
     const errs: string[] = [];
     rows.forEach((r, i) => {
       if (!r.train_number || isNaN(+r.train_number)) errs.push(`Row ${i + 1}: train_number must be a number`);
+      // Warn if a shared_power_meter_group value contains spaces or special chars
+      if (r.shared_power_meter_group && /[^a-zA-Z0-9_\-]/.test(r.shared_power_meter_group.trim())) {
+        errs.push(`Row ${i + 1}: shared_power_meter_group should only contain letters, numbers, hyphens or underscores (got "${r.shared_power_meter_group}")`);
+      }
     });
     if (errs.length) { setErrors(errs); return; }
     setBusy(true);
@@ -5664,6 +5692,8 @@ function TrainCsvImportDialog({ plantId, onClose,
       num_hp_pumps: r.num_hp_pumps ? +r.num_hp_pumps : 0,
       filter_media_type: plantMediaType,
       filter_housing_type: plantFilterType,
+      // Shared power meter group — null if blank (train has its own meter or no per-train meter)
+      shared_power_meter_group: r.shared_power_meter_group?.trim() || null,
     }));
     const { error } = await supabase.from('ro_trains').insert(payload);
     setBusy(false);
@@ -5690,6 +5720,12 @@ function TrainCsvImportDialog({ plantId, onClose,
             <p className="text-xs text-muted-foreground font-mono">{TRAIN_CSV_HEADERS.join(', ')}</p>
             <p className="text-xs text-muted-foreground mt-1"><strong>train_number</strong> required (integer). All component count fields default to 0 if blank.</p>
             <p className="text-xs text-muted-foreground mt-0.5 italic">{headerNotes}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              <strong>shared_power_meter_group</strong>: leave blank for trains with individual meters.
+              Trains sharing one physical power meter (e.g. Umapad Colbox 1/2/3) should all have
+              the same short label such as <code className="font-mono bg-muted px-1 rounded">colbox</code>.
+              kWh is stored per-train; volume-weighted attribution runs in reports.
+            </p>
           </div>
           <div>
             <Label className="text-xs font-medium">Select CSV file</Label>

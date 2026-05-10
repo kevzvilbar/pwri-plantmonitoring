@@ -511,18 +511,35 @@ function PretreatmentAndROLog() {
     return out;
   }, [prevPretreat]);
 
-  // Pull the most recent RO train reading to auto-fill prev meter readings + duration
-  // NOTE: feed_meter_curr/permeate_meter_curr/reject_meter_curr/power_meter_curr do NOT exist
-  // as DB columns — they are local-only calc inputs. We store the computed volumes instead.
-  // The prev reading's datetime is all we need for duration auto-compute.
+  // Pull the most recent RO train reading to auto-fill prev meter readings + duration.
+  // Also fetches power_meter_curr (stored as power_meter_reading_kwh) so the delta can compute.
   const { data: prevRO } = useQuery({
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => (await supabase.from('ro_train_readings')
-      .select('reading_datetime')
+      .select('reading_datetime, power_meter_reading_kwh')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
+
+  // Fetch sibling trains in the same shared power meter group (if any).
+  // Used to warn the operator and to do volume-weighted kWh allocation on save.
+  const sharedPowerGroup: string | null = (train as any)?.shared_power_meter_group ?? null;
+  const { data: siblingTrains } = useQuery({
+    queryKey: ['ro-power-siblings', plantId, sharedPowerGroup],
+    enabled: !!plantId && !!sharedPowerGroup,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ro_trains')
+        .select('id, train_number, name')
+        .eq('plant_id', plantId)
+        .eq('shared_power_meter_group', sharedPowerGroup!)
+        .neq('id', trainId)
+        .order('train_number');
+      return (data ?? []) as any[];
+    },
+  });
+  const isSharedPowerMeter = !!sharedPowerGroup;
 
   // Auto-compute duration (min) between current reading datetime and last reading datetime
   const autoDurationMin = useMemo(() => {
@@ -531,13 +548,13 @@ function PretreatmentAndROLog() {
     return diff > 0 ? +diff.toFixed(1) : null;
   }, [prevRO, dt]);
 
-  // Previous meter readings: these are local-only inputs — the DB does not store raw meter
-  // current readings, only the computed delta volumes. So prev values cannot be auto-filled
-  // from the last reading; the operator must enter them manually each session.
+  // Previous meter readings: feed/permeate/reject are local-only — DB stores computed volumes,
+  // not raw meter odometer values, so they stay null and the operator enters them manually.
+  // Power is different: we now persist power_meter_reading_kwh so prev is auto-filled.
   const prevFeedMeter  = null;
   const prevPermMeter  = null;
   const prevRejMeter   = null;
-  const prevPowerMeter = null;
+  const prevPowerMeter: number | null = prevRO?.power_meter_reading_kwh ?? null;
 
   // Per-AFM/MMF rows: independent backwash + reading + pressure
   const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
@@ -710,9 +727,23 @@ function PretreatmentAndROLog() {
     // Excluded (local-only, no DB column): feed_meter_curr, permeate_meter_curr,
     //   reject_meter_curr, power_meter_curr.
     // To save volume/power data, first confirm exact column names in your Supabase schema.
+    // feed_meter_curr / permeate_meter_curr / reject_meter_curr are local-only calc helpers —
+    // the DB stores computed delta volumes, not raw odometer readings.
+    // power_meter_curr IS persisted as power_meter_reading_kwh so the next session can
+    // auto-fill the "previous reading" and the delta can be computed without manual re-entry.
     const EXCLUDED_KEYS = new Set([
       'feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr',
     ]);
+
+    // ── Volume-weighted power allocation for shared meters ───────────────────
+    // When this train shares a physical power meter with sibling trains
+    // (shared_power_meter_group is set), we cannot attribute the full kWh delta
+    // to this train — that would multiply-count the same consumption.
+    // Instead we store the FULL meter delta + the raw reading on this train's
+    // row and leave kWh attribution (÷ by number of running sibling trains) to
+    // the reporting layer, which has access to all trains' permeate volumes.
+    // The per-train secEnergy (kWh/m³) shown in the form is therefore an ESTIMATE
+    // (full delta / this train's permeate) and is flagged as such in the UI.
     const roPayload: any = {
       train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
       ...Object.fromEntries(
@@ -725,6 +756,16 @@ function PretreatmentAndROLog() {
       recovery_pct: recovery,
       rejection_pct: rejection,
       salt_passage_pct: saltPassage,
+      // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
+      power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
+      // Delta & derived — null when prevPowerMeter not yet established (first reading)
+      power_delta_kwh: pwrDelta,
+      power_avg_kw: pwrKw,
+      // kWh/m³ stored as-is; for shared meters this is the full-meter estimate,
+      // not the train-allocated value. Attribution happens in reporting queries.
+      specific_energy_kwh_m3: secEnergy,
+      // Flag for reporting layer: if non-null, this train shares a power meter
+      shared_power_meter_group: sharedPowerGroup ?? null,
       recorded_by: activeOperator?.id,
     };
     const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
@@ -1568,12 +1609,41 @@ function PretreatmentAndROLog() {
                 <span className="font-mono font-medium">{autoDurationMin != null ? `${autoDurationMin} min` : '—'}</span>
               </div>
             </div>
+
+            {/* Shared meter warning banner */}
+            {isSharedPowerMeter && (
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>⚡ Shared power meter</span>
+                  <span className="font-mono text-[10px] bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">
+                    group: {sharedPowerGroup}
+                  </span>
+                </div>
+                <p className="opacity-80">
+                  This train shares one physical meter with{' '}
+                  {siblingTrains?.length
+                    ? siblingTrains.map((t: any) => `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}`).join(', ')
+                    : 'other trains in this group'}.
+                  Enter the <strong>same meter reading</strong> on each train.
+                  The full kWh delta is saved here — volume-weighted allocation happens in reports.
+                </p>
+                <p className="opacity-60 italic">
+                  Specific energy shown below is an estimate (full meter ÷ this train's permeate only).
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-[11px] text-muted-foreground">Prev reading (kWh) — auto</Label>
+                <Label className="text-[11px] text-muted-foreground">
+                  Prev reading (kWh){prevPowerMeter != null ? ' — auto' : ' — enter manually (first reading)'}
+                </Label>
                 <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" />
               </div>
-              <div><Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label><Input type="number" step="any" {...f('power_meter_curr')} /></div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label>
+                <Input type="number" step="any" {...f('power_meter_curr')} placeholder="e.g. 12456.8" />
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
@@ -1585,8 +1655,13 @@ function PretreatmentAndROLog() {
                 <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" />
               </div>
               <div>
-                <Label className="text-[11px] text-muted-foreground">Specific energy (kWh/m³)</Label>
-                <ComputedInput value={secEnergy ?? ''} className="text-foreground font-medium" />
+                <Label className={cn('text-[11px]', isSharedPowerMeter ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                  Specific energy (kWh/m³){isSharedPowerMeter ? ' ≈ est.' : ''}
+                </Label>
+                <ComputedInput
+                  value={secEnergy ?? ''}
+                  className={isSharedPowerMeter ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-medium' : 'text-foreground font-medium'}
+                />
               </div>
             </div>
           </Card>
