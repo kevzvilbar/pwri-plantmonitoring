@@ -258,22 +258,12 @@ function OverviewTable({
   }
   if (metric === 'productionCost') {
     cols.push(
-      { key: 'powerCost', label: 'Power (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-      { key: 'chemCost', label: 'Chemical (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-      { key: 'totalCost', label: 'Total (₱)', fmt: (d) => d.totalCost != null ? '₱' + d.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-      { key: 'unitCost', label: '₱/m³', fmt: (d) => d.unitCost != null ? '₱' + d.unitCost : '—' },
+      { key: 'powerCost', label: 'Power (₱/m³)', fmt: (d) => d.powerCost != null ? `₱${(+d.powerCost).toFixed(4)}/m³` : '—' },
+      { key: 'chemCost',  label: 'Chem (₱/m³)',  fmt: (d) => d.chemCost  != null ? `₱${(+d.chemCost).toFixed(4)}/m³`  : '—' },
+      { key: 'totalCost', label: 'Prod Cost (₱/m³)', fmt: (d) => d.totalCost != null ? `₱${(+d.totalCost).toFixed(4)}/m³` : '—' },
     );
   }
-  if (metric === 'chemCost') {
-    cols.push(
-      { key: 'chemCost', label: 'Chemical Cost (₱)', fmt: (d) => d.chemCost != null ? '₱' + d.chemCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-    );
-  }
-  if (metric === 'powerCost') {
-    cols.push(
-      { key: 'powerCost', label: 'Power Cost (₱)', fmt: (d) => d.powerCost != null ? '₱' + d.powerCost.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-    );
-  }
+  // chemCost and powerCost are now part of productionCost (₱/m³ toggles)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -728,11 +718,6 @@ export function TrendChart({
   const [trainSearch, setTrainSearch] = useState('');
   const [showTrainFilter, setShowTrainFilter] = useState(false);
 
-  // ── Production Cost line toggles ─────────────────────────────────────────
-  // Default: only show Prod Cost (sum). Power Cost + Chem Cost lines hidden.
-  const [showPowerCostLine, setShowPowerCostLine] = useState(false);
-  const [showChemCostLine, setShowChemCostLine] = useState(false);
-
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -755,14 +740,17 @@ export function TrendChart({
   }, [range, from, to]);
 
   const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv';
-  const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv';
+  const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
-  const needsPowerReadings = metric === 'pv';
+  // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh)
+  const needsPowerReadings = metric === 'pv' || metric === 'productionCost';
+  // production_costs stores chem_cost (₱ per day) — still used for chemical side.
+  // Power cost is now computed live: daily_kwh × rate_per_kwh / production_m3.
   const needsCostReadings = metric === 'productionCost';
   // needsPermeateProduction: we may need permeate_meter_delta from ro_train_readings
   // as the production source for plants where permeate_is_production = true.
-  const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv';
+  const needsPermeateProduction = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
 
   // ── Entity name lookups — fetched once per plant selection ─────────────────
   const { data: wellNames } = useQuery({
@@ -1020,14 +1008,15 @@ export function TrendChart({
   // Production-cost rows use a date column (`cost_date`) rather than a
   // datetime, so the generic `supaSelect` helper (which filters on
   // `reading_datetime`) doesn't fit. Inline this single query instead.
-  // `production_m3` is pulled so we can compute weighted ₱/m³ across
-  // multi-plant selections (a simple average of per-plant `cost_per_m3`
-  // would mis-weight a plant that produced 10× the volume).
+  // production_costs stores chem_cost (₱/day) entered by operators.
+  // We use it for the chemical side of the cost formula:
+  //   Chem Cost (₱/m³) = chem_cost / production_m3
+  // The power side is now computed live from power_readings × tariff rate.
   const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
     queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       const { data, error } = await supabase.from('production_costs')
-        .select('cost_date,power_cost,chem_cost,total_cost,production_m3')
+        .select('cost_date,chem_cost,plant_id')
         .in('plant_id', plantIds)
         .gte('cost_date', startKey)
         .lte('cost_date', endKey);
@@ -1037,10 +1026,56 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsCostReadings,
   });
 
+  // Power tariffs: rate_per_kwh (₱/kWh) effective on or before each day.
+  // Source of truth: Costs → Power tab auto-derives this from each monthly bill.
+  // For a given day, we use the latest tariff whose effective_date ≤ that day.
+  // We fetch all tariffs in a wide window so we can look up per-day rates in JS.
+  const { data: powerTariffs } = useQuery({
+    queryKey: ['trend-power-tariffs', plantIds],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('power_tariffs')
+        .select('plant_id,effective_date,rate_per_kwh,multiplier')
+        .in('plant_id', plantIds)
+        .order('effective_date', { ascending: true });
+      if (error) throw new Error(`power_tariffs: ${error.message}`);
+      return (data as any[]) ?? [];
+    },
+    enabled: plantIds.length > 0 && needsCostReadings,
+  });
+
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
 
   const chartData = useMemo(() => {
+    // ── Tariff lookup: for each plant, sorted array of {effectiveDate, ratePerKwh} ─
+    // Used to find the ₱/kWh rate active on a given day:
+    //   latest tariff whose effective_date ≤ day's date.
+    // If no tariff exists yet for a plant, cost will be null (not 0).
+    const tariffsByPlant = new Map<string, { effectiveDate: string; ratePerKwh: number }[]>();
+    (powerTariffs ?? []).forEach((t: any) => {
+      if (!t.plant_id || t.rate_per_kwh == null) return;
+      if (!tariffsByPlant.has(t.plant_id)) tariffsByPlant.set(t.plant_id, []);
+      tariffsByPlant.get(t.plant_id)!.push({
+        effectiveDate: t.effective_date,
+        ratePerKwh: +t.rate_per_kwh,
+      });
+    });
+    // Sort each plant's tariffs ascending by date (already ordered from DB, but ensure)
+    tariffsByPlant.forEach((arr) => arr.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)));
+
+    /** Look up the ₱/kWh rate for a given plant on a given yyyy-MM-dd date. */
+    function getRateForDay(plantId: string, dateKey: string): number | null {
+      const tariffs = tariffsByPlant.get(plantId);
+      if (!tariffs || tariffs.length === 0) return null;
+      // Find latest effective tariff ≤ dateKey
+      let rate: number | null = null;
+      for (const t of tariffs) {
+        if (t.effectiveDate <= dateKey) rate = t.ratePerKwh;
+        else break;
+      }
+      return rate;
+    }
+
     const byDay = new Map<string, any>();
     const ensure = (d: string, sortKey: number) =>
       byDay.get(d) ?? byDay.set(d, {
@@ -1048,8 +1083,13 @@ export function TrendChart({
         production: 0, consumption: 0, rawwater: 0,
         recovery: 0, recoverySamples: 0,
         tds: 0, tdsSamples: 0, kwh: 0, solarKwh: 0,
-        powerCost: 0, chemCost: 0, totalCost: 0,
-        costProduction: 0,
+        // Cost accumulators (raw ₱ amounts, divided by production at the end)
+        _powerCostPeso: 0,   // ₱ from power: daily_kwh × rate_per_kwh
+        _chemCostPeso: 0,    // ₱ from chemical: chem_cost column in production_costs
+        _hasTariff: false,   // true when at least one power reading had a valid tariff
+        powerCost: null as number | null,   // ₱/m³  (computed in final map)
+        chemCost: null as number | null,    // ₱/m³
+        totalCost: null as number | null,   // ₱/m³  = powerCost + chemCost
         // _raw* fields accumulate the true unclamped deltas so the tooltip
         // can show the real value even when the chart plots 0 (clamped).
         // null means "no negative delta seen" → tooltip shows normal value.
@@ -1058,11 +1098,9 @@ export function TrendChart({
         _rawRawwater: null as number | null,
         _rawKwh: null as number | null,
         // _meterReplacements: list of human-readable entity names replaced on this day.
-        // e.g. ["Well 4 Raw Meter", "McDonalds Product Meter"]
         _meterReplacements: [] as string[],
         // _permeateSourcePlants: set of plant IDs whose production came from the permeate
         // meter on this day. Populated only for plants with permeate_is_production = true.
-        // Converted to plant names in the final map step for tooltip display.
         _permeateSourcePlants: null as Set<string> | null,
       }).get(d);
 
@@ -1326,6 +1364,10 @@ export function TrendChart({
     // Power = daily_consumption_kwh (already Δ × multiplier, saved by Operations).
     // If daily_consumption_kwh is null (legacy rows without the saved pre-multiplied
     // value), fall back to computing raw meter delta and applying the row's multiplier.
+    //
+    // For productionCost metric: also compute power cost in ₱ per day:
+    //   Power Cost ₱ = daily_kwh × rate_per_kwh
+    // where rate_per_kwh comes from power_tariffs (latest tariff ≤ this day).
     computeEntityDeltas(
       (powerReadings ?? []).map((r: any) => ({
         ...r,
@@ -1341,6 +1383,7 @@ export function TrendChart({
       const delta = hasDailyKwh ? rawComputedDelta : rawComputedDelta * mult;
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
+      const dateKey = format(dt, 'yyyy-MM-dd');
       const row = ensure(key, dt.getTime());
       row.kwh += delta;
       accumulateRaw(row, '_rawKwh', rawDelta);
@@ -1348,6 +1391,14 @@ export function TrendChart({
         const entityName = plantNames?.get(r.plant_id) ?? r.plant_id ?? 'Plant';
         const label = `${entityName} Power Meter`;
         if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
+      }
+      // productionCost: accumulate ₱ cost for this day using the active tariff rate
+      if (metric === 'productionCost' && delta > 0) {
+        const rate = getRateForDay(r.plant_id, dateKey);
+        if (rate != null) {
+          row._powerCostPeso += delta * rate;
+          row._hasTariff = true;
+        }
       }
     });
 
@@ -1363,37 +1414,54 @@ export function TrendChart({
       row.solarKwh += solarVal;
     });
 
+    // Chemical cost: chem_cost (₱/day) from production_costs table.
+    // Operators log this manually in Costs → Rollup (or via CSV import).
+    // Chem Cost (₱/m³) = chem_cost / production_m3  (computed in final map below)
     (costReadings ?? []).forEach((r: any) => {
       const dt = new Date(`${r.cost_date}T00:00:00`);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
-      const power = +(r.power_cost ?? 0);
       const chem = +(r.chem_cost ?? 0);
-      row.powerCost += power;
-      row.chemCost += chem;
-      row.totalCost += r.total_cost != null ? +r.total_cost : power + chem;
-      row.costProduction += +(r.production_m3 ?? 0);
+      row._chemCostPeso += chem;
     });
 
     return Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({ sortKey: _s, recoverySamples, tdsSamples, costProduction, _permeateSourcePlants, ...d }) => ({
-        ...d,
-        recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
-        tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
-        nrw: calc.nrw(d.production, d.consumption),
-        unitCost: costProduction > 0 ? +(d.totalCost / costProduction).toFixed(2) : null,
-        // _meterReplacements is already in ...d — preserved here for the tooltip
-        // _permeateSourceNames: sorted plant names whose production came from the permeate
-        // meter on this day. Empty array when no permeate-source plant contributed.
-        _permeateSourceNames: _permeateSourcePlants
-          ? Array.from(_permeateSourcePlants)
-              .map((id) => plantNames?.get(id) ?? id)
-              .sort()
-          : [] as string[],
-      }));
-  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
-      wellNames, locatorNames, productMeterNames, plantNames,
+      .map(({ sortKey: _s, recoverySamples, tdsSamples, _powerCostPeso, _chemCostPeso, _hasTariff, _permeateSourcePlants, ...d }) => {
+        // ── Production Cost formula ────────────────────────────────────────────
+        // All three metrics expressed as ₱/m³ (unit cost):
+        //   Power Cost  = (daily_kwh × rate_per_kwh) / production_m3
+        //   Chem Cost   = chem_cost_₱               / production_m3
+        //   Prod Cost   = Power Cost + Chem Cost
+        //
+        // If production_m3 is 0 or unavailable the day's values stay null
+        // (the chart will gap those points rather than showing Infinity).
+        const prodVol = d.production > 0 ? d.production : null;
+        const powerCostPerM3 = (_hasTariff && prodVol != null)
+          ? +(_powerCostPeso / prodVol).toFixed(4) : null;
+        const chemCostPerM3  = (prodVol != null && _chemCostPeso > 0)
+          ? +(_chemCostPeso  / prodVol).toFixed(4) : null;
+        const totalCostPerM3 = (powerCostPerM3 != null || chemCostPerM3 != null)
+          ? +((powerCostPerM3 ?? 0) + (chemCostPerM3 ?? 0)).toFixed(4) : null;
+        return {
+          ...d,
+          recovery: recoverySamples ? +(d.recovery / recoverySamples).toFixed(1) : null,
+          tds: tdsSamples ? Math.round(d.tds / tdsSamples) : null,
+          nrw: calc.nrw(d.production, d.consumption),
+          // ₱/m³ unit costs — null when data is missing
+          powerCost: powerCostPerM3,
+          chemCost:  chemCostPerM3,
+          totalCost: totalCostPerM3,
+          // _meterReplacements is already in ...d — preserved for the tooltip
+          _permeateSourceNames: _permeateSourcePlants
+            ? Array.from(_permeateSourcePlants)
+                .map((id) => plantNames?.get(id) ?? id)
+                .sort()
+            : [] as string[],
+        };
+      });
+  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
+      metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
 
   // ── Drill-mode locator data ───────────────────────────────────────────────
@@ -1924,37 +1992,6 @@ export function TrendChart({
           Data Summary
         </button>
 
-        {/* Production Cost line toggles — show/hide Power Cost and Chem Cost breakdown lines */}
-        {metric === 'productionCost' && (
-          <div className="flex items-center gap-0.5 shrink-0" title="Toggle cost breakdown lines">
-            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Show:</span>
-            <button
-              onClick={() => setShowPowerCostLine((v) => !v)}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                showPowerCostLine
-                  ? 'bg-chart-6 text-white border-chart-6'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title="Toggle Power Cost line"
-            >
-              Power ₱
-            </button>
-            <button
-              onClick={() => setShowChemCostLine((v) => !v)}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                showChemCostLine
-                  ? 'bg-highlight text-white border-highlight'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title="Toggle Chemical Cost line"
-            >
-              Chem ₱
-            </button>
-          </div>
-        )}
-
         {/* Drill controls — only for charts that have consumption data */}
         {hasConsumptionDrill && (
           <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
@@ -2329,7 +2366,7 @@ export function TrendChart({
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
               <div className="text-[11px] mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' || metric === 'chemCost' || metric === 'powerCost' ? 'power + chemicals (production_costs rollup)' : 'wells'}.
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power readings + tariff (Costs → Power) + chem cost (Costs → Rollup)' : 'wells'}.
               </div>
             </div>
           </div>
@@ -2461,24 +2498,42 @@ export function TrendChart({
               <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--chart-6))' }} name="Power Cost (₱)" connectNulls />
             </LineChart>
           ) : metric === 'productionCost' ? (
-            // Production Cost chart: always shows Total (Prod Cost = Power + Chem).
-            // Power Cost and Chemical Cost breakdown lines are toggled via buttons above.
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            // Production Cost — all lines as ₱/m³ (unit cost per cubic metre):
+            //   Prod Cost  = Power Cost + Chem Cost          (teal, always visible)
+            //   Power Cost = daily_kwh × rate_per_kwh / m³  (blue, toggle: Power ₱)
+            //   Chem Cost  = chem_cost_₱ / m³               (orange, toggle: Chem ₱)
+            // Single ₱/m³ Y-axis — all lines share the same scale.
+            // Points gap (null) when production = 0 or no tariff is configured.
+            // ─ Where does rate_per_kwh come from? ────────────────────────────────
+            //   Costs → Power tab: each monthly bill entry auto-derives a tariff row
+            //   (total_amount ÷ kWh). That rate is stored in power_tariffs and looked
+            //   up here using the latest effective_date ≤ each reading's date.
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis yAxisId="amt" tick={{ fontSize: 10 }} stroke="hsl(var(--accent))" tickFormatter={formatYAxis} width={36} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="unit" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `₱${v}`} />
-              <Tooltip content={<NegativeAwareTooltip />} />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--accent))"
+                tickFormatter={(v) => `₱${formatYAxis(v)}`}
+                width={44}
+                label={{ value: '₱/m³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+              />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, name: string) => [
+                  v != null ? `₱${(+v).toFixed(4)}/m³` : '—',
+                  name,
+                ]}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line yAxisId="amt" type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱)" connectNulls />
+              <Line type="monotone" dataKey="totalCost" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={{ r: 2 }} name="Prod Cost (₱/m³)" connectNulls />
               {showPowerCostLine && (
-                <Line yAxisId="amt" type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱)" connectNulls />
+                <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={false} name="Power (₱/m³)" connectNulls />
               )}
               {showChemCostLine && (
-                <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" connectNulls />
+                <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chem (₱/m³)" connectNulls />
               )}
-              <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
-            </ComposedChart>
+            </LineChart>
           ) : metric === 'pv' ? (
             // PV Ratio — two lines: Grid-only PV and (Grid+Solar) PV.
             // PvTooltip and domain are defined/hoisted above the return().
