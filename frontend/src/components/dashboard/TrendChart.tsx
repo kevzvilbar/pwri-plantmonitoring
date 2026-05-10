@@ -925,19 +925,33 @@ export function TrendChart({
     queryFn: async () => {
       const trainIds = _roTrainIdsForReadings ?? [];
       if (!trainIds.length) return [];
-      const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
-        // permeate_meter      — cumulative odometer snapshot (curr).
-        // permeate_meter_prev — previous snapshot saved at insert time.
-        // permeate_meter_delta — pre-computed curr−prev saved at insert time;
-        //   never needs sequential in-memory diffing (avoids zero-first-reading bug).
-        // permeate_production_date — cutoff-adjusted day label (YYYY-MM-DD);
-        //   correctly buckets hourly readings across midnight cut-offs.
-        .select('train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,permeate_production_date,reading_datetime')
+
+      // Attempt full select including the new columns added in the permeate-delta
+      // migration (permeate_meter_prev, permeate_meter_delta, permeate_production_date).
+      // If the DB hasn't been migrated yet those columns don't exist and Supabase
+      // returns a schema-cache error — fall back to the legacy select so the chart
+      // never breaks on un-migrated deployments.
+      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,permeate_production_date,reading_datetime';
+      const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime';
+      const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date'];
+      const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
+
+      const base = (supabase.from('ro_train_readings' as never) as any)
         .in('train_id', trainIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-      if (error) throw new Error(`ro_train_readings: ${error.message}`);
+
+      const { data, error } = await base.select(FULL_SELECT);
+      if (error) {
+        if (isNewColError(error.message)) {
+          // New columns not yet in DB — retry with legacy columns only.
+          const { data: d2, error: e2 } = await base.select(LEGACY_SELECT);
+          if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
+          return (d2 ?? []) as any[];
+        }
+        throw new Error(`ro_train_readings: ${error.message}`);
+      }
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
@@ -1170,57 +1184,71 @@ export function TrendChart({
 
     // Step 2: accumulate permeate meter deltas for plants where permeate_is_production = true.
     //
-    // APPROACH: use the pre-saved permeate_meter_delta + permeate_production_date columns
-    // written by insertROTrainReadings at import time.  This avoids computeEntityDeltas
-    // entirely — which always zeroed the first reading in every fetch window because
-    // the sequential in-memory diff had no predecessor for it.
+    // PRIMARY PATH (migrated DB): use pre-saved permeate_meter_delta + permeate_production_date.
+    //   • permeate_meter_delta — exact curr−prev from the CSV row, saved at insert time.
+    //     No sequential in-memory diffing needed, so the first reading in any fetch window
+    //     is never silently zeroed.
+    //   • permeate_production_date — cutoff-adjusted YYYY-MM-DD label saved at insert time.
+    //     Correctly buckets hourly readings that cross midnight cut-offs (e.g. a 1:06 AM
+    //     reading past a 12:20 cut-off is already stamped the next calendar day).
     //
-    // Cut-off bucketing: permeate_production_date is the cutoff-adjusted YYYY-MM-DD label
-    // computed at insert time (e.g. a 1:06 AM reading beyond a 12:20 cut-off is already
-    // stamped "May 5").  We group by that date, not by the raw reading_datetime calendar day.
-    //
-    // Fallback: if a row has no saved delta/date (e.g. data imported before this fix),
-    // fall back to curr−prev from permeate_meter / permeate_meter_prev when available,
-    // and bucket by the calendar date of reading_datetime as a last resort.
+    // FALLBACK PATH (un-migrated DB, new columns absent): fall back to computeEntityDeltas
+    //   keyed by train_id — same as before — so the chart still works without migration.
     if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
-      (roReadings ?? []).forEach((r: any) => {
-        const plantId = _trainPlantMap.get(r.train_id);
-        if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
+      // Check whether the new columns are present on any row in the result set.
+      const hasSavedDelta = (roReadings ?? []).some(
+        (r: any) => r.permeate_meter_delta != null || r.permeate_production_date != null,
+      );
 
-        // ── Resolve delta ────────────────────────────────────────────────────
-        let delta: number | null = null;
-        if (r.permeate_meter_delta != null) {
-          // Best path: pre-saved at insert time — exact curr−prev from the CSV row.
-          delta = Math.max(0, +r.permeate_meter_delta);
-        } else if (r.permeate_meter != null && r.permeate_meter_prev != null) {
-          // Fallback A: both curr and prev snapshots present in DB.
-          delta = Math.max(0, +r.permeate_meter - +r.permeate_meter_prev);
-        }
-        // If neither is available this reading carries no usable production data.
-        if (delta === null || delta === 0) return;
+      if (hasSavedDelta) {
+        // ── PRIMARY: use saved delta + production date ───────────────────────
+        (roReadings ?? []).forEach((r: any) => {
+          const plantId = _trainPlantMap.get(r.train_id);
+          if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
 
-        // ── Resolve production day ───────────────────────────────────────────
-        // Best path: cutoff-adjusted label saved at insert time.
-        // Fallback B: calendar date of reading_datetime (correct for daily readings
-        //   at 00:00 which never cross the cut-off boundary).
-        let dayLabel: string;
-        if (r.permeate_production_date) {
-          dayLabel = r.permeate_production_date; // YYYY-MM-DD
-        } else {
-          dayLabel = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-        }
+          // Resolve delta: prefer pre-saved, fall back to curr−prev snapshots.
+          let delta: number | null = null;
+          if (r.permeate_meter_delta != null) {
+            delta = Math.max(0, +r.permeate_meter_delta);
+          } else if (r.permeate_meter != null && r.permeate_meter_prev != null) {
+            delta = Math.max(0, +r.permeate_meter - +r.permeate_meter_prev);
+          }
+          if (delta === null || delta === 0) return;
 
-        // ensure() keys by the display label "MMM d"; we need a consistent
-        // sortKey so derive it from the YYYY-MM-DD label at noon local time.
-        const dt = new Date(`${dayLabel}T12:00:00`);
-        const key = format(dt, 'MMM d');
-        const row = ensure(key, dt.getTime());
-        row.production += delta;
+          // Resolve production day: prefer cutoff-adjusted label, fall back to
+          // calendar date of reading_datetime (correct for daily 00:00 readings).
+          const dayLabel: string = r.permeate_production_date
+            ?? format(new Date(r.reading_datetime), 'yyyy-MM-dd');
 
-        // Track which plants contributed via permeate source (for tooltip note).
-        if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
-        row._permeateSourcePlants.add(plantId);
-      });
+          // ensure() keys by display label "MMM d"; anchor sortKey at noon so
+          // multiple readings on the same day don't produce duplicate chart keys.
+          const dt = new Date(`${dayLabel}T12:00:00`);
+          const key = format(dt, 'MMM d');
+          const row = ensure(key, dt.getTime());
+          row.production += delta;
+          if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+          row._permeateSourcePlants.add(plantId);
+        });
+      } else {
+        // ── FALLBACK: un-migrated DB — sequential delta via computeEntityDeltas ─
+        const permeateRoReadings = (roReadings ?? [])
+          .filter((r: any) => {
+            const plantId = _trainPlantMap.get(r.train_id);
+            return plantId && permeateIsProductionPlants.has(plantId) && r.permeate_meter != null;
+          })
+          .map((r: any) => ({ ...r, current_reading: +r.permeate_meter }));
+
+        computeEntityDeltas(permeateRoReadings, 'train_id', null).forEach(({ r, delta }) => {
+          if (delta === 0) return;
+          const plantId = _trainPlantMap.get(r.train_id)!;
+          const dt = new Date(r.reading_datetime);
+          const key = format(dt, 'MMM d');
+          const row = ensure(key, dt.getTime());
+          row.production += delta;
+          if (!row._permeateSourcePlants) row._permeateSourcePlants = new Set<string>();
+          row._permeateSourcePlants.add(plantId);
+        });
+      }
     }
 
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
