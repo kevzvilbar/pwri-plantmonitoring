@@ -32,14 +32,13 @@ const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
 // ─── Chemical master list (mirrors ROTrains.tsx KNOWN_CHEMICALS) ─────────────
 // Managers configure which chemicals are applicable per plant in Plant Configuration.
 // ROTrains → Chemical Dosing hides chemicals not in the enabled list.
+// CIP-only chemicals (HCl, SLS, Caustic Soda) are intentionally excluded —
+// they are consistent across all plants and managed exclusively in the CIP tab.
 const PLANT_CHEMICALS = [
-  { name: 'Chlorine',      defaultUnit: 'kg' },
-  { name: 'SMBS',          defaultUnit: 'kg' },
-  { name: 'Anti Scalant',  defaultUnit: 'L'  },
-  { name: 'Soda Ash',      defaultUnit: 'kg' },
-  { name: 'Caustic Soda',  defaultUnit: 'kg' },
-  { name: 'HCl',           defaultUnit: 'L'  },
-  { name: 'SLS',           defaultUnit: 'g'  },
+  { name: 'Chlorine',     defaultUnit: 'kg' },
+  { name: 'SMBS',         defaultUnit: 'kg' },
+  { name: 'Anti Scalant', defaultUnit: 'L'  },
+  { name: 'Soda Ash',     defaultUnit: 'kg' },
 ];
 
 // ─── SummaryCount pill ───────────────────────────────────────────────────────

@@ -22,21 +22,20 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, Download, FileText, AlertCircle, Loader2, X } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, Loader2, X, ChevronDown } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 
 
 
 // ─── Chemical Dosing constants ────────────────────────────────────────────────
+// HCl, SLS, and Caustic Soda are CIP-only chemicals — they are NOT listed here.
+// They are always used during CIP and are entered exclusively in the CIP tab.
 const KNOWN_CHEMICALS = [
   { name: 'Chlorine', defaultUnit: 'kg' },
   { name: 'SMBS', defaultUnit: 'kg' },
   { name: 'Anti Scalant', defaultUnit: 'L' },
   { name: 'Soda Ash', defaultUnit: 'kg' },
-  { name: 'Caustic Soda', defaultUnit: 'kg' },
-  { name: 'HCl', defaultUnit: 'L' },
-  { name: 'SLS', defaultUnit: 'g' },
 ];
 const CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 const DOSING_KEYS = [
@@ -2497,7 +2496,13 @@ function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange: (patc
   );
 }
 
-function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
+function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
+  // ── Vessel count — user can override before generating the list ──────────
+  const [vesselCount, setVesselCount] = useState(numVessels);
+  const [vesselCountInput, setVesselCountInput] = useState(String(numVessels));
+  const [listGenerated, setListGenerated] = useState(false);
+  const [vesselListOpen, setVesselListOpen] = useState(true);
+
   // ── Per-vessel flow state ─────────────────────────────────────────────────
   const makeRow = (id: number): VesselFlowRow => ({
     id, method: 'meter',
@@ -2505,10 +2510,18 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
     bucketVol: '20', fillTimeSec: '',
   });
   const [vesselRows, setVesselRows] = useState<VesselFlowRow[]>(
-    Array.from({ length: numVessels }, (_, i) => makeRow(i + 1))
+    Array.from({ length: vesselCount }, (_, i) => makeRow(i + 1))
   );
   const [expandedVessel, setExpandedVessel] = useState<number | null>(null);
   const [globalMethod, setGlobalMethod] = useState<VesselFlowMethod>('meter');
+
+  const generateList = () => {
+    const n = Math.max(1, Math.min(50, +vesselCountInput || vesselCount));
+    setVesselCount(n);
+    setVesselRows(Array.from({ length: n }, (_, i) => makeRow(i + 1)));
+    setListGenerated(true);
+    setVesselListOpen(true);
+  };
 
   const patchRow = (id: number, patch: Partial<VesselFlowRow>) =>
     setVesselRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -2593,6 +2606,33 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
       {/* ══ TAB 1 — Per-Vessel Flow Rate ════════════════════════════ */}
       {activeTab === 'vessel' && (
         <div className="space-y-3">
+
+          {/* ── Vessel count prompt ──────────────────────────────── */}
+          <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+            <span className="text-xs font-semibold text-foreground shrink-0">Vessels per train:</span>
+            <Input
+              type="number" min="1" max="50"
+              value={vesselCountInput}
+              onChange={e => setVesselCountInput(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && generateList()}
+              className="h-7 w-16 text-sm text-center font-mono"
+            />
+            <Button
+              size="sm"
+              onClick={generateList}
+              className="h-7 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+            >
+              Generate List
+            </Button>
+            {listGenerated && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                ✓ {vesselCount} vessel{vesselCount !== 1 ? 's' : ''} ready
+              </span>
+            )}
+          </div>
+
+          {listGenerated && (<>
+
           {/* Global method switcher */}
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[11px] text-muted-foreground font-medium">All vessels:</span>
@@ -2619,8 +2659,34 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
             }
           </div>
 
-          {/* Vessel list — accordion */}
-          <div className="space-y-2">
+          {/* Vessel list — foldable ──────────────────────────────── */}
+          <div className="rounded-xl border border-border overflow-hidden">
+            {/* Fold/unfold header */}
+            <button
+              type="button"
+              onClick={() => setVesselListOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors"
+            >
+              <span className="text-xs font-semibold text-foreground">
+                Vessel List ({vesselCount} vessel{vesselCount !== 1 ? 's' : ''})
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground">
+                  {vesselRows.filter(r => {
+                    if (r.method === 'meter') {
+                      const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+                      const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+                      return dV !== null && dT !== null && dT > 0;
+                    }
+                    return +r.bucketVol > 0 && +r.fillTimeSec > 0;
+                  }).length} / {vesselCount} filled
+                </span>
+                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200', vesselListOpen ? 'rotate-180' : '')} />
+              </div>
+            </button>
+
+            {vesselListOpen && (
+            <div className="divide-y divide-border">
             {vesselRows.map(row => {
               const isOpen = expandedVessel === row.id;
               // Quick Q preview for collapsed state
@@ -2673,6 +2739,8 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
                 </div>
               );
             })}
+            </div>
+            )}
           </div>
 
           {/* All-vessel Q summary strip */}
@@ -2711,6 +2779,7 @@ function CIPVolumetric({ numVessels = 15 }: { numVessels?: number }) {
               <p className="text-[9px] text-muted-foreground/50 mt-1.5">m³/hr per vessel</p>
             </div>
           )}
+          </>)}
         </div>
       )}
 
