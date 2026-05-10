@@ -158,6 +158,7 @@ function ImportReadingsDialog({
   const [busy, setBusy]     = useState(false);
   const [done, setDone]     = useState(false);
   const [imported, setImported] = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   // Intra-file duplicate handling
   const [dupRows, setDupRows] = useState<Record<string, string>[]>([]);
   const [dupResolved, setDupResolved] = useState(false);
@@ -183,7 +184,7 @@ function ImportReadingsDialog({
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false);
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupRows([]); setDupResolved(false); setImportErrors([]);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = parseCSVText(ev.target?.result as string);
@@ -240,7 +241,7 @@ function ImportReadingsDialog({
       return; // let user click Import again with deduplicated rows
     }
 
-    const { count, errors: importErrors } = await insertRows(rows, plantId);
+    const { count, errors: insertErrs } = await insertRows(rows, plantId);
     await logReadingImport({
       user_id: userId,
       plant_id: plantId,
@@ -248,13 +249,14 @@ function ImportReadingsDialog({
       file_name: file.name,
       row_count: rows.length,
       schema_valid: errors.length === 0,
-      schema_errors: [...errors, ...importErrors],
+      schema_errors: [...errors, ...insertErrs],
       timestamp: ts,
     });
     setBusy(false);
     setImported(count);
     setDone(true);
-    if (importErrors.length) toast.error(`${count} imported, ${importErrors.length} failed`);
+    setImportErrors(insertErrs);
+    if (insertErrs.length) toast.error(`${count} imported, ${insertErrs.length} failed`);
     else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
     else toast.success(`${count} reading(s) imported`);
     // Only auto-close when at least one row was actually imported;
@@ -387,10 +389,22 @@ function ImportReadingsDialog({
           )}
 
           {done && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-              {imported} record(s) imported. Audit log written.
-            </p>
+            <div className="space-y-2">
+              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}. Audit log written.
+              </p>
+              {importErrors.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] font-semibold text-destructive mb-1 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Import errors (first {Math.min(importErrors.length, 20)} of {importErrors.length}):
+                  </p>
+                  <ul className="text-[10px] text-destructive list-disc ml-3 space-y-0.5">
+                    {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Intra-file duplicate notice (shown after dedup, before re-import) */}
