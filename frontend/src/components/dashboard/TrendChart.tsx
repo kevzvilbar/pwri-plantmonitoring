@@ -2344,35 +2344,34 @@ export function TrendChart({
               <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
             </ComposedChart>
           ) : metric === 'pv' ? (
-            // PV Ratio: Production (m³) and Power (kWh) as bars on the left axis,
-            // computed PV Ratio (kWh/m³) as a dashed line on the right axis.
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            // PV Ratio only — single line showing kWh/m³ ratio directly.
+            // Power and Production are intentionally excluded; the ratio alone
+            // is what operators need to track energy efficiency over time.
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³ / kWh', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="ratio" orientation="right" tick={{ fontSize: 10 }} stroke="#f59e0b" width={36} tickFormatter={(v) => `${v}`} label={{ value: 'kWh/m³', angle: 90, position: 'insideRight', fontSize: 9, offset: 8 }} />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="#f59e0b"
+                width={40}
+                tickFormatter={(v) => `${v}`}
+                label={{ value: 'kWh/m³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+              />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any, name: string) => {
-                  if (name === 'PV Ratio (kWh/m³)') return [v != null ? `${v} kWh/m³` : '—', name];
-                  return [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name];
-                }}
+                formatter={(v: any) => [v != null ? `${v} kWh/m³` : '—', 'PV Ratio']}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" maxBarSize={32} />
-              <Bar yAxisId="vol" dataKey="kwh" fill="hsl(var(--chart-3))" name="Power (kWh)" maxBarSize={32} />
               <Line
-                yAxisId="ratio"
                 type="monotone"
                 dataKey={(d: any) => d.production > 0 ? +(d.kwh / d.production).toFixed(2) : null}
                 stroke="#f59e0b"
-                strokeWidth={2}
-                strokeDasharray="4 3"
+                strokeWidth={2.5}
                 dot={{ r: 2, fill: '#f59e0b' }}
                 name="PV Ratio (kWh/m³)"
                 connectNulls
               />
-            </ComposedChart>
+            </LineChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
