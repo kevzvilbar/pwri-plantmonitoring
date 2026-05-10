@@ -5070,10 +5070,6 @@ function TrainOperatorLogModal({
   );
 }
 
-    </Dialog>
-  );
-}
-
 // ─── Trains List ─────────────────────────────────────────────────────────────
 
 function TrainsList({ plantId }: { plantId: string }) {
