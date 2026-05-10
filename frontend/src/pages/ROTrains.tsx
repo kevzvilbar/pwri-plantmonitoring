@@ -22,7 +22,8 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, Loader2, X } from 'lucide-react';
+import { downloadCSV } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 
 
@@ -44,6 +45,354 @@ const DOSING_KEYS = [
   { key: 'anti_scalant_l', name: 'Anti Scalant', unit: 'L' },
   { key: 'soda_ash_kg', name: 'Soda Ash', unit: 'kg' },
 ];
+
+
+// ─── CSV helpers (same pattern as Operations.tsx) ────────────────────────────
+
+function parseROCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  const len = line.length;
+  while (i < len) {
+    if (line[i] === '"') {
+      i++;
+      let val = '';
+      while (i < len) {
+        if (line[i] === '"' && line[i + 1] === '"') { val += '"'; i += 2; }
+        else if (line[i] === '"') { i++; break; }
+        else { val += line[i++]; }
+      }
+      fields.push(val.trim());
+      if (i < len && line[i] === ',') i++;
+    } else {
+      const start = i;
+      while (i < len && line[i] !== ',') i++;
+      fields.push(line.slice(start, i).trim());
+      if (i < len && line[i] === ',') i++;
+    }
+  }
+  if (len > 0 && line[len - 1] === ',') fields.push('');
+  return fields;
+}
+
+function parseROCSVText(text: string): Record<string, string>[] {
+  const clean = text.replace(/^\uFEFF/, '').trim();
+  const lines = clean.split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = parseROCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim());
+  return lines.slice(1).filter((l) => l.trim()).map((line) => {
+    const vals = parseROCSVLine(line);
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function normalizeRODatetime(raw: string): string {
+  if (!raw?.trim()) return '';
+  let s = raw.trim().replace(' ', 'T');
+  s = s.replace(/T(\d):/, 'T0$1:');
+  return s;
+}
+
+// ─── RO Train Readings CSV schema ────────────────────────────────────────────
+const RO_TRAIN_SCHEMA =
+  'train_number*, reading_datetime (YYYY-MM-DDTHH:mm), feed_pressure_psi, reject_pressure_psi, ' +
+  'feed_flow, permeate_flow, reject_flow, feed_tds, permeate_tds, reject_tds, ' +
+  'feed_ph, permeate_ph, reject_ph, turbidity_ntu, temperature_c, suction_pressure_psi, remarks';
+
+const RO_TRAIN_TEMPLATE_ROW: Record<string, string> = {
+  train_number: '1',
+  reading_datetime: '2024-06-15T08:30',
+  feed_pressure_psi: '120',
+  reject_pressure_psi: '115',
+  feed_flow: '10.5',
+  permeate_flow: '7.5',
+  reject_flow: '3.0',
+  feed_tds: '800',
+  permeate_tds: '50',
+  reject_tds: '1500',
+  feed_ph: '7.2',
+  permeate_ph: '6.8',
+  reject_ph: '7.5',
+  turbidity_ntu: '0.5',
+  temperature_c: '28',
+  suction_pressure_psi: '10',
+  remarks: '',
+};
+
+function validateROTrainRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.train_number?.trim() || isNaN(Number(r.train_number)))
+    e.push(`Row ${i}: train_number is required and must be a number`);
+  if (r.reading_datetime && isNaN(Date.parse(normalizeRODatetime(r.reading_datetime))))
+    e.push(`Row ${i}: reading_datetime is not a valid date`);
+  const numFields = [
+    'feed_pressure_psi','reject_pressure_psi','feed_flow','permeate_flow','reject_flow',
+    'feed_tds','permeate_tds','reject_tds','feed_ph','permeate_ph','reject_ph',
+    'turbidity_ntu','temperature_c','suction_pressure_psi',
+  ];
+  for (const f of numFields) {
+    if (r[f]?.trim() && isNaN(Number(r[f])))
+      e.push(`Row ${i}: ${f} must be a number`);
+  }
+  return e;
+}
+
+async function insertROTrainReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+): Promise<{ count: number; errors: string[] }> {
+  const { data: trains } = await supabase
+    .from('ro_trains').select('id, train_number').eq('plant_id', plantId);
+  const numToId: Record<string, string> = {};
+  (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+
+  let count = 0;
+  const errors: string[] = [];
+  for (const r of rows) {
+    const trainId = numToId[r.train_number?.trim()];
+    if (!trainId) { errors.push(`Train ${r.train_number} not found in this plant`); continue; }
+
+    const dt = r.reading_datetime
+      ? new Date(normalizeRODatetime(r.reading_datetime)).toISOString()
+      : new Date().toISOString();
+    const dtMin = dt.slice(0, 16);
+
+    // Duplicate check — one per train per hour
+    const { data: existing } = await supabase.from('ro_train_readings')
+      .select('id').eq('train_id', trainId)
+      .gte('reading_datetime', `${dtMin}:00`)
+      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
+    if (existing && existing.length > 0) {
+      errors.push(`Skipped: Train ${r.train_number} already has a reading at ${dtMin}`);
+      continue;
+    }
+
+    const num = (k: string) => r[k]?.trim() ? +r[k] : null;
+    const { error } = await supabase.from('ro_train_readings').insert({
+      train_id: trainId,
+      plant_id: plantId,
+      reading_datetime: dt,
+      feed_pressure_psi: num('feed_pressure_psi'),
+      reject_pressure_psi: num('reject_pressure_psi'),
+      feed_flow: num('feed_flow'),
+      permeate_flow: num('permeate_flow'),
+      reject_flow: num('reject_flow'),
+      feed_tds: num('feed_tds'),
+      permeate_tds: num('permeate_tds'),
+      reject_tds: num('reject_tds'),
+      feed_ph: num('feed_ph'),
+      permeate_ph: num('permeate_ph'),
+      reject_ph: num('reject_ph'),
+      turbidity_ntu: num('turbidity_ntu'),
+      temperature_c: num('temperature_c'),
+      suction_pressure_psi: num('suction_pressure_psi'),
+      remarks: r.remarks?.trim() || null,
+      recorded_by: userId,
+    });
+    if (error) errors.push(error.message);
+    else count++;
+  }
+  return { count, errors };
+}
+
+// ─── ImportROReadingsDialog ───────────────────────────────────────────────────
+function ImportROReadingsDialog({
+  plantId,
+  userId,
+  onClose,
+  onImported,
+}: {
+  plantId: string;
+  userId: string | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [file, setFile]               = useState<File | null>(null);
+  const [rows, setRows]               = useState<Record<string, string>[]>([]);
+  const [errors, setErrors]           = useState<string[]>([]);
+  const [busy, setBusy]               = useState(false);
+  const [done, setDone]               = useState(false);
+  const [imported, setImported]       = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]); setImportErrors([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseROCSVText(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateROTrainRow(r, i + 2)));
+      setRows(parsed);
+      setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    if (!plantId) { toast.error('Select a plant first'); return; }
+    setBusy(true);
+    const { count, errors: insertErrs } = await insertROTrainReadings(rows, plantId, userId);
+    setBusy(false);
+    setImported(count);
+    setDone(true);
+    setImportErrors(insertErrs);
+    if (insertErrs.length) toast.error(`${count} imported, ${insertErrs.length} failed`);
+    else if (count === 0) toast.info('No rows imported — all were duplicates.');
+    else toast.success(`${count} RO reading(s) imported`);
+    if (count > 0) onImported();
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Import RO Train Readings from CSV
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* Download template */}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button
+              size="sm" variant="outline" className="shrink-0 gap-1.5"
+              onClick={() => downloadCSV('ro_train_readings_template.csv', [RO_TRAIN_TEMPLATE_ROW])}
+            >
+              <Download className="h-3.5 w-3.5" /> Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema hint */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{RO_TRAIN_SCHEMA}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required. <code>reading_datetime</code> accepts
+              ISO 8601 (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
+              Leave blank to default to import timestamp. Existing readings at the same hour are skipped.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm" variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" /> Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0
+                ? 'border-destructive/40 bg-destructive/5'
+                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {Object.keys(rows[0]).map((h) => (
+                        <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((val, j) => (
+                          <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[100px] truncate">{val || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {done && (
+            <div className="space-y-2">
+              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} skipped/failed` : ''}. 
+              </p>
+              {importErrors.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] font-semibold text-destructive mb-1 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Issues (first {Math.min(importErrors.length, 20)}):
+                  </p>
+                  <ul className="text-[10px] text-destructive list-disc ml-3 space-y-0.5">
+                    {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-teal-700 text-white hover:bg-teal-800"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function ROTrains() {
   return (
@@ -428,6 +777,7 @@ function PretreatmentAndROLog() {
   // is always the auth-owner (Reynan). activeOperator reflects whoever was
   // selected on the operator-picker screen or switched via OperatorSwitcher.
   const { activeOperator } = useAuth();
+  const [showImport, setShowImport] = useState(false);
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState('');
@@ -876,24 +1226,20 @@ function PretreatmentAndROLog() {
             size="sm"
             variant="outline"
             className="gap-1.5 h-8 text-xs"
-            onClick={() => document.getElementById('ro-pretreat-import-input')?.click()}
+            onClick={() => setShowImport(true)}
           >
             <Upload className="h-3.5 w-3.5" /> Import CSV
           </Button>
-          <input
-            id="ro-pretreat-import-input"
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              toast.info(`Import of "${file.name}" is not yet wired to a handler — connect an insertRows function to process it.`);
-              e.target.value = '';
-            }}
-          />
           <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
         </div>
+        {showImport && (
+          <ImportROReadingsDialog
+            plantId={plantId}
+            userId={activeOperator?.id ?? null}
+            onClose={() => setShowImport(false)}
+            onImported={() => { setShowImport(false); qc.invalidateQueries(); }}
+          />
+        )}
       </div>
 
       <Card className="p-3 space-y-3">
