@@ -4272,10 +4272,10 @@ function DosingHistoryLog() {
           {/* Plant filter */}
           <div>
             <Label className="text-[11px] text-muted-foreground">Plant</Label>
-            <Select value={filterPlantId} onValueChange={setFilterPlantId}>
+            <Select value={filterPlantId || '__all__'} onValueChange={(v) => setFilterPlantId(v === '__all__' ? '' : v)}>
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All plants" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All plants</SelectItem>
+                <SelectItem value="__all__">All plants</SelectItem>
                 {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
