@@ -1788,6 +1788,50 @@ export function TrendChart({
     return String(value);
   };
 
+  // PV tooltip — defined here (not inside JSX) so esbuild can parse it.
+  // Shows Grid PV and (Grid+Solar) PV ratios plus the underlying Volume and
+  // Power values so operators can see what is driving each day's ratio.
+  const PvTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const row = chartData.find((d) => d.date === label);
+    if (!row) return null;
+    const gridPv  = row.production > 0 ? +(row.kwh / row.production).toFixed(2) : null;
+    const totalPv = row.production > 0 && (row.kwh + row.solarKwh) > 0
+      ? +((row.kwh + row.solarKwh) / row.production).toFixed(2) : null;
+    const hasSolar = row.solarKwh > 0;
+    return (
+      <div style={{
+        background: 'hsl(var(--card))',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: 8, fontSize: 11, padding: '8px 10px',
+        minWidth: 188, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+      }}>
+        <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
+        <p style={{ margin: '1px 0', color: '#f59e0b' }}>
+          Grid PV: <strong>{gridPv != null ? `${gridPv} kWh/m³` : '—'}</strong>
+        </p>
+        {hasSolar && (
+          <p style={{ margin: '1px 0', color: '#22c55e' }}>
+            (Grid+Solar) PV: <strong>{totalPv != null ? `${totalPv} kWh/m³` : '—'}</strong>
+          </p>
+        )}
+        <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
+          <p style={{ margin: '1px 0', color: 'hsl(var(--chart-1))' }}>
+            Volume: <span>{row.production > 0 ? row.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' m³' : '—'}</span>
+          </p>
+          <p style={{ margin: '1px 0', color: '#f59e0b' }}>
+            Grid Power: <span>{row.kwh > 0 ? row.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
+          </p>
+          {hasSolar && (
+            <p style={{ margin: '1px 0', color: '#22c55e' }}>
+              Solar Power: <span>{row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh</span>
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Title, range buttons, and Data Summary tab on one compact row */}
@@ -2357,58 +2401,9 @@ export function TrendChart({
               <Line yAxisId="amt" type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2} dot={false} name="Chemical (₱)" />
               <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
             </ComposedChart>
-          ) : metric === 'pv' ? (() => {
-            // Custom tooltip: shows Grid PV + (Grid+Solar) PV ratios, then the
-            // underlying Production (m³) and Power (kWh) rows so operators can
-            // understand what is driving the ratio on each day.
-            const PvTooltip = ({ active, payload, label }: any) => {
-              if (!active || !payload?.length) return null;
-              const row = chartData.find((d) => d.date === label);
-              if (!row) return null;
-              const gridPv   = row.production > 0 ? +(row.kwh / row.production).toFixed(2) : null;
-              const totalPv  = row.production > 0 && (row.kwh + row.solarKwh) > 0
-                ? +((row.kwh + row.solarKwh) / row.production).toFixed(2) : null;
-              const hasSolar = row.solarKwh > 0;
-              return (
-                <div style={{
-                  background: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: 8, fontSize: 11, padding: '8px 10px',
-                  minWidth: 188, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                }}>
-                  <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
-                  {/* PV ratio rows */}
-                  <p style={{ margin: '1px 0', color: '#f59e0b' }}>
-                    Grid PV:{' '}
-                    <strong>{gridPv != null ? `${gridPv} kWh/m³` : '—'}</strong>
-                  </p>
-                  {hasSolar && (
-                    <p style={{ margin: '1px 0', color: '#22c55e' }}>
-                      (Grid+Solar) PV:{' '}
-                      <strong>{totalPv != null ? `${totalPv} kWh/m³` : '—'}</strong>
-                    </p>
-                  )}
-                  {/* Divider then underlying values */}
-                  <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
-                    <p style={{ margin: '1px 0', color: 'hsl(var(--chart-1))' }}>
-                      Volume:{' '}
-                      <span>{row.production > 0 ? row.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' m³' : '—'}</span>
-                    </p>
-                    <p style={{ margin: '1px 0', color: '#f59e0b' }}>
-                      Grid Power:{' '}
-                      <span>{row.kwh > 0 ? row.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
-                    </p>
-                    {hasSolar && (
-                      <p style={{ margin: '1px 0', color: '#22c55e' }}>
-                        Solar Power:{' '}
-                        <span>{row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            };
-            return (
+          ) : metric === 'pv' ? (
+            // PV Ratio — two lines: Grid-only PV and (Grid+Solar) PV.
+            // PvTooltip and domain are defined/hoisted above the return().
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -2444,8 +2439,6 @@ export function TrendChart({
                 connectNulls
               />
             </LineChart>
-            );
-          })()
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
