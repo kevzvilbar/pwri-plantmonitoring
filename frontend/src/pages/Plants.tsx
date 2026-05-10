@@ -4765,10 +4765,14 @@ function TrainOperatorLogModal({
           'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
           'is_meter_replacement', 'remarks',
         ].join(',');
+        // SAFE_COLS: columns that have always existed — safe on un-migrated DBs.
+        // permeate_meter is original so always safe; permeate_meter_prev is new.
+        // Delta is computed in-memory from sorted rows when permeate_meter_delta absent.
         const SAFE_COLS = [
           'id', 'reading_datetime', 'recorded_by',
           'permeate_flow', 'feed_flow',
           'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
+          'permeate_meter',
         ].join(',');
         const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'is_meter_replacement', 'remarks', 'reject_flow', 'reject_pressure_psi', 'suction_pressure_psi', 'reject_tds', 'feed_ph', 'permeate_ph', 'temperature_c', 'turbidity_ntu'];
         const isNewColErr = (msg: string) => NEW_COLS.some(c => msg.includes(c));
@@ -4797,6 +4801,19 @@ function TrainOperatorLogModal({
           }
         }
         if (!readings?.length) return [];
+
+        // Compute permeate_meter_delta in-memory when column not in DB yet.
+        // Rows are sorted descending; we need ascending order for prev-curr diff.
+        // Build a per-train map of the previous meter reading as we iterate ascending.
+        const ascReadings = [...(readings as any[])].reverse();
+        const lastMeter = new Map<string, number>(); // trainId → last seen permeate_meter
+        ascReadings.forEach((r: any) => {
+          if (r.permeate_meter_delta == null && r.permeate_meter != null) {
+            const prev = lastMeter.get(r.train_id ?? trainId);
+            r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
+            lastMeter.set(r.train_id ?? trainId, +r.permeate_meter);
+          }
+        });
 
         // Resolve operator names
         const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
@@ -4960,8 +4977,6 @@ function TrainOperatorLogModal({
                 <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
                   <th className="text-left px-2 py-2 font-semibold w-[110px]">Operator</th>
-                  {/* Meter replacement — orange checkbox, manager-only toggle */}
-                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[54px]" title="Meter Replacement — flags this reading as a meter change; zeroes Δ in production chart">Repl.</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Flow</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Flow</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Flow</th>
@@ -4975,6 +4990,7 @@ function TrainOperatorLogModal({
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Recovery</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ m³</th>
+                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[54px]" title="Meter Replacement — flags reading as meter change; zeroes Δ in chart">Repl.</th>
                   <th className="text-left px-2 py-2 font-semibold">Remarks</th>
                 </tr>
               </thead>
@@ -5013,26 +5029,6 @@ function TrainOperatorLogModal({
                           <span className="truncate max-w-[80px]" title={opName}>{opName}</span>
                         </div>
                       </td>
-                      {/* Meter replacement toggle */}
-                      <td className="px-2 py-2 text-center">
-                        <button
-                          title={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
-                          disabled={!isManager || isToggling}
-                          onClick={() => toggleMeterReplacement(r)}
-                          className={[
-                            'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
-                            !isManager ? 'opacity-30 cursor-not-allowed' : 'disabled:opacity-40 disabled:cursor-not-allowed',
-                            isRepl
-                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
-                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
-                          ].join(' ')}
-                        >
-                          {isToggling
-                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                            : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
-                          }
-                        </button>
-                      </td>
                       {/* Flow */}
                       <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_flow, 'm³/h')}</td>
                       <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_flow, 'm³/h')}</td>
@@ -5054,12 +5050,36 @@ function TrainOperatorLogModal({
                       </td>
                       {/* Permeate meter */}
                       <td className="px-2 py-2 text-right font-mono text-[11px]">{fmtVal(r.permeate_meter, 'm³')}</td>
+                      {/* Δ m³ — use saved delta if available, else in-memory computed delta */}
                       <td className="px-2 py-2 text-right font-mono text-[11px]">
-                        {r.permeate_meter_delta != null
-                          ? <span className={+r.permeate_meter_delta > 0 ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground/40'}>
-                              {+r.permeate_meter_delta > 0 ? `+${Number(r.permeate_meter_delta).toLocaleString(undefined,{maximumFractionDigits:1})}` : '0'}
-                            </span>
-                          : <span className="text-muted-foreground/30">—</span>}
+                        {(() => {
+                          const d = r.permeate_meter_delta != null ? +r.permeate_meter_delta : r._computed_delta;
+                          if (d == null) return <span className="text-muted-foreground/30">—</span>;
+                          if (isRepl) return <span className="text-orange-500 font-medium">0</span>;
+                          return d > 0
+                            ? <span className="text-teal-600 dark:text-teal-400">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
+                            : <span className="text-muted-foreground/40">0</span>;
+                        })()}
+                      </td>
+                      {/* Meter replacement toggle — next to Perm Meter / Δ */}
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          title={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
+                          disabled={!isManager || isToggling}
+                          onClick={() => toggleMeterReplacement(r)}
+                          className={[
+                            'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                            !isManager ? 'opacity-30 cursor-not-allowed' : 'disabled:opacity-40 disabled:cursor-not-allowed',
+                            isRepl
+                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                          ].join(' ')}
+                        >
+                          {isToggling
+                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                          }
+                        </button>
                       </td>
                       {/* Remarks */}
                       <td className="px-2 py-2 text-muted-foreground max-w-[140px] truncate" title={r.remarks ?? ''}>{r.remarks || <span className="opacity-30">—</span>}</td>
