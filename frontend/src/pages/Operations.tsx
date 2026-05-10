@@ -3154,14 +3154,6 @@ function PowerForm() {
                   <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 uppercase tracking-wide">Solar</span>
                   <span className="text-[10px] text-muted-foreground ml-auto">{solarMeterCount} meter{solarMeterCount !== 1 ? 's' : ''}</span>
                 </div>
-                {/* Input mode hint — set in Plants → Energy Sources, not editable here */}
-                <p className="text-[10px] text-muted-foreground -mt-1">
-                  Mode: <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                    {solarInputMode === 'direct' ? 'Direct kWh' : 'Raw Meter'}
-                  </span>
-                  <span className="opacity-60 ml-1">(configure in Plants → Energy Sources)</span>
-                </p>
-
                 {Array.from({ length: solarMeterCount }).map((_, idx) => {
                   const meterLabel = getSolarLabel(idx);
                   const val = solarMeterReadings[idx] ?? '';
@@ -3192,6 +3184,15 @@ function PowerForm() {
                           {isSavingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
                       </div>
+                      {/* Input mode hint — shown below input to align with grid's prev reading */}
+                      {isFirst && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Mode: <span className="font-medium text-yellow-600 dark:text-yellow-400">
+                            {solarInputMode === 'direct' ? 'Direct kWh' : 'Raw Meter'}
+                          </span>
+                          <span className="opacity-60 ml-1">(configure in Plants → Energy Sources)</span>
+                        </p>
+                      )}
                       {/* Hint line: raw mode shows prev + computed Δ; direct mode previews stored value */}
                       {isFirst && solarInputMode === 'raw' && prevSolar != null && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
