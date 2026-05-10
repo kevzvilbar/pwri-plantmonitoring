@@ -2521,10 +2521,33 @@ function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
     setVesselRows(Array.from({ length: n }, (_, i) => makeRow(i + 1)));
     setListGenerated(true);
     setVesselListOpen(true);
+    setSavedVessels(new Set());
+    setEditingVessel(null);
   };
 
   const patchRow = (id: number, patch: Partial<VesselFlowRow>) =>
     setVesselRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
+
+  // ── Per-vessel save / edit / delete ─────────────────────────────────────
+  // "saved" vessels show a green lock icon and are read-only until Edited.
+  const [savedVessels, setSavedVessels] = useState<Set<number>>(new Set());
+  const [editingVessel, setEditingVessel] = useState<number | null>(null);
+
+  const saveVessel = (id: number) => {
+    setSavedVessels(prev => new Set([...prev, id]));
+    setEditingVessel(null);
+    setExpandedVessel(null);
+  };
+  const editVessel = (id: number) => {
+    setSavedVessels(prev => { const n = new Set(prev); n.delete(id); return n; });
+    setEditingVessel(id);
+    setExpandedVessel(id);
+  };
+  const deleteVessel = (id: number) => {
+    setVesselRows(rows => rows.filter(r => r.id !== id));
+    setSavedVessels(prev => { const n = new Set(prev); n.delete(id); return n; });
+    if (expandedVessel === id) setExpandedVessel(null);
+  };
 
   const applyGlobalMethod = (m: VesselFlowMethod) => {
     setGlobalMethod(m);
@@ -2699,39 +2722,95 @@ function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
               const qPreview_manual = (bV > 0 && bT > 0) ? +((bV / bT * 60 / 1000 * 60)).toFixed(3) : null;
               const qPreview = row.method === 'meter' ? qPreview_meter : qPreview_manual;
 
+              const isSaved = savedVessels.has(row.id);
+              const isEditing = editingVessel === row.id;
+
               return (
                 <div key={row.id} className={cn(
                   'rounded-xl border transition-colors overflow-hidden',
-                  isOpen ? 'border-emerald-300 dark:border-emerald-700' : 'border-border'
+                  isSaved
+                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50/30 dark:bg-emerald-950/10'
+                    : isOpen ? 'border-emerald-300 dark:border-emerald-700' : 'border-border'
                 )}>
                   {/* Accordion header */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedVessel(isOpen ? null : row.id)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center px-3 py-2.5 hover:bg-muted/20 transition-colors">
+                    {/* Clickable label area (expands/collapses) */}
+                    <button
+                      type="button"
+                      onClick={() => !isSaved && setExpandedVessel(isOpen ? null : row.id)}
+                      className="flex-1 flex items-center gap-2 text-left min-w-0"
+                      disabled={isSaved}
+                    >
                       <span className="text-xs font-bold text-foreground">Vessel {row.id}</span>
-                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border font-medium',
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0',
                         row.method === 'meter'
                           ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
                           : 'border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300')}>
                         {row.method === 'meter' ? '📟 Meter' : '🪣 Bucket'}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      {isSaved && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">✓ saved</span>
+                      )}
+                    </button>
+
+                    {/* Right side: Q preview + action buttons */}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {qPreview !== null ? (
                         <span className="text-xs font-bold font-mono-num text-emerald-600 dark:text-emerald-400">
                           {qPreview} m³/hr
                         </span>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground/50">not set</span>
+                        !isSaved && <span className="text-[10px] text-muted-foreground/50">not set</span>
                       )}
-                      <span className="text-muted-foreground/50 text-xs">{isOpen ? '▲' : '▼'}</span>
+
+                      {/* Save button — shown when open and not yet saved */}
+                      {isOpen && !isSaved && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); saveVessel(row.id); }}
+                          className="h-6 px-2 rounded text-[10px] font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
+                          title="Save this vessel"
+                        >
+                          Save
+                        </button>
+                      )}
+
+                      {/* Edit button — shown when saved */}
+                      {isSaved && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); editVessel(row.id); }}
+                          className="h-6 px-2 rounded text-[10px] font-semibold border border-border bg-background hover:bg-muted transition-colors text-foreground"
+                          title="Edit this vessel"
+                        >
+                          Edit
+                        </button>
+                      )}
+
+                      {/* Delete button — always visible */}
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); deleteVessel(row.id); }}
+                        className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remove this vessel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+
+                      {/* Expand chevron — hidden when saved */}
+                      {!isSaved && (
+                        <span
+                          className="text-muted-foreground/50 text-xs cursor-pointer"
+                          onClick={() => setExpandedVessel(isOpen ? null : row.id)}
+                        >
+                          {isOpen ? '▲' : '▼'}
+                        </span>
+                      )}
                     </div>
-                  </button>
-                  {/* Expanded vessel card */}
-                  {isOpen && (
+                  </div>
+
+                  {/* Expanded vessel card — shown when open and not saved */}
+                  {isOpen && !isSaved && (
                     <div className="px-2 pb-2">
                       <VesselFlowCard row={row} onChange={patch => patchRow(row.id, patch)} />
                     </div>
@@ -3409,6 +3488,362 @@ function ChemCard({
   );
 }
 
+// ─── Chemical Dosing CSV Import ──────────────────────────────────────────────
+const DOSING_CSV_SCHEMA =
+  'plant_name*, log_datetime (YYYY-MM-DDTHH:mm), chlorine_kg, smbs_kg, anti_scalant_l, ' +
+  'soda_ash_kg, free_chlorine_reagent_pcs, remarks';
+
+const DOSING_TEMPLATE_ROW: Record<string, string> = {
+  plant_name: 'Umapad',
+  log_datetime: '2024-06-15T08:30',
+  chlorine_kg: '1.5',
+  smbs_kg: '',
+  anti_scalant_l: '2.0',
+  soda_ash_kg: '',
+  free_chlorine_reagent_pcs: '2',
+  remarks: '',
+};
+
+function validateDosingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.plant_name?.trim())
+    e.push(`Row ${i}: plant_name is required`);
+  if (r.log_datetime && isNaN(Date.parse(r.log_datetime.trim().replace(' ', 'T'))))
+    e.push(`Row ${i}: log_datetime is not a valid date`);
+  const numFields = ['chlorine_kg', 'smbs_kg', 'anti_scalant_l', 'soda_ash_kg', 'free_chlorine_reagent_pcs'];
+  for (const f of numFields) {
+    if (r[f]?.trim() && isNaN(Number(r[f])))
+      e.push(`Row ${i}: ${f} must be a number`);
+  }
+  return e;
+}
+
+// Module-level resolver hooks (same pattern as Operations.tsx)
+let _dosingDupPromptResolver: ((decision: 'overwrite' | 'skip') => void) | null = null;
+let _dosingDupShowPrompt: ((label: string) => void) | null = null;
+let _dosingBulkDecision: 'overwrite' | 'skip' | null = null;
+const _dosingDupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
+
+async function resolveDosingDuplicate(key: string, label: string): Promise<'overwrite' | 'skip'> {
+  if (_dosingDupDecisions.has(key)) return _dosingDupDecisions.get(key)!;
+  if (_dosingBulkDecision) { _dosingDupDecisions.set(key, _dosingBulkDecision); return _dosingBulkDecision; }
+  const decision = await new Promise<'overwrite' | 'skip'>((resolve) => {
+    _dosingDupPromptResolver = resolve;
+    _dosingDupShowPrompt?.(label);
+  });
+  _dosingDupDecisions.set(key, decision);
+  return decision;
+}
+
+function ImportDosingDialog({
+  plantId,
+  userId,
+  onClose,
+  onImported,
+}: {
+  plantId: string;
+  userId: string | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [file, setFile]           = useState<File | null>(null);
+  const [rows, setRows]           = useState<Record<string, string>[]>([]);
+  const [errors, setErrors]       = useState<string[]>([]);
+  const [busy, setBusy]           = useState(false);
+  const [done, setDone]           = useState(false);
+  const [imported, setImported]   = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [dupConfirm, setDupConfirm] = useState<string | null>(null);
+  const [dupResolved, setDupResolved] = useState(false);
+
+  const { data: plants } = usePlants();
+
+  useEffect(() => {
+    _dosingDupShowPrompt = (label) => setDupConfirm(label);
+    return () => { _dosingDupShowPrompt = null; _dosingDupPromptResolver = null; };
+  }, []);
+
+  const handleDupDecision = (decision: 'overwrite' | 'skip', applyAll = false) => {
+    if (applyAll) _dosingBulkDecision = decision;
+    setDupConfirm(null);
+    _dosingDupPromptResolver?.(decision);
+    _dosingDupPromptResolver = null;
+  };
+
+  const parseFile = (text: string) => {
+    const clean = text.replace(/^\uFEFF/, '').trim();
+    const lines = clean.split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const parseL = (line: string): string[] => {
+      const fields: string[] = []; let i = 0; const len = line.length;
+      while (i < len) {
+        if (line[i] === '"') {
+          i++; let val = '';
+          while (i < len) {
+            if (line[i] === '"' && line[i+1] === '"') { val += '"'; i += 2; }
+            else if (line[i] === '"') { i++; break; }
+            else { val += line[i++]; }
+          }
+          fields.push(val.trim());
+          if (i < len && line[i] === ',') i++;
+        } else {
+          const start = i;
+          while (i < len && line[i] !== ',') i++;
+          fields.push(line.slice(start, i).trim());
+          if (i < len && line[i] === ',') i++;
+        }
+      }
+      if (len > 0 && line[len-1] === ',') fields.push('');
+      return fields;
+    };
+    const headers = parseL(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+    return lines.slice(1).filter(l => l.trim()).map(line => {
+      const vals = parseL(line);
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    });
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupResolved(false); setImportErrors([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseFile(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateDosingRow(r, i + 2)));
+      setRows(parsed); setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    setBusy(true);
+    _dosingDupDecisions.clear(); _dosingBulkDecision = null;
+
+    // Intra-file duplicate detection by plant+datetime
+    const seenKeys = new Map<string, number>();
+    const intraDups: number[] = [];
+    rows.forEach((r, i) => {
+      const key = `${r.plant_name?.trim().toLowerCase()}|${r.log_datetime?.trim()}`;
+      if (seenKeys.has(key)) intraDups.push(i);
+      else seenKeys.set(key, i);
+    });
+    if (intraDups.length > 0 && !dupResolved) {
+      setRows(rows.filter((_, i) => !intraDups.includes(i)));
+      setDupResolved(true); setBusy(false); return;
+    }
+
+    let count = 0; const errs: string[] = [];
+    for (const r of rows) {
+      // Resolve plant_name → plant_id
+      const plant = plants?.find(p => p.name.toLowerCase() === r.plant_name?.trim().toLowerCase());
+      if (!plant) { errs.push(`Plant not found: "${r.plant_name}"`); continue; }
+      const pid = plant.id;
+
+      const dt = r.log_datetime?.trim()
+        ? new Date(r.log_datetime.replace(' ', 'T')).toISOString()
+        : new Date().toISOString();
+      const dtMin = dt.slice(0, 16);
+
+      // Duplicate check
+      const { data: existing } = await supabase
+        .from('chemical_dosing_logs')
+        .select('id')
+        .eq('plant_id', pid)
+        .gte('log_datetime', `${dtMin}:00`)
+        .lte('log_datetime', `${dtMin}:59`)
+        .limit(1);
+      const existingId = existing?.[0]?.id ?? null;
+
+      if (existingId) {
+        const key = `${pid}|${dtMin}`;
+        const decision = await resolveDosingDuplicate(key, `${r.plant_name} @ ${r.log_datetime}`);
+        if (decision === 'skip') continue;
+      }
+
+      const num = (k: string) => r[k]?.trim() ? +r[k] : 0;
+      const payload: Record<string, any> = {
+        plant_id: pid,
+        log_datetime: dt,
+        chlorine_kg: num('chlorine_kg'),
+        smbs_kg: num('smbs_kg'),
+        anti_scalant_l: num('anti_scalant_l'),
+        soda_ash_kg: num('soda_ash_kg'),
+        free_chlorine_reagent_pcs: num('free_chlorine_reagent_pcs'),
+        recorded_by: userId,
+      };
+      if (r.remarks?.trim()) payload.remarks = r.remarks.trim();
+
+      let opError: any;
+      if (existingId) {
+        const { error } = await supabase.from('chemical_dosing_logs').update(payload).eq('id', existingId);
+        opError = error;
+      } else {
+        const { error } = await supabase.from('chemical_dosing_logs').insert(payload);
+        opError = error;
+      }
+      if (opError) errs.push(opError.message); else count++;
+    }
+
+    setBusy(false); setImported(count); setDone(true); setImportErrors(errs);
+    if (errs.length) toast.error(`${count} imported, ${errs.length} failed`);
+    else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
+    else { toast.success(`${count} dosing record(s) imported`); onImported(); }
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+
+  return (
+    <Dialog open onOpenChange={o => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" /> Import Chemical Dosing
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* Download template */}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5"
+              onClick={() => {
+                const headers = Object.keys(DOSING_TEMPLATE_ROW);
+                const row = Object.values(DOSING_TEMPLATE_ROW);
+                const csv = [headers.join(','), row.join(',')].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                a.download = 'chemical_dosing_template.csv'; a.click();
+              }}>
+              <Download className="h-3.5 w-3.5" /> Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema hint */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{DOSING_CSV_SCHEMA}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required. <code>log_datetime</code> accepts
+              ISO 8601 (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
+              CIP-only chemicals (SLS, HCl, Caustic Soda) are <strong>not</strong> included — log those in the CIP tab.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5" /> Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>{Object.keys(rows[0]).map(h => <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[120px] truncate">{v || '—'}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {done && (
+            <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}.
+            </p>
+          )}
+
+          {/* Intra-file dup notice */}
+          {dupResolved && !done && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Duplicate rows within the file were removed. Click <strong>Import Rows</strong> to proceed.</span>
+            </div>
+          )}
+
+          {/* DB-level dup confirm */}
+          {dupConfirm && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" /> Duplicate detected
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                A dosing record for <strong>"{dupConfirm}"</strong> already exists at this date & time.
+                Overwrite it, or skip this row?
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip')}>Skip</Button>
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)}>Overwrite All</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip', true)}>Skip All</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button onClick={doImport} disabled={!canSubmit} className="bg-teal-700 text-white hover:bg-teal-800">
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ChemDosingForm() {
   const qc = useQueryClient();
   // ── Use activeOperator, not user — same shared-email fix as PretreatmentAndROLog
@@ -3421,6 +3856,7 @@ function ChemDosingForm() {
     free_chlorine_reagent_pcs: '0',
   });
   const [samples, setSamples] = useState<Array<{ id: string; point: string; ppm: string }>>([]);
+  const [showImport, setShowImport] = useState(false);
 
   // ── Load per-plant chemical config — filters which chemicals are shown ──────
   const { config: plantConfig } = usePlantMeterConfig(plantId || null);
@@ -3521,6 +3957,16 @@ function ChemDosingForm() {
 
   return (
     <div className="space-y-2.5">
+      {/* Import dialog */}
+      {showImport && (
+        <ImportDosingDialog
+          plantId={plantId}
+          userId={activeOperator?.id ?? null}
+          onClose={() => setShowImport(false)}
+          onImported={() => { setShowImport(false); qc.invalidateQueries(); }}
+        />
+      )}
+
       {/* ── Main + Sidebar: stacked mobile, side-by-side md+ ─────────── */}
       <div className="flex flex-col md:flex-row gap-2.5 items-start">
 
@@ -3529,12 +3975,23 @@ function ChemDosingForm() {
 
           {/* Plant header card */}
           <Card className="p-3 space-y-2">
-            {plantName && (
-              <div className="flex items-center gap-2 pb-1">
-                <span className="text-base">🏭</span>
-                <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
-              </div>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              {plantName && (
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🏭</span>
+                  <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
+                </div>
+              )}
+              {/* Import CSV button */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 shrink-0 ml-auto h-7 text-xs"
+                onClick={() => setShowImport(true)}
+              >
+                <Upload className="h-3 w-3" /> Import
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-[11px] text-muted-foreground">Plant</Label>
@@ -3582,22 +4039,6 @@ function ChemDosingForm() {
                   unit="kg" accent="default"
                 />
               )}
-              {isChemEnabled('Caustic Soda') && (
-                <ChemCard
-                  name="Caustic Soda (kg)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">NaOH</span>}
-                  value={v.caustic_soda_kg ?? ''} onChange={val => setV({ ...v, caustic_soda_kg: val } as any)}
-                  unit="kg" accent="default"
-                />
-              )}
-              {isChemEnabled('SLS') && (
-                <ChemCard
-                  name="SLS (g)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">SLS</span>}
-                  value={v.sls_g ?? ''} onChange={val => setV({ ...v, sls_g: val } as any)}
-                  unit="g" accent="default"
-                />
-              )}
             </div>
           </div>
 
@@ -3611,14 +4052,6 @@ function ChemDosingForm() {
                   icon={<span className="text-base leading-none">🚛</span>}
                   value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
                   unit="L" accent="olive"
-                />
-              )}
-              {isChemEnabled('HCl') && (
-                <ChemCard
-                  name="HCl (L)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">HCl</span>}
-                  value={v.hcl_l ?? ''} onChange={val => setV({ ...v, hcl_l: val } as any)}
-                  unit="L" accent="default"
                 />
               )}
               <ChemCard
