@@ -1097,6 +1097,13 @@ export interface PlantMeterConfig {
   // NRW / product distribution
   nrw_enabled: boolean;
   has_billed_volume_meter: boolean;
+  // Permeate meter = daily production (no bulk/mother meter)
+  // When true, permeate readings are hourly but grouped into days using cut-off time
+  permeate_is_production: boolean;
+  // HH:mm cut-off time (24-hr). Day N runs from cutoff on day N-1 (exclusive)
+  // to cutoff on day N (inclusive). Stored reading is labelled as day N.
+  // Example: cutoff "00:20" → May 3 00:21 … May 4 00:20 = "May 4" production.
+  permeate_cutoff_time: string; // e.g. "00:20"
 }
 
 const DEFAULT_METER_CONFIG: PlantMeterConfig = {
@@ -1121,6 +1128,8 @@ const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   grid_meter_names: [],
   nrw_enabled: false,
   has_billed_volume_meter: false,
+  permeate_is_production: false,
+  permeate_cutoff_time: '00:20',
 };
 
 const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
@@ -1354,7 +1363,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
             {!open && (
               <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>RO: {roFlags}</span>
-                <span>Prod: {cfg.ro_production_source === 'permeate' ? 'Permeate' : 'Product meter'}</span>
+                <span>Prod: {cfg.ro_production_source === 'permeate' ? `Permeate${cfg.permeate_is_production ? ` (cut-off ${cfg.permeate_cutoff_time || '00:20'})` : ''}` : 'Product meter'}</span>
                 {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
                 <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
               </div>
@@ -1443,6 +1452,71 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
               ))}
             </div>
           </div>
+
+          {/* ── Permeate = Production: daily cut-off time (manager only) ── */}
+          {cfg.ro_production_source === 'permeate' && (
+            <div className="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium flex items-center gap-1.5">
+                    <span>⏱</span> Permeate readings are production
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    Readings are collected hourly. A daily "cut-off" groups them into calendar days.
+                    The day label is the date <em>after</em> the cut-off crosses midnight.
+                  </div>
+                </div>
+                <Switch
+                  checked={cfg.permeate_is_production}
+                  onCheckedChange={canEdit ? (v) => update({ permeate_is_production: v }) : undefined}
+                  disabled={!canEdit}
+                  className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                />
+              </div>
+
+              {cfg.permeate_is_production && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Daily cut-off time (24-hr)</p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {canEdit ? (
+                      <Input
+                        type="time"
+                        value={cfg.permeate_cutoff_time}
+                        onChange={e => update({ permeate_cutoff_time: e.target.value })}
+                        className="h-8 w-32 text-sm font-mono"
+                      />
+                    ) : (
+                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded border border-border">
+                        {cfg.permeate_cutoff_time || '00:20'}
+                      </span>
+                    )}
+                    <div className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">
+                      {(() => {
+                        const t = cfg.permeate_cutoff_time || '00:20';
+                        const [hh, mm] = t.split(':');
+                        const cutH = parseInt(hh ?? '0');
+                        const cutM = parseInt(mm ?? '20');
+                        const pad = (n: number) => String(n).padStart(2, '0');
+                        // next minute after cutoff
+                        const nextM = (cutM + 1) % 60;
+                        const nextH = cutM === 59 ? (cutH + 1) % 24 : cutH;
+                        return (
+                          <span>
+                            Day recorded as <strong>May 4</strong> = readings from{' '}
+                            <span className="font-mono">May 3 {pad(nextH)}:{pad(nextM)}</span> to{' '}
+                            <span className="font-mono">May 4 {t}</span>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  {!canEdit && (
+                    <p className="text-[10px] text-muted-foreground">Only managers and admins can change the cut-off time.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Per-train utility meters ── */}
           <div>
