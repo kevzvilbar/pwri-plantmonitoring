@@ -926,10 +926,12 @@ export function TrendChart({
       const trainIds = _roTrainIdsForReadings ?? [];
       if (!trainIds.length) return [];
       const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
-        // permeate_meter_curr/prev fetched for all metrics: delta (curr - prev) is used
-        // as the production source when plant_meter_config.permeate_is_production = true.
-        // The DB has no pre-computed permeate_meter_delta column; we compute it in code.
-        .select('train_id,recovery_pct,permeate_tds,permeate_meter_curr,permeate_meter_prev,reading_datetime')
+        // DB columns (set by ROTrains.tsx on save):
+        //   permeate_meter_reading — current cumulative reading
+        //   permeate_meter_prev    — previous cumulative reading
+        //   permeate_meter_delta   — pre-computed delta (curr - prev), may be null on older rows
+        // We prefer the pre-computed delta; fall back to curr - prev if it is null.
+        .select('train_id,recovery_pct,permeate_tds,permeate_meter_delta,permeate_meter_reading,permeate_meter_prev,reading_datetime')
         .in('train_id', trainIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -1170,11 +1172,16 @@ export function TrendChart({
     if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
       // Group permeate deltas by day-key, accumulating across trains for the same plant.
       (roReadings ?? []).forEach((r: any) => {
-        // Compute delta from cumulative meter readings; skip rows with missing data.
-        if (r.permeate_meter_curr == null || r.permeate_meter_prev == null) return;
+        // Use pre-computed delta when available; fall back to curr - prev for older rows.
+        const permDelta = r.permeate_meter_delta != null
+          ? +r.permeate_meter_delta
+          : (r.permeate_meter_reading != null && r.permeate_meter_prev != null)
+            ? +r.permeate_meter_reading - +r.permeate_meter_prev
+            : null;
+        if (permDelta == null) return;
         const plantId = _trainPlantMap.get(r.train_id);
         if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
-        const delta = Math.max(0, +r.permeate_meter_curr - +r.permeate_meter_prev);
+        const delta = Math.max(0, permDelta);
         if (delta === 0) return;
         const dt = new Date(r.reading_datetime);
         const key = format(dt, 'MMM d');
