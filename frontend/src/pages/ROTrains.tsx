@@ -260,9 +260,9 @@ async function insertROTrainReadings(
     const remarksVal = r.remarks?.trim();
     if (remarksVal)         optionalPayload.remarks                  = remarksVal;
     if (userId)             optionalPayload.recorded_by              = userId;
-    if (permCurr !== null)  optionalPayload.permeate_meter_reading   = permCurr;
-    if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
-    if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
+    // DB column is `permeate_meter` (single cumulative odometer snapshot).
+    // TrendChart computes the delta via computeEntityDeltas (curr - prev per train).
+    if (permCurr !== null)  optionalPayload.permeate_meter           = permCurr;
     if (permeateDayLabel)   optionalPayload.permeate_production_date = permeateDayLabel;
 
     // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
@@ -270,8 +270,7 @@ async function insertROTrainReadings(
     // DBs degrade gracefully instead of failing every row.
     const OPTIONAL_KEYS = [
       'remarks', 'recorded_by',
-      'permeate_meter_reading', 'permeate_meter_prev',
-      'permeate_meter_delta', 'permeate_production_date',
+      'permeate_meter', 'permeate_production_date',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
