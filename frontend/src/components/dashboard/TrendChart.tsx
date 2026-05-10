@@ -942,19 +942,14 @@ export function TrendChart({
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-     if (error) {
-       if (isNewColError(error.message)) {
-       const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
-          .select(LEGACY_SELECT)
-          .in('train_id', trainIds)
-          .gte('reading_datetime', startISO)
-          .lte('reading_datetime', endISO)
-          .order('reading_datetime', { ascending: true });
-      if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
-      return (d2 ?? []) as any[];
-     }
-     throw new Error(`ro_train_readings: ${error.message}`);
- }
+      if (error) {
+        if (isNewColError(error.message)) {
+          const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
+            .select(LEGACY_SELECT)
+            .in('train_id', trainIds)
+            .gte('reading_datetime', startISO)
+            .lte('reading_datetime', endISO)
+            .order('reading_datetime', { ascending: true });
           if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
           return (d2 ?? []) as any[];
         }
@@ -1192,61 +1187,35 @@ export function TrendChart({
 
     // Step 2: accumulate permeate meter deltas for plants where permeate_is_production = true.
     //
-    // PRIMARY PATH (migrated DB): use pre-saved permeate_meter_delta + permeate_production_date.
-    //   • permeate_meter_delta — exact curr−prev from the CSV row, saved at insert time.
-    //     No sequential in-memory diffing needed, so the first reading in any fetch window
-    //     is never silently zeroed.
-    //   • permeate_production_date — cutoff-adjusted YYYY-MM-DD label saved at insert time.
-    //     Correctly buckets hourly readings that cross midnight cut-offs (e.g. a 1:06 AM
-    //     reading past a 12:20 cut-off is already stamped the next calendar day).
-    //
-    // FALLBACK PATH (un-migrated DB, new columns absent): fall back to computeEntityDeltas
-    //   keyed by train_id — same as before — so the chart still works without migration.
+    // Uses permeate_meter_delta (pre-saved curr−prev) + permeate_production_date
+    // (cutoff-adjusted day label) written at import time.
+    // Falls back to computeEntityDeltas when columns not yet populated (NULL).
     if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
-      // Check whether the new columns are present on any row in the result set.
       const hasSavedDelta = (roReadings ?? []).some(
-        (r: any) => r.permeate_meter_delta != null || r.permeate_production_date != null,
+        (r: any) => r.permeate_meter_delta != null && +r.permeate_meter_delta > 0,
       );
 
-      // DEBUG — remove after confirming production shows correctly
-      console.log('[Permeate Production]', {
-        roReadingsCount: (roReadings ?? []).length,
-        hasSavedDelta,
-        permeateIsProductionPlants: Array.from(permeateIsProductionPlants),
-        sampleRow: (roReadings ?? [])[0],
-      });
-
       if (hasSavedDelta) {
-        // ── PRIMARY: use saved delta + production date ───────────────────────
-        // KEY RULE: ensure() uses "MMM d" display strings as map keys (e.g. "Mar 5").
-        // Every other data source derives this key via format(new Date(reading_datetime), 'MMM d').
-        // We must do the same — construct a datetime from permeate_production_date and
-        // use the reading's original time component so the key matches exactly.
-        // Using T12:00:00 as anchor causes timezone drift vs other sources that use
-        // the raw reading_datetime — so we build the key from reading_datetime directly,
-        // but override which calendar day it belongs to via permeate_production_date.
+        // ── PRIMARY PATH ─────────────────────────────────────────────────────
         (roReadings ?? []).forEach((r: any) => {
           const plantId = _trainPlantMap.get(r.train_id);
           if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
 
-          // Resolve delta: prefer pre-saved, fall back to curr−prev snapshots.
-          let delta: number | null = null;
-          if (r.permeate_meter_delta != null) {
-            delta = Math.max(0, +r.permeate_meter_delta);
-          } else if (r.permeate_meter != null && r.permeate_meter_prev != null) {
-            delta = Math.max(0, +r.permeate_meter - +r.permeate_meter_prev);
-          }
-          if (delta === null || delta === 0) return;
+          const delta = r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
+            : r.permeate_meter != null && r.permeate_meter_prev != null
+              ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
+              : null;
+          if (!delta) return;
 
-          // Build the chart key the same way ALL other sources do:
+          // Build chart key EXACTLY like every other source:
           //   format(new Date(reading_datetime), 'MMM d')
-          // When permeate_production_date differs from the reading's calendar date
-          // (hourly cross-midnight case), substitute the date part but keep the
-          // reading_datetime's time so the JS Date parses in the same local timezone.
+          // For the hourly cross-midnight case, substitute the date part from
+          // permeate_production_date but keep the time from reading_datetime so
+          // the local timezone parsing is consistent with all other chart keys.
           let dt: Date;
           if (r.permeate_production_date) {
-            const readingTime = r.reading_datetime.slice(11) || '00:00:00'; // HH:mm:ss...
-            dt = new Date(`${r.permeate_production_date}T${readingTime}`);
+            const timePart = (r.reading_datetime as string).slice(11) || '00:00:00';
+            dt = new Date(`${r.permeate_production_date}T${timePart}`);
           } else {
             dt = new Date(r.reading_datetime);
           }
@@ -1257,7 +1226,7 @@ export function TrendChart({
           row._permeateSourcePlants.add(plantId);
         });
       } else {
-        // ── FALLBACK: un-migrated DB — sequential delta via computeEntityDeltas ─
+        // ── FALLBACK PATH (columns still NULL) ───────────────────────────────
         const permeateRoReadings = (roReadings ?? [])
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
