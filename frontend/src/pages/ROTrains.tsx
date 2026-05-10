@@ -231,7 +231,8 @@ async function insertROTrainReadings(
       ? getPermeateDayLabel(dt, cutoff)
       : null;
 
-    const { error } = await supabase.from('ro_train_readings').insert({
+    // ── Core payload (columns that always exist in ro_train_readings) ──────────
+    const corePayload: Record<string, any> = {
       train_id: trainId,
       plant_id: plantId,
       reading_datetime: dt,
@@ -249,17 +250,39 @@ async function insertROTrainReadings(
       turbidity_ntu: num('turbidity_ntu'),
       temperature_c: num('temperature_c'),
       suction_pressure_psi: num('suction_pressure_psi'),
-      // Permeate meter odometer fields (null when not provided)
-      ...(permCurr !== null ? { permeate_meter_reading: permCurr } : {}),
-      ...(permPrev !== null ? { permeate_meter_prev: permPrev } : {}),
-      ...(permDelta !== null ? { permeate_meter_delta: permDelta } : {}),
-      // Production day label (only set when permeate is the production source)
-      ...(permeateDayLabel ? { permeate_production_date: permeateDayLabel } : {}),
       remarks: r.remarks?.trim() || null,
       recorded_by: userId,
-    });
-    if (error) errors.push(error.message);
-    else count++;
+    };
+
+    // ── Optional new columns (added by migration — may not exist in all DBs) ──
+    // Only spread them when the CSV row actually provides values; sending null
+    // for a missing DB column causes Supabase to reject with a schema cache error.
+    const optionalPayload: Record<string, any> = {};
+    if (permCurr !== null)    optionalPayload.permeate_meter_reading  = permCurr;
+    if (permPrev !== null)    optionalPayload.permeate_meter_prev     = permPrev;
+    if (permDelta !== null)   optionalPayload.permeate_meter_delta    = permDelta;
+    if (permeateDayLabel)     optionalPayload.permeate_production_date = permeateDayLabel;
+
+    // ── Column-fallback insert: try full payload first, strip optional cols on error ──
+    // Mirrors the doInsert / fallback pattern used in insertPowerReadings /
+    // insertWellReadings so that new columns don't break imports on un-migrated DBs.
+    const OPTIONAL_KEYS = ['permeate_meter_reading', 'permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date'];
+    const isOptionalColError = (msg: string) =>
+      OPTIONAL_KEYS.some(k => msg.includes(k));
+
+    const fullPayload = { ...corePayload, ...optionalPayload };
+    const { error } = await supabase.from('ro_train_readings').insert(fullPayload);
+    if (error) {
+      if (isOptionalColError(error.message)) {
+        // Optional columns not yet in DB — retry with core columns only
+        const { error: e2 } = await supabase.from('ro_train_readings').insert(corePayload);
+        if (e2) errors.push(e2.message); else count++;
+      } else {
+        errors.push(error.message);
+      }
+    } else {
+      count++;
+    }
   }
   return { count, errors };
 }
