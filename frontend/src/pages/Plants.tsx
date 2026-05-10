@@ -4752,32 +4752,50 @@ function TrainOperatorLogModal({
     queryKey,
     queryFn: async () => {
       try {
-        let q = (supabase.from('ro_train_readings' as any) as any)
-          .select([
-            'id', 'reading_datetime', 'recorded_by',
-            // flow & pressure
-            'permeate_flow', 'feed_flow', 'reject_flow',
-            'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
-            // quality
-            'feed_tds', 'permeate_tds', 'reject_tds',
-            'feed_ph', 'permeate_ph',
-            'temperature_c', 'turbidity_ntu',
-            // derived
-            'recovery_pct',
-            // permeate meter
-            'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
-            // flags
-            'is_meter_replacement',
-            // notes
-            'remarks',
-          ].join(','))
-          .eq('train_id', trainId)
-          .order('reading_datetime', { ascending: false })
-          .limit(2000);
-        if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
-        if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
-        const { data: readings, error } = await q;
-        if (error) { console.error('operator log fetch:', error); return []; }
+        // Columns added by migration — may not exist in un-migrated DBs.
+        // Try full select first; if Supabase returns a schema error for any
+        // new column, fall back to the original safe set so logs always load.
+        const FULL_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'feed_ph', 'permeate_ph', 'temperature_c', 'turbidity_ntu',
+          'recovery_pct',
+          'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+          'is_meter_replacement', 'remarks',
+        ].join(',');
+        const SAFE_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow',
+          'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
+        ].join(',');
+        const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'is_meter_replacement', 'remarks', 'reject_flow', 'reject_pressure_psi', 'suction_pressure_psi', 'reject_tds', 'feed_ph', 'permeate_ph', 'temperature_c', 'turbidity_ntu'];
+        const isNewColErr = (msg: string) => NEW_COLS.some(c => msg.includes(c));
+
+        const buildQ = (cols: string) => {
+          let q = (supabase.from('ro_train_readings' as any) as any)
+            .select(cols)
+            .eq('train_id', trainId)
+            .order('reading_datetime', { ascending: false })
+            .limit(2000);
+          if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
+          if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
+          return q;
+        };
+
+        let { data: readings, error } = await buildQ(FULL_COLS);
+        if (error) {
+          if (isNewColErr(error.message)) {
+            // Un-migrated DB — retry with safe columns only
+            const { data: d2, error: e2 } = await buildQ(SAFE_COLS);
+            if (e2) { console.error('operator log fetch (fallback):', e2); return []; }
+            readings = d2;
+          } else {
+            console.error('operator log fetch:', error);
+            return [];
+          }
+        }
         if (!readings?.length) return [];
 
         // Resolve operator names
