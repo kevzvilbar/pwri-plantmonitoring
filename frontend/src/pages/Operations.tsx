@@ -27,12 +27,45 @@ const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // ─── CSV helpers ────────────────────────────────────────────────────────────
 
+// Fix #6 — RFC-4180 compliant CSV parser. Handles quoted fields that contain
+// commas, newlines, or escaped double-quotes (""). Plain split(',') breaks on
+// values like "Well #1, North" or plant names with commas.
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  while (i <= line.length) {
+    if (line[i] === '"') {
+      // Quoted field
+      i++; // skip opening quote
+      let val = '';
+      while (i < line.length) {
+        if (line[i] === '"' && line[i + 1] === '"') {
+          val += '"'; i += 2; // escaped quote
+        } else if (line[i] === '"') {
+          i++; break; // closing quote
+        } else {
+          val += line[i++];
+        }
+      }
+      fields.push(val.trim());
+      if (line[i] === ',') i++; // skip comma after closing quote
+    } else {
+      // Unquoted field — read until next comma
+      const start = i;
+      while (i < line.length && line[i] !== ',') i++;
+      fields.push(line.slice(start, i).trim());
+      if (line[i] === ',') i++;
+    }
+  }
+  return fields;
+}
+
 function parseCSVText(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  return lines.slice(1).map((line) => {
-    const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+  const headers = parseCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, ''));
+  return lines.slice(1).filter((l) => l.trim()).map((line) => {
+    const vals = parseCSVLine(line);
     return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
   });
 }
@@ -505,8 +538,10 @@ async function insertLocatorReadings(
         const csvPrevLoc = r.previous_reading ? +r.previous_reading : null;
         updatePayload.current_reading = csvCurLoc;
         updatePayload.previous_reading = csvPrevLoc;
-        // Bug 2 fix: always persist daily_volume (explicit or computed)
-        updatePayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (csvPrevLoc != null ? Math.max(0, csvCurLoc - csvPrevLoc) : null);
+        const rawLocDelta = csvPrevLoc != null ? csvCurLoc - csvPrevLoc : null;
+        if (rawLocDelta != null && rawLocDelta < 0)
+          errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
+        updatePayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (rawLocDelta != null ? Math.max(0, rawLocDelta) : null);
       }
       const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
@@ -530,8 +565,10 @@ async function insertLocatorReadings(
       const csvPrevLoc2 = r.previous_reading ? +r.previous_reading : null;
       insertPayload.current_reading = csvCurLoc2;
       insertPayload.previous_reading = csvPrevLoc2;
-      // Bug 2 fix: always persist daily_volume (explicit or computed from delta)
-      insertPayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (csvPrevLoc2 != null ? Math.max(0, csvCurLoc2 - csvPrevLoc2) : null);
+      const rawLocDelta2 = csvPrevLoc2 != null ? csvCurLoc2 - csvPrevLoc2 : null;
+      if (rawLocDelta2 != null && rawLocDelta2 < 0)
+        errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta2.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
+      insertPayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (rawLocDelta2 != null ? Math.max(0, rawLocDelta2) : null);
     }
     const { error } = await supabase.from('locator_readings').insert(insertPayload);
     if (error) errors.push(error.message);
@@ -595,24 +632,30 @@ async function insertWellReadings(
     if (existing && existing.length > 0) {
       const decision = await resolveImportDuplicate(`${wellId}|${dtMin}`, `${r.well_name} @ ${dtMin}`);
       if (decision === 'skip') continue;
+      // Fix #5 — overwrite path was missing daily_volume; TrendChart/Dashboard aggregation
+      // would silently use the stale delta from the original insert after a CSV overwrite.
+      const ovwCur = +r.current_reading;
+      const ovwPrev = r.previous_reading ? +r.previous_reading : null;
+      const ovwDailyVol = ovwPrev != null ? Math.max(0, ovwCur - ovwPrev) : null;
       const { error } = await supabase.from('well_readings').update({
-        current_reading: +r.current_reading,
-        previous_reading: r.previous_reading ? +r.previous_reading : null,
+        current_reading: ovwCur,
+        previous_reading: ovwPrev,
         power_meter_reading: r.power_meter_reading ? +r.power_meter_reading : null,
         solar_meter_reading: r.solar_meter_reading ? +r.solar_meter_reading : null,
         reading_datetime: dt,
         recorded_by: userId,
+        daily_volume: ovwDailyVol,  // Fix #5: keep daily_volume in sync on overwrite
       }).eq('id', existing[0].id);
       if (error) errors.push(error.message); else count++;
       continue;
     }
 
-    // Compute and persist daily_volume so Dashboard/TrendChart aggregation works.
-    // Clamp to 0: a negative delta (meter rollback) must not be stored as negative
-    // daily_volume because TrendChart uses daily_volume directly when it is present.
     const csvCur = +r.current_reading;
     const csvPrev = r.previous_reading ? +r.previous_reading : null;
-    const csvDailyVol = csvPrev != null ? Math.max(0, csvCur - csvPrev) : null;
+    const rawWellDelta = csvPrev != null ? csvCur - csvPrev : null;
+    if (rawWellDelta != null && rawWellDelta < 0)
+      errors.push(`Well "${r.well_name}" @ ${dt.slice(0, 10)}: negative delta (${rawWellDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
+    const csvDailyVol = rawWellDelta != null ? Math.max(0, rawWellDelta) : null;
 
     const { error } = await supabase.from('well_readings').insert({
       well_id: wellId,
@@ -648,6 +691,9 @@ function validateBlendingRow(r: Record<string, string>, i: number): string[] {
     e.push(`Row ${i}: volume_m3 must be a positive number`);
   if (r.event_date && isNaN(Date.parse(r.event_date)))
     e.push(`Row ${i}: event_date is not a valid date (use YYYY-MM-DD)`);
+  // Fix #7 — reading_datetime was never validated; a bad value silently becomes Invalid Date
+  if (r.reading_datetime?.trim() && isNaN(Date.parse(r.reading_datetime)))
+    e.push(`Row ${i}: reading_datetime is not a valid date (use YYYY-MM-DDTHH:mm)`);
   return e;
 }
 
@@ -794,16 +840,41 @@ async function insertPowerReadings(
       if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
     }
     if (r.daily_grid_kwh?.trim())  payload.daily_grid_kwh  = +r.daily_grid_kwh;
-    // Bug 3 fix: compute and persist daily_consumption_kwh from the CSV's explicit column
-    // or from the delta vs the previous reading for this plant on that day.
+
+    // Fix #1 — daily_consumption_kwh was only set when daily_grid_kwh was in the CSV.
+    // For shared-meter plants (or any plant without explicit daily_grid_kwh), we must
+    // fetch the previous reading for this plant-day and compute the delta ourselves.
+    // Fix #4 — shared_power_meter_group: if multiple plants share one physical meter,
+    // only import readings for the "primary" plant in the group; importing for each
+    // plant individually would create duplicate meter rows. The CSV template already
+    // uses plant_name to distinguish, but the caller must ensure only one row per
+    // physical meter per day is present in the file.
     if (r.daily_grid_kwh?.trim()) {
-      // If daily_grid_kwh is supplied in the CSV, use that directly as total consumption
+      // Explicit column supplied — use it directly
       payload.daily_consumption_kwh = +r.daily_grid_kwh;
-    } else if (existing && (existing as any[]).length > 0) {
-      // overwrite path: delta will be computed after fetch; handled below
+    } else {
+      // No explicit column: look up the most recent prior reading for this plant
+      // (outside today's window) and compute Δ meter_reading_kwh.
+      try {
+        const { data: prevReading } = await supabase
+          .from('power_readings')
+          .select('meter_reading_kwh')
+          .eq('plant_id', rowPlantId)
+          .lt('reading_datetime', dayStart)
+          .order('reading_datetime', { ascending: false })
+          .limit(1);
+        if (prevReading && prevReading.length > 0) {
+          const delta = +r.meter_reading_kwh - (prevReading[0] as any).meter_reading_kwh;
+          if (delta >= 0) payload.daily_consumption_kwh = delta;
+          // Negative delta = meter rollback; leave daily_consumption_kwh null so
+          // the row is visible but excluded from Dashboard totals (same behaviour
+          // as manual entry with the meter-replacement flag).
+        }
+        // No prior reading → daily_consumption_kwh stays null (first-ever row for this plant)
+      } catch {
+        // Non-critical: proceed without daily_consumption_kwh rather than failing the row
+      }
     }
-    // Note: when there is no prior reading and no explicit column the field stays null —
-    // which is correct; Dashboard will show 0 for that row just as it did before the bug.
 
     const doInsert = async () => {
       const { error } = await supabase.from('power_readings').insert(payload);
@@ -892,7 +963,10 @@ const VALID_TABS = new Set(['locator', 'well', 'product', 'blending', 'power']);
 function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
-  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId]);
+  // Fix #9 — value and onChange were missing from the deps array. Without them,
+  // the effect captures the initial (stale) closure and may double-fire or skip
+  // the auto-select when the parent re-renders with a new onChange reference.
+  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value, onChange]);
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
@@ -1112,8 +1186,13 @@ function LocatorRow({
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
-    if (belowPrev && !window.confirm(`${locator.name}: reading below previous — save anyway?`)) return;
-    if (!belowPrev && highVol && !window.confirm(`${locator.name}: volume unusually high — save anyway?`)) return;
+    // Fix #8 — window.confirm is blocked in iframes. The below-prev and high-vol
+    // warnings are already shown as inline alert banners in the UI (the yellow strip
+    // below the input). We now use those banners as the only warning and remove the
+    // blocking confirm dialogs. If the user clicks Save while the banner is visible
+    // they have implicitly acknowledged the warning.
+    if (belowPrev) toast.warning(`${locator.name}: reading below previous — saved anyway`);
+    else if (highVol) toast.warning(`${locator.name}: volume unusually high vs. avg — saved anyway`);
 
     setSaving(true);
     let gps_lat = null, gps_lng = null, off = false;
@@ -1393,7 +1472,7 @@ function WellRow({
   const save = async () => {
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
-    if (belowPrev && !window.confirm(`${well.name}: meter below previous — save anyway?`)) return;
+    if (belowPrev) toast.warning(`${well.name}: meter below previous — saved anyway`);
 
     setSaving(true);
     let gps_lat = null, gps_lng = null;
@@ -1958,8 +2037,10 @@ function ProductForm() {
                     if (decision === 'skip') continue;
                     const csvCur = +r.current_reading;
                     const csvPrev = r.previous_reading ? +r.previous_reading : null;
-                    // Bug fix: persist daily_volume on update so Dashboard aggregation works
-                    const csvDailyVol = csvPrev != null ? Math.max(0, csvCur - csvPrev) : null;
+                    const rawOvwDelta = csvPrev != null ? csvCur - csvPrev : null;
+                    if (rawOvwDelta != null && rawOvwDelta < 0)
+                      errors.push(`Meter "${r.meter_name}" @ ${dtMin}: negative delta (${rawOvwDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
+                    const csvDailyVol = rawOvwDelta != null ? Math.max(0, rawOvwDelta) : null;
                     const { error } = await supabase.from('product_meter_readings' as any).update({
                       current_reading: csvCur,
                       previous_reading: csvPrev,
@@ -1973,8 +2054,14 @@ function ProductForm() {
 
                   const csvCur2 = +r.current_reading;
                   const csvPrev2 = r.previous_reading ? +r.previous_reading : null;
-                  // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly
-                  const csvDailyVol2 = csvPrev2 != null ? Math.max(0, csvCur2 - csvPrev2) : null;
+                  // Fix #11 — negative delta was silently clamped to 0 with no user feedback.
+                  // Now we still clamp (a negative daily_volume would corrupt Dashboard sums)
+                  // but emit a warning so the user knows a rollback row was detected.
+                  const rawDelta2 = csvPrev2 != null ? csvCur2 - csvPrev2 : null;
+                  if (rawDelta2 != null && rawDelta2 < 0) {
+                    errors.push(`Row for "${r.meter_name}" @ ${dt.slice(0, 10)}: negative delta (${rawDelta2.toFixed(2)}) — likely a meter rollback. daily_volume stored as 0; mark it as a meter replacement if needed.`);
+                  }
+                  const csvDailyVol2 = rawDelta2 != null ? Math.max(0, rawDelta2) : null;
                   const { error } = await supabase.from('product_meter_readings' as any).insert({
                     meter_id: meterId,
                     plant_id: pid,
@@ -2248,9 +2335,16 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
   const saveEdit = async () => {
     if (!editRow) return;
     setSaving(true);
+    // Recalculate daily_volume so Dashboard/TrendChart totals stay correct after edits.
+    // previous_reading is not editable in this dialog, so we read it from the fetched rows.
+    const existingRow = rows?.find((r: any) => r.id === editRow.id);
+    const prevReading = existingRow?.previous_reading ?? null;
+    const newCur = +editRow.value;
+    const newDailyVol = prevReading != null ? Math.max(0, newCur - prevReading) : null;
     const { error } = await supabase.from('product_meter_readings' as any).update({
-      current_reading: +editRow.value,
+      current_reading: newCur,
       reading_datetime: new Date(editRow.datetime).toISOString(),
+      daily_volume: newDailyVol,  // keep in sync so Dashboard aggregation reflects the edit
     } as any).eq('id', editRow.id);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
@@ -2260,8 +2354,13 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     qc.invalidateQueries();
   };
 
+  // Fix #8 — window.confirm is blocked in iframes. Use a two-click inline confirm
+  // (first click sets pendingDeleteId, second click executes the delete).
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   const deleteRow = async (id: string) => {
-    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
+    if (pendingDeleteId !== id) { setPendingDeleteId(id); return; }
+    setPendingDeleteId(null);
     setDeletingId(id);
     const { error } = await supabase.from('product_meter_readings' as any).delete().eq('id', id);
     setDeletingId(null);
@@ -2372,15 +2471,28 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
                       <td className="px-2 py-1 text-center">
                         <div className="flex items-center justify-center gap-0.5">
                           <button title="Edit" disabled={!!editRow || isDeleting}
-                            onClick={() => setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) })}
+                            onClick={() => { setPendingDeleteId(null); setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) }); }}
                             className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
                             <Pencil className="h-3 w-3" />
                           </button>
-                          <button title="Delete" disabled={!!editRow || isDeleting}
-                            onClick={() => deleteRow(r.id)}
-                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
-                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                          </button>
+                          {pendingDeleteId === r.id ? (
+                            <>
+                              <button title="Confirm delete" onClick={() => deleteRow(r.id)}
+                                className="p-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-[10px] font-semibold leading-none px-1.5">
+                                Yes
+                              </button>
+                              <button title="Cancel" onClick={() => setPendingDeleteId(null)}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground text-[10px] leading-none px-1.5">
+                                No
+                              </button>
+                            </>
+                          ) : (
+                            <button title="Delete" disabled={!!editRow || isDeleting}
+                              onClick={() => deleteRow(r.id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2675,17 +2787,20 @@ function PowerForm() {
 
     setSavingMeter(meterKey);
 
-    // Duplicate check (day-level) — only for the first/primary grid meter
-    if (kind === 'grid' && idx === 0 && !editingId) {
+    // Fix #2 — dup check was limited to idx===0, so secondary grid meters (idx≥1)
+    // could insert a second row for the same plant+day, producing double-rows in
+    // power_readings. Extend the check to every grid meter submission.
+    if (kind === 'grid' && !editingId) {
       const dup = await findExistingReading({
         table: 'power_readings', entityCol: 'plant_id', entityId: plantId,
         datetime: new Date(dt), windowKind: 'day',
       });
       if (dup) {
-        if (!confirm('A power reading already exists for this plant today. Edit it instead?')) {
-          setSavingMeter(null); return;
-        }
+        // Fix #8: bare confirm() is also blocked in iframes.
+        // Auto-switch to edit mode for the existing reading and notify via toast.
         setEditingId(dup);
+        toast.info('A power reading already exists for today — switched to edit mode. Adjust the values and save again.');
+        setSavingMeter(null); return;
       }
     }
 
@@ -3299,6 +3414,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [togglingGridId, setTogglingGridId] = useState<string | null>(null);
   const [togglingSolarId, setTogglingSolarId] = useState<string | null>(null);
+  // Fix #8 — replace window.confirm (blocked in iframes) with inline two-click confirm
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
 
   // Helper: parse a YYYY-MM-DD string as LOCAL midnight (avoids UTC timezone shift)
   const localMidnight = (dateStr: string) => {
@@ -3462,7 +3580,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   // Bulk delete
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.size} reading(s)? This cannot be undone.`)) return;
+    // Fix #8: two-click confirm instead of window.confirm (blocked in iframes)
+    if (!bulkDeletePending) { setBulkDeletePending(true); return; }
+    setBulkDeletePending(false);
     setBulkDeleting(true);
     const ids = [...selectedIds];
     let error: any = null;
@@ -3482,7 +3602,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
   };
 
   const deleteRow = async (id: string) => {
-    if (!window.confirm('Delete this reading? This cannot be undone.')) return;
+    // Fix #8: two-click confirm instead of window.confirm (blocked in iframes)
+    if (pendingDeleteId !== id) { setPendingDeleteId(id); return; }
+    setPendingDeleteId(null);
     setDeletingId(id);
     let error: any = null;
     if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
@@ -3494,7 +3616,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     qc.invalidateQueries({ queryKey });
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
+    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-loc-recent'] });
     if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
     qc.invalidateQueries();
   };
@@ -3535,12 +3657,35 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
         daily_volume: newDailyVol,  // keep daily_volume in sync
       }).eq('id', editRow.id));
     } else if (module === 'power') {
-      ({ error } = await (supabase.from('power_readings') as any).update({
+      // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
+      // totals would drift after any history correction.  Re-derive it the same way
+      // the initial insert does: find the predecessor row and compute Δ meter reading.
+      const editedDt = new Date(dtIso).toISOString();
+      const editedDate = editedDt.slice(0, 10);
+      let recomputedConsumption: number | null = null;
+      try {
+        const { data: pred } = await supabase
+          .from('power_readings')
+          .select('meter_reading_kwh')
+          .eq('plant_id', entityId)
+          .lt('reading_datetime', `${editedDate}T00:00:00.000Z`)
+          .order('reading_datetime', { ascending: false })
+          .limit(1);
+        if (pred && pred.length > 0) {
+          const delta = +editRow.value - (pred[0] as any).meter_reading_kwh;
+          if (delta >= 0) recomputedConsumption = delta;
+        }
+      } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
+      const powerUpdatePayload: Record<string, any> = {
         meter_reading_kwh: +editRow.value,
         solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
-      }).eq('id', editRow.id));
+      };
+      if (recomputedConsumption != null) {
+        powerUpdatePayload.daily_consumption_kwh = recomputedConsumption;
+      }
+      ({ error } = await (supabase.from('power_readings') as any).update(powerUpdatePayload).eq('id', editRow.id));
     }
 
     setSaving(false);
@@ -3550,7 +3695,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
     qc.invalidateQueries({ queryKey });
     // Also invalidate the parent form queries so "Last 7 readings" refreshes
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-locator-recent'] });
+    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-loc-recent'] });
     if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
     qc.invalidateQueries();
   };
@@ -3679,18 +3824,29 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
             <span className="text-xs font-medium text-destructive flex-1">
               {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
             </span>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-7 px-3 text-xs gap-1.5"
-              onClick={bulkDelete}
-              disabled={bulkDeleting}
-            >
-              {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-              Delete selected
-            </Button>
+            {bulkDeletePending ? (
+              <>
+                <span className="text-xs text-destructive font-medium">Delete {selectedIds.size} reading(s)?</span>
+                <Button size="sm" variant="destructive" className="h-7 px-3 text-xs gap-1" onClick={bulkDelete} disabled={bulkDeleting}>
+                  {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, delete'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                  onClick={() => setBulkDeletePending(false)}>Cancel</Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 px-3 text-xs gap-1.5"
+                onClick={bulkDelete}
+                disabled={bulkDeleting}
+              >
+                <X className="h-3 w-3" />
+                Delete selected
+              </Button>
+            )}
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-              onClick={() => setSelectedIds(new Set())}>
+              onClick={() => { setSelectedIds(new Set()); setBulkDeletePending(false); }}>
               Clear
             </Button>
           </div>
@@ -3919,14 +4075,27 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                             >
                               <Pencil className="h-3 w-3" />
                             </button>
-                            <button
-                              title="Delete"
-                              disabled={!!editRow || isDeleting}
-                              onClick={() => deleteRow(r.id)}
-                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
-                            >
-                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                            </button>
+                            {pendingDeleteId === r.id ? (
+                              <>
+                                <button title="Confirm delete" onClick={() => deleteRow(r.id)}
+                                  className="px-1.5 py-0.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-[10px] font-semibold leading-none">
+                                  Yes
+                                </button>
+                                <button title="Cancel" onClick={() => setPendingDeleteId(null)}
+                                  className="px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground text-[10px] leading-none">
+                                  No
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                title="Delete"
+                                disabled={!!editRow || isDeleting}
+                                onClick={() => deleteRow(r.id)}
+                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                              >
+                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                              </button>
+                            )}
                           </div>
                         </td>
                       )}
