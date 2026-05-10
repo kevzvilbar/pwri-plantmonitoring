@@ -2318,12 +2318,12 @@ export function TrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(var(--warn))" width={28} tickFormatter={(v) => `${v}%`} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="#a855f7" width={28} tickFormatter={(v) => `${v}%`} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
               <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="hsl(var(--warn))" strokeWidth={2.5} dot={{ r: 3 }} name="NRW %" />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3, fill: "#a855f7" }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'productionCost' ? (
             // Two-axis composed chart: absolute ₱ amounts on the left,
