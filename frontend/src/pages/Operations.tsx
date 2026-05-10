@@ -873,13 +873,21 @@ async function insertPowerReadings(
     };
     // Solar input mode: "direct" stores daily_solar_kwh only (no cumulative meter write);
     // "raw" (default) stores solar_meter_reading and optionally daily_solar_kwh.
-    const solarMode = r.solar_input_mode?.trim().toLowerCase() === 'direct' ? 'direct' : 'raw';
+    //
+    // Auto-detect: when solar_input_mode is blank but daily_solar_kwh is explicitly
+    // supplied, treat the row as "direct". The CSV template stores the *previous* day's
+    // reading in the solar_meter_reading column (not the current cumulative value), so
+    // writing it would corrupt the meter sequence. The pre-computed daily_solar_kwh is
+    // the ground truth and should be stored directly without touching solar_meter_reading.
+    const explicitDirect = r.solar_input_mode?.trim().toLowerCase() === 'direct';
+    const impliedDirect  = !r.solar_input_mode?.trim() && !!r.daily_solar_kwh?.trim();
+    const solarMode = (explicitDirect || impliedDirect) ? 'direct' : 'raw';
     if (solarMode === 'direct') {
       // Direct daily kWh: supply via daily_solar_kwh column OR via solar_meter_reading (treated as direct)
       const directKwh = r.daily_solar_kwh?.trim() || r.solar_meter_reading?.trim();
       if (directKwh) payload.daily_solar_kwh = +directKwh;
     } else {
-      // Raw cumulative mode
+      // Raw cumulative mode — solar_meter_reading is the actual current odometer value
       if (r.solar_meter_reading?.trim()) payload.solar_meter_reading = +r.solar_meter_reading;
       if (r.daily_solar_kwh?.trim()) payload.daily_solar_kwh = +r.daily_solar_kwh;
     }
@@ -3410,6 +3418,7 @@ function PowerForm() {
           entityName={plants?.find((p: any) => p.id === plantId)?.name ?? 'Plant'}
           module="power"
           entityId={plantId}
+          multiplier={effectiveMultiplier}
           onClose={() => setPowerHistoryOpen(false)}
         />
       )}
@@ -3437,11 +3446,13 @@ interface HistoryEditState {
   isMeterReplacement?: boolean;
 }
 
-function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }: {
+function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplier = 1, onClose }: {
   entityName: string;
   module: HistoryModule;
   entityId: string;
   plantId?: string;
+  /** CT multiplier used for grid power (Δ × multiplier). Defaults to 1. */
+  multiplier?: number;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -3941,6 +3952,8 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                   {module === 'power' && <>
                     <th className="px-3 py-2 font-medium text-right">Grid Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Grid (kWh)</th>
+                    <th className="px-2 py-2 font-medium text-center text-slate-500">×</th>
+                    <th className="px-3 py-2 font-medium text-right text-blue-700">Grid Power (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center text-blue-600">Grid Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Solar Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ Solar (kWh)</th>
@@ -4061,6 +4074,19 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, onClose }
                             {isGridRepl
                               ? <span className="text-orange-500 font-medium">0</span>
                               : predecessor != null ? fmtNum(r.meter_reading_kwh - predecessor.meter_reading_kwh) : '—'
+                            }
+                          </td>
+                          {/* Multiplier */}
+                          <td className="px-2 py-1.5 text-center font-mono-num text-slate-500 text-[10px]">
+                            {multiplier !== 1 ? `×${multiplier}` : '×1'}
+                          </td>
+                          {/* Grid Power = Δ × multiplier */}
+                          <td className="px-3 py-1.5 text-right font-mono-num text-blue-700 dark:text-blue-400 font-medium">
+                            {isGridRepl
+                              ? <span className="text-orange-500 font-medium">0</span>
+                              : predecessor != null
+                                ? fmtNum((r.meter_reading_kwh - predecessor.meter_reading_kwh) * multiplier)
+                                : '—'
                             }
                           </td>
                           {/* Grid Repl. toggle */}
