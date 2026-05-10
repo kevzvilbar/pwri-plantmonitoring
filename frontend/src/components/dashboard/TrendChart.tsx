@@ -250,8 +250,10 @@ function OverviewTable({
   if (metric === 'pv') {
     cols.push(
       { key: 'production', label: 'Production (m³)', fmt: (d) => d.production?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
-      { key: 'kwh', label: 'Power (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
-      { key: 'pv', label: 'PV Ratio (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—' },
+      { key: 'kwh', label: 'Grid (kWh)', fmt: (d) => d.kwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—' },
+      { key: 'solarKwh', label: 'Solar (kWh)', fmt: (d) => d.solarKwh > 0 ? d.solarKwh?.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—' },
+      { key: 'pvGrid', label: 'Grid PV (kWh/m³)', fmt: (d) => d.production > 0 ? (d.kwh / d.production).toFixed(2) : '—' },
+      { key: 'pvTotal', label: '(Grid+Solar) PV (kWh/m³)', fmt: (d) => d.production > 0 && (d.kwh + d.solarKwh) > 0 ? ((d.kwh + d.solarKwh) / d.production).toFixed(2) : '—' },
     );
   }
   if (metric === 'productionCost') {
@@ -994,7 +996,7 @@ export function TrendChart({
   });
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,reading_datetime,is_meter_replacement,plant_id'),
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
 
@@ -1028,7 +1030,7 @@ export function TrendChart({
         date: d, sortKey, isoDate: new Date(sortKey).toISOString(),
         production: 0, consumption: 0, rawwater: 0,
         recovery: 0, recoverySamples: 0,
-        tds: 0, tdsSamples: 0, kwh: 0,
+        tds: 0, tdsSamples: 0, kwh: 0, solarKwh: 0,
         powerCost: 0, chemCost: 0, totalCost: 0,
         costProduction: 0,
         // _raw* fields accumulate the true unclamped deltas so the tooltip
@@ -1323,6 +1325,18 @@ export function TrendChart({
         const label = `${entityName} Power Meter`;
         if (!row._meterReplacements.includes(label)) row._meterReplacements.push(label);
       }
+    });
+
+    // Accumulate daily_solar_kwh per day for the (Grid+Solar) PV ratio line.
+    // Skips null/zero rows so the ratio stays null on days with no solar data.
+    (powerReadings ?? []).forEach((r: any) => {
+      if (r.daily_solar_kwh == null || r.is_meter_replacement) return;
+      const solarVal = +r.daily_solar_kwh;
+      if (solarVal <= 0) return;
+      const dt = new Date(r.reading_datetime);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      row.solarKwh += solarVal;
     });
 
     (costReadings ?? []).forEach((r: any) => {
@@ -2344,9 +2358,10 @@ export function TrendChart({
               <Line yAxisId="unit" type="monotone" dataKey="unitCost" stroke="hsl(var(--warn))" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="₱/m³" connectNulls />
             </ComposedChart>
           ) : metric === 'pv' ? (
-            // PV Ratio only — single line showing kWh/m³ ratio directly.
-            // Power and Production are intentionally excluded; the ratio alone
-            // is what operators need to track energy efficiency over time.
+            // PV Ratio — two lines: Grid-only PV and (Grid+Solar) PV.
+            // Grid PV = grid meter Δ ÷ production.
+            // (Grid+Solar) PV = (grid Δ + daily_solar_kwh) ÷ production — total
+            // energy consumed per m³ including solar contribution.
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -2359,7 +2374,7 @@ export function TrendChart({
               />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any) => [v != null ? `${v} kWh/m³` : '—', 'PV Ratio']}
+                formatter={(v: any, name: string) => [v != null ? `${v} kWh/m³` : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line
@@ -2368,7 +2383,19 @@ export function TrendChart({
                 stroke="#f59e0b"
                 strokeWidth={2.5}
                 dot={{ r: 2, fill: '#f59e0b' }}
-                name="PV Ratio (kWh/m³)"
+                name="Grid PV (kWh/m³)"
+                connectNulls
+              />
+              <Line
+                type="monotone"
+                dataKey={(d: any) => d.production > 0 && (d.kwh + d.solarKwh) > 0
+                  ? +((d.kwh + d.solarKwh) / d.production).toFixed(2)
+                  : null}
+                stroke="#22c55e"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                dot={{ r: 2, fill: '#22c55e' }}
+                name="(Grid+Solar) PV (kWh/m³)"
                 connectNulls
               />
             </LineChart>
