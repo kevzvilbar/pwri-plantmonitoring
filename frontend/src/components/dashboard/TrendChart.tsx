@@ -942,19 +942,14 @@ export function TrendChart({
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
-     if (error) {
-       if (isNewColError(error.message)) {
-       const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
-          .select(LEGACY_SELECT)
-          .in('train_id', trainIds)
-          .gte('reading_datetime', startISO)
-          .lte('reading_datetime', endISO)
-          .order('reading_datetime', { ascending: true });
-      if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
-      return (d2 ?? []) as any[];
-     }
-     throw new Error(`ro_train_readings: ${error.message}`);
- }
+      if (error) {
+        if (isNewColError(error.message)) {
+          const { data: d2, error: e2 } = await (supabase.from('ro_train_readings' as never) as any)
+            .select(LEGACY_SELECT)
+            .in('train_id', trainIds)
+            .gte('reading_datetime', startISO)
+            .lte('reading_datetime', endISO)
+            .order('reading_datetime', { ascending: true });
           if (e2) throw new Error(`ro_train_readings: ${e2.message}`);
           return (d2 ?? []) as any[];
         }
