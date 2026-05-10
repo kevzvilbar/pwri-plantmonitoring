@@ -4705,8 +4705,8 @@ function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabe
 }
 
 // ─── Train Operator Log Modal ─────────────────────────────────────────────────
-// Shows a paginated list of all operator data inputs for a given RO Train,
-// including the operator's name, timestamp, and key reading values.
+// Full paginated operator log with all columns + meter-replacement toggle,
+// matching the Operations reading-history pattern.
 
 function TrainOperatorLogModal({
   trainId,
@@ -4717,8 +4717,11 @@ function TrainOperatorLogModal({
   trainLabel: string;
   onClose: () => void;
 }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Date range — default last 30 days
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -4735,9 +4738,6 @@ function TrainOperatorLogModal({
     setPage(0);
   };
 
-  // Use date-only strings for filtering — same pattern as ReadingHistoryDialog.
-  // Pure string arithmetic avoids UTC offset shifting the date back (e.g. UTC+8 would
-  // turn 2026-05-08T00:00:00 local → 2026-05-07T16:00:00Z, cutting off today's entries).
   const untilNextDay = dateTo
     ? (() => {
         const [y, m, d] = dateTo.split('-').map(Number);
@@ -4746,71 +4746,64 @@ function TrainOperatorLogModal({
       })()
     : null;
 
-  const { data: logs = [], isLoading, refetch } = useQuery({
-    queryKey: ['train-operator-log', trainId, dateFrom, untilNextDay],
+  const queryKey = ['train-operator-log', trainId, dateFrom, untilNextDay];
+
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey,
     queryFn: async () => {
       try {
-        // Step 1: fetch readings using date-only range (matches how ReadingHistoryDialog works)
         let q = (supabase.from('ro_train_readings' as any) as any)
-          .select('id, reading_datetime, permeate_flow, feed_flow, feed_pressure_psi, permeate_tds, feed_tds, recovery_pct, recorded_by')
+          .select([
+            'id', 'reading_datetime', 'recorded_by',
+            // flow & pressure
+            'permeate_flow', 'feed_flow', 'reject_flow',
+            'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+            // quality
+            'feed_tds', 'permeate_tds', 'reject_tds',
+            'feed_ph', 'permeate_ph',
+            'temperature_c', 'turbidity_ntu',
+            // derived
+            'recovery_pct',
+            // permeate meter
+            'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+            // flags
+            'is_meter_replacement',
+            // notes
+            'remarks',
+          ].join(','))
           .eq('train_id', trainId)
           .order('reading_datetime', { ascending: false })
-          .limit(1000);
+          .limit(2000);
         if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
-        if (untilNextDay) q = q.lt('reading_datetime', `${untilNextDay}T00:00:00`);
+        if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
         const { data: readings, error } = await q;
-        if (error) {
-          console.error('Error fetching readings:', error);
-          return [];
-        }
+        if (error) { console.error('operator log fetch:', error); return []; }
         if (!readings?.length) return [];
 
-        // Step 2: batch-fetch operator profiles for all unique recorded_by UUIDs
+        // Resolve operator names
         const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
         let profileMap: Record<string, string> = {};
         if (uids.length) {
-          // user_profiles columns: id, first_name, last_name, username (no full_name/email).
-          // Selecting non-existent columns causes Supabase to return an error (perr truthy),
-          // which was silently swallowing all results and falling back to UID for every row.
           for (const table of ['user_profiles', 'profiles']) {
             const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
-              .select('id, first_name, last_name, username')
-              .in('id', uids);
+              .select('id, first_name, last_name, username').in('id', uids);
             if (!perr && pdata?.length) {
               profileMap = Object.fromEntries(
                 (pdata as any[]).map((p: any) => {
-                  const fullName = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim();
-                  const name = fullName || p.username?.trim() || '';
+                  const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
                   return [p.id, name || null];
-                }).filter(([, name]) => name)
+                }).filter(([, n]) => n)
               );
               if (Object.keys(profileMap).length) break;
             }
           }
         }
-
-        // Step 3: for any UIDs still unresolved, attempt a final lookup via
-        // auth.users email metadata (admin API — may be unavailable in some setups).
-        const unresolvedUids = uids.filter((uid) => !profileMap[uid]);
-        if (unresolvedUids.length) {
-          try {
-            const { data: authUsers } = await (supabase.auth as any).admin?.listUsers?.() ?? {};
-            if (authUsers?.users?.length) {
-              for (const u of authUsers.users) {
-                if (unresolvedUids.includes(u.id) && u.email) {
-                  profileMap[u.id] = u.email.split('@')[0];
-                }
-              }
-            }
-          } catch { /* admin API not available — skip silently */ }
-        }
-
         return (readings as any[]).map((r: any) => ({
           ...r,
           _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown'),
         }));
       } catch (err) {
-        console.error('Unexpected error in operator log query:', err);
+        console.error('operator log error:', err);
         return [];
       }
     },
@@ -4818,26 +4811,54 @@ function TrainOperatorLogModal({
     gcTime: 60_000,
   });
 
+  // Toggle is_meter_replacement on a row (manager-only) — zeroes the delta in TrendChart
+  const toggleMeterReplacement = async (r: any) => {
+    if (!isManager) return;
+    setTogglingId(r.id);
+    const next = !r.is_meter_replacement;
+    const { error } = await (supabase.from('ro_train_readings' as any) as any)
+      .update({ is_meter_replacement: next }).eq('id', r.id);
+    setTogglingId(null);
+    if (error) {
+      // Column may not exist yet — add it via migration
+      toast.error('is_meter_replacement column missing — run: ALTER TABLE ro_train_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN DEFAULT FALSE');
+      return;
+    }
+    toast.success(next ? 'Marked as meter replacement — Δ zeroed in chart' : 'Meter replacement flag removed');
+    qc.invalidateQueries({ queryKey });
+  };
+
   const totalPages = Math.ceil(logs.length / PAGE_SIZE);
-  const pageLogs = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const pageLogs   = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const fmtVal = (v: any, unit = '') =>
+    v != null ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-[10px]">{unit}</span></span>
+              : <span className="text-muted-foreground/30">—</span>;
 
   const exportCSV = () => {
     if (!logs.length) { toast.error('No logs to export'); return; }
-    const headers = ['Date/Time', 'Operator', 'Permeate Flow (m³/h)', 'Feed Flow (m³/h)', 'Feed Pressure (psi)', 'Permeate TDS (ppm)', 'Feed TDS (ppm)', 'Recovery (%)'];
-    const rows = logs.map((r: any) => {
-      const opName = r._operatorName ?? 'Unknown';
-      return [
-        r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
-        opName,
-        r.permeate_flow ?? '',
-        r.feed_flow ?? '',
-        r.feed_pressure_psi ?? '',
-        r.permeate_tds ?? '',
-        r.feed_tds ?? '',
-        r.recovery_pct ?? '',
-      ].join(',');
-    });
-    const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
+    const headers = [
+      'Date/Time','Operator','Meter Repl.',
+      'Perm Flow (m³/h)','Feed Flow (m³/h)','Reject Flow (m³/h)',
+      'Feed Press (psi)','Reject Press (psi)','Suction Press (psi)',
+      'Feed TDS (ppm)','Perm TDS (ppm)','Reject TDS (ppm)',
+      'Feed pH','Perm pH','Temp (°C)','Turbidity (NTU)',
+      'Recovery (%)','Perm Meter Curr','Perm Meter Prev','Perm Delta (m³)',
+      'Remarks',
+    ];
+    const csvRows = logs.map((r: any) => [
+      r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
+      r._operatorName ?? 'Unknown',
+      r.is_meter_replacement ? 'YES' : '',
+      r.permeate_flow ?? '', r.feed_flow ?? '', r.reject_flow ?? '',
+      r.feed_pressure_psi ?? '', r.reject_pressure_psi ?? '', r.suction_pressure_psi ?? '',
+      r.feed_tds ?? '', r.permeate_tds ?? '', r.reject_tds ?? '',
+      r.feed_ph ?? '', r.permeate_ph ?? '', r.temperature_c ?? '', r.turbidity_ntu ?? '',
+      r.recovery_pct ?? '',
+      r.permeate_meter ?? '', r.permeate_meter_prev ?? '', r.permeate_meter_delta ?? '',
+      r.remarks ?? '',
+    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url;
     a.download = `${trainLabel.replace(/\s+/g, '_')}_operator_log.csv`;
@@ -4848,11 +4869,11 @@ function TrainOperatorLogModal({
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden"
+        className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
         onInteractOutside={() => onClose()}
       >
-        {/* Hidden title for screen-reader accessibility */}
         <DialogTitle className="sr-only">Operator Log — {trainLabel}</DialogTitle>
+
         {/* ── Header ── */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
           <div className="min-w-0">
@@ -4861,7 +4882,7 @@ function TrainOperatorLogModal({
               <span className="truncate">Operator Log — {trainLabel}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              All data entries submitted by operators for this RO Train
+              All readings submitted for this RO train · {isManager ? 'Click orange checkbox to flag meter replacement' : 'Managers can flag meter replacements'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 mr-8">
@@ -4871,36 +4892,31 @@ function TrainOperatorLogModal({
           </div>
         </div>
 
-        {/* ── Date Range Filter ── */}
-        <div className="flex items-center gap-2 px-5 py-2.5 border-b shrink-0 flex-wrap">
-          {/* Preset pills */}
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5 shrink-0">
-            {(['7', '30', '90'] as const).map(p => (
-              <button key={p} onClick={() => applyPreset(p)}
-                className={`px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${rangePreset === p ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-                {p}d
-              </button>
-            ))}
-            <button onClick={() => setRangePreset('custom')}
-              className={`px-2.5 py-0.5 rounded text-[10px] font-medium transition-colors ${rangePreset === 'custom' ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-              Custom
-            </button>
-          </div>
-          {/* Date inputs */}
-          <div className="flex items-center gap-1.5">
-            <input
-              type="date" value={dateFrom} max={dateTo || todayStr}
-              onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-7 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
-            />
-            <span className="text-muted-foreground text-xs">→</span>
-            <input
-              type="date" value={dateTo} min={dateFrom} max={todayStr}
-              onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-7 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
-            />
-          </div>
-          {/* Entry count */}
+        {/* ── Filters bar ── */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/20 shrink-0 flex-wrap">
+          {(['7','30','90'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => applyPreset(p)}
+              className={[
+                'h-6 px-2 rounded text-xs font-medium border transition-colors',
+                rangePreset === p
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-background border-input text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >{p}d</button>
+          ))}
+          <input
+            type="date" value={dateFrom} max={dateTo || todayStr}
+            onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
+            className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+          />
+          <span className="text-muted-foreground text-xs">→</span>
+          <input
+            type="date" value={dateTo} min={dateFrom} max={todayStr}
+            onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
+            className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+          />
           {!isLoading && (
             <span className="text-xs text-muted-foreground ml-auto">
               <span className="font-semibold text-foreground">{logs.length}</span> {logs.length === 1 ? 'entry' : 'entries'}
@@ -4909,7 +4925,7 @@ function TrainOperatorLogModal({
         </div>
 
         {/* ── Log table ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -4918,68 +4934,117 @@ function TrainOperatorLogModal({
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Calendar className="h-8 w-8 mb-2 opacity-30" />
               <p className="text-sm font-medium">No logs found</p>
-              <p className="text-xs mt-0.5">Try expanding the date range or check that data has been submitted.</p>
+              <p className="text-xs mt-0.5">Try expanding the date range.</p>
             </div>
           ) : (
-            <table className="w-full text-xs">
+            <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 bg-background border-b z-10">
                 <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
-                  <th className="text-left px-4 py-2.5 font-semibold w-[140px]">Date / Time</th>
-                  <th className="text-left px-3 py-2.5 font-semibold w-[130px]">Operator</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Permeate Flow</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Feed Flow</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Feed Press.</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Perm TDS</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Recovery</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
+                  <th className="text-left px-2 py-2 font-semibold w-[110px]">Operator</th>
+                  {/* Meter replacement — orange checkbox, manager-only toggle */}
+                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[54px]" title="Meter Replacement — flags this reading as a meter change; zeroes Δ in production chart">Repl.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Suction</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Temp</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Recovery</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ m³</th>
+                  <th className="text-left px-2 py-2 font-semibold">Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {pageLogs.map((r: any, i: number) => {
-                  const opName = r._operatorName ?? 'Unknown';
-                  const initials = opName !== 'Unknown'
+                  const isRepl     = !!r.is_meter_replacement;
+                  const isToggling = togglingId === r.id;
+                  const opName     = r._operatorName ?? 'Unknown';
+                  const initials   = opName !== 'Unknown'
                     ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
                     : '?';
                   return (
-                    <tr key={r.id ?? i} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-2.5 font-mono text-[11px] whitespace-nowrap text-muted-foreground">
-                        {r.reading_datetime ? (<>
-                          <div className="text-foreground font-medium">{format(new Date(r.reading_datetime), 'MMM d, yyyy')}</div>
-                          <div>{format(new Date(r.reading_datetime), 'HH:mm')}</div>
-                        </>) : '—'}
+                    <tr
+                      key={r.id ?? i}
+                      className={[
+                        'border-t transition-colors',
+                        isRepl ? 'bg-orange-50/40 dark:bg-orange-950/10' : 'hover:bg-muted/30',
+                      ].join(' ')}
+                    >
+                      {/* Date / Time */}
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground font-mono text-[11px]">
+                        <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
+                        <div className="flex items-center gap-1">
+                          {r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}
+                          {isRepl && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">repl.</span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      {/* Operator */}
+                      <td className="px-2 py-2">
                         <div className="flex items-center gap-1.5">
                           <div className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[9px] font-bold shrink-0">
                             {initials}
                           </div>
-                          <span className="truncate max-w-[90px]" title={opName}>{opName}</span>
+                          <span className="truncate max-w-[80px]" title={opName}>{opName}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.permeate_flow != null
-                          ? <span>{fmtNum(r.permeate_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
-                          : <span className="text-muted-foreground/40">—</span>}
+                      {/* Meter replacement toggle */}
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          title={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
+                          disabled={!isManager || isToggling}
+                          onClick={() => toggleMeterReplacement(r)}
+                          className={[
+                            'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                            !isManager ? 'opacity-30 cursor-not-allowed' : 'disabled:opacity-40 disabled:cursor-not-allowed',
+                            isRepl
+                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                          ].join(' ')}
+                        >
+                          {isToggling
+                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                          }
+                        </button>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_flow != null
-                          ? <span>{fmtNum(r.feed_flow)}<span className="text-muted-foreground ml-0.5">m³/h</span></span>
-                          : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.feed_pressure_psi != null
-                          ? <span>{fmtNum(r.feed_pressure_psi)}<span className="text-muted-foreground ml-0.5">psi</span></span>
-                          : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
-                        {r.permeate_tds != null
-                          ? <span>{fmtNum(r.permeate_tds)}<span className="text-muted-foreground ml-0.5">ppm</span></span>
-                          : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">
+                      {/* Flow */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_flow, 'm³/h')}</td>
+                      {/* Pressure */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.suction_pressure_psi, 'psi')}</td>
+                      {/* Quality */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.temperature_c, '°C')}</td>
+                      {/* Recovery */}
+                      <td className="px-2 py-2 text-right font-mono">
                         {r.recovery_pct != null
-                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmtNum(r.recovery_pct)}%</span>
-                          : <span className="text-muted-foreground/40">—</span>}
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{Number(r.recovery_pct).toFixed(1)}%</span>
+                          : <span className="text-muted-foreground/30">—</span>}
                       </td>
+                      {/* Permeate meter */}
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">{fmtVal(r.permeate_meter, 'm³')}</td>
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {r.permeate_meter_delta != null
+                          ? <span className={+r.permeate_meter_delta > 0 ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground/40'}>
+                              {+r.permeate_meter_delta > 0 ? `+${Number(r.permeate_meter_delta).toLocaleString(undefined,{maximumFractionDigits:1})}` : '0'}
+                            </span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      {/* Remarks */}
+                      <td className="px-2 py-2 text-muted-foreground max-w-[140px] truncate" title={r.remarks ?? ''}>{r.remarks || <span className="opacity-30">—</span>}</td>
                     </tr>
                   );
                 })}
@@ -4989,22 +5054,22 @@ function TrainOperatorLogModal({
         </div>
 
         {/* ── Pagination footer ── */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between gap-2 px-5 py-3 border-t shrink-0">
-            <span className="text-xs text-muted-foreground">
-              Page {page + 1} of {totalPages} · {logs.length} entries
-            </span>
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {totalPages > 1 ? `Page ${page + 1} of ${totalPages} · ` : ''}{logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+          </span>
+          {totalPages > 1 && (
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                ← Prev
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-                Next →
-              </Button>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
+    </Dialog>
+  );
+}
+
     </Dialog>
   );
 }
