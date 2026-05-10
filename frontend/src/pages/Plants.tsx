@@ -29,6 +29,19 @@ import { format } from 'date-fns';
 
 const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
 
+// ─── Chemical master list (mirrors ROTrains.tsx KNOWN_CHEMICALS) ─────────────
+// Managers configure which chemicals are applicable per plant in Plant Configuration.
+// ROTrains → Chemical Dosing hides chemicals not in the enabled list.
+const PLANT_CHEMICALS = [
+  { name: 'Chlorine',      defaultUnit: 'kg' },
+  { name: 'SMBS',          defaultUnit: 'kg' },
+  { name: 'Anti Scalant',  defaultUnit: 'L'  },
+  { name: 'Soda Ash',      defaultUnit: 'kg' },
+  { name: 'Caustic Soda',  defaultUnit: 'kg' },
+  { name: 'HCl',           defaultUnit: 'L'  },
+  { name: 'SLS',           defaultUnit: 'g'  },
+];
+
 // ─── SummaryCount pill ───────────────────────────────────────────────────────
 // Renders "active/total" — active count in primary color, total in muted.
 // If all active: green accent. If any inactive: amber warning.
@@ -1106,6 +1119,9 @@ export interface PlantMeterConfig {
   // to cutoff on day N (inclusive). Stored reading is labelled as day N.
   // Example: cutoff "00:20" → May 3 00:21 … May 4 00:20 = "May 4" production.
   permeate_cutoff_time: string; // e.g. "00:20"
+  // Chemicals enabled for this plant — only these appear in RO Trains → Chemical Dosing.
+  // Default: all chemicals enabled (empty array = all shown for backwards compat).
+  enabled_chemicals: string[]; // chemical names from KNOWN_CHEMICALS
 }
 
 const DEFAULT_METER_CONFIG: PlantMeterConfig = {
@@ -1133,6 +1149,7 @@ const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   has_billed_volume_meter: false,
   permeate_is_production: false,
   permeate_cutoff_time: '00:20',
+  enabled_chemicals: [], // empty = all chemicals visible (backwards compat)
 };
 
 const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
@@ -1929,6 +1946,68 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
               <PlantComponentTypeCard plant={plant} embedded />
               <BackwashModeCard plant={plant} />
             </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Chemicals ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base leading-none">🧪</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chemicals in use</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Select which chemicals this plant uses. Only checked chemicals appear in{' '}
+              <strong className="font-medium">RO Trains → Chemical Dosing</strong>.
+              {!canEdit && ' (view only)'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PLANT_CHEMICALS.map(chem => {
+                // Empty array = all chemicals enabled (backwards compat)
+                const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
+                return (
+                  <label
+                    key={chem.name}
+                    className={[
+                      'flex items-center gap-3 p-3 rounded-lg border transition-colors',
+                      isEnabled
+                        ? 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50'
+                        : 'border-border bg-muted/30',
+                      canEdit ? 'cursor-pointer' : 'cursor-default',
+                    ].join(' ')}
+                  >
+                    <Checkbox
+                      checked={isEnabled}
+                      disabled={!canEdit}
+                      onCheckedChange={canEdit ? (checked) => {
+                        // When first toggling from "all" (empty) state, expand to full list first
+                        const current = cfg.enabled_chemicals.length === 0
+                          ? PLANT_CHEMICALS.map(c => c.name)
+                          : [...cfg.enabled_chemicals];
+                        const next = checked
+                          ? [...new Set([...current, chem.name])]
+                          : current.filter(n => n !== chem.name);
+                        update({ enabled_chemicals: next });
+                      } : undefined}
+                      className="data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{chem.name}</div>
+                      <div className="text-[11px] text-muted-foreground">default unit: {chem.defaultUnit}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {canEdit && cfg.enabled_chemicals.length > 0 && cfg.enabled_chemicals.length < PLANT_CHEMICALS.length && (
+              <button
+                type="button"
+                onClick={() => update({ enabled_chemicals: [] })}
+                className="mt-2 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              >
+                Enable all chemicals
+              </button>
+            )}
           </div>
 
           {/* Save button */}

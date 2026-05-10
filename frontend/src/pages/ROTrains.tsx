@@ -3353,6 +3353,13 @@ function ChemDosingForm() {
   });
   const [samples, setSamples] = useState<Array<{ id: string; point: string; ppm: string }>>([]);
 
+  // ── Load per-plant chemical config — filters which chemicals are shown ──────
+  const { config: plantConfig } = usePlantMeterConfig(plantId || null);
+  // empty enabled_chemicals = all chemicals visible (backwards compat with existing plants)
+  const enabledChemicals: string[] = plantConfig.enabled_chemicals ?? [];
+  const isChemEnabled = (name: string) =>
+    enabledChemicals.length === 0 || enabledChemicals.includes(name);
+
   useEffect(() => {
     const n = Math.max(0, Math.min(20, +v.free_chlorine_reagent_pcs || 0));
     setSamples((prev) => {
@@ -3469,30 +3476,59 @@ function ChemDosingForm() {
                 <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
               </div>
             </div>
+            {/* Show a notice when some chemicals are hidden for this plant */}
+            {plantId && enabledChemicals.length > 0 && enabledChemicals.length < KNOWN_CHEMICALS.length && (
+              <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-2 mt-1">
+                Showing {enabledChemicals.length} of {KNOWN_CHEMICALS.length} chemicals configured for this plant.{' '}
+                Managers can update this in <strong>Plants → Configuration</strong>.
+              </p>
+            )}
           </Card>
 
           {/* Mass-Based Dosing Group */}
           <div className="space-y-1.5">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Mass-Based Dosing Group</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <ChemCard
-                name="Chlorine (kg)"
-                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
-                value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
-                unit="kg" accent="teal"
-              />
-              <ChemCard
-                name="SMBS (kg)"
-                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
-                value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
-                unit="kg" accent="default"
-              />
-              <ChemCard
-                name="Soda Ash (kg)"
-                icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
-                value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
-                unit="kg" accent="default"
-              />
+              {isChemEnabled('Chlorine') && (
+                <ChemCard
+                  name="Chlorine (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
+                  value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
+                  unit="kg" accent="teal"
+                />
+              )}
+              {isChemEnabled('SMBS') && (
+                <ChemCard
+                  name="SMBS (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
+                  value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
+                  unit="kg" accent="default"
+                />
+              )}
+              {isChemEnabled('Soda Ash') && (
+                <ChemCard
+                  name="Soda Ash (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
+                  value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
+                  unit="kg" accent="default"
+                />
+              )}
+              {isChemEnabled('Caustic Soda') && (
+                <ChemCard
+                  name="Caustic Soda (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">NaOH</span>}
+                  value={v.caustic_soda_kg ?? ''} onChange={val => setV({ ...v, caustic_soda_kg: val } as any)}
+                  unit="kg" accent="default"
+                />
+              )}
+              {isChemEnabled('SLS') && (
+                <ChemCard
+                  name="SLS (g)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">SLS</span>}
+                  value={v.sls_g ?? ''} onChange={val => setV({ ...v, sls_g: val } as any)}
+                  unit="g" accent="default"
+                />
+              )}
             </div>
           </div>
 
@@ -3500,12 +3536,22 @@ function ChemDosingForm() {
           <div className="space-y-1.5">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Volume-Based & Ancillary</p>
             <div className="grid grid-cols-2 gap-2">
-              <ChemCard
-                name="Anti Scalant (L)"
-                icon={<span className="text-base leading-none">🚛</span>}
-                value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
-                unit="L" accent="olive"
-              />
+              {isChemEnabled('Anti Scalant') && (
+                <ChemCard
+                  name="Anti Scalant (L)"
+                  icon={<span className="text-base leading-none">🚛</span>}
+                  value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
+                  unit="L" accent="olive"
+                />
+              )}
+              {isChemEnabled('HCl') && (
+                <ChemCard
+                  name="HCl (L)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">HCl</span>}
+                  value={v.hcl_l ?? ''} onChange={val => setV({ ...v, hcl_l: val } as any)}
+                  unit="L" accent="default"
+                />
+              )}
               <ChemCard
                 name="Free Cl Reagent (pcs)"
                 icon={<span className="text-base leading-none">🧪</span>}
