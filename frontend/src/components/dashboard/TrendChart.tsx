@@ -744,7 +744,7 @@ export function TrendChart({
     };
   }, [range, from, to]);
 
-  const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv';
+  const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv' || metric === 'productionCost';
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
@@ -1460,7 +1460,15 @@ export function TrendChart({
         // _solarKwhForCost is tracked for informational purposes.
         // Total power cost ₱ = _powerCostPeso (grid cost) + solar cost (₱)
         // Solar cost ₱ is computed below using the average rate derived from grid readings.
-        const prodVol = d.production > 0 ? d.production : null;
+        // ── Production volume denominator ─────────────────────────────────────
+        // Priority: product meter readings → permeate meter → well readings (raw water).
+        // Plants that have no product meter (e.g. direct abstraction wells) report
+        // their output volume via well_readings, which accumulates into `d.rawwater`.
+        // Using rawwater as fallback lets Power Cost (₱/m³) work for those plants
+        // without requiring a separate product meter setup.
+        const prodVol = d.production > 0 ? d.production
+          : d.rawwater   > 0 ? d.rawwater
+          : null;
         // Derive average rate from accumulated grid cost ÷ grid kWh (d.kwh).
         // Then apply that same rate to solar kWh.
         const gridKwh = d.kwh > 0 ? d.kwh : 0;
