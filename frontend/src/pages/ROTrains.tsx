@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
+import { Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -870,7 +871,29 @@ function PretreatmentAndROLog() {
     <div className="space-y-3">
       <div className="flex items-end justify-between gap-2">
         <p className="text-sm text-muted-foreground">AFM/MMF, Boosters, Filter Housings & RO Vessel</p>
-        <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 text-xs"
+            onClick={() => document.getElementById('ro-pretreat-import-input')?.click()}
+          >
+            <Upload className="h-3.5 w-3.5" /> Import CSV
+          </Button>
+          <input
+            id="ro-pretreat-import-input"
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              toast.info(`Import of "${file.name}" is not yet wired to a handler — connect an insertRows function to process it.`);
+              e.target.value = '';
+            }}
+          />
+          <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
+        </div>
       </div>
 
       <Card className="p-3 space-y-3">
@@ -2307,6 +2330,9 @@ function CIPLog() {
 
   const selectedTrain = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
   const numVessels = selectedTrain?.num_vessels ?? 15;
+
+  // Form state — was missing, causing "v is not defined" crash on mount
+  const [v, setV] = useState({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
 
   // Live computed values
   const causticKg  = +v.caustic || 0;
