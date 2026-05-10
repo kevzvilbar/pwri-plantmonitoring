@@ -1201,13 +1201,18 @@ export function TrendChart({
           const plantId = _trainPlantMap.get(r.train_id);
           if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
 
+          // Skip replacement rows first — their saved delta is the old-meter→new-meter
+          // jump (e.g. 72,691 → 227,368) which is not real production. The same-day
+          // non-replacement row(s) already carry the valid pre-swap production delta
+          // and will be summed in separately below.
+          if (r.is_meter_replacement) return;
+
           const delta = r.permeate_meter_delta != null ? Math.max(0, +r.permeate_meter_delta)
             : r.permeate_meter != null && r.permeate_meter_prev != null
               ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
               : null;
-          if (!delta) return;
-          // Respect is_meter_replacement flag — zero out this reading's contribution
-          if (r.is_meter_replacement) return;
+          // Use === null so a legitimate delta of 0 is still plotted (don't skip it).
+          if (delta === null) return;
 
           // Build chart key EXACTLY like every other source:
           //   format(new Date(reading_datetime), 'MMM d')
