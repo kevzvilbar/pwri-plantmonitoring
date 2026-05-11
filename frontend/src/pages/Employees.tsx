@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare, X, Send, Loader2, Clock,
@@ -142,7 +141,8 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
   const { data: messages = [], refetch } = useQuery<ChatMsg[]>({
     queryKey: ['chat', currentUserId, peer.id],
     queryFn: fetchMessages,
-    // Realtime broadcast handles updates; no polling needed.
+    // Fallback polling every 3 s in case realtime broadcast misses an event.
+    refetchInterval: 3000,
   });
 
   useEffect(() => {
@@ -447,7 +447,8 @@ function Staff() {
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
-    // staleTime 0 so presence dots stay fresh; realtime postgres_changes triggers re-fetches.
+    // Refresh every 30 s; staleTime 0 so presence dots are always fresh.
+    refetchInterval: 30_000,
     staleTime: 0,
   });
 
@@ -910,11 +911,10 @@ function RegisterInfo() {
 // ---------------------------------------------------------------------------
 
 export default function Employees() {
-  const [tab, setTab] = useTabPersist<'staff' | 'info'>('tab:employees', 'staff');
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Employees</h1>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs defaultValue="staff">
         <TabsList className="grid grid-cols-2 w-full">
           <TabsTrigger value="staff">Staff</TabsTrigger>
           <TabsTrigger value="info">Info</TabsTrigger>

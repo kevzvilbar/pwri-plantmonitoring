@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,11 +29,10 @@ const CATEGORIES = [
 ];
 
 export default function Maintenance() {
-  const [tab, setTab] = useTabPersist<'calendar' | 'add' | 'records' | 'forecast'>('tab:maintenance', 'calendar');
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Maintenance</h1>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs defaultValue="calendar">
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="add">Add Equipment</TabsTrigger>

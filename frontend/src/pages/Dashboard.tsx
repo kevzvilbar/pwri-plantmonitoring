@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { fmtNum, nrwColor } from '@/lib/calculations';
-import { StatusPill } from '@/components/StatusPill';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { format, subDays, startOfDay } from 'date-fns';
@@ -13,7 +12,6 @@ import {
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
 } from 'lucide-react';
-import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { EnergyMixCard } from '@/components/EnergyMixCard';
 import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
@@ -798,39 +796,6 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
-  const trainGaps = useTrainAutoOffline(plantIds);
-
-  // Legacy RO/chem alerts (still useful, live-computed)
-  const localAlerts: { tone: 'danger' | 'warn'; text: string }[] = [];
-  trainGaps.forEach((g) => localAlerts.push({ tone: 'warn', text: `Train ${g.train_number} no reading ${g.hours_gap.toFixed(1)}h — auto-flagged Offline` }));
-  (latestRO ?? []).forEach((r: any) => {
-    if (r.dp_psi >= 40) localAlerts.push({ tone: 'danger', text: `DP alert: ${r.dp_psi} psi` });
-    if (r.permeate_tds >= 600) localAlerts.push({ tone: 'danger', text: `TDS alert: ${r.permeate_tds} ppm` });
-    if (r.permeate_ph != null && (r.permeate_ph < 6.5 || r.permeate_ph > 8.5)) localAlerts.push({ tone: 'warn', text: `pH out of range: ${r.permeate_ph}` });
-  });
-  (chemInv ?? []).forEach((c: any) => {
-    if (c.current_stock < c.low_stock_threshold) localAlerts.push({ tone: 'warn', text: `Low stock: ${c.chemical_name}` });
-  });
-
-  // Unified alerts feed (downtime / blending / recovery) served from backend
-  const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
-  const { data: feed } = useQuery<{ count: number; alerts: any[] }>({
-    queryKey: ['alerts-feed', selectedPlantId],
-    queryFn: async () => {
-      try {
-        const qs = new URLSearchParams({ days: '30' });
-        if (selectedPlantId) qs.set('plant_id', selectedPlantId);
-        const res = await fetch(`${BASE}/api/alerts/feed?${qs.toString()}`);
-        if (!res.ok) return { count: 0, alerts: [] };
-        return res.json();
-      } catch {
-        return { count: 0, alerts: [] };
-      }
-    },
-    retry: false,
-  });
-  const feedAlerts = feed?.alerts ?? [];
-
   return (
     <div className="space-y-3 animate-fade-in">
       <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -976,10 +941,10 @@ export default function Dashboard() {
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
           value={`₱${fmtNum(powerCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+          onClick={handleMetricClick('productionCost', 'Production Cost Trend')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
           value={`₱${fmtNum(chemCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+          onClick={handleMetricClick('productionCost', 'Production Cost Trend')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
           trend={dKwh} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
@@ -987,66 +952,15 @@ export default function Dashboard() {
           calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
-      <ClusterCharts metrics={COST_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="cost" />
-
-      <Card className="p-3" data-testid="alerts-card">
-        <div className="flex items-center gap-2 mb-2">
-          <AlertTriangle className="h-4 w-4 text-danger" />
-          <h2 className="text-sm font-semibold">Active Alerts</h2>
-          <span className="text-[10px] text-muted-foreground">
-            {feedAlerts.length + localAlerts.length} active
-          </span>
-          {(feedAlerts.length + localAlerts.length) > 0 && <span className="pulse-dot ml-auto" />}
-        </div>
-
-        {/* Unified feed — downtime, blending, recovery */}
-        {feedAlerts.length > 0 && (
-          <div className="space-y-1.5 mb-2" data-testid="alerts-feed-list">
-            {feedAlerts.slice(0, 8).map((a, i) => {
-              const tone = a.severity === 'high' ? 'danger'
-                : a.severity === 'medium' ? 'warn'
-                : a.severity === 'low' ? 'accent'
-                : 'info' as const;
-              const kindLabel = a.kind === 'downtime' ? 'Downtime'
-                : a.kind === 'blending' ? 'Blending'
-                : 'Recovery';
-              return (
-                <button
-                  key={`feed-${i}`}
-                  className="w-full text-left flex items-start gap-2 text-xs hover:bg-muted/40 rounded px-1 py-1"
-                  onClick={() => {
-                    if (a.kind === 'downtime') setDowntimeOpen(true);
-                  }}
-                  data-testid={`alert-row-${a.kind}-${i}`}
-                >
-                  <StatusPill tone={tone as any}>{kindLabel}</StatusPill>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{a.title}</div>
-                    {a.detail && <div className="text-muted-foreground truncate">{a.detail}</div>}
-                  </div>
-                  <span className="font-mono-num text-[10px] text-muted-foreground shrink-0 mt-0.5">{a.date}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Live-computed RO / chem / train gap alerts */}
-        {localAlerts.length > 0 && (
-          <div className="space-y-1.5 pt-1 border-t">
-            {localAlerts.slice(0, 5).map((a, i) => (
-              <div key={`${a.tone}-${a.text}-${i}`} className="flex items-center gap-2 text-sm">
-                <StatusPill tone={a.tone}>{a.tone}</StatusPill>
-                <span className="text-xs">{a.text}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {feedAlerts.length === 0 && localAlerts.length === 0 && (
-          <p className="text-xs text-muted-foreground py-2 text-center">All clear — no alerts</p>
-        )}
-      </Card>
+      <ClusterCharts
+        metrics={[
+          ...COST_CHART_METRICS,
+        ]}
+        viewMode={viewMode}
+        expandedMetric={expandedMetric}
+        plantIds={plantIds}
+        clusterId="cost"
+      />
 
       <Card className="p-3">
         <h2 className="text-sm font-semibold mb-2">Chemical stock</h2>
