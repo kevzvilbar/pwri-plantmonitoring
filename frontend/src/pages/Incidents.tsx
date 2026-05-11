@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,10 +24,11 @@ const TYPES = ['Equipment failure', 'Chemical spill', 'Power outage', 'Safety in
 const WEATHER = ['Clear', 'Partly cloudy', 'Cloudy', 'Rain', 'Heavy rain'];
 
 export default function Incidents() {
+  const [tab, setTab] = useTabPersist<'open' | 'report' | 'history'>('tab:incidents', 'open');
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Incidents</h1>
-      <Tabs defaultValue="open">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="open">Open</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
