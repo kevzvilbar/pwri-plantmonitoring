@@ -6232,28 +6232,94 @@ function PowerConsumptionEnergyMix({
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
-      const { data } = await supabase
+
+      // ── Step 1: CT multiplier from latest electric bill ─────────────────────
+      // daily_consumption_kwh = Δ meter × multiplier. Fetch it once so fallback
+      // delta calculations apply the same multiplier Operations.tsx uses.
+      let multiplier = 1;
+      try {
+        const { data: bill } = await supabase
+          .from('electric_bills' as any)
+          .select('multiplier')
+          .eq('plant_id', plantId)
+          .order('billing_month', { ascending: false })
+          .limit(1);
+        const m = +(bill?.[0] as any)?.multiplier;
+        if (m > 0) multiplier = m;
+      } catch { /* table may not exist — keep multiplier = 1 */ }
+
+      // ── Step 2: Fetch window rows + one row BEFORE the window ───────────────
+      // We need the row before `since` to compute the delta for the first in-window
+      // reading (otherwise the first bar is always 0 or shows a spike).
+      const { data: allRows } = await supabase
         .from('power_readings' as any)
-        .select('reading_datetime, solar_kwh, grid_kwh, daily_solar_kwh, daily_consumption_kwh, meter_reading_kwh, source_type')
+        .select('reading_datetime, meter_reading_kwh, solar_meter_reading, daily_consumption_kwh, daily_solar_kwh, is_meter_replacement, multiplier')
         .eq('plant_id', plantId)
-        .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: true });
 
+      const rows = (allRows ?? []) as any[];
+
+      // ── Step 3: Compute per-day grid kWh (delta-based) ─────────────────────
+      // Priority order (mirrors TrendChart.computeEntityDeltas + Operations save logic):
+      //   1. daily_consumption_kwh — pre-multiplied Δ saved by Operations (most reliable)
+      //   2. Δ meter_reading_kwh × multiplier — fallback for legacy rows without daily_consumption_kwh
+      //   3. Skip meter-replacement rows (delta = 0)
       const byDate = new Map<string, { solar: number; grid: number }>();
-      for (const r of (data ?? []) as any[]) {
+      const ensure = (d: string) => {
+        if (!byDate.has(d)) byDate.set(d, { solar: 0, grid: 0 });
+        return byDate.get(d)!;
+      };
+
+      let prevGridMeter: number | null = null;
+      let afterGridRepl = false;
+
+      for (const r of rows) {
         const date = r.reading_datetime?.slice(0, 10) ?? '';
         if (!date) continue;
-        if (!byDate.has(date)) byDate.set(date, { solar: 0, grid: 0 });
-        const entry = byDate.get(date)!;
-        // Prefer explicit daily fields; fall back to meter_reading_kwh.
-        const kwh = +(r.meter_reading_kwh ?? 0);
-        if (r.source_type === 'solar' || r.solar_kwh != null || r.daily_solar_kwh != null) {
-          entry.solar += +(r.daily_solar_kwh ?? r.solar_kwh ?? kwh);
+
+        const isMeterRepl = !!r.is_meter_replacement;
+        const gridCurrent = r.meter_reading_kwh != null ? +r.meter_reading_kwh : null;
+
+        // ── Grid kWh ──
+        if (isMeterRepl) {
+          // Replacement row: zero this day, reset baseline
+          prevGridMeter = gridCurrent;
+          afterGridRepl = true;
         } else {
-          entry.grid += +(r.daily_consumption_kwh ?? r.grid_kwh ?? kwh);
+          let gridKwh = 0;
+          if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0) {
+            // Best path: pre-multiplied daily value saved by Operations
+            gridKwh = +r.daily_consumption_kwh;
+            afterGridRepl = false;
+          } else if (!afterGridRepl && prevGridMeter != null && gridCurrent != null) {
+            // Fallback: raw delta × multiplier (use row's multiplier if present, else bill's)
+            const m = r.multiplier != null && +r.multiplier > 0 ? +r.multiplier : multiplier;
+            const delta = gridCurrent - prevGridMeter;
+            if (delta >= 0) gridKwh = delta * m;
+            afterGridRepl = false;
+          } else {
+            afterGridRepl = false;
+          }
+          prevGridMeter = gridCurrent;
+
+          // Only accumulate dates that fall within the requested window
+          if (r.reading_datetime >= since && gridKwh > 0) {
+            ensure(date).grid += gridKwh;
+          }
+        }
+
+        // ── Solar kWh ──
+        // daily_solar_kwh is always stored directly (either direct-entry or delta-computed
+        // by Operations at save time). No further delta math needed.
+        if (!isMeterRepl && r.reading_datetime >= since) {
+          const solarKwh = r.daily_solar_kwh != null ? Math.max(0, +r.daily_solar_kwh) : 0;
+          if (solarKwh > 0) ensure(date).solar += solarKwh;
         }
       }
+
+      // Filter to only dates within the window, then sort
       return Array.from(byDate.entries())
+        .filter(([date]) => date >= since.slice(0, 10))
         .map(([date, v]) => ({ date, solar: +v.solar.toFixed(2), grid: +v.grid.toFixed(2) }))
         .sort((a, b) => a.date.localeCompare(b.date));
     },
