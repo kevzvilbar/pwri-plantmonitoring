@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { calc } from '@/lib/calculations';
@@ -721,6 +721,8 @@ export function TrendChart({
 
   // ── kwh: Energy-mix source filter (Both / Solar / Grid) ─────────────────
   const [kwhSource, setKwhSource] = useState<'both' | 'solar' | 'grid'>('both');
+  // Reset source filter whenever the user switches away from (and back to) kwh
+  useEffect(() => { if (metric !== 'kwh') setKwhSource('both'); }, [metric]);
 
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
@@ -2109,7 +2111,7 @@ export function TrendChart({
                           ? 'bg-teal-700 text-white border-teal-700'
                           : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                       ].join(' ')}>
-                      {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
+                      {s === 'both' ? 'Both' : s === 'solar' ? '☀ Solar' : '⚡ Grid'}
                     </button>
                   ))}
                 </div>
@@ -2577,74 +2579,61 @@ export function TrendChart({
         const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
         const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
 
-        // GridPylon SVG icon (inline, mirrors Plants.tsx)
-        const GridPylonIcon = ({ className = 'h-3 w-3' }: { className?: string }) => (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-            <line x1="4" y1="22" x2="20" y2="22" />
-            <line x1="8" y1="22" x2="10" y2="14" /><line x1="16" y1="22" x2="14" y2="14" />
-            <line x1="8" y1="22" x2="14" y2="14" /><line x1="16" y1="22" x2="10" y2="14" />
-            <line x1="10" y1="14" x2="11" y2="8" /><line x1="14" y1="14" x2="13" y2="8" />
-            <line x1="10" y1="14" x2="13" y2="8" /><line x1="14" y1="14" x2="11" y2="8" />
-            <line x1="11" y1="8" x2="11.8" y2="4" /><line x1="13" y1="8" x2="12.2" y2="4" />
-            <line x1="11" y1="8" x2="12.2" y2="4" /><line x1="13" y1="8" x2="11.8" y2="4" />
-            <line x1="7" y1="6" x2="17" y2="6" /><line x1="12" y1="4" x2="12" y2="6" />
-            <line x1="7" y1="6" x2="7" y2="8" /><line x1="17" y1="6" x2="17" y2="8" />
-          </svg>
-        );
+        // Only render stat cards when there's actual data today
+        if (todaySolar === 0 && todayGrid === 0) return null;
 
         return (
           <div className="grid grid-cols-3 gap-2 mb-3">
             {/* Today Solar */}
             {hasSolarData && (
-              <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2">
-                <div className="flex items-center gap-1 mb-1">
+              <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
                   <Sun className="h-3 w-3 text-yellow-500 shrink-0" />
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-base font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-lg font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                   <span className="text-[10px] text-muted-foreground">kWh</span>
                 </div>
                 {solarDelta !== null && (
-                  <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  <p className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
                     {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
-                  </div>
+                  </p>
                 )}
               </div>
             )}
             {/* Today Grid */}
             {hasGridData && (
-              <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <GridPylonIcon className="h-3 w-3 text-blue-500 shrink-0" />
+              <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="h-3 w-3 text-blue-500 shrink-0" />
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-base font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-lg font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                   <span className="text-[10px] text-muted-foreground">kWh</span>
                 </div>
                 {gridDelta !== null && (
-                  <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  <p className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
                     {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
-                  </div>
+                  </p>
                 )}
               </div>
             )}
-            {/* Today Total */}
-            <div className="rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2">
-              <div className="flex items-center gap-1 mb-1">
+            {/* Today Total — spans 2 cols when only one source exists */}
+            <div className={`rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2.5 ${(!hasSolarData || !hasGridData) ? 'col-span-2' : ''}`}>
+              <div className="flex items-center gap-1.5 mb-1">
                 <Zap className="h-3 w-3 text-teal-600 shrink-0" />
                 <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-base font-semibold tabular-nums">{todayTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                <span className="text-lg font-semibold tabular-nums">{todayTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                 <span className="text-[10px] text-muted-foreground">kWh</span>
               </div>
               {hasSolarData && todaySolar > 0 && (
-                <div className="text-[10px] mt-0.5 text-muted-foreground">
+                <p className="text-[10px] mt-0.5 text-muted-foreground">
                   Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
-                </div>
+                </p>
               )}
             </div>
           </div>
@@ -2685,6 +2674,15 @@ export function TrendChart({
                 </ul>
                 <p className="mt-1 opacity-75">Check: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">SELECT * FROM power_tariffs WHERE plant_id = '…'</code></p>
               </div>
+            </div>
+          </div>
+        )}
+        {!queryError && !isFetching && metric === 'kwh' && chartData.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 gap-2">
+            <BarChart2 className="h-8 w-8 opacity-20 text-muted-foreground" />
+            <div className="text-center">
+              <div className="text-xs font-medium text-foreground">No power readings in this period</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5 opacity-70">Log readings in Operations → Power, then run the SQL migration to backfill legacy rows.</div>
             </div>
           </div>
         )}
