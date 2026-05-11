@@ -230,7 +230,6 @@ export default function Plants() {
       };
     },
     // Re-check every minute so the 2-hr window flips automatically
-    refetchInterval: 60_000,
   });
 
   const summaryLabel = (
@@ -339,7 +338,6 @@ function PlantDetail({ plantId }: { plantId: string }) {
       ).length;
       return { active, total };
     },
-    refetchInterval: 60_000,
   });
 
   if (!plant) return <div>Plant not found.</div>;
@@ -4886,20 +4884,24 @@ function TrainOperatorLogModal({
           'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
           'is_meter_replacement', 'remarks',
         ];
-        // Tier 2: drop purely-optional display columns but keep is_meter_replacement
-        // and permeate meter columns which are needed for functionality.
+        // Tier 2: drop migration-only columns (remarks, permeate_meter_prev) but
+        // keep all original schema columns so Rej. Flow / Suction / Temp etc. display.
         const TIER2_COLS = [
           'id', 'reading_datetime', 'recorded_by',
-          'permeate_flow', 'feed_flow',
-          'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'temperature_c', 'recovery_pct',
           'permeate_meter', 'permeate_meter_delta',
           'is_meter_replacement',
         ];
         // Tier 3: absolute minimum — original columns only, no migration deps
         const TIER3_COLS = [
           'id', 'reading_datetime', 'recorded_by',
-          'permeate_flow', 'feed_flow',
-          'feed_pressure_psi', 'permeate_tds', 'feed_tds', 'recovery_pct',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'temperature_c', 'recovery_pct',
           'permeate_meter',
         ];
 
@@ -5264,7 +5266,6 @@ function TrainsList({ plantId }: { plantId: string }) {
       return new Set((data ?? []).map((r: any) => r.train_id));
     },
     enabled: (trains ?? []).length > 0,
-    refetchInterval: 60_000,
   });
 
   // Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
