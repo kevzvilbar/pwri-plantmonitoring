@@ -14,6 +14,7 @@ import {
   Legend, ComposedChart, Bar, BarChart,
 } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
+import { toast } from 'sonner';
 import {
   ChartMetric, DashboardViewMode, RANGE_DAYS, RangeKey, TREND_Y_LABEL,
 } from './types';
@@ -723,6 +724,19 @@ export function TrendChart({
   const [kwhSource, setKwhSource] = useState<'both' | 'solar' | 'grid'>('both');
   // Reset source filter whenever the user switches away from (and back to) kwh
   useEffect(() => { if (metric !== 'kwh') setKwhSource('both'); }, [metric]);
+
+  // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
+  // chartRows useMemo: maps source filter into solarKwh/gridKwh so bars with
+  // value 0 are never emitted (avoids phantom bar space in recharts).
+  const kwhChartRows = useMemo(() => {
+    if (metric !== 'kwh') return [];
+    return chartData.map((d: any) => ({
+      date:     d.date,
+      solarKwh: kwhSource !== 'grid'  ? (d.solarKwh ?? 0) : 0,
+      gridKwh:  kwhSource !== 'solar' ? (d.kwh      ?? 0) : 0,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartData, kwhSource, metric]);
 
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
@@ -2101,15 +2115,14 @@ export function TrendChart({
           return (
             <div className="flex items-center gap-1 shrink-0 ml-1">
               {hasSolarData && hasGridData && (
-                <div className="flex items-center gap-0.5">
-                  <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Source:</span>
+                <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
                   {(['both', 'solar', 'grid'] as const).map(s => (
                     <button key={s} onClick={() => setKwhSource(s)}
                       className={[
-                        'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border capitalize',
+                        'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
                         kwhSource === s
-                          ? 'bg-teal-700 text-white border-teal-700'
-                          : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                          ? 'bg-teal-700 text-white'
+                          : 'text-muted-foreground hover:text-foreground',
                       ].join(' ')}>
                       {s === 'both' ? 'Both' : s === 'solar' ? '☀ Solar' : '⚡ Grid'}
                     </button>
@@ -2118,7 +2131,7 @@ export function TrendChart({
               )}
               <button
                 onClick={() => {
-                  if (!chartData.length) return;
+                  if (!chartData.length) { toast.error('No data to export'); return; }
                   const rows = chartData.map((d: any) =>
                     `${d.date},${+(d.solarKwh ?? 0).toFixed(2)},${+(d.kwh ?? 0).toFixed(2)},${+((d.solarKwh ?? 0) + (d.kwh ?? 0)).toFixed(2)}`
                   );
@@ -2127,6 +2140,7 @@ export function TrendChart({
                   const a = document.createElement('a');
                   a.href = url; a.download = 'power_energy_mix.csv'; a.click();
                   URL.revokeObjectURL(url);
+                  toast.success('CSV exported');
                 }}
                 className="h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border bg-muted text-muted-foreground hover:text-foreground border-border"
                 title="Export CSV"
@@ -2649,7 +2663,7 @@ export function TrendChart({
             </div>
           </div>
         )}
-        {!queryError && !isFetching && chartData.length === 0 && drilldownData.length === 0 && drillupData.length === 0 && (
+        {!queryError && !isFetching && chartData.length === 0 && drilldownData.length === 0 && drillupData.length === 0 && metric !== 'kwh' && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
@@ -2903,50 +2917,52 @@ export function TrendChart({
             </LineChart>
           ) : metric === 'kwh' ? (
             // ── Power Consumption & Energy Mix ────────────────────────────────────
-            // Stacked bar chart: Solar (yellow) stacks below Grid (blue).
-            // chartData.kwh = grid daily kWh; chartData.solarKwh = solar daily kWh.
-            // Both are accumulated from power_readings via computeEntityDeltas above.
-            // kwhSource filter: 'both' | 'solar' | 'grid' — controlled by toolbar pills.
-            // barSize is dynamic so bars don't get paper-thin on 90d/180d views.
-            <ComposedChart
-              data={chartData}
-              margin={{ top: 4, right: 8, left: 0, bottom: 20 }}
-              barSize={Math.max(3, Math.min(14, 400 / Math.max(chartData.length, 1)))}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                angle={-30}
-                textAnchor="end"
-                height={36}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 10 }}
-                stroke="hsl(var(--muted-foreground))"
-                tickFormatter={formatYAxis}
-                width={42}
-                label={{ value: 'kWh', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
-              />
-              <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                formatter={(v: any, name: string) => [
-                  v != null && +v > 0
-                    ? `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
-                    : '—',
-                  name,
-                ]}
-                labelFormatter={(label) => `Date: ${label}`}
-              />
-              {/* Solar renders first — sits at base of stack */}
-              {kwhSource !== 'grid' && (
-                <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48, 96%, 53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
-              )}
-              {kwhSource !== 'solar' && (
-                <Bar dataKey="kwh"      name="⚡ Grid (kWh)"  fill="hsl(213, 94%, 68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
-              )}
-            </ComposedChart>
+            // Uses kwhChartRows (source-filtered useMemo) so zero-value bars are
+            // never emitted. hasSolarData/hasGridData guards mirror PowerChart exactly.
+            (() => {
+              const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+              const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
+              return (
+                <ComposedChart
+                  data={kwhChartRows}
+                  margin={{ top: 4, right: 4, left: -16, bottom: 20 }}
+                  barSize={Math.max(3, Math.min(18, 400 / Math.max(kwhChartRows.length, 1)))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                    angle={-30}
+                    textAnchor="end"
+                    height={36}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    tickFormatter={formatYAxis}
+                    width={42}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                    formatter={(v: any, name: string) => [
+                      v != null && +v > 0
+                        ? `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+                        : '—',
+                      name,
+                    ]}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  {/* Solar — base of stack, no rounded corners */}
+                  {hasSolarData && kwhSource !== 'grid' && (
+                    <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48,96%,53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
+                  )}
+                  {/* Grid — top of stack, rounded upper corners */}
+                  {hasGridData && kwhSource !== 'solar' && (
+                    <Bar dataKey="gridKwh"  name="⚡ Grid (kWh)"  fill="hsl(213,94%,68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
+                  )}
+                </ComposedChart>
+              );
+            })()
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -2973,7 +2989,7 @@ export function TrendChart({
       </div>
 
       {/* ── kwh: Legend (Solar / Grid swatches) ──────────────────────────── */}
-      {metric === 'kwh' && chartData.length > 0 && (() => {
+      {metric === 'kwh' && kwhChartRows.length > 0 && (() => {
         const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
         const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
         return (
