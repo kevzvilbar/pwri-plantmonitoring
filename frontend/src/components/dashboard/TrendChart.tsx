@@ -5,7 +5,7 @@ import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search } from 'lucide-react';
+import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Sun, Zap } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -718,6 +718,9 @@ export function TrendChart({
   const [showPowerCostLine, setShowPowerCostLine] = useState(true);
   const [showChemCostLine,  setShowChemCostLine]  = useState(true);
   const [showTotalCostLine, setShowTotalCostLine] = useState(true);
+
+  // ── kwh: Energy-mix source filter (Both / Solar / Grid) ─────────────────
+  const [kwhSource, setKwhSource] = useState<'both' | 'solar' | 'grid'>('both');
 
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
@@ -2089,6 +2092,29 @@ export function TrendChart({
           Data Summary
         </button>
 
+        {/* kwh: Source filter — Both / Solar / Grid */}
+        {metric === 'kwh' && (() => {
+          const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+          const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
+          if (!hasSolarData || !hasGridData) return null;
+          return (
+            <div className="flex items-center gap-0.5 shrink-0 ml-1">
+              <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Source:</span>
+              {(['both', 'solar', 'grid'] as const).map(s => (
+                <button key={s} onClick={() => setKwhSource(s)}
+                  className={[
+                    'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border capitalize',
+                    kwhSource === s
+                      ? 'bg-teal-700 text-white border-teal-700'
+                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  ].join(' ')}>
+                  {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Production Cost line toggles — Prod Cost / Power / Chem */}
         {metric === 'productionCost' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
@@ -2525,48 +2551,76 @@ export function TrendChart({
           ? +(((todaySolar - yesterday.solarKwh) / yesterday.solarKwh) * 100).toFixed(1) : null;
         const gridDelta = yesterday && yesterday.kwh > 0
           ? +(((todayGrid - yesterday.kwh) / yesterday.kwh) * 100).toFixed(1) : null;
+
+        // Derive hasSolar / hasGrid from actual chartData so no extra prop is needed
+        const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+        const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
+
+        // GridPylon SVG icon (inline, mirrors Plants.tsx)
+        const GridPylonIcon = ({ className = 'h-3 w-3' }: { className?: string }) => (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+            strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+            <line x1="4" y1="22" x2="20" y2="22" />
+            <line x1="8" y1="22" x2="10" y2="14" /><line x1="16" y1="22" x2="14" y2="14" />
+            <line x1="8" y1="22" x2="14" y2="14" /><line x1="16" y1="22" x2="10" y2="14" />
+            <line x1="10" y1="14" x2="11" y2="8" /><line x1="14" y1="14" x2="13" y2="8" />
+            <line x1="10" y1="14" x2="13" y2="8" /><line x1="14" y1="14" x2="11" y2="8" />
+            <line x1="11" y1="8" x2="11.8" y2="4" /><line x1="13" y1="8" x2="12.2" y2="4" />
+            <line x1="11" y1="8" x2="12.2" y2="4" /><line x1="13" y1="8" x2="11.8" y2="4" />
+            <line x1="7" y1="6" x2="17" y2="6" /><line x1="12" y1="4" x2="12" y2="6" />
+            <line x1="7" y1="6" x2="7" y2="8" /><line x1="17" y1="6" x2="17" y2="8" />
+          </svg>
+        );
+
         return (
           <div className="grid grid-cols-3 gap-2 mb-3">
             {/* Today Solar */}
-            <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2">
-              <div className="flex items-center gap-1 mb-1">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-base font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-                <span className="text-[10px] text-muted-foreground">kWh</span>
-              </div>
-              {solarDelta !== null && (
-                <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+            {hasSolarData && (
+              <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <Sun className="h-3 w-3 text-yellow-500 shrink-0" />
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
                 </div>
-              )}
-            </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-base font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-[10px] text-muted-foreground">kWh</span>
+                </div>
+                {solarDelta !== null && (
+                  <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                    {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+                  </div>
+                )}
+              </div>
+            )}
             {/* Today Grid */}
-            <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2">
-              <div className="flex items-center gap-1 mb-1">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-base font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-                <span className="text-[10px] text-muted-foreground">kWh</span>
-              </div>
-              {gridDelta !== null && (
-                <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+            {hasGridData && (
+              <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <GridPylonIcon className="h-3 w-3 text-blue-500 shrink-0" />
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
                 </div>
-              )}
-            </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-base font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-[10px] text-muted-foreground">kWh</span>
+                </div>
+                {gridDelta !== null && (
+                  <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                    {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+                  </div>
+                )}
+              </div>
+            )}
             {/* Today Total */}
             <div className="rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2">
               <div className="flex items-center gap-1 mb-1">
+                <Zap className="h-3 w-3 text-teal-600 shrink-0" />
                 <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
               </div>
               <div className="flex items-baseline gap-1">
                 <span className="text-base font-semibold tabular-nums">{todayTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                 <span className="text-[10px] text-muted-foreground">kWh</span>
               </div>
-              {todaySolar > 0 && (
+              {hasSolarData && todaySolar > 0 && (
                 <div className="text-[10px] mt-0.5 text-muted-foreground">
                   Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
                 </div>
@@ -2833,6 +2887,7 @@ export function TrendChart({
             // Stacked bar chart: Solar (yellow) stacks below Grid (blue).
             // chartData.kwh = grid daily kWh; chartData.solarKwh = solar daily kWh.
             // Both are accumulated from power_readings via computeEntityDeltas above.
+            // kwhSource filter: 'both' | 'solar' | 'grid' — controlled by toolbar pills.
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -2853,10 +2908,13 @@ export function TrendChart({
                 ]}
                 labelFormatter={(label) => `Date: ${label}`}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
               {/* Solar renders first — sits at base of stack */}
-              <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48, 96%, 53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="kwh"      name="⚡ Grid (kWh)"  fill="hsl(213, 94%, 68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
+              {kwhSource !== 'grid' && (
+                <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48, 96%, 53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
+              )}
+              {kwhSource !== 'solar' && (
+                <Bar dataKey="kwh"      name="⚡ Grid (kWh)"  fill="hsl(213, 94%, 68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
+              )}
             </ComposedChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -2882,6 +2940,28 @@ export function TrendChart({
           )}
         </ResponsiveContainer>
       </div>
+
+      {/* ── kwh: Legend (Solar / Grid swatches) ──────────────────────────── */}
+      {metric === 'kwh' && chartData.length > 0 && (() => {
+        const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+        const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
+        return (
+          <div className="flex items-center gap-4 text-[11px] text-muted-foreground mt-1">
+            {hasSolarData && kwhSource !== 'grid' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-yellow-400" />
+                Solar (kWh)
+              </div>
+            )}
+            {hasGridData && kwhSource !== 'solar' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />
+                Grid (kWh)
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </>
   );
 }
