@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import {
-  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical, ChevronDown, ShieldCheck,
+  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -306,33 +306,44 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
       </div>
 
       {/* ── Footer ── */}
-      <div className="px-3 pb-3 flex items-center justify-between gap-1 border-t pt-2 mt-auto">
-        <span className="text-[10.5px] text-muted-foreground truncate max-w-[100px]" title={s.designation ?? ''}>
-          {s.designation || <span className="italic opacity-50">No designation</span>}
-        </span>
-        <div className="flex items-center gap-1 shrink-0">
+      <div className="border-t mt-auto">
+
+        {/* Designation row */}
+        <div className="px-3 pt-2 pb-1 flex items-center justify-between gap-2">
+          <span className="text-[10.5px] text-muted-foreground truncate" title={s.designation ?? ''}>
+            {s.designation || <span className="italic opacity-40">No designation</span>}
+          </span>
           {awaiting && (
             <Button
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-[10px] shrink-0"
               onClick={() => approveUser(s.id, userLabel)}
               data-testid={`approve-user-${s.id}`}
             >
               Approve
             </Button>
           )}
-          {/* Change Role toggle */}
+        </div>
+
+        {/* Action buttons row — full width, evenly spaced */}
+        <div className="px-3 pb-3 grid grid-cols-3 gap-1.5">
+          {/* Change role */}
           <button
             className={cn(
-              'h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
-              expanded && 'bg-muted text-foreground border-primary/40',
+              'h-7 flex items-center justify-center gap-1 rounded-md border text-[10.5px] font-medium transition-colors',
+              expanded
+                ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-300'
+                : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
             title="Change role"
             aria-label="Change role"
             onClick={() => setExpanded((v) => !v)}
           >
             <ShieldCheck className="w-3 h-3" />
+            <span>Role</span>
           </button>
+
+          {/* Edit plants */}
           <PlantAssignmentEditor
             userId={s.id}
             userLabel={userLabel}
@@ -341,14 +352,17 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
             invalidateKeys={[['admin-users'], ['staff']]}
             trigger={
               <button
-                className="h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                className="h-7 flex items-center justify-center gap-1 rounded-md border border-border/60 text-[10.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors w-full"
                 title="Edit plants"
                 aria-label="Edit plants"
               >
                 <Building2 className="w-3 h-3" />
+                <span>Plants</span>
               </button>
             }
           />
+
+          {/* More / delete */}
           <DeleteEntityMenu
             kind="user" id={s.id} label={userLabel}
             canSoftDelete={s.status === 'Active'} canHardDelete
@@ -356,28 +370,29 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
             compact
             trigger={
               <button
-                className="h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                className="h-7 flex items-center justify-center gap-1 rounded-md border border-border/60 text-[10.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors w-full"
                 title="More options"
                 aria-label="More options"
               >
                 <MoreVertical className="w-3 h-3" />
+                <span>More</span>
               </button>
             }
           />
         </div>
-      </div>
 
-      {/* ── Role selector (expanded) ── */}
-      {expanded && (
-        <div className="px-3 pb-3 pt-0 border-t">
-          <div className="flex items-center justify-between gap-2 pt-2">
-            <span className="text-[10.5px] font-medium text-muted-foreground flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> Role
-            </span>
-            <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
+        {/* Role selector — slides in when expanded */}
+        {expanded && (
+          <div className="px-3 pb-3 pt-0 border-t border-violet-100 dark:border-violet-900/40 bg-violet-50/40 dark:bg-violet-950/10">
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1 shrink-0">
+                <ShieldCheck className="w-3 h-3" /> Change role
+              </span>
+              <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
