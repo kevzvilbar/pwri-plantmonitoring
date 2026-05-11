@@ -6210,17 +6210,31 @@ function MeterNameListRows({
 }
 
 // ─── Power History Chart ──────────────────────────────────────────────────────
-function PowerHistoryChart({ plantId, hasSolar, hasGrid }: { plantId: string; hasSolar: boolean; hasGrid: boolean }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+// ─── PowerConsumptionEnergyMix ────────────────────────────────────────────────
+// Merged card: Power Consumption & Energy Mix.
+// • Single stacked bar chart (Solar + Grid) shared by both sections.
+// • Stat summary row (Today Solar / Today Grid / Today Total + solar % of mix).
+// • Range selector (30d / 90d / 180d / All) and Source filter (Both / Solar / Grid).
+// • CSV export.
+// Replaces the old separate PowerHistoryChart and the standalone Energy Mix card.
+function PowerConsumptionEnergyMix({
+  plantId, hasSolar, hasGrid,
+}: {
+  plantId: string;
+  hasSolar: boolean;
+  hasGrid: boolean;
+}) {
+  const [range, setRange]   = useState<'30' | '90' | '180' | 'all'>('30');
+  const [source, setSource] = useState<'both' | 'solar' | 'grid'>('both');
 
   const { data: rows = [], isLoading } = useQuery<{ date: string; solar: number; grid: number }[]>({
     queryKey: ['power-history', plantId, range],
     queryFn: async () => {
-      const days = range === 'all' ? 9999 : parseInt(range);
+      const days  = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
       const { data } = await supabase
         .from('power_readings' as any)
-        .select('reading_datetime, solar_kwh, grid_kwh, meter_reading_kwh, source_type')
+        .select('reading_datetime, solar_kwh, grid_kwh, daily_solar_kwh, daily_consumption_kwh, meter_reading_kwh, source_type')
         .eq('plant_id', plantId)
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: true });
@@ -6231,65 +6245,231 @@ function PowerHistoryChart({ plantId, hasSolar, hasGrid }: { plantId: string; ha
         if (!date) continue;
         if (!byDate.has(date)) byDate.set(date, { solar: 0, grid: 0 });
         const entry = byDate.get(date)!;
+        // Prefer explicit daily fields; fall back to meter_reading_kwh.
         const kwh = +(r.meter_reading_kwh ?? 0);
-        if (r.source_type === 'solar' || r.solar_kwh != null) entry.solar += +(r.solar_kwh ?? kwh);
-        else entry.grid += +(r.grid_kwh ?? kwh);
+        if (r.source_type === 'solar' || r.solar_kwh != null || r.daily_solar_kwh != null) {
+          entry.solar += +(r.daily_solar_kwh ?? r.solar_kwh ?? kwh);
+        } else {
+          entry.grid += +(r.daily_consumption_kwh ?? r.grid_kwh ?? kwh);
+        }
       }
-      return Array.from(byDate.entries()).map(([date, v]) => ({ date, solar: +v.solar.toFixed(2), grid: +v.grid.toFixed(2) })).sort((a, b) => a.date.localeCompare(b.date));
+      return Array.from(byDate.entries())
+        .map(([date, v]) => ({ date, solar: +v.solar.toFixed(2), grid: +v.grid.toFixed(2) }))
+        .sort((a, b) => a.date.localeCompare(b.date));
     },
     staleTime: 60_000,
   });
 
+  // ── Chart data — filter by source toggle ───────────────────────────────────
+  const chartRows = useMemo(() => rows.map(r => ({
+    date: r.date,
+    solar: source !== 'grid'  ? r.solar : 0,
+    grid:  source !== 'solar' ? r.grid  : 0,
+  })), [rows, source]);
+
+  // ── Today's stats (last row) ────────────────────────────────────────────────
+  const today     = rows.length ? rows[rows.length - 1] : null;
+  const yesterday = rows.length > 1 ? rows[rows.length - 2] : null;
+
+  const todaySolar = today?.solar ?? 0;
+  const todayGrid  = today?.grid  ?? 0;
+  const todayTotal = +(todaySolar + todayGrid).toFixed(2);
+  const solarPct   = todayTotal > 0 ? +((todaySolar / todayTotal) * 100).toFixed(1) : 0;
+
+  const solarDelta = yesterday && yesterday.solar > 0
+    ? +(((todaySolar - yesterday.solar) / yesterday.solar) * 100).toFixed(1)
+    : null;
+  const gridDelta = yesterday && yesterday.grid > 0
+    ? +(((todayGrid - yesterday.grid) / yesterday.grid) * 100).toFixed(1)
+    : null;
+
+  // ── CSV export ─────────────────────────────────────────────────────────────
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data to export'); return; }
-    const blob = new Blob([['date,solar_kwh,grid_kwh', ...rows.map(r => `${r.date},${r.solar},${r.grid}`)].join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
-    a.download = `power_history_${plantId}.csv`; a.click(); URL.revokeObjectURL(url);
+    const blob = new Blob(
+      [['date,solar_kwh,grid_kwh,total_kwh', ...rows.map(r => `${r.date},${r.solar},${r.grid},${+(r.solar + r.grid).toFixed(2)}`)].join('\n')],
+      { type: 'text/csv' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `power_energy_mix_${plantId}.csv`; a.click();
+    URL.revokeObjectURL(url);
     toast.success('CSV exported');
   };
 
+  // ── Range label for subtitle ────────────────────────────────────────────────
+  const rangeLabel = range === 'all' ? 'all time' : `last ${range}d`;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
-          <span className="text-sm font-semibold">Power Consumption History</span>
+    <div className="space-y-4">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-semibold">Power Consumption &amp; Energy Mix</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-0.5 pl-6">
+            {rangeLabel} · daily totals · Solar vs Grid (kWh)
+          </p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Range pills */}
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['30','90','180','all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                }`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
             ))}
           </div>
+          {/* Source pills — only shown when plant has both sources */}
+          {hasSolar && hasGrid && (
+            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+              {(['both','solar','grid'] as const).map(s => (
+                <button key={s} onClick={() => setSource(s)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors ${
+                    source === s ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Export */}
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
             <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       </div>
+
+      {/* ── Today stat cards ── */}
+      {today && (
+        <div className="grid grid-cols-3 gap-2">
+          {/* Today Solar */}
+          {hasSolar && (
+            <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sun className="h-3 w-3 text-yellow-500" />
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold tabular-nums">{fmtNum(todaySolar)}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {solarDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+          )}
+          {/* Today Grid */}
+          {hasGrid && (
+            <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <GridPylonIcon className="h-3 w-3 text-blue-500" />
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold tabular-nums">{fmtNum(todayGrid)}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {gridDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+          )}
+          {/* Today Total */}
+          <div className="rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Zap className="h-3 w-3 text-teal-600" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-semibold tabular-nums">{fmtNum(todayTotal)}</span>
+              <span className="text-[10px] text-muted-foreground">kWh</span>
+            </div>
+            {hasSolar && (
+              <div className="text-[10px] mt-0.5 text-muted-foreground">
+                Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Chart ── */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No power readings in this period</p>
+      ) : chartRows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p>No power readings in this period</p>
         </div>
       ) : (
-        <div className="h-52 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(14, 400 / rows.length))}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
-              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={42} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)} />
-              <Tooltip formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? 'Solar' : 'Grid']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              {hasSolar && <Bar dataKey="solar" fill="hsl(48, 96%, 53%)" name="solar" radius={[2,2,0,0]} stackId="a" />}
-              {hasGrid  && <Bar dataKey="grid"  fill="hsl(213, 94%, 68%)" name="grid"  radius={[2,2,0,0]} stackId="a" />}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <>
+          <div className="h-52 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartRows}
+                margin={{ top: 4, right: 4, bottom: 20, left: 0 }}
+                barSize={Math.max(3, Math.min(14, 400 / chartRows.length))}
+              >
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)}
+                  interval="preserveStartEnd"
+                  angle={-30}
+                  textAnchor="end"
+                  height={36}
+                />
+                <YAxis
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  width={42}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                />
+                <Tooltip
+                  formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? '☀ Solar' : '⚡ Grid']}
+                  labelFormatter={(label: string) => `Date: ${label}`}
+                  labelStyle={{ fontSize: 11 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                />
+                {hasSolar && source !== 'grid' && (
+                  <Bar dataKey="solar" fill="hsl(48, 96%, 53%)" name="solar" radius={[0, 0, 0, 0]} stackId="a" />
+                )}
+                {hasGrid && source !== 'solar' && (
+                  <Bar dataKey="grid" fill="hsl(213, 94%, 68%)" name="grid" radius={[2, 2, 0, 0]} stackId="a" />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+            {hasSolar && source !== 'grid' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-yellow-400" />
+                Solar (kWh)
+              </div>
+            )}
+            {hasGrid && source !== 'solar' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />
+                Grid (kWh)
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -6482,9 +6662,9 @@ function PowerMetersCard({ plant }: { plant: any }) {
         )}
       </Card>
 
-      {/* ── Power Consumption History ── */}
+      {/* ── Power Consumption & Energy Mix ── */}
       <Card className="p-4">
-        <PowerHistoryChart plantId={plant.id} hasSolar={hasSolar} hasGrid={hasGrid} />
+        <PowerConsumptionEnergyMix plantId={plant.id} hasSolar={hasSolar} hasGrid={hasGrid} />
       </Card>
     </div>
   );
