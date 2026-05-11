@@ -230,6 +230,7 @@ export default function Plants() {
       };
     },
     // Re-check every minute so the 2-hr window flips automatically
+    refetchInterval: 60_000,
   });
 
   const summaryLabel = (
@@ -338,6 +339,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
       ).length;
       return { active, total };
     },
+    refetchInterval: 60_000,
   });
 
   if (!plant) return <div>Plant not found.</div>;
@@ -5262,6 +5264,7 @@ function TrainsList({ plantId }: { plantId: string }) {
       return new Set((data ?? []).map((r: any) => r.train_id));
     },
     enabled: (trains ?? []).length > 0,
+    refetchInterval: 60_000,
   });
 
   // Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
