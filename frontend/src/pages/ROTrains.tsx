@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -660,7 +659,6 @@ function ImportROReadingsDialog({
 }
 
 export default function ROTrains() {
-  const [outerTab, setOuterTab] = useTabPersist<'overview' | 'pretreat-ro' | 'cip' | 'chemical-dosing'>('tab:ro-trains-outer', 'overview');
   return (
     <div className="space-y-3 animate-fade-in">
       <div className="flex items-start justify-between gap-2">
@@ -669,7 +667,7 @@ export default function ROTrains() {
 
         </div>
       </div>
-      <Tabs value={outerTab} onValueChange={(v) => setOuterTab(v as typeof outerTab)}>
+      <Tabs defaultValue="overview">
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="overview" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">Overview</TabsTrigger>
           <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Pre-Treatment & RO</TabsTrigger>
@@ -779,6 +777,7 @@ function Overview() {
     },
     enabled: trainIds.length > 0,
     // Re-evaluate the 2-hr window every minute so status flips automatically
+    refetchInterval: 60_000,
   });
 
   // Fetch last 5 readings per train for sparklines
@@ -800,6 +799,7 @@ function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
+    refetchInterval: 60_000,
   });
 
   const allReadings = Object.values(lastReadings ?? {});
@@ -1042,8 +1042,23 @@ function PretreatmentAndROLog() {
   const [showImport, setShowImport] = useState(false);
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const [plantId, setPlantId] = useState('');
-  const [trainId, setTrainId] = useState('');
+
+  // Persist plant + train selection across tab switches / browser-focus changes
+  const [plantId, setPlantIdState] = useState<string>(() => {
+    try { return sessionStorage.getItem('pretreat:plantId') ?? ''; } catch { return ''; }
+  });
+  const setPlantId = (v: string) => {
+    try { sessionStorage.setItem('pretreat:plantId', v); } catch { /* ignore */ }
+    setPlantIdState(v);
+  };
+  const [trainId, setTrainIdState] = useState<string>(() => {
+    try { return sessionStorage.getItem('pretreat:trainId') ?? ''; } catch { return ''; }
+  });
+  const setTrainId = (v: string) => {
+    try { sessionStorage.setItem('pretreat:trainId', v); } catch { /* ignore */ }
+    setTrainIdState(v);
+  };
+
   const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   // Plant-wide synchronized backwash window (only used when plant.backwash_mode = 'synchronized')
@@ -2567,7 +2582,7 @@ function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
   const [postCipKpi, setPostCipKpi] = useState('');
 
   // ── Active section tab ────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useTabPersist<'vessel' | 'flow' | 'compare'>('tab:ro-trains-inner', 'vessel');
+  const [activeTab, setActiveTab] = useState<'vessel' | 'flow' | 'compare'>('vessel');
 
   // ── Q = ΔV / Δt calc (Tab 2) ─────────────────────────────────────────────
   const deltaV = (qCurrMeter !== '' && qPrevMeter !== '')
