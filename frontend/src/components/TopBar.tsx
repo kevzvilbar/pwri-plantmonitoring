@@ -74,6 +74,7 @@ export function TopBar() {
       return (data ?? EMPTY_NOTIFICATIONS) as Notification[];
     },
     enabled: !!user,
+    refetchInterval: 60000,
   });
 
   const notifs = notificationsData ?? EMPTY_NOTIFICATIONS;

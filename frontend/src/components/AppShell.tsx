@@ -3,10 +3,8 @@ import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
 import { AppSidebar } from './AppSidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { useScrollRestore } from '@/hooks/useScrollRestore';
 
 export function AppShell() {
-  useScrollRestore();
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
