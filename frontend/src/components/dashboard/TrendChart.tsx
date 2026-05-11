@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Legend, ComposedChart, Bar,
+  Legend, ComposedChart, Bar, BarChart,
 } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
@@ -752,8 +752,9 @@ export function TrendChart({
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
   const needsRoReadings = metric === 'recovery' || metric === 'tds';
-  // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh)
-  const needsPowerReadings = metric === 'pv' || metric === 'productionCost';
+  // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh).
+  // 'kwh' = Power Consumption & Energy Mix chart (Solar vs Grid stacked bars).
+  const needsPowerReadings = metric === 'pv' || metric === 'productionCost' || metric === 'kwh';
   // production_costs stores chem_cost (₱ per day) — still used for chemical side.
   // Power cost is now computed live: daily_kwh × rate_per_kwh / production_m3.
   const needsCostReadings = metric === 'productionCost';
@@ -1777,6 +1778,7 @@ export function TrendChart({
         { rawField: '_rawProduction', chartField: 'production', label: 'Production (m³)' },
         { rawField: '_rawKwh',        chartField: 'kwh',        label: 'Power (kWh)' },
       ],
+      kwh:            [{ rawField: '_rawKwh', chartField: 'kwh', label: 'Grid (kWh)' }],
       // recovery, tds, productionCost values come straight from the DB —
       // no clamping — so rawField === chartField (negative = truly negative).
       recovery:       [{ rawField: 'recovery',  chartField: 'recovery',  label: 'Recovery (%)' }],
@@ -2482,6 +2484,69 @@ export function TrendChart({
         />
       )}
 
+      {/* ── kwh: Today Solar / Grid / Total stat cards ───────────────────── */}
+      {metric === 'kwh' && chartData.length > 0 && (() => {
+        const today     = chartData[chartData.length - 1];
+        const yesterday = chartData.length > 1 ? chartData[chartData.length - 2] : null;
+        const todaySolar = today?.solarKwh ?? 0;
+        const todayGrid  = today?.kwh      ?? 0;
+        const todayTotal = +(todaySolar + todayGrid).toFixed(1);
+        const solarPct   = todayTotal > 0 ? +((todaySolar / todayTotal) * 100).toFixed(1) : 0;
+        const solarDelta = yesterday && yesterday.solarKwh > 0
+          ? +(((todaySolar - yesterday.solarKwh) / yesterday.solarKwh) * 100).toFixed(1) : null;
+        const gridDelta = yesterday && yesterday.kwh > 0
+          ? +(((todayGrid - yesterday.kwh) / yesterday.kwh) * 100).toFixed(1) : null;
+        return (
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {/* Today Solar */}
+            <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2">
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {solarDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+            {/* Today Grid */}
+            <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2">
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {gridDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+            {/* Today Total */}
+            <div className="rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2">
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-semibold tabular-nums">{todayTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {todaySolar > 0 && (
+                <div className="text-[10px] mt-0.5 text-muted-foreground">
+                  Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -2734,6 +2799,36 @@ export function TrendChart({
                 connectNulls
               />
             </LineChart>
+          ) : metric === 'kwh' ? (
+            // ── Power Consumption & Energy Mix ────────────────────────────────────
+            // Stacked bar chart: Solar (yellow) stacks below Grid (blue).
+            // chartData.kwh = grid daily kWh; chartData.solarKwh = solar daily kWh.
+            // Both are accumulated from power_readings via computeEntityDeltas above.
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--muted-foreground))"
+                tickFormatter={formatYAxis}
+                width={42}
+                label={{ value: 'kWh', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+              />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                formatter={(v: any, name: string) => [
+                  v != null && +v > 0
+                    ? `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+                    : '—',
+                  name,
+                ]}
+                labelFormatter={(label) => `Date: ${label}`}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {/* Solar renders first — sits at base of stack */}
+              <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48, 96%, 53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="kwh"      name="⚡ Grid (kWh)"  fill="hsl(213, 94%, 68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
+            </ComposedChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
