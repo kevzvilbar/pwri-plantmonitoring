@@ -308,9 +308,9 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
       {/* ── Footer ── */}
       <div className="border-t mt-auto">
 
-        {/* Designation row */}
-        <div className="px-3 pt-2 pb-1 flex items-center justify-between gap-2">
-          <span className="text-[10.5px] text-muted-foreground truncate" title={s.designation ?? ''}>
+        {/* Designation + approve row */}
+        <div className="px-3 pt-2 pb-1.5 flex items-center justify-between gap-2 min-w-0">
+          <span className="text-[10.5px] text-muted-foreground truncate min-w-0" title={s.designation ?? ''}>
             {s.designation || <span className="italic opacity-40">No designation</span>}
           </span>
           {awaiting && (
@@ -325,22 +325,21 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           )}
         </div>
 
-        {/* Action buttons row — full width, evenly spaced */}
-        <div className="px-3 pb-3 grid grid-cols-3 gap-1.5">
+        {/* Icon-only action buttons — fixed square size, never truncate */}
+        <div className="px-3 pb-3 flex items-center justify-end gap-1.5">
           {/* Change role */}
           <button
             className={cn(
-              'h-7 flex items-center justify-center gap-1 rounded-md border text-[10.5px] font-medium transition-colors',
+              'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
               expanded
-                ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-300'
+                ? 'bg-violet-100 border-violet-400 text-violet-700 dark:bg-violet-900/40 dark:border-violet-600 dark:text-violet-300'
                 : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
             title="Change role"
             aria-label="Change role"
             onClick={() => setExpanded((v) => !v)}
           >
-            <ShieldCheck className="w-3 h-3" />
-            <span>Role</span>
+            <ShieldCheck className="w-3.5 h-3.5" />
           </button>
 
           {/* Edit plants */}
@@ -352,12 +351,11 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
             invalidateKeys={[['admin-users'], ['staff']]}
             trigger={
               <button
-                className="h-7 flex items-center justify-center gap-1 rounded-md border border-border/60 text-[10.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors w-full"
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                 title="Edit plants"
                 aria-label="Edit plants"
               >
-                <Building2 className="w-3 h-3" />
-                <span>Plants</span>
+                <Building2 className="w-3.5 h-3.5" />
               </button>
             }
           />
@@ -370,23 +368,22 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
             compact
             trigger={
               <button
-                className="h-7 flex items-center justify-center gap-1 rounded-md border border-border/60 text-[10.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors w-full"
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                 title="More options"
                 aria-label="More options"
               >
-                <MoreVertical className="w-3 h-3" />
-                <span>More</span>
+                <MoreVertical className="w-3.5 h-3.5" />
               </button>
             }
           />
         </div>
 
-        {/* Role selector — slides in when expanded */}
+        {/* Role selector panel — appears when shield button is active */}
         {expanded && (
-          <div className="px-3 pb-3 pt-0 border-t border-violet-100 dark:border-violet-900/40 bg-violet-50/40 dark:bg-violet-950/10">
-            <div className="flex items-center justify-between gap-2 pt-2">
+          <div className="border-t border-violet-100 dark:border-violet-900/40 bg-violet-50/50 dark:bg-violet-950/10 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1 shrink-0">
-                <ShieldCheck className="w-3 h-3" /> Change role
+                <ShieldCheck className="w-3 h-3" /> Role
               </span>
               <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
             </div>
