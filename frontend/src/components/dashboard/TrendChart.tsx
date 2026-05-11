@@ -725,19 +725,6 @@ export function TrendChart({
   // Reset source filter whenever the user switches away from (and back to) kwh
   useEffect(() => { if (metric !== 'kwh') setKwhSource('both'); }, [metric]);
 
-  // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
-  // chartRows useMemo: maps source filter into solarKwh/gridKwh so bars with
-  // value 0 are never emitted (avoids phantom bar space in recharts).
-  const kwhChartRows = useMemo(() => {
-    if (metric !== 'kwh') return [];
-    return chartData.map((d: any) => ({
-      date:     d.date,
-      solarKwh: kwhSource !== 'grid'  ? (d.solarKwh ?? 0) : 0,
-      gridKwh:  kwhSource !== 'solar' ? (d.kwh      ?? 0) : 0,
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, kwhSource, metric]);
-
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
   const [roDrillMode, setRoDrillMode] = useState<RoDrillMode>('default');
@@ -1557,6 +1544,20 @@ export function TrendChart({
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
+
+  // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
+  // chartRows useMemo: maps source filter into solarKwh/gridKwh so bars with
+  // value 0 are never emitted (avoids phantom bar space in recharts).
+  // NOTE: must be declared AFTER chartData (depends on it) to avoid a
+  //       temporal dead zone ("Cannot access 'X' before initialization").
+  const kwhChartRows = useMemo(() => {
+    if (metric !== 'kwh') return [];
+    return chartData.map((d: any) => ({
+      date:     d.date,
+      solarKwh: kwhSource !== 'grid'  ? (d.solarKwh ?? 0) : 0,
+      gridKwh:  kwhSource !== 'solar' ? (d.kwh      ?? 0) : 0,
+    }));
+  }, [chartData, kwhSource, metric]);
 
   // ── Drill-mode locator data ───────────────────────────────────────────────
   // drillEntities: full sorted list of {id, label, color} for all active locators.
