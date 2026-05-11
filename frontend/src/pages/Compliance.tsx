@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery } from '@tanstack/react-query';
 import {
   ShieldCheck, ShieldAlert, AlertTriangle, Loader2, RefreshCcw,
@@ -148,6 +149,7 @@ export default function Compliance() {
   const [evaluating, setEvaluating] = useState(false);
   const [result, setResult] = useState<EvalResult | null>(null);
   const [overrideMetrics, setOverrideMetrics] = useState<Record<string, string>>({});
+  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'thresholds' | 'override'>('tab:compliance', 'status');
 
   useEffect(() => {
     if (selectedPlantId) { setPlantId(selectedPlantId); setScope('plant'); }
@@ -288,7 +290,7 @@ export default function Compliance() {
         </div>
       </Card>
 
-      <Tabs defaultValue="status">
+      <Tabs value={complianceTab} onValueChange={(v) => setComplianceTab(v as typeof complianceTab)}>
         <TabsList>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="thresholds"><Settings2 className="h-3.5 w-3.5 mr-1" />Thresholds</TabsTrigger>

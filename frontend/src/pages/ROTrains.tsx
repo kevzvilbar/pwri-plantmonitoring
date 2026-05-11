@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -659,6 +660,7 @@ function ImportROReadingsDialog({
 }
 
 export default function ROTrains() {
+  const [outerTab, setOuterTab] = useTabPersist<'overview' | 'pretreat-ro' | 'cip' | 'chemical-dosing'>('tab:ro-trains-outer', 'overview');
   return (
     <div className="space-y-3 animate-fade-in">
       <div className="flex items-start justify-between gap-2">
@@ -667,7 +669,7 @@ export default function ROTrains() {
 
         </div>
       </div>
-      <Tabs defaultValue="overview">
+      <Tabs value={outerTab} onValueChange={(v) => setOuterTab(v as typeof outerTab)}>
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="overview" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">Overview</TabsTrigger>
           <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Pre-Treatment & RO</TabsTrigger>
@@ -777,8 +779,6 @@ function Overview() {
     },
     enabled: trainIds.length > 0,
     // Re-evaluate the 2-hr window every minute so status flips automatically
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
   });
 
   // Fetch last 5 readings per train for sparklines
@@ -800,8 +800,6 @@ function Overview() {
       return map;
     },
     enabled: trainIds.length > 0,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
   });
 
   const allReadings = Object.values(lastReadings ?? {});
@@ -2569,7 +2567,7 @@ function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
   const [postCipKpi, setPostCipKpi] = useState('');
 
   // ── Active section tab ────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'vessel' | 'flow' | 'compare'>('vessel');
+  const [activeTab, setActiveTab] = useTabPersist<'vessel' | 'flow' | 'compare'>('tab:ro-trains-inner', 'vessel');
 
   // ── Q = ΔV / Δt calc (Tab 2) ─────────────────────────────────────────────
   const deltaV = (qCurrMeter !== '' && qPrevMeter !== '')
