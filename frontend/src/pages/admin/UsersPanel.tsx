@@ -356,7 +356,7 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
                 aria-label="Edit plants"
               >
                 <Building2 className="w-3 h-3 shrink-0" />
-                <span className="text-[10px] font-medium">Edit plants</span>
+                <span className="text-[8px] font-medium">Edit plants</span>
               </button>
             }
           />
