@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import {
-  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical,
+  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical, ChevronDown, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -321,6 +321,18 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
               Approve
             </Button>
           )}
+          {/* Change Role toggle */}
+          <button
+            className={cn(
+              'h-6 w-6 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
+              expanded && 'bg-muted text-foreground border-primary/40',
+            )}
+            title="Change role"
+            aria-label="Change role"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <ShieldCheck className="w-3 h-3" />
+          </button>
           <PlantAssignmentEditor
             userId={s.id}
             userLabel={userLabel}
@@ -354,6 +366,18 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           />
         </div>
       </div>
+
+      {/* ── Role selector (expanded) ── */}
+      {expanded && (
+        <div className="px-3 pb-3 pt-0 border-t">
+          <div className="flex items-center justify-between gap-2 pt-2">
+            <span className="text-[10.5px] font-medium text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" /> Role
+            </span>
+            <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
