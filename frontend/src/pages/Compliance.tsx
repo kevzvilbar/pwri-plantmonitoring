@@ -75,30 +75,116 @@ type EvalResult = {
 };
 
 // -----------------------------------------------------------------------
-// Deterministic summary — no AI required
+// Default thresholds — used when no saved value exists
 // -----------------------------------------------------------------------
 
-/**
- * Violation-code → plain-English explanation lookup.
- * Add or edit entries here as your backend evolves.
- */
+const DEFAULT_THRESHOLDS: Thresholds = {
+  nrw_pct_max:              20,
+  downtime_hrs_per_day_max:  2,
+  permeate_tds_max:        500,
+  permeate_ph_min:         6.5,
+  permeate_ph_max:         8.5,
+  raw_turbidity_max:         5,
+  dp_psi_max:               15,
+  recovery_pct_min:         70,
+  pv_ratio_max:            1.2,
+  chem_low_stock_days_min:   7,
+};
+
+// -----------------------------------------------------------------------
+// localStorage helpers for threshold persistence
+// (primary: Supabase compliance_thresholds; fallback: localStorage)
+// -----------------------------------------------------------------------
+
+const LS_KEY = (scope: string) => `compliance_thresholds:${scope}`;
+
+function lsLoadThresholds(scope: string): Thresholds | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY(scope));
+    return raw ? (JSON.parse(raw) as Thresholds) : null;
+  } catch {
+    return null;
+  }
+}
+
+function lsSaveThresholds(scope: string, t: Thresholds) {
+  try {
+    localStorage.setItem(LS_KEY(scope), JSON.stringify(t));
+  } catch {
+    // quota exceeded — silently ignore
+  }
+}
+
+// -----------------------------------------------------------------------
+// Deterministic violation-check engine — runs 100 % in the browser
+// -----------------------------------------------------------------------
+
 const VIOLATION_COPY: Record<string, string> = {
-  NRW_HIGH:      'Non-revenue water is above the acceptable threshold — inspect for leaks or meter inaccuracies.',
-  DOWNTIME_HIGH: 'Average daily downtime exceeds the limit — review maintenance schedules and equipment logs.',
-  TDS_HIGH:      'Permeate TDS is elevated, which may indicate membrane degradation or bypass.',
-  PH_LOW:        'Permeate pH is below the safe minimum — check chemical dosing.',
-  PH_HIGH:       'Permeate pH is above the safe maximum — check chemical dosing.',
-  TURBIDITY_HIGH:'Raw turbidity exceeds the threshold — inspect pre-treatment and coagulation stages.',
-  DP_HIGH:       'Differential pressure is too high — membranes may require cleaning or replacement.',
-  RECOVERY_LOW:  'Recovery rate is below the minimum — review operational settings and feed conditions.',
-  PV_RATIO_HIGH: 'Pressure-vessel ratio is outside range — inspect vessel loading balance.',
-  CHEM_LOW:      'Chemical stock is projected to run out soon — initiate a procurement order.',
+  NRW_HIGH:       'Non-revenue water is above the acceptable threshold — inspect for leaks or meter inaccuracies.',
+  DOWNTIME_HIGH:  'Average daily downtime exceeds the limit — review maintenance schedules and equipment logs.',
+  TDS_HIGH:       'Permeate TDS is elevated, which may indicate membrane degradation or bypass.',
+  PH_LOW:         'Permeate pH is below the safe minimum — check chemical dosing.',
+  PH_HIGH:        'Permeate pH is above the safe maximum — check chemical dosing.',
+  TURBIDITY_HIGH: 'Raw turbidity exceeds the threshold — inspect pre-treatment and coagulation stages.',
+  DP_HIGH:        'Differential pressure is too high — membranes may require cleaning or replacement.',
+  RECOVERY_LOW:   'Recovery rate is below the minimum — review operational settings and feed conditions.',
+  PV_RATIO_HIGH:  'Pressure-vessel ratio is outside range — inspect vessel loading balance.',
+  CHEM_LOW:       'Chemical stock is projected to run out soon — initiate a procurement order.',
 };
 
 /**
- * Builds a concise, human-readable status headline and detail list
- * purely from the violations array — no external API call needed.
+ * Pure function: given a metrics map and thresholds, returns a Violation array.
+ * No network calls. No side-effects.
  */
+function computeViolations(
+  metrics: Record<string, number | undefined>,
+  t: Thresholds,
+): Violation[] {
+  const violations: Violation[] = [];
+
+  const check = (
+    code: string,
+    metric: string,
+    value: number | undefined,
+    threshold: number,
+    comparator: '>' | '<',
+    severity: 'low' | 'medium' | 'high',
+  ) => {
+    if (value === undefined || value === null || Number.isNaN(value)) return;
+    const breached = comparator === '>' ? value > threshold : value < threshold;
+    if (!breached) return;
+    violations.push({
+      code,
+      severity,
+      metric,
+      value: Math.round(value * 1000) / 1000,
+      threshold,
+      comparator,
+      message: VIOLATION_COPY[code] ?? `${metric} is out of range.`,
+    });
+  };
+
+  check('NRW_HIGH',       'nrw_pct',       metrics.nrw_pct,       t.nrw_pct_max,              '>', 'high');
+  check('DOWNTIME_HIGH',  'downtime_hrs',  metrics.downtime_hrs,  t.downtime_hrs_per_day_max,  '>', 'medium');
+  check('TDS_HIGH',       'permeate_tds',  metrics.permeate_tds,  t.permeate_tds_max,          '>', 'high');
+  check('PH_LOW',         'permeate_ph',   metrics.permeate_ph,   t.permeate_ph_min,           '<', 'medium');
+  check('PH_HIGH',        'permeate_ph',   metrics.permeate_ph,   t.permeate_ph_max,           '>', 'medium');
+  check('TURBIDITY_HIGH', 'raw_turbidity', metrics.raw_turbidity, t.raw_turbidity_max,         '>', 'medium');
+  check('DP_HIGH',        'dp_psi',        metrics.dp_psi,        t.dp_psi_max,                '>', 'high');
+  check('RECOVERY_LOW',   'recovery_pct',  metrics.recovery_pct,  t.recovery_pct_min,          '<', 'medium');
+  check('PV_RATIO_HIGH',  'pv_ratio',      metrics.pv_ratio,      t.pv_ratio_max,              '>', 'low');
+
+  // Sort: high → medium → low
+  const rank = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+  violations.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+
+  return violations;
+}
+
+// -----------------------------------------------------------------------
+// Deterministic summary — no AI required
+// -----------------------------------------------------------------------
+
 function buildSummary(violations: Violation[]): { headline: string; details: string[] } {
   if (violations.length === 0) {
     return {
@@ -117,39 +203,13 @@ function buildSummary(violations: Violation[]): { headline: string; details: str
   if (low.length)    parts.push(`${low.length} low`);
 
   const headline = `${violations.length} violation${violations.length > 1 ? 's' : ''} detected — ${parts.join(', ')}.`;
-
-  const details = violations.map(
-    (v) => VIOLATION_COPY[v.code] ?? v.message,
-  );
+  const details  = violations.map((v) => VIOLATION_COPY[v.code] ?? v.message);
 
   return { headline, details };
 }
 
 // -----------------------------------------------------------------------
-// API helper
-// -----------------------------------------------------------------------
-
-const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      msg = (await res.json()).detail ?? msg;
-    } catch (parseErr) {
-      console.warn('[Compliance.api] non-JSON error body:', parseErr);
-    }
-    throw new Error(msg);
-  }
-  return res.json();
-}
-
-// -----------------------------------------------------------------------
-// Metric aggregation from Supabase
+// Metric aggregation from Supabase (unchanged)
 // -----------------------------------------------------------------------
 
 export async function fetchPlantMetrics(plantId: string, days = 7): Promise<Record<string, any>> {
@@ -157,7 +217,7 @@ export async function fetchPlantMetrics(plantId: string, days = 7): Promise<Reco
   since.setDate(since.getDate() - days);
   const sinceIso = since.toISOString().slice(0, 10);
 
-  const summary = await supabase
+  const { data } = await supabase
     .from('daily_plant_summary')
     .select('*')
     .eq('plant_id', plantId)
@@ -165,24 +225,74 @@ export async function fetchPlantMetrics(plantId: string, days = 7): Promise<Reco
     .order('summary_date', { ascending: false })
     .limit(Math.min(days, 14));
 
-  const rows = (summary.data ?? []) as any[];
-  const avg = (k: string) => {
+  const rows = (data ?? []) as any[];
+  const avg  = (k: string) => {
     const vals = rows.map((r) => r?.[k]).filter((v) => typeof v === 'number');
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
   };
-  const sum = (k: string) =>
+  const sum  = (k: string) =>
     rows.map((r) => r?.[k] ?? 0).reduce((a, b) => a + Number(b || 0), 0);
 
   return {
-    nrw_pct:      avg('nrw_pct') ?? avg('nrw_percentage'),
-    downtime_hrs: rows.length ? sum('downtime_hrs') / rows.length : undefined,
-    permeate_tds: avg('permeate_tds'),
-    permeate_ph:  avg('permeate_ph'),
-    raw_turbidity:avg('raw_turbidity'),
-    dp_psi:       avg('dp_psi'),
-    recovery_pct: avg('recovery_pct'),
-    pv_ratio:     avg('pv_ratio'),
+    nrw_pct:       avg('nrw_pct') ?? avg('nrw_percentage'),
+    downtime_hrs:  rows.length ? sum('downtime_hrs') / rows.length : undefined,
+    permeate_tds:  avg('permeate_tds'),
+    permeate_ph:   avg('permeate_ph'),
+    raw_turbidity: avg('raw_turbidity'),
+    dp_psi:        avg('dp_psi'),
+    recovery_pct:  avg('recovery_pct'),
+    pv_ratio:      avg('pv_ratio'),
   };
+}
+
+// -----------------------------------------------------------------------
+// Threshold persistence via Supabase (with localStorage fallback)
+// -----------------------------------------------------------------------
+
+/**
+ * Loads thresholds for a given scope.
+ * Priority: Supabase row → localStorage snapshot → hardcoded defaults.
+ */
+async function loadThresholds(scope: string): Promise<Thresholds> {
+  try {
+    const { data, error } = await supabase
+      .from('compliance_thresholds')
+      .select('thresholds')
+      .eq('scope', scope)
+      .maybeSingle();
+
+    if (!error && data?.thresholds) {
+      // Keep localStorage in sync so the fallback stays fresh
+      lsSaveThresholds(scope, data.thresholds as Thresholds);
+      return data.thresholds as Thresholds;
+    }
+  } catch {
+    // Supabase unavailable — fall through
+  }
+
+  // localStorage fallback
+  const cached = lsLoadThresholds(scope);
+  if (cached) return cached;
+
+  // Ultimate fallback — use defaults
+  return { ...DEFAULT_THRESHOLDS };
+}
+
+/**
+ * Persists thresholds for a given scope.
+ * Tries Supabase upsert first; always writes localStorage as backup.
+ */
+async function persistThresholds(scope: string, thresholds: Thresholds): Promise<void> {
+  lsSaveThresholds(scope, thresholds);
+
+  const { error } = await supabase
+    .from('compliance_thresholds')
+    .upsert({ scope, thresholds, updated_at: new Date().toISOString() }, { onConflict: 'scope' });
+
+  if (error) {
+    // Not fatal — localStorage already has the data
+    console.warn('[Compliance] Supabase upsert failed, thresholds stored in localStorage only:', error.message);
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -190,7 +300,7 @@ export async function fetchPlantMetrics(plantId: string, days = 7): Promise<Reco
 // -----------------------------------------------------------------------
 
 export default function Compliance() {
-  const { data: plants } = usePlants();
+  const { data: plants }    = usePlants();
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId]   = useState<string>(selectedPlantId ?? 'global');
   const [days, setDays]         = useState<number>(7);
@@ -209,18 +319,14 @@ export default function Compliance() {
     if (selectedPlantId) { setPlantId(selectedPlantId); setScope('plant'); }
   }, [selectedPlantId]);
 
-  // Thresholds
+  // ---- Thresholds — loaded entirely from Supabase / localStorage ----
   const thresholdScope = scope === 'plant' ? plantId : 'global';
+
   const { data: thData, refetch: refetchThresholds } = useQuery({
     queryKey: ['thresholds', thresholdScope],
-    queryFn: async () => {
-      try {
-        return await api<{ scope: string; thresholds: Thresholds }>(
-          `/api/compliance/thresholds?scope=${encodeURIComponent(thresholdScope)}`,
-        );
-      } catch {
-        return null;
-      }
+    queryFn:  async () => {
+      const thresholds = await loadThresholds(thresholdScope);
+      return { scope: thresholdScope, thresholds };
     },
     retry: false,
   });
@@ -229,53 +335,58 @@ export default function Compliance() {
     if (thData?.thresholds && !editing) setLocal(thData.thresholds);
   }, [thData, editing]);
 
-  // ---- Evaluate (no summarize flag — summary is built client-side) ----
+  // ---- Evaluate — 100 % frontend, no backend call ----
   const runEvaluate = useCallback(async () => {
     setEvaluating(true);
     setResult(null);
     try {
-      let metrics: Record<string, any> = {};
       const scope_label =
         scope === 'plant'
           ? (plants ?? []).find((p) => p.id === plantId)?.name
           : 'All plants';
 
+      // 1. Fetch raw metrics from Supabase
+      let metrics: Record<string, any> = {};
       if (scope === 'plant' && plantId && plantId !== 'global') {
         metrics = await fetchPlantMetrics(plantId, days);
       }
 
-      // Apply manual overrides
+      // 2. Apply manual overrides
       for (const [k, v] of Object.entries(overrideMetrics)) {
         const n = parseFloat(v);
         if (!Number.isNaN(n)) metrics[k] = n;
       }
 
-      const r = await api<EvalResult>('/api/compliance/evaluate', {
-        method: 'POST',
-        body: JSON.stringify({
-          plant_id: scope === 'plant' ? plantId : null,
-          scope_label,
-          metrics,
-        }),
-      });
+      // 3. Load thresholds (Supabase → localStorage → defaults)
+      const thresholds = await loadThresholds(thresholdScope);
 
-      setResult(r);
+      // 4. Run violation checks entirely in the browser
+      const violations = computeViolations(metrics, thresholds);
+
+      // 5. Build result — same shape the old API used to return
+      const evalResult: EvalResult = {
+        scope:        thresholdScope,
+        scope_label,
+        evaluated_at: new Date().toISOString(),
+        violations,
+        thresholds,
+      };
+
+      setResult(evalResult);
+      setLocal(thresholds); // keep threshold editor in sync
     } catch (e: any) {
       toast.error(`Evaluation failed: ${e.message}`);
     } finally {
       setEvaluating(false);
     }
-  }, [plantId, scope, days, plants, overrideMetrics]);
+  }, [plantId, scope, days, plants, overrideMetrics, thresholdScope]);
 
-  // ---- Save thresholds ----
+  // ---- Save thresholds — write to Supabase (+ localStorage fallback) ----
   const saveThresholds = useCallback(async () => {
     if (!local) return;
     setSaving(true);
     try {
-      await api('/api/compliance/thresholds', {
-        method: 'PUT',
-        body: JSON.stringify({ scope: thresholdScope, thresholds: local }),
-      });
+      await persistThresholds(thresholdScope, local);
       toast.success('Thresholds saved');
       setEditing(false);
       refetchThresholds();
@@ -383,14 +494,12 @@ export default function Compliance() {
                     ? <ShieldCheck className="h-6 w-6 text-emerald-600 shrink-0" />
                     : <ShieldAlert className="h-6 w-6 text-rose-600 shrink-0" />}
                   <div className="flex-1">
-                    {/* Headline */}
                     <div className="text-sm font-semibold">{summary?.headline}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {result.scope_label ?? result.scope} · evaluated{' '}
                       {new Date(result.evaluated_at).toLocaleTimeString()}
                     </div>
 
-                    {/* Detail bullets (only when there are violations) */}
                     {summary && summary.details.length > 0 && (
                       <ul className="mt-2 space-y-1">
                         {summary.details.map((d, i) => (
