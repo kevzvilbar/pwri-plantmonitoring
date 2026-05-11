@@ -1009,9 +1009,38 @@ export function TrendChart({
     },
     enabled: plantIds.length > 0 && needsPermeateProduction,
   });
+  // Power readings — fetches the full ordered history for each plant so
+  // computeEntityDeltas can diff consecutive meter_reading_kwh values correctly.
+  // We also grab one row BEFORE startISO (per plant) to seed the delta for
+  // the very first in-window reading — without it the first bar is always 0.
   const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
-    queryFn: () => supaSelect<any>('power_readings', 'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,multiplier,reading_datetime,is_meter_replacement,plant_id'),
+    queryFn: async () => {
+      // Fetch in-window rows (standard path)
+      const inWindow = await supaSelect<any>(
+        'power_readings',
+        'daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,multiplier,reading_datetime,is_meter_replacement,plant_id',
+      );
+      // For each plant, fetch the single most-recent row BEFORE the window to
+      // establish a delta baseline for the first in-window reading.
+      const preRows: any[] = [];
+      await Promise.all(
+        plantIds.map(async (pid) => {
+          const { data } = await (supabase.from('power_readings' as never) as any)
+            .select('daily_consumption_kwh,daily_solar_kwh,daily_grid_kwh,meter_reading_kwh,multiplier,reading_datetime,is_meter_replacement,plant_id')
+            .eq('plant_id', pid)
+            .lt('reading_datetime', startISO)
+            .order('reading_datetime', { ascending: false })
+            .limit(1);
+          if (data?.[0]) preRows.push(data[0]);
+        }),
+      );
+      // Merge pre-window rows at the front, then sort ascending so
+      // computeEntityDeltas sees them in chronological order.
+      return [...preRows, ...inWindow].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+    },
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
 
