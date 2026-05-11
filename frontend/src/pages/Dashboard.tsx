@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
-import { EnergyMixCard } from '@/components/EnergyMixCard';
 import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { calc } from '@/lib/calculations';
@@ -25,7 +24,6 @@ import {
 import {
   ClusterCharts, TrendModal,
 } from '@/components/dashboard/TrendChart';
-import { PowerChart } from '@/components/dashboard/PowerChart';
 import {
   DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
   OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS,
@@ -1067,8 +1065,6 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      <PowerChart plantIds={plantIds} />
-      <EnergyMixCard plantIds={plantIds} />
       <BlendingVolumeCard plantIds={plantIds} />
 
       <TrendModal open={!!modal} onClose={() => setModal(null)} metric={modal?.metric ?? ''} title={modal?.title ?? ''} plantIds={plantIds} />
