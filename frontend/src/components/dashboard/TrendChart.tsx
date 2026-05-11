@@ -704,6 +704,10 @@ export function TrendChart({
   const [drillMode, setDrillMode] = useState<DrillMode>('default');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
 
+  // Production drill source: 'locator' = per distribution locator, 'well' = per raw water well
+  type ProdDrillSource = 'locator' | 'well';
+  const [prodDrillSource, setProdDrillSource] = useState<ProdDrillSource>('locator');
+
   // Locator filter for drill modes — null means "all selected" (default)
   // When the user opens drill mode, all locators start selected.
   const [selectedLocatorIds, setSelectedLocatorIds] = useState<Set<string> | null>(null);
@@ -1188,17 +1192,19 @@ export function TrendChart({
 
         if (!lastReading.has(entityKey)) {
           lastReading.set(entityKey, +r.current_reading);
-          // Bug fix: if the DB stored previous_reading, compute the delta
-          // instead of returning 0.  Without this, the first reading in the
-          // fetch window (which has no prior in-memory row) always shows 0 —
-          // causing every locator/well to report no data at the start of a
-          // long range even though readings exist in the database.
+          // If the DB stored previous_reading, compute the delta instead of returning 0.
+          // Without this, the first reading in the fetch window (no prior in-memory row)
+          // always shows 0, causing a false dip at the start of every range.
           if (r.previous_reading != null) {
             const rawDelta = +r.current_reading - +r.previous_reading;
             const delta    = Math.max(0, rawDelta);
             return { r, delta, rawDelta, isMeterReplacement: false };
           }
-          return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
+          // No previous_reading in DB → we genuinely don't know the delta for this
+          // first row. Return null delta so the chart gaps rather than plots 0.
+          return { r, delta: 0, rawDelta: null, isMeterReplacement: true };
+          // Note: isMeterReplacement=true here causes the caller to skip this point,
+          // preventing a false zero at the start of a date window.
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
@@ -1517,54 +1523,72 @@ export function TrendChart({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [hasConsumptionDrill, locReadings, locatorNames]);
 
-  // visibleEntities: subset of drillEntities that pass the current locator selection.
+  // wellDrillEntities: per-well breakdown for production chart
+  const wellDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    if (metric !== 'production') return [];
+    const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
+    return ids
+      .map((id, i) => ({
+        id,
+        label: wellNames?.get(id) ?? `Well ${id.slice(-4)}`,
+        color: DRILL_COLORS[i % DRILL_COLORS.length],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [metric, wellReadings, wellNames]);
+
+  // activeEntities: locator or well depending on prodDrillSource
+  const activeEntities = metric === 'production' && prodDrillSource === 'well'
+    ? wellDrillEntities : drillEntities;
+
+  // visibleEntities: subset of activeEntities that pass the current locator selection.
   // null selectedLocatorIds = all visible.
   const visibleEntities = useMemo(
     () => selectedLocatorIds === null
-      ? drillEntities
-      : drillEntities.filter((e) => selectedLocatorIds.has(e.id)),
-    [drillEntities, selectedLocatorIds],
+      ? activeEntities
+      : activeEntities.filter((e) => selectedLocatorIds.has(e.id)),
+    [activeEntities, selectedLocatorIds],
   );
 
-  // filteredLocatorList: drillEntities filtered by search string (for the picker UI)
+  // filteredLocatorList: activeEntities filtered by search string (for the picker UI)
   const filteredLocatorList = useMemo(
     () => locatorSearch.trim() === ''
-      ? drillEntities
-      : drillEntities.filter((e) =>
+      ? activeEntities
+      : activeEntities.filter((e) =>
           e.label.toLowerCase().includes(locatorSearch.trim().toLowerCase()),
         ),
-    [drillEntities, locatorSearch],
+    [activeEntities, locatorSearch],
   );
 
   // Helpers for the locator selector
-  const allSelected = selectedLocatorIds === null || selectedLocatorIds.size === drillEntities.length;
+  const allSelected = selectedLocatorIds === null || selectedLocatorIds.size === activeEntities.length;
   const noneSelected = selectedLocatorIds !== null && selectedLocatorIds.size === 0;
 
   function toggleLocator(id: string) {
     setSelectedLocatorIds((prev) => {
-      // null → all selected; clicking one = keep only that one
-      const current = prev ?? new Set(drillEntities.map((e) => e.id));
+      const current = prev ?? new Set(activeEntities.map((e) => e.id));
       const next = new Set(current);
       if (next.has(id)) {
         next.delete(id);
       } else {
         next.add(id);
       }
-      // If all are manually selected, normalise back to null
-      return next.size === drillEntities.length ? null : next;
+      return next.size === activeEntities.length ? null : next;
     });
   }
 
   function selectAllLocators() { setSelectedLocatorIds(null); }
   function clearAllLocators() { setSelectedLocatorIds(new Set()); }
 
-  // drilldownData: one row per day, each VISIBLE locator gets its own key
+  // drilldownData: one row per day, each VISIBLE entity (locator or well) gets its own key
   const drilldownData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drilldown') return [];
-    const sorted = [...(locReadings ?? [])].sort(
+    const isWell = metric === 'production' && prodDrillSource === 'well';
+    const sourceReadings = isWell ? (wellReadings ?? []) : (locReadings ?? []);
+    const entityField   = isWell ? 'well_id' : 'locator_id';
+    const sorted = [...sourceReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    const { pivot, dateKeys } = buildEntityPivot(sorted, entityField);
     if (dateKeys.length === 0) return [];
     const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
     return allDates.map((dateKey) => {
@@ -1575,15 +1599,18 @@ export function TrendChart({
       row._total = visibleEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, locReadings, visibleEntities]);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, wellReadings, visibleEntities]);
 
-  // drillupData: one row per month, each VISIBLE locator gets monthly sum
+  // drillupData: one row per month — grouped bars (not stacked) per entity
   const drillupData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drillup') return [];
-    const sorted = [...(locReadings ?? [])].sort(
+    const isWell = metric === 'production' && prodDrillSource === 'well';
+    const sourceReadings = isWell ? (wellReadings ?? []) : (locReadings ?? []);
+    const entityField   = isWell ? 'well_id' : 'locator_id';
+    const sorted = [...sourceReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    const { pivot, dateKeys } = buildEntityPivot(sorted, entityField);
     const byMonth = new Map<string, Map<string, number>>();
     dateKeys.forEach((dk) => {
       const monthKey = dk.slice(0, 7);
@@ -1605,7 +1632,7 @@ export function TrendChart({
       row._total = visibleEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, locReadings, visibleEntities]);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, wellReadings, visibleEntities]);
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -2068,10 +2095,37 @@ export function TrendChart({
           </div>
         )}
 
+        {/* Production source toggle — Per Locator vs Per Well — only for production metric in drill mode */}
+        {metric === 'production' && drillMode !== 'default' && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">View:</span>
+            <button
+              onClick={() => { setProdDrillSource('locator'); setSelectedLocatorIds(null); }}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                prodDrillSource === 'locator'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Breakdown by distribution locator"
+            >Per Locator</button>
+            <button
+              onClick={() => { setProdDrillSource('well'); setSelectedLocatorIds(null); }}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                prodDrillSource === 'well'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Breakdown by raw water well"
+            >Per Well</button>
+          </div>
+        )}
+
         {/* Drill controls — only for charts that have consumption data */}
         {hasConsumptionDrill && (
           <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
-            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Cons.:</span>
+            {metric !== 'production' && <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Cons.:</span>}
             <button
               onClick={() => setDrillMode(drillMode === 'drillup' ? 'default' : 'drillup')}
               data-testid={`drill-up-${metric}`}
@@ -2541,6 +2595,8 @@ export function TrendChart({
               ))}
             </ComposedChart>
           ) : (hasConsumptionDrill && drillMode === 'drillup') ? (
+            // Monthly view — grouped bars (one bar per entity per month, not stacked)
+            // This makes it easy to compare entities month-over-month.
             <ComposedChart data={drillupData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -2556,8 +2612,7 @@ export function TrendChart({
                   dataKey={id}
                   name={label}
                   fill={color}
-                  stackId="monthly"
-                  maxBarSize={48}
+                  maxBarSize={32}
                 />
               ))}
             </ComposedChart>
