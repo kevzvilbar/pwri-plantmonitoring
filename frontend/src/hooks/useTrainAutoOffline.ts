@@ -50,6 +50,7 @@ export function useTrainAutoOffline(plantIds: string[]) {
       }).filter((g) => g.hours_gap > 2 && g.current_status === 'Running');
     },
     enabled: plantIds.length > 0,
+    refetchInterval: 5 * 60 * 1000,
   });
 
   // Auto-mark stale trains Offline (operator must confirm to bring back Running)
