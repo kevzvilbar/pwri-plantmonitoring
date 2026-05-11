@@ -1305,27 +1305,22 @@ function Compare() {
 
   // ── Bill-aligned variance rows ─────────────────────────────────────────────
   const billRows = useMemo(() => (bills ?? []).map((b: any) => {
-    const billMult = b.multiplier ? +b.multiplier : 1;
     const periodReadings = (dailyKwh ?? [])
       .filter((d: any) => d.reading_datetime >= b.period_start && d.reading_datetime <= `${b.period_end}T23:59:59.999Z`);
     const sumDaily = periodReadings.reduce((s: number, d: any) => s + (+d.daily_consumption_kwh || 0), 0);
     const sumEffective = periodReadings.reduce((s: number, d: any) => {
-      const mult = d.multiplier != null ? +d.multiplier : billMult;
+      const mult = d.multiplier != null ? +d.multiplier : (b.multiplier ? +b.multiplier : 1);
       return s + (+d.daily_consumption_kwh || 0) * mult;
     }, 0);
-    // Billed kWh already reflects CT ratio (utility applies it before issuing the bill).
-    // billedEffective = total_kwh × bill multiplier so all three columns are on the same scale.
-    const billedEffective = (+b.total_kwh || 0) * billMult;
-    // Variance: compare effective daily readings vs billed-effective
-    const variance = billedEffective > 0 ? ((sumEffective - billedEffective) / billedEffective) * 100 : null;
-    return { ...b, sumDaily: Math.round(sumDaily), sumEffective: Math.round(sumEffective), billedEffective: Math.round(billedEffective), variance };
+    const variance = b.total_kwh ? ((sumEffective - +b.total_kwh) / +b.total_kwh) * 100 : null;
+    return { ...b, sumDaily, sumEffective, variance };
   }), [bills, dailyKwh]);
 
   const billsChartData = useMemo(() => billRows.slice().reverse().map((r: any) => ({
     month: r.billing_month ? format(parseISO(r.billing_month), 'MMM yy') : '—',
-    billed:    r.billedEffective || 0,
-    daily:     r.sumDaily        || 0,
-    effective: r.sumEffective    || 0,
+    billed: +r.total_kwh || 0,
+    daily: r.sumDaily || 0,
+    effective: r.sumEffective || 0,
   })), [billRows]);
 
   const rangeBtns: { key: typeof viewMode; label: string }[] = [
@@ -1439,7 +1434,7 @@ function Compare() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="billed"    fill="hsl(var(--chart-1))" name="Billed×mult kWh" />
+                  <Bar dataKey="billed"    fill="hsl(var(--chart-1))" name="Billed kWh" />
                   <Bar dataKey="daily"     fill="hsl(var(--chart-2))" name="Sum daily kWh" />
                   <Bar dataKey="effective" fill="hsl(var(--chart-3))" name="Eff. kWh (×mult)" />
                 </BarChart>
@@ -1452,7 +1447,7 @@ function Compare() {
               {billRows.map((r: any) => (
                 <div key={r.id} className="grid grid-cols-5 gap-2 text-xs border-b last:border-0 py-1.5 items-center">
                   <div className="font-mono-num">{r.billing_month ? format(parseISO(r.billing_month), 'MMM yy') : '—'}</div>
-                  <div className="font-mono-num text-right">{fmtNum(r.billedEffective, 0)}</div>
+                  <div className="font-mono-num text-right">{fmtNum(r.total_kwh, 0)}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.sumDaily, 0)}</div>
                   <div className="font-mono-num text-right text-amber-700 dark:text-amber-400">{fmtNum(r.sumEffective, 0)}</div>
                   <div className="text-right">
@@ -1465,11 +1460,11 @@ function Compare() {
                 </div>
               ))}
               <div className="grid grid-cols-5 gap-2 text-[10px] text-muted-foreground pt-1">
-                <div>Month</div><div className="text-right">Billed×mult</div><div className="text-right">Daily Σ</div>
+                <div>Month</div><div className="text-right">Billed kWh</div><div className="text-right">Daily Σ</div>
                 <div className="text-right text-amber-600">Eff. kWh×</div><div className="text-right">Δ%</div>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1">
-                Billed×mult = total_kwh × CT multiplier. Eff. kWh× = Σ(daily reading × multiplier). Variance = (Eff − Billed×mult) / Billed×mult.
+                Eff. kWh× = Σ(daily reading × CT multiplier). Variance compares effective kWh to billed.
               </p>
             </div>
           </Card>
