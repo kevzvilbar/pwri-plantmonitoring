@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { PlantAssignmentEditor } from '@/components/PlantAssignmentEditor';
 import {
@@ -22,14 +21,18 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import {
-  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical, ShieldCheck,
+  Search, Hourglass, UserPlus, Zap, Building2, MoreVertical,
+  ShieldCheck, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const ALL_ROLES = ['Operator', 'Technician', 'Supervisor', 'Manager', 'Admin'] as const;
 type AppRole = typeof ALL_ROLES[number];
 
 const ROLE_ORDER: AppRole[] = ['Admin', 'Manager', 'Supervisor', 'Technician', 'Operator'];
+
 const ROLE_PLURAL: Record<AppRole, string> = {
   Admin: 'Admins',
   Manager: 'Managers',
@@ -38,15 +41,26 @@ const ROLE_PLURAL: Record<AppRole, string> = {
   Operator: 'Operators',
 };
 
-// ── Avatar color by role ───────────────────────────────────────────────────────
+// Roles rendered as cards (higher-privilege, fewer users)
+const CARD_ROLES: AppRole[] = ['Admin', 'Manager', 'Supervisor'];
+
+// Roles rendered as table rows (high-volume, operational roles)
+const TABLE_ROLES: AppRole[] = ['Technician', 'Operator'];
+
+const OPERATORS_PER_PAGE = 8;
+
+// ── Avatar styles ─────────────────────────────────────────────────────────────
 
 const ROLE_AVATAR: Record<string, string> = {
-  Admin: 'bg-[#CECBF6] text-[#3C3489]',
-  Manager: 'bg-[#9FE1CB] text-[#085041]',
+  Admin:      'bg-[#CECBF6] text-[#3C3489]',
+  Manager:    'bg-[#9FE1CB] text-[#085041]',
   Supervisor: 'bg-[#B5D4F4] text-[#0C447C]',
   Technician: 'bg-[#FAC775] text-[#633806]',
-  Operator: 'bg-[#D3D1C7] text-[#444441]',
+  Operator:   'bg-[#D3D1C7] text-[#444441]',
+  'No role':  'bg-muted text-muted-foreground',
 };
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function initials(first?: string, last?: string, username?: string): string {
   if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
@@ -60,6 +74,23 @@ function primaryRole(roles: string[]): AppRole | null {
   return null;
 }
 
+function displayName(s: any): string {
+  return `${s.first_name ?? ''} ${s.last_name ?? ''} ${s.suffix ?? ''}`.trim() || (s.username ?? '—');
+}
+
+function userLabel(s: any): string {
+  return `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user');
+}
+
+// ── Status dot ────────────────────────────────────────────────────────────────
+
+function StatusDot({ status }: { status: string }) {
+  const cls =
+    status === 'Active'    ? 'bg-green-500' :
+    status === 'Suspended' ? 'bg-red-500'   : 'bg-amber-400';
+  return <span className={cn('w-2 h-2 rounded-full shrink-0', cls)} title={status} />;
+}
+
 // ── Role selector ─────────────────────────────────────────────────────────────
 
 function RoleSelector({ userId, currentRoles, onChanged }: {
@@ -69,10 +100,10 @@ function RoleSelector({ userId, currentRoles, onChanged }: {
 
   const handleChange = async (newRole: AppRole) => {
     if (newRole === pRole) return;
-    const { error: delError } = await supabase.from('user_roles').delete().eq('user_id', userId);
-    if (delError) { toast.error(delError.message); return; }
-    const { error: insError } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
-    if (insError) { toast.error(insError.message); return; }
+    const { error: delErr } = await supabase.from('user_roles').delete().eq('user_id', userId);
+    if (delErr) { toast.error(delErr.message); return; }
+    const { error: insErr } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
+    if (insErr) { toast.error(insErr.message); return; }
     toast.success(`Role updated to ${newRole}`);
     onChanged();
   };
@@ -81,7 +112,9 @@ function RoleSelector({ userId, currentRoles, onChanged }: {
     <Select value={pRole} onValueChange={(v) => handleChange(v as AppRole)}>
       <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
       <SelectContent>
-        {ALL_ROLES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}
+        {ALL_ROLES.map((r) => (
+          <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
@@ -153,11 +186,13 @@ function CreateUserDialog({ open, onClose, onCreated }: {
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Create new user</DialogTitle></DialogHeader>
         <div className="space-y-3 py-1">
+          {/* Credentials */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Login credentials</p>
             <div><Label>Email *</Label><Input type="email" value={form.email} onChange={field('email')} placeholder="user@example.com" /></div>
             <div><Label>Password *</Label><Input type="password" value={form.password} onChange={field('password')} placeholder="Min. 6 characters" /></div>
           </div>
+          {/* Profile */}
           <div className="space-y-2 pt-1 border-t">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profile</p>
             <div><Label>Username *</Label><Input value={form.username} onChange={field('username')} placeholder="e.g. jdelacruz" /></div>
@@ -176,6 +211,7 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               />
             </div>
           </div>
+          {/* Plant assignment */}
           {form.designation && (
             <div className="space-y-2 pt-1 border-t">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -184,8 +220,21 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               {isOperator ? (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {(plants ?? []).map((p) => (
-                    <label key={p.id} className={cn('flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors', plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/40')}>
-                      <input type="radio" name="create-plant" value={p.id} checked={plantId === p.id} onChange={() => setPlantId(p.id)} className="accent-accent" />
+                    <label
+                      key={p.id}
+                      className={cn(
+                        'flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors',
+                        plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/40',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="create-plant"
+                        value={p.id}
+                        checked={plantId === p.id}
+                        onChange={() => setPlantId(p.id)}
+                        className="accent-accent"
+                      />
                       <span className="text-sm">{p.name}</span>
                     </label>
                   ))}
@@ -194,8 +243,21 @@ function CreateUserDialog({ open, onClose, onCreated }: {
               ) : (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {(plants ?? []).map((p) => (
-                    <label key={p.id} className={cn('flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors', plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/40')}>
-                      <Checkbox checked={plantIds.includes(p.id)} onCheckedChange={() => setPlantIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])} />
+                    <label
+                      key={p.id}
+                      className={cn(
+                        'flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors',
+                        plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/40',
+                      )}
+                    >
+                      <Checkbox
+                        checked={plantIds.includes(p.id)}
+                        onCheckedChange={() =>
+                          setPlantIds((prev) =>
+                            prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id],
+                          )
+                        }
+                      />
                       <span className="text-sm">{p.name}</span>
                     </label>
                   ))}
@@ -217,70 +279,59 @@ function CreateUserDialog({ open, onClose, onCreated }: {
   );
 }
 
-// ── User tile (compact grid card) ─────────────────────────────────────────────
+// ── Shared tile props type ────────────────────────────────────────────────────
 
-function UserTile({ s, userRoles, plantName, existingDesignations, updateDesignation, approveUser, invalidate }: {
-  s: any;
-  userRoles: string[];
+interface SharedTileProps {
   plantName: (id: string) => string;
   existingDesignations: string[];
   updateDesignation: (uid: string, designation: string) => Promise<void>;
   approveUser: (uid: string, label: string) => Promise<void>;
   invalidate: () => void;
-}) {
+}
+
+// ── User card (Admin / Manager / Supervisor) ──────────────────────────────────
+
+function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } & SharedTileProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const pRole = primaryRole(userRoles);
-  const avatarCls = ROLE_AVATAR[pRole ?? 'Operator'];
-  const assignments: string[] = s.plant_assignments ?? [];
-  const isOperator = s.designation === OPERATOR_DESIGNATION;
-  const awaiting = s.confirmed === false || s.status === 'Pending';
-  const access = accessLevelFromRoles(userRoles);
-
-  const displayName = `${s.first_name ?? ''} ${s.last_name ?? ''} ${s.suffix ?? ''}`.trim() || (s.username ?? '—');
-  const userLabel = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || (s.username ?? 'user');
-
+  const pRole        = primaryRole(userRoles);
+  const avatarCls    = ROLE_AVATAR[pRole ?? 'Operator'];
+  const assignments  = (s.plant_assignments ?? []) as string[];
+  const isOperator   = s.designation === OPERATOR_DESIGNATION;
+  const awaiting     = s.confirmed === false || s.status === 'Pending';
+  const access       = accessLevelFromRoles(userRoles);
+  const name         = displayName(s);
+  const label        = userLabel(s);
   const visiblePlants = assignments.slice(0, 3);
   const overflowCount = assignments.length - 3;
-
-  const statusDotCls =
-    s.status === 'Active' ? 'bg-green-500' :
-    s.status === 'Suspended' ? 'bg-red-500' : 'bg-amber-400';
 
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl border bg-card text-card-foreground transition-shadow',
-        expanded ? 'shadow-md' : 'hover:shadow-sm',
+        'group relative flex flex-col rounded-xl border bg-card text-card-foreground transition-all duration-150',
+        expanded ? 'shadow-md border-violet-200 dark:border-violet-800' : 'hover:shadow-sm hover:border-border',
       )}
       data-testid={`admin-user-card-${s.id}`}
     >
-      {/* ── Top section ── */}
+      {/* Body */}
       <div className="p-3 flex flex-col gap-2 flex-1">
-        {/* Status dot + name row */}
-        <div className="flex items-start gap-2">
-          {/* Avatar */}
+        {/* Avatar + name + status */}
+        <div className="flex items-start gap-2.5">
           <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0', avatarCls)}>
             {initials(s.first_name, s.last_name, s.username)}
           </div>
-
-          {/* Name / handle */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-medium leading-tight truncate">{displayName}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[13px] font-medium leading-tight truncate max-w-[110px]">{name}</span>
               {access.label === 'Elevated' && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 shrink-0">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 shrink-0 border border-violet-200 dark:border-violet-800">
                   <Zap className="w-2.5 h-2.5" /> Elevated
                 </span>
               )}
             </div>
             <div className="text-[11px] text-muted-foreground truncate">@{s.username ?? '—'}</div>
           </div>
-
-          {/* Status dot */}
-          <div className="flex items-center gap-1 shrink-0 mt-0.5" title={s.status}>
-            <span className={cn('w-2 h-2 rounded-full', statusDotCls)} />
-          </div>
+          <StatusDot status={s.status} />
         </div>
 
         {/* Plant tags */}
@@ -288,7 +339,7 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           <div className="flex flex-wrap gap-1">
             {visiblePlants.map((id) => (
               <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground border border-border/60">
-                {plantName(id)}
+                {shared.plantName(id)}
               </span>
             ))}
             {overflowCount > 0 && (
@@ -299,16 +350,14 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           </div>
         )}
 
-        {/* Role badges */}
         {userRoles.length === 0 && (
           <Badge variant="secondary" className="text-[9px] w-fit">No role</Badge>
         )}
       </div>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="border-t mt-auto">
-
-        {/* Designation + approve row */}
+        {/* Designation + approve */}
         <div className="px-3 pt-2 pb-1.5 flex items-center justify-between gap-2 min-w-0">
           <span className="text-[10.5px] text-muted-foreground truncate min-w-0" title={s.designation ?? ''}>
             {s.designation || <span className="italic opacity-40">No designation</span>}
@@ -317,7 +366,7 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
             <Button
               size="sm"
               className="h-6 px-2 text-[10px] shrink-0"
-              onClick={() => approveUser(s.id, userLabel)}
+              onClick={() => shared.approveUser(s.id, label)}
               data-testid={`approve-user-${s.id}`}
             >
               Approve
@@ -325,9 +374,9 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           )}
         </div>
 
-        {/* Icon-only action buttons — fixed square size, never truncate */}
+        {/* Action row */}
         <div className="px-3 pb-3 flex items-center justify-end gap-1.5">
-          {/* Change role */}
+          {/* Role toggle */}
           <button
             className={cn(
               'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
@@ -345,7 +394,7 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           {/* Edit plants */}
           <PlantAssignmentEditor
             userId={s.id}
-            userLabel={userLabel}
+            userLabel={label}
             currentPlantIds={assignments}
             singlePlantOnly={isOperator}
             invalidateKeys={[['admin-users'], ['staff']]}
@@ -356,14 +405,14 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
                 aria-label="Edit plants"
               >
                 <Building2 className="w-3 h-3 shrink-0" />
-                <span className="text-[8px] font-medium">Edit plants</span>
+                <span className="text-[10px] font-medium">Edit plants</span>
               </button>
             }
           />
 
           {/* More / delete */}
           <DeleteEntityMenu
-            kind="user" id={s.id} label={userLabel}
+            kind="user" id={s.id} label={label}
             canSoftDelete={s.status === 'Active'} canHardDelete
             invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]}
             compact
@@ -379,14 +428,14 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
           />
         </div>
 
-        {/* Role selector panel — appears when shield button is active */}
+        {/* Role expand panel */}
         {expanded && (
           <div className="border-t border-violet-100 dark:border-violet-900/40 bg-violet-50/50 dark:bg-violet-950/10 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1 shrink-0">
                 <ShieldCheck className="w-3 h-3" /> Role
               </span>
-              <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={invalidate} />
+              <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
             </div>
           </div>
         )}
@@ -395,28 +444,263 @@ function UserTile({ s, userRoles, plantName, existingDesignations, updateDesigna
   );
 }
 
-// ── Role group section ────────────────────────────────────────────────────────
+// ── Operator / Technician table row ───────────────────────────────────────────
 
-function RoleGroup({ role, users, ...tileProps }: {
-  role: AppRole | 'No role';
-  users: any[];
-} & Omit<React.ComponentProps<typeof UserTile>, 's' | 'userRoles'> & {
-  rolesOf: (uid: string) => string[];
-}) {
-  const { rolesOf, ...rest } = tileProps as any;
+function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[] } & SharedTileProps) {
+  const [roleOpen, setRoleOpen] = useState(false);
+
+  const pRole       = primaryRole(userRoles);
+  const avatarCls   = ROLE_AVATAR[pRole ?? 'Operator'];
+  const assignments = (s.plant_assignments ?? []) as string[];
+  const isOperator  = s.designation === OPERATOR_DESIGNATION;
+  const awaiting    = s.confirmed === false || s.status === 'Pending';
+  const name        = displayName(s);
+  const label       = userLabel(s);
+  const access      = accessLevelFromRoles(userRoles);
+
+  return (
+    <>
+      <tr
+        className={cn(
+          'border-b border-border/50 transition-colors last:border-0',
+          roleOpen ? 'bg-violet-50/40 dark:bg-violet-950/10' : 'hover:bg-muted/30',
+        )}
+        data-testid={`admin-user-row-${s.id}`}
+      >
+        {/* Name */}
+        <td className="py-2.5 pl-4 pr-2">
+          <div className="flex items-center gap-2.5">
+            <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0', avatarCls)}>
+              {initials(s.first_name, s.last_name, s.username)}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12.5px] font-medium leading-tight truncate">{name}</span>
+                {access.label === 'Elevated' && (
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border border-violet-200 dark:border-violet-800 shrink-0">
+                    <Zap className="w-2 h-2" /> Elevated
+                  </span>
+                )}
+              </div>
+              <div className="text-[10.5px] text-muted-foreground">@{s.username ?? '—'}</div>
+            </div>
+          </div>
+        </td>
+
+        {/* Plants */}
+        <td className="py-2.5 px-2">
+          <div className="flex flex-wrap gap-1">
+            {assignments.slice(0, 2).map((id) => (
+              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground border border-border/60">
+                {shared.plantName(id)}
+              </span>
+            ))}
+            {assignments.length > 2 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
+                +{assignments.length - 2}
+              </span>
+            )}
+            {assignments.length === 0 && (
+              <span className="text-[10.5px] text-muted-foreground italic">None</span>
+            )}
+          </div>
+        </td>
+
+        {/* Designation */}
+        <td className="py-2.5 px-2 hidden sm:table-cell">
+          <span className="text-[11px] text-muted-foreground truncate max-w-[120px] block" title={s.designation ?? ''}>
+            {s.designation || <span className="italic opacity-40">—</span>}
+          </span>
+        </td>
+
+        {/* Status */}
+        <td className="py-2.5 px-2">
+          <div className="flex items-center gap-1.5">
+            <StatusDot status={s.status} />
+            <span className={cn(
+              'text-[11px]',
+              s.status === 'Active'    ? 'text-green-700 dark:text-green-400' :
+              s.status === 'Suspended' ? 'text-red-600 dark:text-red-400'     : 'text-amber-600 dark:text-amber-400',
+            )}>
+              {s.status ?? 'Pending'}
+            </span>
+          </div>
+        </td>
+
+        {/* Actions */}
+        <td className="py-2.5 pl-2 pr-4">
+          <div className="flex items-center justify-end gap-1.5">
+            {awaiting && (
+              <Button
+                size="sm"
+                className="h-6 px-2 text-[10px] shrink-0"
+                onClick={() => shared.approveUser(s.id, label)}
+                data-testid={`approve-user-${s.id}`}
+              >
+                Approve
+              </Button>
+            )}
+
+            {/* Role toggle */}
+            <button
+              className={cn(
+                'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
+                roleOpen
+                  ? 'bg-violet-100 border-violet-400 text-violet-700 dark:bg-violet-900/40 dark:border-violet-600 dark:text-violet-300'
+                  : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+              title="Change role"
+              aria-label="Change role"
+              onClick={() => setRoleOpen((v) => !v)}
+            >
+              <ShieldCheck className="w-3 h-3" />
+            </button>
+
+            {/* Edit plants */}
+            <PlantAssignmentEditor
+              userId={s.id}
+              userLabel={label}
+              currentPlantIds={assignments}
+              singlePlantOnly={isOperator}
+              invalidateKeys={[['admin-users'], ['staff']]}
+              trigger={
+                <button
+                  className="h-7 flex items-center justify-center gap-1.5 px-2 rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                  title="Edit plants"
+                  aria-label="Edit plants"
+                >
+                  <Building2 className="w-3 h-3 shrink-0" />
+                  <span className="text-[10px] font-medium">Edit plants</span>
+                </button>
+              }
+            />
+
+            {/* Delete / more */}
+            <DeleteEntityMenu
+              kind="user" id={s.id} label={label}
+              canSoftDelete={s.status === 'Active'} canHardDelete
+              invalidateKeys={[['admin-users'], ['admin-user-roles'], ['staff'], ['all-roles']]}
+              compact
+              trigger={
+                <button
+                  className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                  title="More options"
+                  aria-label="More options"
+                >
+                  <MoreVertical className="w-3 h-3" />
+                </button>
+              }
+            />
+          </div>
+        </td>
+      </tr>
+
+      {/* Inline role panel */}
+      {roleOpen && (
+        <tr className="border-b border-violet-100 dark:border-violet-900/40 bg-violet-50/50 dark:bg-violet-950/10">
+          <td colSpan={5} className="px-4 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" /> Change role
+              </span>
+              <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ── Card-role section (Admin, Manager, Supervisor) ────────────────────────────
+
+function CardRoleSection({
+  role, users, rolesOf, ...shared
+}: { role: AppRole | 'No role'; users: any[]; rolesOf: (uid: string) => string[] } & SharedTileProps) {
   const label = role === 'No role' ? 'No role' : ROLE_PLURAL[role as AppRole];
 
   return (
     <div className="space-y-2">
+      {/* Section header */}
       <div className="flex items-center gap-2">
         <span className="text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
         <div className="flex-1 h-px bg-border/60" />
       </div>
+      {/* Card grid */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2">
         {users.map((s) => (
-          <UserTile key={s.id} s={s} userRoles={rolesOf(s.id)} {...rest} />
+          <UserCard key={s.id} s={s} userRoles={rolesOf(s.id)} {...shared} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Table-role section (Technician, Operator) ─────────────────────────────────
+
+function TableRoleSection({
+  role, users, rolesOf, ...shared
+}: { role: AppRole | 'No role'; users: any[]; rolesOf: (uid: string) => string[] } & SharedTileProps) {
+  const [page, setPage] = useState(0);
+  const label      = role === 'No role' ? 'No role' : ROLE_PLURAL[role as AppRole];
+  const totalPages = Math.ceil(users.length / OPERATORS_PER_PAGE);
+  const pageUsers  = users.slice(page * OPERATORS_PER_PAGE, (page + 1) * OPERATORS_PER_PAGE);
+
+  return (
+    <div className="space-y-2">
+      {/* Section header */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
+        <div className="flex-1 h-px bg-border/60" />
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl border border-border/60 overflow-hidden bg-card">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/50 bg-muted/30">
+              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 pl-4 pr-2">User</th>
+              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Plant</th>
+              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2 hidden sm:table-cell">Designation</th>
+              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Status</th>
+              <th className="text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 pl-2 pr-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageUsers.map((s) => (
+              <UserTableRow key={s.id} s={s} userRoles={rolesOf(s.id)} {...shared} />
+            ))}
+          </tbody>
+        </table>
+
+        {/* Pagination footer */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-2 border-t border-border/50 bg-muted/20">
+            <span className="text-[11px] text-muted-foreground">
+              Page {page + 1} of {totalPages} · {users.length} users
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page === totalPages - 1}
+                aria-label="Next page"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -485,13 +769,16 @@ export function UsersPanel() {
     [staff],
   );
 
+  // Filter users
   const filtered = useMemo(() => {
     let list = (staff ?? []) as any[];
     if (pendingOnly) list = list.filter((s) => s.confirmed === false || s.status === 'Pending');
     const q = query.trim().toLowerCase();
     if (!q) return list;
     return list.filter((s) =>
-      [s.first_name, s.last_name, s.username, s.designation].filter(Boolean).some((v: string) => v.toLowerCase().includes(q)),
+      [s.first_name, s.last_name, s.username, s.designation]
+        .filter(Boolean)
+        .some((v: string) => v.toLowerCase().includes(q)),
     );
   }, [staff, query, pendingOnly]);
 
@@ -507,8 +794,7 @@ export function UsersPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, roles]);
 
-  const tileProps = {
-    rolesOf,
+  const sharedProps: SharedTileProps = {
     plantName,
     existingDesignations,
     updateDesignation,
@@ -516,14 +802,16 @@ export function UsersPanel() {
     invalidate,
   };
 
-  const activeGroups = [...ROLE_ORDER, 'No role' as const].filter((r) => grouped[r]?.length > 0);
+  const activeCardGroups  = [...CARD_ROLES,  'No role' as const].filter((r) => grouped[r]?.length > 0);
+  const activeTableGroups = TABLE_ROLES.filter((r) => grouped[r]?.length > 0);
+  const hasAny = activeCardGroups.length > 0 || activeTableGroups.length > 0;
 
   return (
-    <div className="space-y-4">
-      {/* Toolbar */}
+    <div className="space-y-5">
+      {/* ── Toolbar ── */}
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
-          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Search by name, username, designation…"
             value={query}
@@ -538,27 +826,51 @@ export function UsersPanel() {
           onClick={() => setPendingOnly((v) => !v)}
           data-testid="admin-users-pending-filter"
         >
-          <Hourglass className="h-3 w-3 mr-1" /> Pending {pendingCount > 0 && `· ${pendingCount}`}
+          <Hourglass className="h-3 w-3 mr-1" />
+          Pending
+          {pendingCount > 0 && (
+            <span className={cn(
+              'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium leading-none',
+              pendingOnly
+                ? 'bg-white/20 text-white'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+            )}>
+              {pendingCount}
+            </span>
+          )}
         </Button>
         <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="admin-create-user-btn">
           <UserPlus className="h-3 w-3 mr-1" /> Add user
         </Button>
       </div>
 
-      {/* Role-grouped grid */}
-      {activeGroups.length > 0 ? (
+      {/* ── Content ── */}
+      {hasAny ? (
         <div className="space-y-6">
-          {activeGroups.map((role) => (
-            <RoleGroup
+          {/* Card sections: Admin, Manager, Supervisor */}
+          {activeCardGroups.map((role) => (
+            <CardRoleSection
               key={role}
               role={role as AppRole | 'No role'}
               users={grouped[role]}
-              {...tileProps}
+              rolesOf={rolesOf}
+              {...sharedProps}
+            />
+          ))}
+
+          {/* Table sections: Technician, Operator */}
+          {activeTableGroups.map((role) => (
+            <TableRoleSection
+              key={role}
+              role={role as AppRole}
+              users={grouped[role]}
+              rolesOf={rolesOf}
+              {...sharedProps}
             />
           ))}
         </div>
       ) : (
-        <Card className="p-4 text-center text-xs text-muted-foreground">
+        <Card className="p-6 text-center text-xs text-muted-foreground">
           {pendingOnly ? 'No pending approvals.' : 'No users found.'}
         </Card>
       )}
