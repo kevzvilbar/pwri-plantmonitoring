@@ -1088,6 +1088,32 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsCostReadings,
   });
 
+  // CT multiplier from electric_bills — mirrors PowerChart's authoritative multiplier source.
+  // TrendChart's power-delta computation falls back to power_readings.multiplier, then to 1.
+  // Adding the bill multiplier as an intermediate fallback matches PowerChart behaviour exactly,
+  // ensuring the kwh bars are correct even when individual reading rows lack a multiplier value.
+  // Only fetched for the `kwh` metric so other metrics don't pay the extra Supabase round-trip.
+  const { data: billMultiplierMap } = useQuery({
+    queryKey: ['trend-bill-multipliers', plantIds],
+    queryFn: async () => {
+      const map = new Map<string, number>();
+      try {
+        const { data } = await (supabase.from('electric_bills' as never) as any)
+          .select('plant_id,multiplier')
+          .in('plant_id', plantIds)
+          .order('billing_month', { ascending: false });
+        for (const b of (data ?? []) as any[]) {
+          // Keep only the FIRST (most-recent) entry per plant — query is DESC by billing_month.
+          if (!map.has(b.plant_id) && +(b.multiplier ?? 0) > 0)
+            map.set(b.plant_id, +b.multiplier);
+        }
+      } catch { /* electric_bills table may not exist — silently default to row.multiplier */ }
+      return map;
+    },
+    enabled: plantIds.length > 0 && metric === 'kwh',
+    staleTime: 120_000,
+  });
+
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
 
@@ -1424,9 +1450,15 @@ export function TrendChart({
       'plant_id',
       'daily_consumption_kwh',
     ).forEach(({ r, delta: rawComputedDelta, rawDelta, isMeterReplacement }) => {
-      // rawComputedDelta is either daily_consumption_kwh (multiplied) or Δ meter (raw).
-      // Only apply multiplier in the fallback (raw delta) path.
-      const mult = +(r.multiplier ?? 1) || 1;
+      // rawComputedDelta is either daily_consumption_kwh (pre-multiplied, saved by Operations)
+      // or the raw Δ meter_reading_kwh (needs multiplier applied).
+      // Multiplier priority (mirrors PowerChart):
+      //   1. power_readings.multiplier  — row-level CT ratio logged at read time
+      //   2. electric_bills.multiplier  — latest bill's CT ratio for this plant
+      //   3. 1                          — safe default when no multiplier is on record
+      const mult = +(r.multiplier ?? 0) > 0
+        ? +r.multiplier
+        : (billMultiplierMap?.get(r.plant_id) ?? 1);
       const hasDailyKwh = r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0;
       const delta = hasDailyKwh ? rawComputedDelta : rawComputedDelta * mult;
       const dt = new Date(r.reading_datetime);
@@ -1542,7 +1574,7 @@ export function TrendChart({
         };
       });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
-      metric, wellNames, locatorNames, productMeterNames, plantNames,
+      billMultiplierMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
 
   // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
@@ -2577,77 +2609,121 @@ export function TrendChart({
         />
       )}
 
-      {/* ── kwh: Today Solar / Grid / Total stat cards ───────────────────── */}
+      {/* ── kwh: Latest Solar / Grid / Total stat cards ──────────────────────
+           Rendered above the chart so operators can see the most-recent day's
+           figures at a glance without scrolling to the rightmost bar.
+           "Latest" = the last chartData row that has any power data.
+           Delta is vs. the row before it — labelled "vs prev day" because the
+           selected range may not include today (e.g. a 90D window ending last week).
+           Color semantics: Solar ↑ = good (green); Grid ↑ = bad (rose). ───── */}
       {metric === 'kwh' && chartData.length > 0 && (() => {
-        const today     = chartData[chartData.length - 1];
-        const yesterday = chartData.length > 1 ? chartData[chartData.length - 2] : null;
-        const todaySolar = today?.solarKwh ?? 0;
-        const todayGrid  = today?.kwh      ?? 0;
-        const todayTotal = +(todaySolar + todayGrid).toFixed(1);
-        const solarPct   = todayTotal > 0 ? +((todaySolar / todayTotal) * 100).toFixed(1) : 0;
-        const solarDelta = yesterday && yesterday.solarKwh > 0
-          ? +(((todaySolar - yesterday.solarKwh) / yesterday.solarKwh) * 100).toFixed(1) : null;
-        const gridDelta = yesterday && yesterday.kwh > 0
-          ? +(((todayGrid - yesterday.kwh) / yesterday.kwh) * 100).toFixed(1) : null;
+        // Walk from the end to find the most-recent row with actual power data
+        const dataRows = chartData.filter((d: any) => (d.kwh ?? 0) > 0 || (d.solarKwh ?? 0) > 0);
+        if (!dataRows.length) return null;
 
-        // Derive hasSolar / hasGrid from actual chartData so no extra prop is needed
+        const latest    = dataRows[dataRows.length - 1] as any;
+        const prevRow   = dataRows.length > 1 ? dataRows[dataRows.length - 2] as any : null;
+
+        const latestSolar = +(latest.solarKwh ?? 0);
+        const latestGrid  = +(latest.kwh      ?? 0);
+        const latestTotal = +(latestSolar + latestGrid).toFixed(1);
+        const solarPct    = latestTotal > 0 ? +((latestSolar / latestTotal) * 100).toFixed(1) : 0;
+
+        const solarDelta  = prevRow && (prevRow.solarKwh ?? 0) > 0
+          ? +(((latestSolar - (prevRow.solarKwh ?? 0)) / (prevRow.solarKwh ?? 0)) * 100).toFixed(1)
+          : null;
+        const gridDelta   = prevRow && (prevRow.kwh ?? 0) > 0
+          ? +(((latestGrid - (prevRow.kwh ?? 0)) / (prevRow.kwh ?? 0)) * 100).toFixed(1)
+          : null;
+
         const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
-        const hasGridData  = chartData.some((d: any) => (d.kwh ?? 0) > 0);
+        const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
 
-        // Only render stat cards when there's actual data today
-        if (todaySolar === 0 && todayGrid === 0) return null;
+        if (latestSolar === 0 && latestGrid === 0) return null;
+
+        const fmtKwh = (v: number) =>
+          v.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
         return (
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {/* Today Solar */}
+          <div className="grid grid-cols-3 gap-2 mb-3 mt-1" data-testid="kwh-stat-cards">
+            {/* ── Solar ── */}
             {hasSolarData && (
-              <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2.5">
+              <div
+                className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2.5"
+                data-testid="kwh-stat-solar"
+              >
                 <div className="flex items-center gap-1.5 mb-1">
                   <Sun className="h-3 w-3 text-yellow-500 shrink-0" />
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">
+                    Solar · {latest.date}
+                  </span>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-lg font-semibold tabular-nums">{todaySolar.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-lg font-semibold tabular-nums">{fmtKwh(latestSolar)}</span>
                   <span className="text-[10px] text-muted-foreground">kWh</span>
                 </div>
                 {solarDelta !== null && (
-                  <p className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                    {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+                  <p className={[
+                    'text-[10px] mt-0.5 font-medium',
+                    solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500',
+                  ].join(' ')}>
+                    {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs prev day
                   </p>
                 )}
               </div>
             )}
-            {/* Today Grid */}
+
+            {/* ── Grid ── */}
             {hasGridData && (
-              <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2.5">
+              <div
+                className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2.5"
+                data-testid="kwh-stat-grid"
+              >
                 <div className="flex items-center gap-1.5 mb-1">
                   <Zap className="h-3 w-3 text-blue-500 shrink-0" />
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+                    Grid · {latest.date}
+                  </span>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-lg font-semibold tabular-nums">{todayGrid.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                  <span className="text-lg font-semibold tabular-nums">{fmtKwh(latestGrid)}</span>
                   <span className="text-[10px] text-muted-foreground">kWh</span>
                 </div>
                 {gridDelta !== null && (
-                  <p className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                    {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+                  <p className={[
+                    'text-[10px] mt-0.5 font-medium',
+                    // Grid consumption: lower is better (efficiency) → green when falling
+                    gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500',
+                  ].join(' ')}>
+                    {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs prev day
                   </p>
                 )}
               </div>
             )}
-            {/* Today Total — spans 2 cols when only one source exists */}
-            <div className={`rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2.5 ${(!hasSolarData || !hasGridData) ? 'col-span-2' : ''}`}>
+
+            {/* ── Total — spans 2 cols when only one source exists ── */}
+            <div
+              className={[
+                'rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2.5',
+                !hasSolarData || !hasGridData ? 'col-span-2' : '',
+              ].join(' ')}
+              data-testid="kwh-stat-total"
+            >
               <div className="flex items-center gap-1.5 mb-1">
                 <Zap className="h-3 w-3 text-teal-600 shrink-0" />
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">
+                  Total · {latest.date}
+                </span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-semibold tabular-nums">{todayTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                <span className="text-lg font-semibold tabular-nums">{fmtKwh(latestTotal)}</span>
                 <span className="text-[10px] text-muted-foreground">kWh</span>
               </div>
-              {hasSolarData && todaySolar > 0 && (
+              {hasSolarData && latestSolar > 0 && (
                 <p className="text-[10px] mt-0.5 text-muted-foreground">
-                  Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
+                  Solar:{' '}
+                  <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span>
+                  {' '}of mix
                 </p>
               )}
             </div>
