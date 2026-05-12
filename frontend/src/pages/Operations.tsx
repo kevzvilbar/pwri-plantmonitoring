@@ -611,7 +611,6 @@ async function insertLocatorReadings(
       if (decision === 'skip') continue;
 
       // Build update payload.
-      // FIX: locator_readings has no plant_id column — omit it.
       // FIX: daily_volume is a GENERATED ALWAYS column — omit it from UPDATE too;
       //      Postgres recomputes it automatically from current_reading - previous_reading.
       const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId };
@@ -635,15 +634,13 @@ async function insertLocatorReadings(
     }
 
     // ── New insert ────────────────────────────────────────────────────────────
-    // FIX 1: plant_id removed — locator_readings table has no plant_id column.
-    //         Sending it caused: "column plant_id does not exist" schema error,
-    //         which silently failed all 60 rows with 0 imported.
-    // FIX 2: daily_volume removed — it is a GENERATED ALWAYS AS column in Postgres
-    //         (auto-computed as current_reading - previous_reading). Supplying it
-    //         causes: "cannot insert a non-DEFAULT value into column daily_volume".
+    // FIX: daily_volume removed — it is a GENERATED ALWAYS AS column in Postgres
+    //      (auto-computed as current_reading - previous_reading). Supplying it
+    //      causes: "cannot insert a non-DEFAULT value into column daily_volume".
+    //      plant_id IS required (NOT NULL constraint) — keep it.
     const insertPayload: Record<string, any> = {
       locator_id:       locatorId,
-      // plant_id:      ← intentionally omitted (no such column on locator_readings)
+      plant_id:         plantId,
       reading_datetime: dt,
       recorded_by:      userId,
     };
@@ -653,10 +650,7 @@ async function insertLocatorReadings(
       // Store current_reading = previous to preserve the cumulative sequence.
       insertPayload.current_reading  = r.previous_reading ? +r.previous_reading : 0;
       insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
-      // daily_volume omitted — generated column; Postgres derives it from current - previous.
-      // For direct mode the generated value will be 0 (cur == prev), which is expected;
-      // the dashboard should read input_mode='direct' and use a separate direct_volume column
-      // if your schema supports it, or you can store the value in a non-generated column.
+      // daily_volume intentionally omitted — GENERATED ALWAYS column
     } else {
       // Raw cumulative meter mode
       const csvCurLoc2  = +r.current_reading;
@@ -666,7 +660,7 @@ async function insertLocatorReadings(
       const rawLocDelta2 = csvPrevLoc2 != null ? csvCurLoc2 - csvPrevLoc2 : null;
       if (rawLocDelta2 != null && rawLocDelta2 < 0)
         errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta2.toFixed(2)}) — meter rollback detected.`);
-      // daily_volume omitted — generated column
+      // daily_volume intentionally omitted — GENERATED ALWAYS column
     }
 
     const { error } = await supabase.from('locator_readings').insert(insertPayload);
@@ -1343,24 +1337,24 @@ function LocatorRow({
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
-    // FIX: plant_id removed — locator_readings has no plant_id column.
     // FIX: daily_volume removed — it is a GENERATED ALWAYS column in Postgres
     //      (auto-computed as current_reading - previous_reading). Supplying it
     //      causes: "cannot insert a non-DEFAULT value into column daily_volume".
+    //      plant_id IS required (NOT NULL) — keep it.
     const payload: any = locInputMode === 'direct'
       ? {
           // Direct m³: stored value IS the daily volume; current_reading stays at prev
-          locator_id: locator.id,
+          locator_id: locator.id, plant_id: plantId,
           current_reading: previous ?? cur,
           previous_reading: previous,
-          // daily_volume intentionally omitted — generated column
+          // daily_volume intentionally omitted — GENERATED ALWAYS column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         }
       : {
-          locator_id: locator.id,
+          locator_id: locator.id, plant_id: plantId,
           current_reading: cur, previous_reading: previous,
-          // daily_volume intentionally omitted — generated column
+          // daily_volume intentionally omitted — GENERATED ALWAYS column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         };
