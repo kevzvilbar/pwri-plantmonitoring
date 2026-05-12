@@ -292,36 +292,73 @@ interface SharedTileProps {
 
 // ── Change Password Dialog ────────────────────────────────────────────────────
 
+// SQL shown to admins when the RPC hasn't been deployed yet
+const SETUP_SQL = `-- Run this once in your Supabase SQL Editor (Dashboard → SQL Editor)
+-- It creates a SECURITY DEFINER function that lets admins reset any user's password.
+
+create or replace function public.admin_set_user_password(
+  _user_id uuid,
+  _new_password text
+)
+returns void
+language plpgsql
+security definer
+set search_path = extensions, public, auth
+as $$
+begin
+  -- Only allow callers who have the Admin role in user_roles
+  if not exists (
+    select 1 from public.user_roles
+    where user_id = auth.uid() and role = 'Admin'
+  ) then
+    raise exception 'Permission denied: Admin role required';
+  end if;
+
+  update auth.users
+  set encrypted_password = crypt(_new_password, gen_salt('bf'))
+  where id = _user_id;
+end;
+$$;
+
+-- Grant execute to authenticated users (the function itself checks for Admin role)
+grant execute on function public.admin_set_user_password(uuid, text) to authenticated;`;
+
 function ChangePasswordDialog({ open, onClose, userId, userName }: {
   open: boolean; onClose: () => void; userId: string; userName: string;
 }) {
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm]   = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [busy, setBusy]         = useState(false);
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [busy, setBusy]           = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [copied, setCopied]       = useState(false);
 
   const handleClose = () => {
-    setPassword(''); setConfirm(''); setShowPass(false); setBusy(false);
+    setPassword(''); setConfirm(''); setShowPass(false);
+    setBusy(false); setNeedsSetup(false); setCopied(false);
     onClose();
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(SETUP_SQL).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleSubmit = async () => {
     if (password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     if (password !== confirm)  { toast.error('Passwords do not match'); return; }
     setBusy(true);
-    // Use the admin_set_user_password RPC if available, otherwise fall back to
-    // updating via the service-role edge function pattern. Here we call the
-    // Supabase Auth Admin API through a custom RPC that the DB exposes.
     const { error } = await (supabase.rpc as any)('admin_set_user_password', {
       _user_id: userId,
       _new_password: password,
     });
     setBusy(false);
     if (error) {
-      // Fallback message if the RPC doesn't exist yet
-      toast.error(error.message.includes('function') || error.message.includes('exist')
-        ? 'Password change RPC not deployed yet. Ask your DB admin to run admin_set_user_password migration.'
-        : error.message);
+      const isNotDeployed = error.message.includes('function') || error.message.includes('does not exist') || error.code === 'PGRST202';
+      if (isNotDeployed) { setNeedsSetup(true); return; }
+      toast.error(error.message);
       return;
     }
     toast.success(`Password updated for ${userName}`);
@@ -330,58 +367,87 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-accent" />
             Change password
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-1 text-sm text-muted-foreground pb-1">
-          Setting a new password for <span className="font-medium text-foreground">{userName}</span>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <Label>New password</Label>
+
+        {needsSetup ? (
+          /* ── One-time setup required ── */
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-semibold">One-time database setup required</p>
+              <p>The <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">admin_set_user_password</code> function isn't deployed yet. Copy the SQL below and run it once in your <strong>Supabase SQL Editor</strong>, then try again.</p>
+            </div>
             <div className="relative">
-              <Input
-                type={showPass ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-                className="pr-10"
-                autoFocus
-              />
+              <pre className="rounded-lg border bg-muted text-[10.5px] font-mono p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
+                {SETUP_SQL}
+              </pre>
               <button
-                type="button"
-                onClick={() => setShowPass((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
+                onClick={handleCopy}
+                className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium border border-border/60 bg-background hover:bg-muted transition-colors"
               >
-                {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {copied ? '✓ Copied' : 'Copy'}
               </button>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              After running the SQL, close this dialog and try changing the password again.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>Close</Button>
+              <Button onClick={() => { setNeedsSetup(false); }}>Try again</Button>
+            </DialogFooter>
           </div>
-          <div>
-            <Label>Confirm new password</Label>
-            <div className="relative">
-              <Input
-                type={showPass ? 'text' : 'password'}
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Repeat password"
-                className="pr-10"
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              />
+        ) : (
+          /* ── Normal password form ── */
+          <>
+            <div className="text-sm text-muted-foreground">
+              Setting a new password for <span className="font-medium text-foreground">{userName}</span>
             </div>
-          </div>
-        </div>
-        <DialogFooter className="pt-2">
-          <Button variant="outline" onClick={handleClose} disabled={busy}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={busy || !password || !confirm}>
-            {busy ? 'Updating…' : 'Update password'}
-          </Button>
-        </DialogFooter>
+            <div className="space-y-3">
+              <div>
+                <Label>New password</Label>
+                <div className="relative">
+                  <Input
+                    type={showPass ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Min. 8 characters"
+                    className="pr-10"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <Label>Confirm new password</Label>
+                <Input
+                  type={showPass ? 'text' : 'password'}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Repeat password"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                />
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button variant="outline" onClick={handleClose} disabled={busy}>Cancel</Button>
+              <Button onClick={handleSubmit} disabled={busy || !password || !confirm}>
+                {busy ? 'Updating…' : 'Update password'}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
