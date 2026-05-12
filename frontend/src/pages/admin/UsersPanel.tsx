@@ -508,12 +508,11 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             invalidateKeys={[['admin-users'], ['staff']]}
             trigger={
               <button
-                className="h-7 flex items-center justify-center gap-1.5 px-2 rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                 title="Edit plants"
                 aria-label="Edit plants"
               >
-                <Building2 className="w-3 h-3 shrink-0" />
-                <span className="text-[10px] font-medium">Edit plants</span>
+                <Building2 className="w-3 h-3" />
               </button>
             }
           />
@@ -683,12 +682,11 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               invalidateKeys={[['admin-users'], ['staff']]}
               trigger={
                 <button
-                  className="h-7 flex items-center justify-center gap-1.5 px-2 rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                  className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
                   title="Edit plants"
                   aria-label="Edit plants"
                 >
-                  <Building2 className="w-3 h-3 shrink-0" />
-                  <span className="text-[10px] font-medium">Edit plants</span>
+                  <Building2 className="w-3 h-3" />
                 </button>
               }
             />
