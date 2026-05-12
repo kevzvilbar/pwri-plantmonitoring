@@ -1605,6 +1605,7 @@ function PretreatmentAndROLog() {
                   <SelectItem value="Pump Failure">Pump Failure</SelectItem>
                   <SelectItem value="Feedwater Quality Issue">Feedwater Quality Issue</SelectItem>
                   <SelectItem value="Operator Shutdown">Operator Shutdown</SelectItem>
+                  <SelectItem value="Peak/Off-Peak Program">Peak/Off-Peak Program</SelectItem>
                   <SelectItem value="Other">Other (specify below)</SelectItem>
                 </SelectContent>
               </Select>
@@ -2331,10 +2332,10 @@ function PretreatmentAndROLog() {
             <Label className="text-[11px] text-muted-foreground">Remarks</Label>
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any observations..." />
           </Card>
-
-          <Button onClick={submit} className="w-full h-12 text-base">Save Pre-Treatment & RO Reading</Button>
           </>
           )}
+
+          <Button onClick={submit} className="w-full h-12 text-base">Save Pre-Treatment & RO Reading</Button>
         </>
       )}
 
