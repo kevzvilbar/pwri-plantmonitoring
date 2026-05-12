@@ -235,7 +235,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
     if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth`,
+      redirectTo: window.location.origin, // matches Supabase Site URL — no /auth needed
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
@@ -679,15 +679,7 @@ function SignUpForm() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Auth() {
-  const { user, loading } = useAuth();
-  const [isRecovery, setIsRecovery] = useState(false);
-
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setIsRecovery(true);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
+  const { user, loading, isRecovery } = useAuth();
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
   if (user && !isRecovery) return <Navigate to="/" replace />;
