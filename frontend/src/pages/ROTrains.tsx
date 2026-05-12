@@ -4248,16 +4248,24 @@ function DosingHistoryLog() {
   };
 
   // ── Aggregate totals strip ─────────────────────────────────────────────────
+  // `calculated_cost` on old records is 0 (saved before prices were configured).
+  // Fall back to live qty × price computation whenever the stored value is zero.
   const totals = useMemo(() => {
     if (!logs?.length) return null;
-    return logs.reduce((acc: any, r: any) => ({
-      chlorine_kg:   acc.chlorine_kg   + (+r.chlorine_kg   || 0),
-      smbs_kg:       acc.smbs_kg       + (+r.smbs_kg       || 0),
-      anti_scalant_l:acc.anti_scalant_l+ (+r.anti_scalant_l|| 0),
-      soda_ash_kg:   acc.soda_ash_kg   + (+r.soda_ash_kg   || 0),
-      cost:          acc.cost          + (+r.calculated_cost|| 0),
-    }), { chlorine_kg: 0, smbs_kg: 0, anti_scalant_l: 0, soda_ash_kg: 0, cost: 0 });
-  }, [logs]);
+    return logs.reduce((acc: any, r: any) => {
+      const storedCost = +r.calculated_cost || 0;
+      const liveCost   = DOSING_KEYS.reduce(
+        (s, c) => s + (+r[c.key] || 0) * (prices?.[c.name] ?? 0), 0,
+      );
+      return {
+        chlorine_kg:    acc.chlorine_kg    + (+r.chlorine_kg    || 0),
+        smbs_kg:        acc.smbs_kg        + (+r.smbs_kg        || 0),
+        anti_scalant_l: acc.anti_scalant_l + (+r.anti_scalant_l || 0),
+        soda_ash_kg:    acc.soda_ash_kg    + (+r.soda_ash_kg    || 0),
+        cost:           acc.cost           + (storedCost > 0 ? storedCost : liveCost),
+      };
+    }, { chlorine_kg: 0, smbs_kg: 0, anti_scalant_l: 0, soda_ash_kg: 0, cost: 0 });
+  }, [logs, prices]);
 
   const FIELD_LABELS: { key: string; label: string; unit: string }[] = [
     { key: 'chlorine_kg',               label: 'Chlorine',    unit: 'kg' },
@@ -4410,7 +4418,7 @@ function DosingHistoryLog() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!isEditing && (
                       <span className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded px-1.5 py-0.5">
-                        ₱ {fmtNum(row.calculated_cost ?? rowCost, 2)}
+                        ₱ {fmtNum(+row.calculated_cost > 0 ? row.calculated_cost : rowCost, 2)}
                       </span>
                     )}
 
