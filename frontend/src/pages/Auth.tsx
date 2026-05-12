@@ -226,7 +226,7 @@ function SignInForm() {
 
 // ─── OTP digit boxes ──────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const LENGTH = 6;
+  const LENGTH = 8;
   const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
   const digits = value.padEnd(LENGTH, ' ').split('').slice(0, LENGTH);
 
@@ -310,7 +310,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
 
   // ── Step 2: verify OTP ──
   const handleVerifyCode = async () => {
-    if (code.replace(/\s/g, '').length < 6) { toast.error('Enter the full 6-digit code'); return; }
+    if (code.replace(/\s/g, '').length < 8) { toast.error('Enter the full 8-digit code'); return; }
     setBusy(true);
     const { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
@@ -359,7 +359,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
           <KeyRound className="h-5 w-5 text-muted-foreground" />
         </div>
         <p className="font-semibold text-sm">Forgot your password?</p>
-        <p className="text-xs text-muted-foreground mt-0.5">We'll send a 6-digit code to your email.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">We'll send an 8-digit code to your email.</p>
       </div>
       <StepDots />
       <div>
@@ -391,14 +391,14 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
         </div>
         <p className="font-semibold text-sm">Enter the code</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          A 6-digit code was sent to <strong>{email}</strong>
+          An 8-digit code was sent to <strong>{email}</strong>
         </p>
       </div>
       <StepDots />
       <OtpInput value={code} onChange={setCode} />
       <Button
         onClick={handleVerifyCode}
-        disabled={busy || code.replace(/\s/g, '').length < 6}
+        disabled={busy || code.replace(/\s/g, '').length < 8}
         className="w-full"
       >
         {busy ? 'Verifying…' : 'Verify code'}
