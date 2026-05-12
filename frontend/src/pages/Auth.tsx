@@ -95,7 +95,6 @@ function SignInForm() {
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
       setBusy(false);
-      // Provide a clearer message for the most common error
       const msg = error.message.toLowerCase().includes('invalid login credentials')
         ? 'Incorrect email or password. Please check your credentials and try again.'
         : error.message;
@@ -315,7 +314,6 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const [password, setPass]   = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy]       = useState(false);
-  const [showPass, setShowPass] = useState(false);
 
   // ── Step 1: send OTP ──
   const handleSendCode = async () => {
@@ -450,34 +448,23 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
       <StepDots />
       <div>
         <Label>New password</Label>
-        <div className="relative">
-          <Input
-            type={showPass ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPass(e.target.value)}
-            placeholder="Min 8 characters"
-            autoFocus
-            className="pr-10"
-          />
-          <button type="button" onClick={() => setShowPass((v) => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            tabIndex={-1}>
-            {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPass(e.target.value)}
+          placeholder="Min 8 characters"
+          autoFocus
+        />
       </div>
       <div>
         <Label>Confirm new password</Label>
-        <div className="relative">
-          <Input
-            type={showPass ? 'text' : 'password'}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Repeat new password"
-            onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
-            className="pr-10"
-          />
-        </div>
+        <Input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Repeat new password"
+          onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
+        />
       </div>
       <Button onClick={handleUpdatePassword} disabled={busy} className="w-full">
         {busy ? 'Updating…' : 'Update password'}
@@ -889,10 +876,9 @@ export default function Auth() {
               alt="PWRI Logo"
               className="h-16 w-16 rounded-2xl object-cover shadow-elev"
               onError={(e) => {
-                const el = e.currentTarget;
-                el.style.display = 'none';
-                const fallback = el.nextElementSibling as HTMLElement | null;
-                if (fallback) fallback.style.display = 'flex';
+                e.currentTarget.style.display = 'none';
+                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                if (fb) fb.style.display = 'flex';
               }}
             />
             <div
