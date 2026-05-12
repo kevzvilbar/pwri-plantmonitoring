@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Droplets, ChevronLeft, ChevronRight, Users, User, KeyRound, MailCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, User, KeyRound, MailCheck } from 'lucide-react';
 import {
   DesignationCombobox,
   OPERATOR_DESIGNATION,
@@ -849,8 +849,8 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-stat p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-accent shadow-elev mb-3">
-            <Droplets className="h-7 w-7 text-accent-foreground" />
+          <div className="inline-flex items-center justify-center mb-3">
+            <img src="/og-image.png" alt="PWRI Logo" className="h-16 w-16 rounded-2xl object-cover shadow-elev" />
           </div>
           <h1 className="text-2xl font-bold text-topbar-foreground tracking-tight">PWRI Monitoring</h1>
           <p className="text-sm text-topbar-muted">Multi-plant water operations</p>
