@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Droplets, ChevronLeft, ChevronRight, Users, User } from 'lucide-react';
+import { Droplets, ChevronLeft, ChevronRight, Users, User, KeyRound, MailCheck } from 'lucide-react';
 import {
   DesignationCombobox,
   OPERATOR_DESIGNATION,
@@ -73,6 +73,7 @@ function SignInForm() {
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [view, setView] = useState<'signin' | 'forgot'>('signin');
   // Operator picklist state
   const [pickList, setPickList] = useState<PickEntry[]>([]);
   const [signedInPlantId, setSignedInPlantId] = useState<string | null>(null);
@@ -161,6 +162,8 @@ function SignInForm() {
     navigate('/');
   };
 
+  if (view === 'forgot') return <ForgotPasswordForm onBack={() => setView('signin')} />;
+
   if (pickList.length > 0) {
     return (
       <div className="space-y-3">
@@ -204,11 +207,141 @@ function SignInForm() {
       <div>
         <Label>Password</Label>
         <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div className="flex justify-end mt-1">
+          <button
+            type="button"
+            onClick={() => setView('forgot')}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            Forgot password?
+          </button>
+        </div>
       </div>
       <Button type="submit" disabled={busy} className="w-full">
         {busy ? 'Signing in…' : 'Sign in'}
       </Button>
     </form>
+  );
+}
+
+// ─── Forgot Password ──────────────────────────────────────────────────────────
+function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const handleReset = async () => {
+    const ve = emailSchema.safeParse(email);
+    if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    setSent(true);
+  };
+
+  if (sent) {
+    return (
+      <div className="space-y-4 text-center py-2">
+        <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-accent/10 mx-auto">
+          <MailCheck className="h-6 w-6 text-accent" />
+        </div>
+        <div>
+          <p className="font-semibold text-sm">Check your email</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            A reset link was sent to <strong>{email}</strong>. Follow the instructions in the email to set a new password.
+          </p>
+        </div>
+        <Button variant="outline" className="w-full" onClick={onBack}>
+          <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back to sign in
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="text-center mb-1">
+        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-muted mx-auto mb-2">
+          <KeyRound className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <p className="font-semibold text-sm">Forgot your password?</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Enter your email and we'll send you a reset link.</p>
+      </div>
+      <div>
+        <Label>Email</Label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          onKeyDown={(e) => e.key === 'Enter' && handleReset()}
+        />
+      </div>
+      <Button onClick={handleReset} disabled={busy} className="w-full">
+        {busy ? 'Sending…' : 'Send reset link'}
+      </Button>
+      <Button variant="ghost" size="sm" className="w-full" onClick={onBack}>
+        <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back to sign in
+      </Button>
+    </div>
+  );
+}
+
+// ─── Reset Password (recovery session) ───────────────────────────────────────
+function ResetPasswordForm() {
+  const navigate = useNavigate();
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleUpdate = async () => {
+    const vp = passSchema.safeParse(password);
+    if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
+    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Password updated! Please sign in with your new password.');
+    await supabase.auth.signOut();
+    navigate('/auth', { replace: true });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="text-center mb-1">
+        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-accent/10 mx-auto mb-2">
+          <KeyRound className="h-5 w-5 text-accent" />
+        </div>
+        <p className="font-semibold text-sm">Set a new password</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Choose a strong password for your account.</p>
+      </div>
+      <div>
+        <Label>New password</Label>
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Min 8 characters"
+        />
+      </div>
+      <div>
+        <Label>Confirm new password</Label>
+        <Input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Repeat new password"
+          onKeyDown={(e) => e.key === 'Enter' && handleUpdate()}
+        />
+      </div>
+      <Button onClick={handleUpdate} disabled={busy} className="w-full">
+        {busy ? 'Updating…' : 'Update password'}
+      </Button>
+    </div>
   );
 }
 
@@ -547,8 +680,17 @@ function SignUpForm() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Auth() {
   const { user, loading } = useAuth();
+  const [isRecovery, setIsRecovery] = useState(false);
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setIsRecovery(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
-  if (user)    return <Navigate to="/" replace />;
+  if (user && !isRecovery) return <Navigate to="/" replace />;
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-stat p-4">
       <div className="w-full max-w-md">
@@ -560,14 +702,18 @@ export default function Auth() {
           <p className="text-sm text-topbar-muted">Multi-plant water operations</p>
         </div>
         <div className="bg-card rounded-2xl shadow-modal p-5">
-          <Tabs defaultValue="signin">
-            <TabsList className="grid grid-cols-2 w-full mb-4">
-              <TabsTrigger value="signin">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
-            </TabsList>
-            <TabsContent value="signin"><SignInForm /></TabsContent>
-            <TabsContent value="signup"><SignUpForm /></TabsContent>
-          </Tabs>
+          {isRecovery ? (
+            <ResetPasswordForm />
+          ) : (
+            <Tabs defaultValue="signin">
+              <TabsList className="grid grid-cols-2 w-full mb-4">
+                <TabsTrigger value="signin">Sign in</TabsTrigger>
+                <TabsTrigger value="signup">Sign up</TabsTrigger>
+              </TabsList>
+              <TabsContent value="signin"><SignInForm /></TabsContent>
+              <TabsContent value="signup"><SignUpForm /></TabsContent>
+            </Tabs>
+          )}
         </div>
       </div>
     </div>
