@@ -22,7 +22,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import {
   Search, Hourglass, UserPlus, Zap, Building2, MoreVertical,
-  ShieldCheck, ChevronLeft, ChevronRight,
+  ShieldCheck, ChevronLeft, ChevronRight, KeyRound, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -287,6 +287,104 @@ interface SharedTileProps {
   updateDesignation: (uid: string, designation: string) => Promise<void>;
   approveUser: (uid: string, label: string) => Promise<void>;
   invalidate: () => void;
+  onChangePassword: (userId: string, userName: string) => void;
+}
+
+// ── Change Password Dialog ────────────────────────────────────────────────────
+
+function ChangePasswordDialog({ open, onClose, userId, userName }: {
+  open: boolean; onClose: () => void; userId: string; userName: string;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm]   = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [busy, setBusy]         = useState(false);
+
+  const handleClose = () => {
+    setPassword(''); setConfirm(''); setShowPass(false); setBusy(false);
+    onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+    if (password !== confirm)  { toast.error('Passwords do not match'); return; }
+    setBusy(true);
+    // Use the admin_set_user_password RPC if available, otherwise fall back to
+    // updating via the service-role edge function pattern. Here we call the
+    // Supabase Auth Admin API through a custom RPC that the DB exposes.
+    const { error } = await (supabase.rpc as any)('admin_set_user_password', {
+      _user_id: userId,
+      _new_password: password,
+    });
+    setBusy(false);
+    if (error) {
+      // Fallback message if the RPC doesn't exist yet
+      toast.error(error.message.includes('function') || error.message.includes('exist')
+        ? 'Password change RPC not deployed yet. Ask your DB admin to run admin_set_user_password migration.'
+        : error.message);
+      return;
+    }
+    toast.success(`Password updated for ${userName}`);
+    handleClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-accent" />
+            Change password
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-1 text-sm text-muted-foreground pb-1">
+          Setting a new password for <span className="font-medium text-foreground">{userName}</span>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <Label>New password</Label>
+            <div className="relative">
+              <Input
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Min. 8 characters"
+                className="pr-10"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                tabIndex={-1}
+              >
+                {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label>Confirm new password</Label>
+            <div className="relative">
+              <Input
+                type={showPass ? 'text' : 'password'}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Repeat password"
+                className="pr-10"
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="pt-2">
+          <Button variant="outline" onClick={handleClose} disabled={busy}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={busy || !password || !confirm}>
+            {busy ? 'Updating…' : 'Update password'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── User card (Admin / Manager / Supervisor) ──────────────────────────────────
@@ -389,6 +487,16 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             onClick={() => setExpanded((v) => !v)}
           >
             <ShieldCheck className="w-3 h-3" />
+          </button>
+
+          {/* Change password */}
+          <button
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 transition-colors shrink-0"
+            title="Change password"
+            aria-label="Change password"
+            onClick={() => shared.onChangePassword(s.id, label)}
+          >
+            <KeyRound className="w-3 h-3" />
           </button>
 
           {/* Edit plants */}
@@ -556,6 +664,16 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               <ShieldCheck className="w-3 h-3" />
             </button>
 
+            {/* Change password */}
+            <button
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 transition-colors shrink-0"
+              title="Change password"
+              aria-label="Change password"
+              onClick={() => shared.onChangePassword(s.id, label)}
+            >
+              <KeyRound className="w-3 h-3" />
+            </button>
+
             {/* Edit plants */}
             <PlantAssignmentEditor
               userId={s.id}
@@ -714,6 +832,7 @@ export function UsersPanel() {
   const [query, setQuery] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [changePw, setChangePw] = useState<{ userId: string; userName: string } | null>(null);
 
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
@@ -800,6 +919,7 @@ export function UsersPanel() {
     updateDesignation,
     approveUser,
     invalidate,
+    onChangePassword: (userId, userName) => setChangePw({ userId, userName }),
   };
 
   const activeCardGroups  = [...CARD_ROLES,  'No role' as const].filter((r) => grouped[r]?.length > 0);
@@ -876,6 +996,14 @@ export function UsersPanel() {
       )}
 
       <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={invalidate} />
+      {changePw && (
+        <ChangePasswordDialog
+          open={!!changePw}
+          onClose={() => setChangePw(null)}
+          userId={changePw.userId}
+          userName={changePw.userName}
+        />
+      )}
     </div>
   );
 }
