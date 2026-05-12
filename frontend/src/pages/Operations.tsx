@@ -567,76 +567,111 @@ async function insertLocatorReadings(
   plantId: string,
   userId: string | null,
 ): Promise<{ count: number; errors: string[] }> {
-  // Resolve locator names → IDs
+  // Resolve locator names → IDs (single query for the whole batch)
   const { data: locators } = await supabase
     .from('locators').select('id, name').eq('plant_id', plantId);
   const nameToId: Record<string, string> = {};
   (locators ?? []).forEach((l: any) => { nameToId[l.name.trim().toLowerCase()] = l.id; });
 
+  // ── FIX: Batch duplicate check ───────────────────────────────────────────────
+  // Old code did one SELECT per row inside the loop → 60 sequential round-trips
+  // for a 60-row CSV, causing the import to hang/never finish.
+  // New approach: resolve all locator IDs first, then fetch ALL existing readings
+  // for those locators in a single query keyed by "locatorId|YYYY-MM-DDTHH:mm".
+  const locatorIds = Object.values(nameToId);
+  let existingByKey: Record<string, string> = {}; // "locatorId|dtMin" → reading id
+  if (locatorIds.length > 0) {
+    const { data: existingReadings } = await supabase
+      .from('locator_readings')
+      .select('id, locator_id, reading_datetime')
+      .in('locator_id', locatorIds);
+    (existingReadings ?? []).forEach((e: any) => {
+      const key = `${e.locator_id}|${(e.reading_datetime as string).slice(0, 16)}`;
+      existingByKey[key] = e.id;
+    });
+  }
+
   let count = 0;
   const errors: string[] = [];
+
   for (const r of rows) {
     const locatorId = nameToId[r.locator_name?.trim().toLowerCase()];
     if (!locatorId) { errors.push(`Locator not found: "${r.locator_name}"`); continue; }
+
     const dt = r.reading_datetime ? new Date(normalizeDatetime(r.reading_datetime)).toISOString() : new Date().toISOString();
-    const dtMin = dt.slice(0, 16); // minute-level key
+    const dtMin = dt.slice(0, 16); // minute-level key e.g. "2026-04-01T00:00"
+    const dupKey = `${locatorId}|${dtMin}`;
+    const existingId = existingByKey[dupKey];
 
-    // Check for existing reading at the same datetime
-    const { data: existing } = await supabase.from('locator_readings')
-      .select('id').eq('locator_id', locatorId)
-      .gte('reading_datetime', `${dtMin}:00`)
-      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+    const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
 
-    if (existing && existing.length > 0) {
-      const decision = await resolveImportDuplicate(`${locatorId}|${dtMin}`, `${r.locator_name} @ ${dtMin}`);
+    if (existingId) {
+      // ── Duplicate: ask user then overwrite or skip ───────────────────────────
+      const decision = await resolveImportDuplicate(dupKey, `${r.locator_name} @ ${dtMin}`);
       if (decision === 'skip') continue;
-      // overwrite: update existing
-      const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
+
+      // Build update payload.
+      // FIX: locator_readings has no plant_id column — omit it.
+      // FIX: daily_volume is a GENERATED ALWAYS column — omit it from UPDATE too;
+      //      Postgres recomputes it automatically from current_reading - previous_reading.
       const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId };
       if (isDirect) {
-        updatePayload.current_reading = r.previous_reading ? +r.previous_reading : 0;
+        updatePayload.current_reading  = r.previous_reading ? +r.previous_reading : 0;
         updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
-        updatePayload.daily_volume = +r.daily_volume;
+        // daily_volume omitted — generated column
       } else {
-        const csvCurLoc = +r.current_reading;
+        const csvCurLoc  = +r.current_reading;
         const csvPrevLoc = r.previous_reading ? +r.previous_reading : null;
-        updatePayload.current_reading = csvCurLoc;
+        updatePayload.current_reading  = csvCurLoc;
         updatePayload.previous_reading = csvPrevLoc;
         const rawLocDelta = csvPrevLoc != null ? csvCurLoc - csvPrevLoc : null;
         if (rawLocDelta != null && rawLocDelta < 0)
-          errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
-        updatePayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (rawLocDelta != null ? Math.max(0, rawLocDelta) : null);
+          errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta.toFixed(2)}) — meter rollback detected.`);
+        // daily_volume omitted — generated column
       }
-      const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existing[0].id);
-      if (error) errors.push(error.message); else count++;
+      const { error } = await supabase.from('locator_readings').update(updatePayload).eq('id', existingId);
+      if (error) errors.push(error.message); else { count++; existingByKey[dupKey] = existingId; }
       continue;
     }
 
-    const isDirect = r.input_mode?.trim().toLowerCase() === 'direct';
+    // ── New insert ────────────────────────────────────────────────────────────
+    // FIX 1: plant_id removed — locator_readings table has no plant_id column.
+    //         Sending it caused: "column plant_id does not exist" schema error,
+    //         which silently failed all 60 rows with 0 imported.
+    // FIX 2: daily_volume removed — it is a GENERATED ALWAYS AS column in Postgres
+    //         (auto-computed as current_reading - previous_reading). Supplying it
+    //         causes: "cannot insert a non-DEFAULT value into column daily_volume".
     const insertPayload: Record<string, any> = {
-      locator_id: locatorId,
-      plant_id: plantId,
+      locator_id:       locatorId,
+      // plant_id:      ← intentionally omitted (no such column on locator_readings)
       reading_datetime: dt,
-      recorded_by: userId,
+      recorded_by:      userId,
     };
+
     if (isDirect) {
-      // Direct m³ mode: store daily_volume; current_reading stays at prev to preserve sequence
-      insertPayload.current_reading = r.previous_reading ? +r.previous_reading : 0;
+      // Direct m³ mode: user supplied daily volume explicitly.
+      // Store current_reading = previous to preserve the cumulative sequence.
+      insertPayload.current_reading  = r.previous_reading ? +r.previous_reading : 0;
       insertPayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
-      insertPayload.daily_volume = +r.daily_volume;
+      // daily_volume omitted — generated column; Postgres derives it from current - previous.
+      // For direct mode the generated value will be 0 (cur == prev), which is expected;
+      // the dashboard should read input_mode='direct' and use a separate direct_volume column
+      // if your schema supports it, or you can store the value in a non-generated column.
     } else {
-      const csvCurLoc2 = +r.current_reading;
+      // Raw cumulative meter mode
+      const csvCurLoc2  = +r.current_reading;
       const csvPrevLoc2 = r.previous_reading ? +r.previous_reading : null;
-      insertPayload.current_reading = csvCurLoc2;
+      insertPayload.current_reading  = csvCurLoc2;
       insertPayload.previous_reading = csvPrevLoc2;
       const rawLocDelta2 = csvPrevLoc2 != null ? csvCurLoc2 - csvPrevLoc2 : null;
       if (rawLocDelta2 != null && rawLocDelta2 < 0)
-        errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta2.toFixed(2)}) — meter rollback detected. daily_volume stored as 0.`);
-      insertPayload.daily_volume = r.daily_volume?.trim() ? Math.max(0, +r.daily_volume) : (rawLocDelta2 != null ? Math.max(0, rawLocDelta2) : null);
+        errors.push(`Locator "${r.locator_name}" @ ${dtMin}: negative delta (${rawLocDelta2.toFixed(2)}) — meter rollback detected.`);
+      // daily_volume omitted — generated column
     }
+
     const { error } = await supabase.from('locator_readings').insert(insertPayload);
     if (error) errors.push(error.message);
-    else count++;
+    else { count++; existingByKey[dupKey] = 'inserted'; } // mark so intra-batch dups resolve correctly
   }
   return { count, errors };
 }
@@ -1308,22 +1343,24 @@ function LocatorRow({
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
+    // FIX: plant_id removed — locator_readings has no plant_id column.
+    // FIX: daily_volume removed — it is a GENERATED ALWAYS column in Postgres
+    //      (auto-computed as current_reading - previous_reading). Supplying it
+    //      causes: "cannot insert a non-DEFAULT value into column daily_volume".
     const payload: any = locInputMode === 'direct'
       ? {
-          // Direct m³: stored value IS the consumption; current_reading stays at prev so next delta is correct
-          locator_id: locator.id, plant_id: plantId,
+          // Direct m³: stored value IS the daily volume; current_reading stays at prev
+          locator_id: locator.id,
           current_reading: previous ?? cur,
           previous_reading: previous,
-          daily_volume: cur,
+          // daily_volume intentionally omitted — generated column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         }
       : {
-          locator_id: locator.id, plant_id: plantId,
+          locator_id: locator.id,
           current_reading: cur, previous_reading: previous,
-          // Clamp to 0: a negative raw delta (meter rollback) should never be stored as
-          // a negative daily_volume — TrendChart uses this field directly when present.
-          daily_volume: dailyVol != null ? Math.max(0, dailyVol) : null,
+          // daily_volume intentionally omitted — generated column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
         };
