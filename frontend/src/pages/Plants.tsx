@@ -625,6 +625,326 @@ async function logProductMeterAudit(entry: {
   } catch { /* silently ignore */ }
 }
 
+// ── Assign Locators Dialog ────────────────────────────────────────────────────
+// Lets managers pick which locators a product meter supplies.
+// Stores the link as `product_meter_id` on the locators row (nullable FK).
+// All DB writes are best-effort: silently falls back if the column doesn't exist yet.
+
+function AssignLocatorsDialog({
+  meter, plantId, onClose, onSaved,
+}: {
+  meter: any;
+  plantId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { data: locators, isLoading } = useQuery({
+    queryKey: ['locators', plantId],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plantId).order('name');
+      return (data ?? []) as any[];
+    },
+  });
+
+  // Pre-select locators currently assigned to this meter
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!locators) return;
+    setSelected(new Set(locators.filter((l: any) => l.product_meter_id === meter.id).map((l: any) => l.id)));
+  }, [locators, meter.id]);
+
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const save = async () => {
+    if (!locators) return;
+    setBusy(true);
+    const toAssign   = locators.filter((l: any) => selected.has(l.id) && l.product_meter_id !== meter.id);
+    const toUnassign = locators.filter((l: any) => !selected.has(l.id) && l.product_meter_id === meter.id);
+
+    try {
+      // Assign selected locators to this meter
+      if (toAssign.length) {
+        const { error } = await supabase
+          .from('locators')
+          .update({ product_meter_id: meter.id } as any)
+          .in('id', toAssign.map((l: any) => l.id));
+        if (error && !error.message.includes('column')) throw error;
+      }
+      // Clear product_meter_id from deselected locators previously linked here
+      if (toUnassign.length) {
+        const { error } = await supabase
+          .from('locators')
+          .update({ product_meter_id: null } as any)
+          .in('id', toUnassign.map((l: any) => l.id));
+        if (error && !error.message.includes('column')) throw error;
+      }
+      toast.success('Locator assignments saved');
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-teal-600" />
+            Assign Locators
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Select which locators are supplied by <span className="font-medium text-foreground">{meter.name ?? 'this meter'}</span>.
+        </p>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading locators…
+          </div>
+        ) : !locators?.length ? (
+          <p className="text-xs text-muted-foreground py-4 text-center">No locators in this plant yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {locators.map((l: any) => {
+              const checked = selected.has(l.id);
+              const takenByOther = l.product_meter_id && l.product_meter_id !== meter.id;
+              return (
+                <label
+                  key={l.id}
+                  className={`flex items-center gap-2.5 p-2 rounded-md border cursor-pointer transition-colors ${
+                    checked
+                      ? 'border-teal-300 bg-teal-50/60 dark:border-teal-700 dark:bg-teal-950/20'
+                      : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggle(l.id)}
+                    className="shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{l.name}</div>
+                    {takenByOther && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                        Currently assigned to another meter
+                      </div>
+                    )}
+                  </div>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={save} disabled={busy || isLoading}>
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save ({selected.size})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Add Product Meter Dialog ──────────────────────────────────────────────────
+// Mirrors the AddWellDialog / AddLocatorDialog pattern: name + meter specs +
+// GPS coordinates with "Use My Location". Extra columns are inserted best-effort
+// (graceful retry without them if the DB hasn't been migrated yet).
+
+function AddProductMeterDialog({
+  plantId, meterCount, userId, onClose, onCreated,
+}: {
+  plantId: string;
+  meterCount: number;
+  userId: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
+    gps_lat: '', gps_lng: '',
+  });
+  const [busy, setBusy]         = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  const field = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    setBusy(true);
+
+    // Build full payload with all optional columns
+    const fullPayload: any = {
+      plant_id: plantId,
+      name: form.name.trim(),
+      status: 'Active',
+      sort_order: meterCount,
+      meter_brand:          form.meter_brand          || null,
+      meter_size:           form.meter_size           || null,
+      meter_serial:         form.meter_serial         || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat:  form.gps_lat  ? +form.gps_lat  : null,
+      gps_lng:  form.gps_lng  ? +form.gps_lng  : null,
+    };
+
+    let { data, error } = await supabase
+      .from('product_meters' as any)
+      .insert(fullPayload)
+      .select('id')
+      .single();
+
+    // If extra columns don't exist yet, fall back to name-only insert
+    if (error && (error.message.includes('column') || error.message.includes('status') || error.message.includes('sort_order'))) {
+      ({ data, error } = await supabase
+        .from('product_meters' as any)
+        .insert({ plant_id: plantId, name: form.name.trim() } as any)
+        .select('id')
+        .single());
+    }
+
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: (data as any)?.id ?? '',
+      meter_name: form.name.trim(), old_value: null, new_value: form.name.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+
+    toast.success(`"${form.name.trim()}" added`);
+    onCreated();
+  };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl   = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Add Product Meter</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+
+          {/* Name */}
+          <div>
+            <Label>Name *</Label>
+            <Input
+              value={form.name}
+              onChange={field('name')}
+              placeholder="e.g. Main Line, Secondary Line…"
+              autoFocus
+              data-testid="product-meter-name-input"
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+            />
+          </div>
+
+          {/* Meter details */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-semibold inline-flex items-center gap-1">
+              <Gauge className="h-3 w-3" /> Meter Details
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Brand</Label>
+                <Input value={form.meter_brand} onChange={field('meter_brand')} />
+              </div>
+              <div>
+                <Label className="text-xs">Size</Label>
+                <div className="relative">
+                  <Input
+                    type="number" min="0" step="0.5"
+                    value={form.meter_size} onChange={field('meter_size')}
+                    className="pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Serial</Label>
+                <Input value={form.meter_serial} onChange={field('meter_serial')} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Installed Date</Label>
+              <Input type="date" value={form.meter_installed_date} onChange={field('meter_installed_date')} />
+            </div>
+          </div>
+
+          {/* GPS */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" /> View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use My Location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.295" value={form.gps_lat} onChange={field('gps_lat')} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.877" value={form.gps_lng} onChange={field('gps_lng')} />
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={submit} disabled={busy || !form.name.trim()} data-testid="save-product-meter-btn">
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProductMetersCard({ plant }: { plant: any }) {
   const qc = useQueryClient();
   const { isManager, isAdmin, user } = useAuth();
@@ -672,38 +992,19 @@ function ProductMetersCard({ plant }: { plant: any }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
 
-  // ── Add meter ─────────────────────────────────────────────────────────────
-  const [adding, setAdding]     = useState(false);
-  const [newName, setNewName]   = useState('');
-  const [addBusy, setAddBusy]   = useState(false);
-  const [selectedMeter, setSelectedMeter] = useState<string | null>(null);
+  // Locators for this plant — used to show which locators each meter supplies
+  const { data: plantLocators } = useQuery({
+    queryKey: ['locators', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as any[];
+    },
+  });
 
-  const addMeter = async () => {
-    if (!newName.trim()) { toast.error('Enter a meter name'); return; }
-    setAddBusy(true);
-    // Try insert with status; if column missing, retry without it
-    let { data, error } = await supabase
-      .from('product_meters' as any)
-      .insert({ plant_id: plant.id, name: newName.trim(), status: 'Active', sort_order: meters?.length ?? 0 } as any)
-      .select('id')
-      .single();
-    if (error?.message?.includes('status')) {
-      ({ data, error } = await supabase
-        .from('product_meters' as any)
-        .insert({ plant_id: plant.id, name: newName.trim(), sort_order: meters?.length ?? 0 } as any)
-        .select('id')
-        .single());
-    }
-    setAddBusy(false);
-    if (error) { toast.error(error.message); return; }
-    await logProductMeterAudit({
-      plant_id: plant.id, meter_id: (data as any)?.id ?? '',
-      meter_name: newName.trim(), old_value: null, new_value: newName.trim(),
-      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
-    });
-    toast.success(`"${newName.trim()}" added`);
-    setNewName(''); setAdding(false); invalidate();
-  };
+  // ── Add meter ─────────────────────────────────────────────────────────────
+  const [addOpen, setAddOpen]           = useState(false);
+  const [assignTarget, setAssignTarget] = useState<any>(null);
+  const [selectedMeter, setSelectedMeter] = useState<string | null>(null);
 
   // ── Delete meter (with reason dialog, matching Locator pattern) ───────────
   const [deleteTarget, setDeleteTarget]   = useState<any | null>(null);
@@ -760,7 +1061,7 @@ function ProductMetersCard({ plant }: { plant: any }) {
             <Button
               size="sm"
               className="h-7 px-2 text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
-              onClick={() => setAdding(true)}
+              onClick={() => setAddOpen(true)}
               data-testid="add-product-meter-btn"
             >
               <Plus className="h-3 w-3 mr-1" />Add
@@ -824,9 +1125,45 @@ function ProductMetersCard({ plant }: { plant: any }) {
                   <TrendingUp className={`h-3.5 w-3.5 transition-colors ${selectedMeter === m.id ? 'text-teal-600' : 'text-muted-foreground/40'}`} />
                 </div>
               </div>
+
+              {/* ── Supplied locators chips ── */}
+              {(() => {
+                const supplied = (plantLocators ?? []).filter((l: any) => l.product_meter_id === m.id);
+                if (!supplied.length) return (
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-muted-foreground/40" />
+                    <span className="text-[11px] text-muted-foreground/60 italic">No locators assigned</span>
+                  </div>
+                );
+                const visible  = supplied.slice(0, 3);
+                const overflow = supplied.length - 3;
+                return (
+                  <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                    <Droplet className="h-3 w-3 text-teal-500 shrink-0" />
+                    {visible.map((l: any) => (
+                      <span key={l.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                        {l.name}
+                      </span>
+                    ))}
+                    {overflow > 0 && (
+                      <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             {canEdit && (
               <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                {/* Assign locators */}
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-7 w-7 p-0 rounded-full text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                  title="Assign locators"
+                  onClick={() => setAssignTarget(m)}
+                  data-testid={`assign-locators-${m.id}`}
+                >
+                  <Droplet className="h-3.5 w-3.5" />
+                </Button>
                 <ProductMeterNameInline.EditTrigger meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
                 <Button
                   size="sm" variant="ghost"
@@ -855,30 +1192,28 @@ function ProductMetersCard({ plant }: { plant: any }) {
         </Card>
       )}
 
-      {/* ── Inline add form ── */}
-      {adding && (
-        <Card className="p-3">
-          <div className="flex items-center gap-2">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Main Line, Secondary Line…"
-              className="h-8 text-sm flex-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addMeter();
-                if (e.key === 'Escape') { setAdding(false); setNewName(''); }
-              }}
-              autoFocus
-              data-testid="product-meter-name-input"
-            />
-            <Button size="sm" onClick={addMeter} disabled={addBusy || !newName.trim()} data-testid="save-product-meter-btn">
-              {addBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewName(''); }}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </Card>
+      {/* ── Add meter dialog ── */}
+      {addOpen && (
+        <AddProductMeterDialog
+          plantId={plant.id}
+          meterCount={meters?.length ?? 0}
+          userId={user?.id ?? null}
+          onClose={() => setAddOpen(false)}
+          onCreated={() => { setAddOpen(false); invalidate(); }}
+        />
+      )}
+
+      {/* ── Assign locators dialog ── */}
+      {assignTarget && (
+        <AssignLocatorsDialog
+          meter={assignTarget}
+          plantId={plant.id}
+          onClose={() => setAssignTarget(null)}
+          onSaved={() => {
+            setAssignTarget(null);
+            qc.invalidateQueries({ queryKey: ['locators', plant.id] });
+          }}
+        />
       )}
 
       {/* ── Single delete confirm dialog ── */}
@@ -2567,6 +2902,18 @@ function LocatorsList({ plantId }: { plantId: string }) {
     },
   });
 
+  // Product meters for this plant — used to show "Fed by" on each locator row
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name')
+        .eq('plant_id', plantId)
+        .order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
   // Admin selection / bulk-delete state.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -2697,6 +3044,17 @@ function LocatorsList({ plantId }: { plantId: string }) {
                     <div className="text-xs text-muted-foreground truncate">
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
                     </div>
+                    {/* Fed by: product meter badge */}
+                    {(() => {
+                      const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
+                      if (!supplyMeter) return null;
+                      return (
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                          <Droplet className="h-2.5 w-2.5" />
+                          Fed by: {supplyMeter.name}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <button
                     type="button"
@@ -2822,8 +3180,19 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
     name: locator.name ?? '', address: locator.address ?? locator.location_desc ?? '',
     meter_brand: locator.meter_brand ?? '', meter_size: locator.meter_size ?? '', meter_serial: locator.meter_serial ?? '',
     meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
+    product_meter_id: locator.product_meter_id ?? '',
   });
   const [locating, setLocating] = useState(false);
+
+  // Product meters for "Supplied by" select
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', locator.plant_id],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name').eq('plant_id', locator.plant_id).order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
 
   const useMyLocation = async () => {
     setLocating(true);
@@ -2844,12 +3213,14 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
 
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
-    const { error } = await supabase.from('locators').update({
+    const payload: any = {
       name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
-    }).eq('id', locator.id);
+      product_meter_id: form.product_meter_id || null,
+    };
+    const { error } = await supabase.from('locators').update(payload).eq('id', locator.id);
     if (error) { toast.error(error.message); return; }
     // Audit status flip
     if (form.status && form.status !== locator.status) {
@@ -2889,6 +3260,26 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
             <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
           </div>
 
+          {/* Supplied by product meter */}
+          {(productMeters?.length ?? 0) > 0 && (
+            <div>
+              <Label>Supplied by (Product Meter)</Label>
+              <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {productMeters!.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* GPS row — editable inputs + clickable map link + use-my-location */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -2926,8 +3317,18 @@ function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => 
 }
 
 function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '' });
+  const [form, setForm] = useState({ name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '', product_meter_id: '' });
   const [locating, setLocating] = useState(false);
+
+  // Product meters for "Supplied by" select
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name').eq('plant_id', plantId).order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
 
   const useMyLocation = async () => {
     setLocating(true);
@@ -2950,12 +3351,14 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
 
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
-    const { error } = await supabase.from('locators').insert({
+    const payload: any = {
       plant_id: plantId, name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
-    });
+    };
+    if (form.product_meter_id) payload.product_meter_id = form.product_meter_id;
+    const { error } = await supabase.from('locators').insert(payload);
     if (error) { toast.error(error.message); return; }
     toast.success('Locator Added'); onClose();
   };
@@ -2981,6 +3384,27 @@ function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () =
             </div>
             <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
           </div>
+
+          {/* Supplied by product meter */}
+          {(productMeters?.length ?? 0) > 0 && (
+            <div>
+              <Label>Supplied by (Product Meter)</Label>
+              <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="None — select a product meter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {productMeters!.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* GPS row */}
           <div>
             <div className="flex items-center justify-between mb-1">
