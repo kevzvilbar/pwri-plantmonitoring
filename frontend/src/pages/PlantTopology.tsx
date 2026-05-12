@@ -1,6 +1,6 @@
 /**
- * PlantTopology.tsx  (revised)
- * ─────────────────────────────
+ * PlantTopology.tsx  (revised v2)
+ * ─────────────────────────────────
  * Visual wiring diagram for each plant showing:
  *
  *  WATER FLOW (left → right)
@@ -12,21 +12,16 @@
  *    Solar Array → Solar Meter(s) ─┐
  *    Grid Utility → Grid Meter(s)  ├──→ Well pumps · RO Train groups
  *
- * New in this revision
- * ────────────────────
- * • Bulk Meter nodes are first-class citizens with their own column,
- *   editable Permeate→Bulk and Bulk→Locator connections.
- * • Locator nodes show name + connection count badge.
- * • Expandable side-panel (slide-in drawer) with:
- *     – Live node inventory (counts per type)
- *     – "Add Box" forms: add ad-hoc Bulk Meter or Locator nodes to the
- *       current plant's topology (persisted to localStorage / Supabase).
- *     – Quick-edit: rename any custom node.
- * • Pan & zoom on the SVG canvas (mouse wheel + drag).
- * • Improved link rendering: animated flow on editable links when hovered.
- * • Column-lane background bands for clarity.
- * • Better status badges (pulse animation for active nodes).
- * • Editable pairs extended: Permeate↔Bulk, Bulk↔Locator.
+ * Changes in v2
+ * ──────────────
+ * • Ample spacing: larger NODE_W/NODE_H, bigger ROW_GAP, wider column gaps.
+ * • Both horizontal AND vertical scrollbars on the SVG canvas (overflow: auto).
+ * • RO Train nodes now show equipment breakdown: AFM/MMF × N, BP × N, HPP × N,
+ *   CF/Bag Housing × N — pulled directly from ro_trains DB data.
+ * • Node counts 1:1 mirror what is entered in Plants.tsx (locators, product
+ *   meters, wells) — no off-by-one, no hardcoding.
+ * • Solar source / solar meters fully shown in Power layer.
+ * • Column headers now reference correct lane labels including SOLAR / GRID.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -57,7 +52,9 @@ interface TopoNode {
   label: string;
   status?: string;
   group?: string;
-  /** true = added manually via "Add Box" (not from DB) */
+  /** Equipment detail line shown below label (e.g. "AFM×4 BP×3 HPP×1") */
+  detail?: string;
+  /** true = added manually via "Add Box" */
   custom?: boolean;
 }
 
@@ -75,30 +72,50 @@ interface TopologyState {
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
-const TOPO_LS_KEY  = (pid: string) => `plant_topology_links_${pid}`;
+const TOPO_LS_KEY   = (pid: string) => `plant_topology_links_${pid}`;
 const CUSTOM_LS_KEY = (pid: string) => `plant_topology_custom_${pid}`;
 
-const NODE_W  = 118;
-const NODE_H  = 48;
-const ROW_GAP = 64;
-const START_Y = 44;
+// ── Node dimensions (larger for readability) ──
+const NODE_W  = 148;
+const NODE_H  = 62;
+const ROW_GAP = 90;   // vertical gap between rows
+const START_Y = 52;
+const COL_GAP = 164;  // horizontal gap between column centers
 
-// Water column X positions
+// Water column X positions — well-spaced
 const WATER_COLS: Record<string, number> = {
-  well: 24, rawMeter: 162, pretreat: 296, feedMeter: 420,
-  roTrain: 544, permeate: 672, reject: 672,
-  bulk: 810, locator: 952,
+  well:      28,
+  rawMeter:  28  + COL_GAP,
+  pretreat:  28  + COL_GAP * 2,
+  feedMeter: 28  + COL_GAP * 3,
+  roTrain:   28  + COL_GAP * 4,
+  permeate:  28  + COL_GAP * 5,
+  reject:    28  + COL_GAP * 5,
+  bulk:      28  + COL_GAP * 6,
+  locator:   28  + COL_GAP * 7,
 };
+
 const POWER_COLS: Record<string, number> = {
-  solarSource: 24, gridSource: 24, solarMeter: 162, gridMeter: 162,
+  solarSource: 28,
+  gridSource:  28,
+  solarMeter:  28 + COL_GAP,
+  gridMeter:   28 + COL_GAP,
 };
 
 const NODE_LABELS: Record<NodeType, string> = {
-  well: 'WELL', rawMeter: 'RAW METER', pretreat: 'PRE-TREAT',
-  feedMeter: 'FEED METER', roTrain: 'RO TRAIN', permeate: 'PERMEATE',
-  reject: 'REJECT', bulk: 'BULK METER', locator: 'LOCATOR',
-  solarSource: 'SOLAR', gridSource: 'GRID',
-  solarMeter: 'SOLAR METER', gridMeter: 'GRID METER',
+  well:        'WELL',
+  rawMeter:    'RAW METER',
+  pretreat:    'PRE-TREAT',
+  feedMeter:   'FEED METER',
+  roTrain:     'RO TRAIN',
+  permeate:    'PERMEATE',
+  reject:      'REJECT',
+  bulk:        'BULK METER',
+  locator:     'LOCATOR',
+  solarSource: 'SOLAR',
+  gridSource:  'GRID',
+  solarMeter:  'SOLAR METER',
+  gridMeter:   'GRID METER',
 };
 
 const COLORS: Record<NodeType, { bg: string; border: string; text: string; accent: string; lane: string }> = {
@@ -108,7 +125,7 @@ const COLORS: Record<NodeType, { bg: string; border: string; text: string; accen
   feedMeter:   { bg: '#ccfbf1', border: '#0d9488', text: '#134e4a', accent: '#0d9488', lane: '#f0fdfa' },
   roTrain:     { bg: '#f3e8ff', border: '#7c3aed', text: '#4c1d95', accent: '#7c3aed', lane: '#faf5ff' },
   permeate:    { bg: '#cffafe', border: '#0891b2', text: '#164e63', accent: '#0891b2', lane: '#ecfeff' },
-  reject:      { bg: '#fee2e2', border: '#dc2626', text: '#7f1d1d', accent: '#dc2626', lane: '#ecfeff' },
+  reject:      { bg: '#fee2e2', border: '#dc2626', text: '#7f1d1d', accent: '#dc2626', lane: '#fef2f2' },
   bulk:        { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12', accent: '#ea580c', lane: '#fff7ed' },
   locator:     { bg: '#f1f5f9', border: '#475569', text: '#1e293b', accent: '#475569', lane: '#f8fafc' },
   solarSource: { bg: '#fefce8', border: '#ca8a04', text: '#713f12', accent: '#ca8a04', lane: '#fefce8' },
@@ -117,12 +134,11 @@ const COLORS: Record<NodeType, { bg: string; border: string; text: string; accen
   gridMeter:   { bg: '#e0e7ff', border: '#4f46e5', text: '#1e1b4b', accent: '#4f46e5', lane: '#e0e7ff' },
 };
 
-// Pairs that can be connected / disconnected
 const EDITABLE_PAIRS: [NodeType, NodeType][] = [
-  ['permeate', 'bulk'],
-  ['bulk',     'locator'],
-  ['well',     'roTrain'],
-  ['roTrain',  'well'],
+  ['permeate',   'bulk'],
+  ['bulk',       'locator'],
+  ['well',       'roTrain'],
+  ['roTrain',    'well'],
   ['solarMeter', 'well'],   ['solarMeter', 'roTrain'],
   ['gridMeter',  'well'],   ['gridMeter',  'roTrain'],
 ];
@@ -165,7 +181,11 @@ function useTopologyData(plantId: string | null) {
 
       const [wellsRes, roRes, locRes, prodRes, powerCfgRes, meterCfgRes] = await Promise.all([
         supabase.from('wells').select('id,name,status,has_power_meter').eq('plant_id', plantId).order('name'),
-        supabase.from('ro_trains').select('id,train_number,status,shared_power_meter_group').eq('plant_id', plantId).order('train_number'),
+        supabase.from('ro_trains').select(
+          'id,train_number,name,status,shared_power_meter_group,' +
+          'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
+          'filter_media_type,filter_housing_type'
+        ).eq('plant_id', plantId).order('train_number'),
         supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
         (supabase.from('product_meters' as any) as any).select('id,name,status').eq('plant_id', plantId).order('name'),
         (supabase.from('plant_power_config' as any) as any)
@@ -193,16 +213,32 @@ function useTopologyData(plantId: string | null) {
       }
 
       return {
-        wells:        (wellsRes.data ?? []) as any[],
-        roTrains:     (roRes.data    ?? []) as any[],
-        locators:     (locRes.data   ?? []) as any[],
-        productMeters:(prodRes.data  ?? []) as any[],
-        powerCfg:     powerCfgRes.data as any,
-        meterCfg:     meterCfgRes.data as any,
+        wells:         (wellsRes.data ?? []) as any[],
+        roTrains:      (roRes.data    ?? []) as any[],
+        locators:      (locRes.data   ?? []) as any[],
+        productMeters: (prodRes.data  ?? []) as any[],
+        powerCfg:      powerCfgRes.data as any,
+        meterCfg:      meterCfgRes.data as any,
         savedLinks,
       };
     },
   });
+}
+
+// ─── Build equipment detail string for RO train ──────────────────────────────
+
+function buildTrainDetail(t: any): string {
+  const mediaType  = (t.filter_media_type ?? 'AFM') as string;
+  const filterType = (t.filter_housing_type ?? 'Cartridge Filter') as string;
+  const filterLabel = filterType === 'Bag Filter' ? 'BF' : 'CF';
+
+  const parts: string[] = [];
+  if ((t.num_afm ?? 0) > 0)               parts.push(`${mediaType}×${t.num_afm}`);
+  if ((t.num_booster_pumps ?? 0) > 0)     parts.push(`BP×${t.num_booster_pumps}`);
+  if ((t.num_hp_pumps ?? 0) > 0)          parts.push(`HPP×${t.num_hp_pumps}`);
+  if ((t.num_cartridge_filters ?? 0) > 0) parts.push(`${filterLabel}×${t.num_cartridge_filters}`);
+  if ((t.num_controllers ?? 0) > 0)       parts.push(`Ctrl×${t.num_controllers}`);
+  return parts.join('  ');
 }
 
 // ─── Build topology ─────────────────────────────────────────────────────────────
@@ -217,18 +253,18 @@ function buildTopology(
 
   const { wells, roTrains, locators, productMeters, powerCfg, meterCfg, savedLinks } = data;
 
-  const hasSolar      = meterCfg?.has_solar ?? false;
-  const hasGrid       = meterCfg?.has_grid  ?? true;
-  const hasFeedMeter  = meterCfg?.ro_has_feed_meter     ?? true;
-  const hasPermeate   = meterCfg?.ro_has_permeate_meter ?? true;
-  const hasReject     = meterCfg?.ro_has_reject_meter   ?? true;
+  const hasSolar     = meterCfg?.has_solar ?? false;
+  const hasGrid      = meterCfg?.has_grid  ?? true;
+  const hasFeedMeter = meterCfg?.ro_has_feed_meter     ?? true;
+  const hasPermeate  = meterCfg?.ro_has_permeate_meter ?? true;
+  const hasReject    = meterCfg?.ro_has_reject_meter   ?? true;
 
-  const solarCount  = powerCfg?.solar_meter_count ?? 1;
-  const gridCount   = powerCfg?.grid_meter_count  ?? 1;
-  const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_, i) => `Solar Meter ${i + 1}`);
-  const gridNames:  string[] = powerCfg?.grid_meter_names  ?? Array.from({ length: gridCount  }, (_, i) => `Grid Meter ${i + 1}`);
+  const solarCount = powerCfg?.solar_meter_count ?? 1;
+  const gridCount  = powerCfg?.grid_meter_count  ?? 1;
+  const solarNames: string[] = powerCfg?.solar_meter_names ?? Array.from({ length: solarCount }, (_: any, i: number) => `Solar Meter ${i + 1}`);
+  const gridNames:  string[] = powerCfg?.grid_meter_names  ?? Array.from({ length: gridCount  }, (_: any, i: number) => `Grid Meter ${i + 1}`);
 
-  // Wells
+  // ── Wells ──
   wells.forEach((w: any) => {
     nodes.push({ id: w.id, type: 'well', label: w.name, status: w.status });
     const rmId = `rawmeter-${w.id}`;
@@ -236,25 +272,34 @@ function buildTopology(
     fixedLinks.push({ from: w.id, to: rmId });
   });
 
-  // Pre-treatment
+  // ── Pre-treatment (one shared node) ──
   const ptId = `pretreat-${plantId}`;
   nodes.push({ id: ptId, type: 'pretreat', label: 'Pre-treatment' });
   wells.forEach((w: any) => { fixedLinks.push({ from: `rawmeter-${w.id}`, to: ptId }); });
 
-  // Feed meter
+  // ── Feed meter ──
   const fmId = `feedmeter-${plantId}`;
   if (hasFeedMeter) {
     nodes.push({ id: fmId, type: 'feedMeter', label: 'Feed Meter' });
     fixedLinks.push({ from: ptId, to: fmId });
   }
 
-  // RO trains
+  // ── RO trains — with equipment detail ──
   roTrains.forEach((r: any) => {
-    nodes.push({ id: r.id, type: 'roTrain', label: `RO Train ${r.train_number}`, status: r.status, group: r.shared_power_meter_group ?? undefined });
+    const detail = buildTrainDetail(r);
+    const trainLabel = r.name ? `Train ${r.train_number} · ${r.name}` : `RO Train ${r.train_number}`;
+    nodes.push({
+      id: r.id,
+      type: 'roTrain',
+      label: trainLabel,
+      status: r.status,
+      group: r.shared_power_meter_group ?? undefined,
+      detail,
+    });
     fixedLinks.push({ from: hasFeedMeter ? fmId : ptId, to: r.id });
   });
 
-  // Permeate / Reject
+  // ── Permeate / Reject — one per train ──
   roTrains.forEach((r: any) => {
     if (hasPermeate) {
       const pmId = `permeate-${r.id}`;
@@ -268,43 +313,44 @@ function buildTopology(
     }
   });
 
-  // Bulk meters (from DB product_meters)
+  // ── Bulk meters (product_meters from DB — exactly as configured in Plants) ──
   productMeters.forEach((m: any) => {
     nodes.push({ id: m.id, type: 'bulk', label: m.name, status: m.status });
   });
 
-  // Locators (from DB)
+  // ── Locators (exactly as configured in Plants) ──
   locators.forEach((l: any) => {
     nodes.push({ id: l.id, type: 'locator', label: l.name, status: l.status ?? 'Active' });
   });
 
-  // Custom nodes added via the panel
+  // ── Custom nodes ──
   customNodes.forEach((n) => {
     if (!nodes.find((x) => x.id === n.id)) nodes.push(n);
   });
 
-  // Power sources
+  // ── Power — Solar ──
   const solarSrcId = `solar-src-${plantId}`;
-  const gridSrcId  = `grid-src-${plantId}`;
-
   if (hasSolar) {
     nodes.push({ id: solarSrcId, type: 'solarSource', label: 'Solar Array' });
-    solarNames.slice(0, solarCount).forEach((name, i) => {
+    solarNames.slice(0, solarCount).forEach((name: string, i: number) => {
       const smId = `solar-meter-${plantId}-${i}`;
       nodes.push({ id: smId, type: 'solarMeter', label: name });
       fixedLinks.push({ from: solarSrcId, to: smId });
     });
   }
+
+  // ── Power — Grid ──
+  const gridSrcId = `grid-src-${plantId}`;
   if (hasGrid) {
     nodes.push({ id: gridSrcId, type: 'gridSource', label: 'Grid Utility' });
-    gridNames.slice(0, gridCount).forEach((name, i) => {
+    gridNames.slice(0, gridCount).forEach((name: string, i: number) => {
       const gmId = `grid-meter-${plantId}-${i}`;
       nodes.push({ id: gmId, type: 'gridMeter', label: name });
       fixedLinks.push({ from: gridSrcId, to: gmId });
     });
   }
 
-  // Default editable links
+  // ── Default editable links ──
   const defaultEditLinks: TopoLink[] = [];
 
   locators.forEach((l: any) => {
@@ -346,10 +392,12 @@ function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zon
     (byType[t] ?? []).forEach((n, i) => {
       const x = WATER_COLS[t] ?? 0;
       let y = START_Y + i * ROW_GAP;
-      if (t === 'reject')
-        y = START_Y + ((byType['permeate']?.length ?? 0) + i) * ROW_GAP;
+      // Centre single pre-treat / feed meter vertically against the wells
       if (t === 'pretreat' || t === 'feedMeter')
         y = START_Y + Math.floor(((byType['well']?.length ?? 1) - 1) / 2) * ROW_GAP;
+      // Reject rows start below permeate rows
+      if (t === 'reject')
+        y = START_Y + ((byType['permeate']?.length ?? 0) + i) * ROW_GAP;
       positions.set(n.id, { x, y, zone: 'water' });
     });
   });
@@ -361,8 +409,9 @@ function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zon
     byType['bulk']?.length ?? 0,
     byType['locator']?.length ?? 0,
   );
-  const POWER_OFFSET_Y = START_Y + waterRows * ROW_GAP + 56;
+  const POWER_OFFSET_Y = START_Y + waterRows * ROW_GAP + 80;
 
+  // Solar source + meters
   let solarRow = 0, gridRow = 0;
   (byType['solarSource'] ?? []).forEach((n) => {
     positions.set(n.id, { x: POWER_COLS.solarSource, y: POWER_OFFSET_Y + solarRow++ * ROW_GAP, zone: 'power' });
@@ -370,7 +419,9 @@ function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zon
   (byType['solarMeter'] ?? []).forEach((n, i) => {
     positions.set(n.id, { x: POWER_COLS.solarMeter, y: POWER_OFFSET_Y + i * ROW_GAP, zone: 'power' });
   });
-  const gridStart = byType['solarMeter']?.length ?? 0;
+
+  // Grid source + meters (start below solar rows)
+  const gridStart = Math.max(byType['solarMeter']?.length ?? 0, byType['solarSource']?.length ?? 0);
   (byType['gridSource'] ?? []).forEach((n) => {
     positions.set(n.id, { x: POWER_COLS.gridSource, y: POWER_OFFSET_Y + (gridStart + gridRow++) * ROW_GAP, zone: 'power' });
   });
@@ -378,8 +429,9 @@ function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zon
     positions.set(n.id, { x: POWER_COLS.gridMeter, y: POWER_OFFSET_Y + (gridStart + i) * ROW_GAP, zone: 'power' });
   });
 
+  // Orphan custom nodes
   nodes.filter((n) => !positions.has(n.id)).forEach((n, i) => {
-    positions.set(n.id, { x: 360, y: POWER_OFFSET_Y + i * ROW_GAP, zone: 'power' });
+    positions.set(n.id, { x: WATER_COLS.locator + COL_GAP, y: START_Y + i * ROW_GAP, zone: 'water' });
   });
 
   return positions;
@@ -589,23 +641,22 @@ export default function PlantTopology() {
 
   const { data: rawData, isLoading, refetch } = useTopologyData(effectivePlantId);
 
-  const [editMode, setEditMode]     = useState<'connect' | 'disconnect' | null>(null);
+  const [editMode, setEditMode]       = useState<'connect' | 'disconnect' | null>(null);
   const [pendingFrom, setPendingFrom] = useState<{ id: string; type: NodeType } | null>(null);
-  const [hovered, setHovered]       = useState<string | null>(null);
+  const [hovered, setHovered]         = useState<string | null>(null);
   const [hoveredLink, setHoveredLink] = useState<number | null>(null);
-  const [showHelp, setShowHelp]     = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [panelOpen, setPanelOpen]   = useState(false);
-  const [topoState, setTopoState]   = useState<TopologyState | null>(null);
+  const [showHelp, setShowHelp]       = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [panelOpen, setPanelOpen]     = useState(false);
+  const [topoState, setTopoState]     = useState<TopologyState | null>(null);
   const [customNodes, setCustomNodes] = useState<TopoNode[]>([]);
 
   // Pan + zoom
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan]   = useState({ x: 0, y: 0 });
-  const isPanning       = useRef(false);
-  const lastPan         = useRef({ x: 0, y: 0 });
+  const [zoom, setZoom]   = useState(1);
+  const [pan, setPan]     = useState({ x: 0, y: 0 });
+  const isPanning         = useRef(false);
+  const lastPan           = useRef({ x: 0, y: 0 });
 
-  // Load custom nodes when plant changes
   useEffect(() => {
     if (!effectivePlantId) return;
     setCustomNodes(loadCustomNodes(effectivePlantId));
@@ -639,7 +690,6 @@ export default function PlantTopology() {
     const next = customNodes.filter((n) => n.id !== id);
     setCustomNodes(next);
     saveCustomNodes(effectivePlantId, next);
-    // Also remove any edit links involving this node
     if (topoState) {
       setTopoState({
         ...topoState,
@@ -705,7 +755,7 @@ export default function PlantTopology() {
   }
 
   function handleMouseDown(e: React.MouseEvent) {
-    if (e.button !== 1 && !(e.button === 0 && e.altKey)) return; // middle or alt+left
+    if (e.button !== 1 && !(e.button === 0 && e.altKey)) return;
     isPanning.current = true;
     lastPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
   }
@@ -716,8 +766,7 @@ export default function PlantTopology() {
   }
 
   function handleMouseUp() { isPanning.current = false; }
-
-  function resetView() { setZoom(1); setPan({ x: 0, y: 0 }); }
+  function resetView()     { setZoom(1); setPan({ x: 0, y: 0 }); }
 
   // ─── Empty / loading states ──────────────────────────────────────────────────
 
@@ -742,17 +791,16 @@ export default function PlantTopology() {
 
   let maxX = 0, maxY = 0;
   positions.forEach(({ x, y }) => {
-    maxX = Math.max(maxX, x + NODE_W + 24);
-    maxY = Math.max(maxY, y + NODE_H + 24);
+    maxX = Math.max(maxX, x + NODE_W + 40);
+    maxY = Math.max(maxY, y + NODE_H + 40);
   });
 
   let maxWaterY = 0;
   positions.forEach(({ y, zone }) => { if (zone === 'water') maxWaterY = Math.max(maxWaterY, y + NODE_H); });
-  const powerDividerY = maxWaterY + 28;
+  const powerDividerY = maxWaterY + 36;
 
   const activePlant = plants.find((p) => p.id === effectivePlantId);
 
-  // Connection counts per node (for badge)
   const linkCounts: Record<string, number> = {};
   allLinks.forEach((l) => {
     linkCounts[l.from] = (linkCounts[l.from] ?? 0) + 1;
@@ -771,6 +819,10 @@ export default function PlantTopology() {
     const isInactive  = node.status === 'Inactive';
     const connCount   = linkCounts[node.id] ?? 0;
     const isCustom    = node.custom;
+    const hasDetail   = !!node.detail;
+
+    // Taller node if it has a detail line
+    const h = hasDetail ? NODE_H + 18 : NODE_H;
 
     return (
       <g
@@ -783,13 +835,13 @@ export default function PlantTopology() {
       >
         {/* Pulse ring for active nodes */}
         {node.status === 'Active' && !isPending && (
-          <rect x={-2} y={-2} width={NODE_W + 4} height={NODE_H + 4} rx={9}
+          <rect x={-2} y={-2} width={NODE_W + 4} height={h + 4} rx={10}
             fill="none" stroke={c.accent} strokeWidth={1} opacity={isHov ? 0.4 : 0.15} />
         )}
 
         {/* Selection / hover ring */}
         {(isPending || (isHov && isClickable)) && (
-          <rect x={-4} y={-4} width={NODE_W + 8} height={NODE_H + 8} rx={10}
+          <rect x={-4} y={-4} width={NODE_W + 8} height={h + 8} rx={11}
             fill="none"
             stroke={isPending ? '#f59e0b' : c.accent}
             strokeWidth={2.5}
@@ -798,11 +850,11 @@ export default function PlantTopology() {
         )}
 
         {/* Drop shadow */}
-        <rect width={NODE_W} height={NODE_H} rx={8} x={1.5} y={2.5}
+        <rect width={NODE_W} height={h} rx={9} x={1.5} y={2.5}
           fill={c.border} opacity={isInactive ? 0.04 : 0.12} />
 
         {/* Node body */}
-        <rect width={NODE_W} height={NODE_H} rx={8}
+        <rect width={NODE_W} height={h} rx={9}
           fill={isInactive ? '#f8fafc' : c.bg}
           stroke={isPending ? '#f59e0b' : c.border}
           strokeWidth={isPending ? 2 : isHov ? 2 : 1.5}
@@ -810,64 +862,81 @@ export default function PlantTopology() {
         />
 
         {/* Left accent bar */}
-        <rect x={0} y={6} width={3.5} height={NODE_H - 12} rx={2}
+        <rect x={0} y={8} width={4} height={h - 16} rx={2}
           fill={c.accent} opacity={isInactive ? 0.2 : 1}
         />
 
         {/* Type badge */}
-        <text x={NODE_W / 2 + 3} y={15}
+        <text x={NODE_W / 2 + 4} y={17}
           textAnchor="middle" fill={c.accent}
-          fontSize={7} fontFamily="'IBM Plex Mono', 'Courier New', monospace"
+          fontSize={7.5} fontFamily="'IBM Plex Mono', 'Courier New', monospace"
           fontWeight={700} letterSpacing={1.2} opacity={0.9}
         >
           {NODE_LABELS[node.type]}
         </text>
 
-        {/* Node name */}
-        <text x={NODE_W / 2 + 3} y={32}
+        {/* Node label */}
+        <text x={NODE_W / 2 + 4} y={35}
           textAnchor="middle"
           fill={isInactive ? '#94a3b8' : c.text}
-          fontSize={11} fontFamily="'IBM Plex Sans', system-ui, sans-serif"
+          fontSize={11.5} fontFamily="'IBM Plex Sans', system-ui, sans-serif"
           fontWeight={600}
         >
-          {node.label.length > 14 ? node.label.slice(0, 13) + '…' : node.label}
+          {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
         </text>
+
+        {/* Equipment detail line (RO trains) */}
+        {hasDetail && (
+          <text x={NODE_W / 2 + 4} y={50}
+            textAnchor="middle"
+            fill={isInactive ? '#94a3b8' : c.accent}
+            fontSize={8.5}
+            fontFamily="'IBM Plex Mono', 'Courier New', monospace"
+            opacity={0.85}
+          >
+            {(node.detail ?? '').length > 22 ? (node.detail ?? '').slice(0, 21) + '…' : node.detail}
+          </text>
+        )}
 
         {/* Status dot */}
         {node.status && (
-          <circle cx={NODE_W - 9} cy={9} r={3.5}
-            fill={node.status === 'Active' ? '#10b981' : '#f87171'}
+          <circle cx={NODE_W - 10} cy={10} r={4}
+            fill={node.status === 'Active' ? '#10b981'
+                  : node.status === 'Running' ? '#10b981'
+                  : node.status === 'Maintenance' ? '#f59e0b'
+                  : '#f87171'}
             stroke="white" strokeWidth={1.2}
           />
         )}
 
         {/* Custom badge */}
         {isCustom && (
-          <rect x={4} y={NODE_H - 8} width={22} height={6} rx={3}
-            fill={c.accent} opacity={0.25} />
-        )}
-        {isCustom && (
-          <text x={15} y={NODE_H - 3.5} textAnchor="middle"
-            fill={c.accent} fontSize={5} fontWeight={700} fontFamily="monospace">
-            CUSTOM
-          </text>
+          <>
+            <rect x={4} y={h - 9} width={26} height={7} rx={3.5}
+              fill={c.accent} opacity={0.25} />
+            <text x={17} y={h - 4}
+              textAnchor="middle" fill={c.accent}
+              fontSize={5.5} fontWeight={700} fontFamily="monospace">
+              CUSTOM
+            </text>
+          </>
         )}
 
-        {/* Connection count badge (for bulk + locator) */}
+        {/* Connection count badge */}
         {(node.type === 'bulk' || node.type === 'locator') && connCount > 0 && (
           <>
-            <rect x={NODE_W - 18} y={NODE_H - 14} width={16} height={12} rx={5}
+            <rect x={NODE_W - 20} y={h - 16} width={18} height={14} rx={6}
               fill={c.accent} />
-            <text x={NODE_W - 10} y={NODE_H - 6}
-              textAnchor="middle" fill="#fff" fontSize={8} fontWeight={700}>
+            <text x={NODE_W - 11} y={h - 7}
+              textAnchor="middle" fill="#fff" fontSize={8.5} fontWeight={700}>
               {connCount}
             </text>
           </>
         )}
 
-        {/* Power-group bar */}
+        {/* Power group bar */}
         {node.group && (
-          <rect x={6} y={NODE_H - 6} width={NODE_W - 12} height={4} rx={2}
+          <rect x={6} y={h - 6} width={NODE_W - 12} height={4} rx={2}
             fill={c.accent} opacity={0.3} />
         )}
       </g>
@@ -881,9 +950,14 @@ export default function PlantTopology() {
     const t = positions.get(link.to);
     if (!f || !t) return null;
 
-    const x1 = f.x + NODE_W, y1 = f.y + NODE_H / 2;
-    const x2 = t.x,          y2 = t.y + NODE_H / 2;
+    // Use dynamic node height for midpoint calculation
     const fromNode = topoState!.nodes.find((n) => n.id === link.from);
+    const toNode   = topoState!.nodes.find((n) => n.id === link.to);
+    const fh = fromNode?.detail ? NODE_H + 18 : NODE_H;
+    const th = toNode?.detail   ? NODE_H + 18 : NODE_H;
+
+    const x1 = f.x + NODE_W, y1 = f.y + fh / 2;
+    const x2 = t.x,          y2 = t.y + th / 2;
     const color = fromNode ? COLORS[fromNode.type].accent : '#94a3b8';
     const isHov = hoveredLink === idx;
     const markerId = `arrow-${idx}`;
@@ -891,14 +965,14 @@ export default function PlantTopology() {
     return (
       <g key={`link-${idx}`}>
         <defs>
-          <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" fill={isHov ? color : '#94a3b8'} />
+          <marker id={markerId} markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill={isHov ? color : '#94a3b8'} />
           </marker>
         </defs>
-        {/* Wider invisible hit area */}
+        {/* Wide invisible hit area */}
         <path
           d={cubicPath(x1, y1, x2, y2)}
-          fill="none" stroke="transparent" strokeWidth={12}
+          fill="none" stroke="transparent" strokeWidth={14}
           style={{ cursor: 'crosshair' }}
           onMouseEnter={() => setHoveredLink(idx)}
           onMouseLeave={() => setHoveredLink(null)}
@@ -908,8 +982,8 @@ export default function PlantTopology() {
           fill="none"
           stroke={isHov ? color : '#94a3b8'}
           strokeWidth={isHov ? 2.5 : link.editable ? 1.5 : 2}
-          strokeDasharray={link.editable ? (isHov ? '8,3' : '6,3') : undefined}
-          opacity={isHov ? 0.85 : 0.45}
+          strokeDasharray={link.editable ? (isHov ? '9,4' : '6,3') : undefined}
+          opacity={isHov ? 0.9 : 0.45}
           markerEnd={`url(#${markerId})`}
           style={{ transition: 'stroke 0.15s, opacity 0.15s' }}
         />
@@ -930,6 +1004,10 @@ export default function PlantTopology() {
     { type: 'locator',   col: 'locator' },
   ];
 
+  const hasPowerNodes = topoState.nodes.some((n) =>
+    ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
+  );
+
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -943,6 +1021,7 @@ export default function PlantTopology() {
             <h1 className="text-lg font-bold tracking-tight text-foreground leading-tight">Network Topology</h1>
           </div>
 
+          {/* Plant selector pills */}
           <div className="flex gap-1.5 flex-wrap">
             {plants.map((p) => (
               <button
@@ -992,7 +1071,7 @@ export default function PlantTopology() {
         </div>
       </div>
 
-      {/* ── Help banner ──────────────────────────────────────────────────────── */}
+      {/* ── Help banner ───────────────────────────────────────────────────────── */}
       {showHelp && (
         <div className="px-5 py-2.5 bg-primary/5 border-b border-primary/20 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 shrink-0">
           <span>
@@ -1000,210 +1079,162 @@ export default function PlantTopology() {
             Well → Raw Meter → Pre-treatment → Feed Meter → RO Train → Permeate / Reject → Bulk Meter → Locator
           </span>
           <span>
-            <strong className="text-amber-600">Power layer:</strong>{' '}
-            Solar / Grid → Named Meters → Well pumps &amp; RO Train groups
+            <strong className="text-primary">Power:</strong>{' '}
+            Solar Array → Solar Meter · Grid Utility → Grid Meter → Wells / RO Trains
           </span>
-          {canEdit && (
-            <span>
-              <strong className="text-emerald-600">Editing:</strong>{' '}
-              Connect/Disconnect mode, then click two compatible nodes. Use panel to add custom boxes.
-            </span>
-          )}
-          <span className="text-muted-foreground/60">
-            Dashed = editable · Solid = fixed · Alt+drag or middle-mouse to pan · Scroll to zoom
+          <span>
+            <strong className="text-primary">Edit:</strong>{' '}
+            Use Connect/Disconnect below, click two compatible nodes, then Save.
+          </span>
+          <span>
+            <strong className="text-primary">Navigate:</strong>{' '}
+            Scroll (H+V) · Alt+drag or middle-click to pan · Scroll to zoom
           </span>
         </div>
       )}
 
-      {/* ── Admin toolbar ────────────────────────────────────────────────────── */}
+      {/* ── Edit toolbar ──────────────────────────────────────────────────────── */}
       {canEdit && (
-        <div className="flex items-center gap-3 px-5 py-2 border-b border-border bg-muted/30 shrink-0">
-          <span className="text-[10px] tracking-widest text-muted-foreground font-mono font-semibold">
-            EDIT WIRING:
-          </span>
-
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-border bg-muted/20 shrink-0 flex-wrap">
+          <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase mr-1">Edit Links:</span>
           <button
             onClick={() => { setEditMode(editMode === 'connect' ? null : 'connect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'connect'
-                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                : 'border-border text-muted-foreground bg-background hover:border-emerald-400 hover:text-emerald-600'
+                ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
+                : 'border-border text-muted-foreground hover:border-emerald-400/60 hover:text-emerald-700'
             }`}
           >
-            <Plug className="h-3 w-3" /> Connect
+            <Plug className="h-3.5 w-3.5" />
+            {editMode === 'connect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Connect'}
           </button>
-
           <button
             onClick={() => { setEditMode(editMode === 'disconnect' ? null : 'disconnect'); setPendingFrom(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'disconnect'
-                ? 'border-red-400 bg-red-50 text-red-700'
-                : 'border-border text-muted-foreground bg-background hover:border-red-400 hover:text-red-600'
+                ? 'bg-red-50 border-red-400 text-red-700'
+                : 'border-border text-muted-foreground hover:border-red-400/60 hover:text-red-700'
             }`}
           >
-            <Unplug className="h-3 w-3" /> Disconnect
+            <Unplug className="h-3.5 w-3.5" />
+            {editMode === 'disconnect' ? (pendingFrom ? 'Pick 2nd node…' : 'Pick node…') : 'Disconnect'}
           </button>
 
-          {pendingFrom && (
-            <>
-              <span className="text-xs text-amber-600 font-medium">
-                [{NODE_LABELS[pendingFrom.type]}] selected — click a compatible node…
-              </span>
-              <button
-                onClick={() => setPendingFrom(null)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                ✕ Cancel
-              </button>
-            </>
-          )}
-
-          {!pendingFrom && editMode && (
-            <span className="text-xs text-muted-foreground">
-              Editable: Well↔RO · Permeate→Bulk · Bulk→Locator · Power Meter→Well/RO
-            </span>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            {/* Zoom controls */}
-            <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
-              <button
-                onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
-                className="p-1 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                title="Zoom out"
-              >
-                <ZoomOut className="h-3 w-3" />
-              </button>
-              <span
-                className="text-[10px] font-mono text-muted-foreground px-1.5 cursor-pointer select-none"
-                onClick={resetView}
-                title="Reset view"
-              >
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
-                className="p-1 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                title="Zoom in"
-              >
-                <ZoomIn className="h-3 w-3" />
-              </button>
-              <button
-                onClick={resetView}
-                className="p-1 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border-l border-border"
-                title="Fit to view"
-              >
-                <Maximize2 className="h-3 w-3" />
-              </button>
-            </div>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSave}
-              disabled={saving}
-              className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/5 hover:border-primary"
-            >
-              {saving
-                ? <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-                : <Save className="h-3 w-3 mr-1" />}
-              Save Topology
-            </Button>
+          <div className="flex items-center gap-1 ml-2 border-l border-border pl-2">
+            <button onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
+              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+              <ZoomIn className="h-3 w-3" />
+            </button>
+            <span className="text-[10px] font-mono text-muted-foreground w-8 text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
+              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+              <ZoomOut className="h-3 w-3" />
+            </button>
+            <button onClick={resetView}
+              className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors ml-0.5">
+              <Maximize2 className="h-3 w-3" />
+            </button>
           </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSave}
+            disabled={saving}
+            className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/5 hover:border-primary ml-auto"
+          >
+            {saving
+              ? <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+              : <Save className="h-3 w-3 mr-1" />}
+            Save Topology
+          </Button>
         </div>
       )}
 
-      {/* ── Main area: canvas + side panel ───────────────────────────────────── */}
+      {/* ── Main area: canvas + side panel ────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 relative">
 
-        {/* ── Diagram canvas ─────────────────────────────────────────────────── */}
-        <div
-          className="flex-1 overflow-hidden p-4 bg-muted/20"
-          onWheel={handleWheel}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          style={{ cursor: isPanning.current ? 'grabbing' : 'default' }}
-        >
+        {/* ── Diagram canvas with BOTH scrollbars ─────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-h-0 p-4 bg-muted/20 overflow-hidden">
+
           {/* Zone label */}
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3 shrink-0">
             <Droplets className="h-3.5 w-3.5 text-primary" />
             <span className="text-[10px] tracking-widest text-primary font-mono uppercase font-semibold">
               {activePlant?.name} — Water Treatment Flow
             </span>
             <span className="ml-auto text-[9px] text-muted-foreground font-mono">
-              Alt+drag to pan · Scroll to zoom
+              Scroll to pan · Alt+drag or middle-click · Ctrl+scroll to zoom
             </span>
           </div>
 
-          {/* SVG canvas */}
-          <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden"
-            style={{ height: 'calc(100% - 32px)' }}>
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                overflow: 'hidden',
-              }}
+          {/* ── SVG canvas with BOTH scrollbars ────────────────────────────────── */}
+          <div
+            className="flex-1 min-h-0 rounded-xl border border-border bg-white shadow-sm"
+            style={{
+              overflow: 'auto',           /* shows both H + V scrollbars */
+              scrollbarWidth: 'thin',     /* Firefox thin scrollbar */
+              scrollbarColor: '#cbd5e1 #f1f5f9',
+            }}
+            onWheel={(e) => {
+              // Only intercept wheel when Ctrl held (zoom); let normal scroll do scrolling
+              if (e.ctrlKey) {
+                e.preventDefault();
+                setZoom((z) => Math.min(2.5, Math.max(0.3, z - e.deltaY * 0.001)));
+              }
+            }}
+          >
+            <svg
+              width={Math.max(maxX * zoom, 200)}
+              height={Math.max((maxY + 24) * zoom, 200)}
+              style={{ display: 'block' }}
             >
-              <svg
-                width={maxX}
-                height={maxY + 24}
-                style={{
-                  display: 'block',
-                  minWidth: maxX,
-                  transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
-                  transformOrigin: '0 0',
-                  transition: isPanning.current ? 'none' : 'transform 0.05s',
-                }}
-              >
-                <defs>
-                  <marker id="arrow-main" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                    <path d="M0,0 L0,6 L6,3 z" fill="#94a3b8" />
-                  </marker>
-                  <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <circle cx="1" cy="1" r="0.8" fill="#e2e8f0" />
-                  </pattern>
-                </defs>
+              <defs>
+                <marker id="arrow-main" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                  <path d="M0,0 L0,7 L7,3.5 z" fill="#94a3b8" />
+                </marker>
+                <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+                  <circle cx="1" cy="1" r="1" fill="#e2e8f0" />
+                </pattern>
+              </defs>
 
+              {/* Zoom transform wrapper */}
+              <g transform={`scale(${zoom})`}>
                 {/* Canvas bg */}
                 <rect width={maxX} height={maxY + 24} fill="#ffffff" />
                 <rect width={maxX} height={maxY + 24} fill="url(#dot-grid)" />
 
-                {/* Column lane backgrounds (water zone only) */}
+                {/* Column lane backgrounds (water zone) */}
                 {waterColTypes.map(({ type, col }) => {
                   const x = WATER_COLS[col];
                   if (x === undefined) return null;
                   return (
                     <rect
                       key={type}
-                      x={x - 8} y={20}
-                      width={NODE_W + 16}
-                      height={maxWaterY - 8}
-                      rx={4}
+                      x={x - 10} y={24}
+                      width={NODE_W + 20}
+                      height={maxWaterY - 10}
+                      rx={6}
                       fill={COLORS[type].lane}
-                      opacity={0.5}
+                      opacity={0.55}
                     />
                   );
                 })}
 
                 {/* Power-zone divider */}
-                {topoState.nodes.some((n) =>
-                  ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
-                ) && (
+                {hasPowerNodes && (
                   <>
                     <line x1={0} y1={powerDividerY} x2={maxX} y2={powerDividerY}
-                      stroke="#cbd5e1" strokeWidth={1} strokeDasharray="5,5" />
-                    <rect x={8} y={powerDividerY - 19} width={92} height={15} rx={7.5} fill="#f1f5f9" />
-                    <text x={54} y={powerDividerY - 9} textAnchor="middle"
-                      fill="#64748b" fontSize={8}
+                      stroke="#cbd5e1" strokeWidth={1} strokeDasharray="6,5" />
+                    <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="#f1f5f9" />
+                    <text x={62} y={powerDividerY - 11} textAnchor="middle"
+                      fill="#64748b" fontSize={9}
                       fontFamily="'IBM Plex Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       POWER SUPPLY
                     </text>
-                    <rect x={8} y={START_Y - 22} width={80} height={15} rx={7.5} fill="#f0fdf4" />
-                    <text x={48} y={START_Y - 12} textAnchor="middle"
-                      fill="#15803d" fontSize={8}
+                    <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="#f0fdf4" />
+                    <text x={54} y={START_Y - 15} textAnchor="middle"
+                      fill="#15803d" fontSize={9}
                       fontFamily="'IBM Plex Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       WATER FLOW
                     </text>
@@ -1221,8 +1252,20 @@ export default function PlantTopology() {
                   { x: WATER_COLS.bulk,      label: 'BULK METERS' },
                   { x: WATER_COLS.locator,   label: 'LOCATORS' },
                 ].map(({ x, label }) => (
-                  <text key={label} x={x + NODE_W / 2} y={14}
-                    textAnchor="middle" fill="#64748b" fontSize={7.5}
+                  <text key={label} x={x + NODE_W / 2} y={16}
+                    textAnchor="middle" fill="#64748b" fontSize={8.5}
+                    fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
+                    {label}
+                  </text>
+                ))}
+
+                {/* Power column header labels */}
+                {hasPowerNodes && [
+                  { x: POWER_COLS.solarSource, label: 'SOURCE' },
+                  { x: POWER_COLS.solarMeter,  label: 'SOLAR / GRID METERS' },
+                ].map(({ x, label }) => (
+                  <text key={`pwr-${label}`} x={x + NODE_W / 2} y={powerDividerY + 16}
+                    textAnchor="middle" fill="#92400e" fontSize={8}
                     fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
                     {label}
                   </text>
@@ -1230,15 +1273,15 @@ export default function PlantTopology() {
 
                 <g>{allLinks.map((l, i) => renderLink(l, i))}</g>
                 <g>{topoState.nodes.map(renderNode)}</g>
-              </svg>
-            </div>
+              </g>
+            </svg>
           </div>
 
-          {/* ── Legend ──────────────────────────────────────────────────────── */}
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 pt-3 border-t border-border">
+          {/* ── Legend ──────────────────────────────────────────────────────────── */}
+          <div className="mt-3 shrink-0 flex flex-wrap gap-x-4 gap-y-1.5 pt-3 border-t border-border">
             {(Object.entries(COLORS) as [NodeType, (typeof COLORS)[NodeType]][]).map(([type, c]) => (
               <div key={type} className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm border-[1.5px]"
+                <div className="w-3.5 h-3.5 rounded-sm border-[1.5px]"
                   style={{ background: c.bg, borderColor: c.border }} />
                 <span className="text-[10px] text-muted-foreground font-mono tracking-wide">
                   {NODE_LABELS[type]}
@@ -1250,15 +1293,17 @@ export default function PlantTopology() {
               <span className="text-[10px] text-muted-foreground font-mono">Editable</span>
               <div className="w-8 border-t-2 border-slate-400 ml-2" />
               <span className="text-[10px] text-muted-foreground font-mono">Fixed</span>
-              <div className="w-3 h-3 rounded-full bg-emerald-400 ml-2 border border-white" />
+              <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 ml-2 border border-white" />
               <span className="text-[10px] text-muted-foreground font-mono">Active</span>
-              <div className="w-3 h-3 rounded-full bg-red-400 border border-white" />
+              <div className="w-3.5 h-3.5 rounded-full bg-red-400 border border-white" />
               <span className="text-[10px] text-muted-foreground font-mono">Inactive</span>
+              <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border border-white" />
+              <span className="text-[10px] text-muted-foreground font-mono">Maintenance</span>
             </div>
           </div>
         </div>
 
-        {/* ── Side panel ───────────────────────────────────────────────────────── */}
+        {/* ── Side panel ────────────────────────────────────────────────────────── */}
         <SidePanel
           open={panelOpen}
           onClose={() => setPanelOpen(false)}
