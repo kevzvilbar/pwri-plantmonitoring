@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Users, User, KeyRound, MailCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, User, KeyRound, MailCheck, Eye, EyeOff } from 'lucide-react';
 import {
   DesignationCombobox,
   OPERATOR_DESIGNATION,
@@ -74,6 +74,7 @@ function SignInForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [view, setView] = useState<'signin' | 'forgot'>('signin');
+  const [showPassword, setShowPassword] = useState(false);
   // Operator picklist state
   const [pickList, setPickList] = useState<PickEntry[]>([]);
   const [signedInPlantId, setSignedInPlantId] = useState<string | null>(null);
@@ -94,7 +95,11 @@ function SignInForm() {
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
       setBusy(false);
-      toast.error(error.message);
+      // Provide a clearer message for the most common error
+      const msg = error.message.toLowerCase().includes('invalid login credentials')
+        ? 'Incorrect email or password. Please check your credentials and try again.'
+        : error.message;
+      toast.error(msg);
       void logLoginAttempt({ emailAttempted: email.trim(), success: false, errorReason: error.message });
       return;
     }
@@ -206,7 +211,24 @@ function SignInForm() {
       </div>
       <div>
         <Label>Password</Label>
-        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div className="relative">
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            tabIndex={-1}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
         <div className="flex justify-end mt-1">
           <button
             type="button"
@@ -293,6 +315,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const [password, setPass]   = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy]       = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   // ── Step 1: send OTP ──
   const handleSendCode = async () => {
@@ -427,23 +450,34 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
       <StepDots />
       <div>
         <Label>New password</Label>
-        <Input
-          type="password"
-          value={password}
-          onChange={(e) => setPass(e.target.value)}
-          placeholder="Min 8 characters"
-          autoFocus
-        />
+        <div className="relative">
+          <Input
+            type={showPass ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPass(e.target.value)}
+            placeholder="Min 8 characters"
+            autoFocus
+            className="pr-10"
+          />
+          <button type="button" onClick={() => setShowPass((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            tabIndex={-1}>
+            {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
       <div>
         <Label>Confirm new password</Label>
-        <Input
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          placeholder="Repeat new password"
-          onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
-        />
+        <div className="relative">
+          <Input
+            type={showPass ? 'text' : 'password'}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Repeat new password"
+            onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
+            className="pr-10"
+          />
+        </div>
       </div>
       <Button onClick={handleUpdatePassword} disabled={busy} className="w-full">
         {busy ? 'Updating…' : 'Update password'}
@@ -850,7 +884,23 @@ export default function Auth() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center mb-3">
-            <img src="/og-image.png" alt="PWRI Logo" className="h-16 w-16 rounded-full object-cover shadow-elev" />
+            <img
+              src="/pwri-plantmonitoring/og-image.png"
+              alt="PWRI Logo"
+              className="h-16 w-16 rounded-2xl object-cover shadow-elev"
+              onError={(e) => {
+                const el = e.currentTarget;
+                el.style.display = 'none';
+                const fallback = el.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+            <div
+              style={{ display: 'none' }}
+              className="h-16 w-16 rounded-2xl shadow-elev bg-accent items-center justify-center"
+            >
+              <span className="text-accent-foreground font-bold text-2xl select-none">PW</span>
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-topbar-foreground tracking-tight">PWRI Monitoring</h1>
           <p className="text-sm text-topbar-muted">Multi-plant water operations</p>
