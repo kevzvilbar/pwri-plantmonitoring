@@ -26,7 +26,7 @@ import {
 } from '@/components/dashboard/TrendChart';
 import {
   DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
-  OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS,
+  OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS, ChartMetric,
 } from '@/components/dashboard/types';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -987,7 +987,10 @@ export default function Dashboard() {
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
       <ClusterCharts
-        metrics={[...COST_CHART_METRICS.filter((m: string) => m !== 'kwh'), 'kwh']}
+        metrics={[
+          ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
+          { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
+        ] as ChartMetric[]}
         viewMode={viewMode}
         expandedMetric={expandedMetric}
         plantIds={plantIds}
