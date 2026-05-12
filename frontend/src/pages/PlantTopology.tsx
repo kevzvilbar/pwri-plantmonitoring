@@ -50,6 +50,59 @@ type NodeType =
 interface CustomColumn {
   id: string;
   label: string;
+  /** which base column key to insert this column after */
+  insertAfter: string;
+}
+
+// ─── Base column definitions (ordered) ──────────────────────────────────────────
+
+interface BaseColSlot {
+  key: string;
+  label: string;
+  type: NodeType;
+}
+
+const BASE_COL_SLOTS: BaseColSlot[] = [
+  { key: 'well',      label: 'WELLS',              type: 'well' },
+  { key: 'rawMeter',  label: 'RAW METERS',         type: 'rawMeter' },
+  { key: 'pretreat',  label: 'PRE-TREAT',          type: 'pretreat' },
+  { key: 'feedMeter', label: 'FEED',               type: 'feedMeter' },
+  { key: 'roTrain',   label: 'RO TRAINS',          type: 'roTrain' },
+  { key: 'permeate',  label: 'PERMEATE / REJECT',  type: 'permeate' },
+  { key: 'bulk',      label: 'BULK METERS',        type: 'bulk' },
+  { key: 'locator',   label: 'LOCATORS',           type: 'locator' },
+];
+
+interface ColSlot {
+  key: string;
+  label: string;
+  type?: NodeType;       // set for base cols
+  customCol?: CustomColumn; // set for custom cols
+  isCustom: boolean;
+}
+
+/** Builds the full ordered column sequence, interleaving custom cols into base cols. */
+function buildColSequence(customColumns: CustomColumn[]): ColSlot[] {
+  const result: ColSlot[] = [];
+  for (const base of BASE_COL_SLOTS) {
+    result.push({ key: base.key, label: base.label, type: base.type, isCustom: false });
+    customColumns
+      .filter((c) => c.insertAfter === base.key)
+      .forEach((cc) =>
+        result.push({ key: cc.id, label: cc.label, customCol: cc, isCustom: true })
+      );
+  }
+  return result;
+}
+
+/** Returns a map of column key → x position based on the ordered sequence. */
+function buildColXMap(customColumns: CustomColumn[]): Record<string, number> {
+  const seq = buildColSequence(customColumns);
+  const map: Record<string, number> = {};
+  seq.forEach((slot, i) => { map[slot.key] = 28 + i * COL_GAP; });
+  // reject shares same x as permeate
+  if (map['permeate'] !== undefined) map['reject'] = map['permeate'];
+  return map;
 }
 
 interface TopoNode {
@@ -90,19 +143,6 @@ const NODE_H  = 62;
 const ROW_GAP = 90;   // vertical gap between rows
 const START_Y = 52;
 const COL_GAP = 164;  // horizontal gap between column centers
-
-// Water column X positions — well-spaced
-const WATER_COLS: Record<string, number> = {
-  well:      28,
-  rawMeter:  28  + COL_GAP,
-  pretreat:  28  + COL_GAP * 2,
-  feedMeter: 28  + COL_GAP * 3,
-  roTrain:   28  + COL_GAP * 4,
-  permeate:  28  + COL_GAP * 5,
-  reject:    28  + COL_GAP * 5,
-  bulk:      28  + COL_GAP * 6,
-  locator:   28  + COL_GAP * 7,
-};
 
 const POWER_COLS: Record<string, number> = {
   solarSource: 28,
@@ -402,6 +442,7 @@ function buildTopology(
 type Zone = 'water' | 'power';
 
 function layoutNodes(nodes: TopoNode[], customColumns: CustomColumn[] = []): Map<string, { x: number; y: number; zone: Zone }> {
+  const colXMap = buildColXMap(customColumns);
   const positions = new Map<string, { x: number; y: number; zone: Zone }>();
   const byType: Record<string, TopoNode[]> = {};
   nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
@@ -412,7 +453,7 @@ function layoutNodes(nodes: TopoNode[], customColumns: CustomColumn[] = []): Map
 
   waterTypes.forEach((t) => {
     (byType[t] ?? []).forEach((n, i) => {
-      const x = WATER_COLS[t] ?? 0;
+      const x = colXMap[t] ?? 0;
       let y = START_Y + i * ROW_GAP;
       // Centre single pre-treat / feed meter vertically against the wells
       if (t === 'pretreat' || t === 'feedMeter')
@@ -451,21 +492,22 @@ function layoutNodes(nodes: TopoNode[], customColumns: CustomColumn[] = []): Map
     positions.set(n.id, { x: POWER_COLS.gridMeter, y: POWER_OFFSET_Y + (gridStart + i) * ROW_GAP, zone: 'power' });
   });
 
-  // Custom column nodes — grouped by colId, stacked vertically
+  // Custom column nodes — group by colId, use dynamic x from colXMap
   const byColId: Record<string, TopoNode[]> = {};
   nodes.filter((n) => n.colId).forEach((n) => {
     (byColId[n.colId!] = byColId[n.colId!] ?? []).push(n);
   });
-  customColumns.forEach((col, colIdx) => {
-    const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
+  customColumns.forEach((col) => {
+    const x = colXMap[col.id] ?? 0;
     (byColId[col.id] ?? []).forEach((n, rowIdx) => {
       positions.set(n.id, { x, y: START_Y + rowIdx * ROW_GAP, zone: 'water' });
     });
   });
 
-  // Orphan custom nodes
+  // Orphan nodes not yet placed
   nodes.filter((n) => !positions.has(n.id)).forEach((n, i) => {
-    positions.set(n.id, { x: WATER_COLS.locator + COL_GAP, y: START_Y + i * ROW_GAP, zone: 'water' });
+    const lastX = Object.values(colXMap).length ? Math.max(...Object.values(colXMap)) : 28;
+    positions.set(n.id, { x: lastX + COL_GAP, y: START_Y + i * ROW_GAP, zone: 'water' });
   });
 
   return positions;
@@ -489,7 +531,7 @@ interface SidePanelProps {
   onAddNode: (type: 'bulk' | 'locator' | 'customNode', name: string, colId?: string) => void;
   onDeleteCustomNode: (id: string) => void;
   onRenameCustomNode: (id: string, name: string) => void;
-  onAddColumn: (label: string) => void;
+  onAddColumn: (label: string, insertAfter: string) => void;
   onDeleteColumn: (id: string) => void;
 }
 
@@ -502,6 +544,7 @@ function SidePanel({
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [newColName, setNewColName] = useState('');
+  const [insertAfter, setInsertAfter] = useState<string>('feedMeter');
   const [activeTab, setActiveTab] = useState<'row' | 'column'>('row');
 
   const counts: Partial<Record<NodeType, number>> = {};
@@ -522,7 +565,7 @@ function SidePanel({
 
   function handleAddColumn() {
     if (!newColName.trim()) return;
-    onAddColumn(newColName.trim());
+    onAddColumn(newColName.trim(), insertAfter);
     setNewColName('');
     setActiveTab('row');
   }
@@ -591,7 +634,23 @@ function SidePanel({
           {activeTab === 'column' ? (
             /* ── Add Column ── */
             <div>
-              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">New Column Name</p>
+              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Insert After</p>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {BASE_COL_SLOTS.map((slot) => (
+                  <button
+                    key={slot.key}
+                    onClick={() => setInsertAfter(slot.key)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                      insertAfter === slot.key
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/50'
+                    }`}
+                  >
+                    {slot.label.replace(' / REJECT', '')}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Column Name</p>
               <div className="flex gap-1.5">
                 <input
                   value={newColName}
@@ -607,18 +666,24 @@ function SidePanel({
               {customColumns.length > 0 && (
                 <div className="mt-3 flex flex-col gap-1">
                   <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-1">Your Columns</p>
-                  {customColumns.map((col) => (
-                    <div key={col.id} className="flex items-center justify-between rounded px-2 py-1 bg-muted/50 border border-border">
-                      <span className="text-[10px] font-medium text-foreground truncate">{col.label}</span>
-                      <button
-                        onClick={() => onDeleteColumn(col.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors ml-2 shrink-0"
-                        title="Delete column and its nodes"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                  {customColumns.map((col) => {
+                    const after = BASE_COL_SLOTS.find((s) => s.key === col.insertAfter);
+                    return (
+                      <div key={col.id} className="flex items-center gap-1.5 rounded px-2 py-1.5 bg-muted/50 border border-border">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] font-semibold text-foreground truncate">{col.label}</div>
+                          <div className="text-[9px] text-muted-foreground">after {after?.label ?? col.insertAfter}</div>
+                        </div>
+                        <button
+                          onClick={() => onDeleteColumn(col.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          title="Delete column and its nodes"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -839,9 +904,9 @@ export default function PlantTopology() {
     }
   }, [customNodes, effectivePlantId, topoState]);
 
-  const handleAddColumn = useCallback((label: string) => {
+  const handleAddColumn = useCallback((label: string, insertAfter: string) => {
     if (!effectivePlantId) return;
-    const col: CustomColumn = { id: `col-${Date.now()}`, label };
+    const col: CustomColumn = { id: `col-${Date.now()}`, label, insertAfter };
     const next = [...customColumns, col];
     setCustomColumns(next);
     saveCustomColumns(effectivePlantId, next);
@@ -1139,16 +1204,9 @@ export default function PlantTopology() {
 
   // ── Column lane backgrounds ───────────────────────────────────────────────────
 
-  const waterColTypes: Array<{ type: NodeType; col: string }> = [
-    { type: 'well',      col: 'well' },
-    { type: 'rawMeter',  col: 'rawMeter' },
-    { type: 'pretreat',  col: 'pretreat' },
-    { type: 'feedMeter', col: 'feedMeter' },
-    { type: 'roTrain',   col: 'roTrain' },
-    { type: 'permeate',  col: 'permeate' },
-    { type: 'bulk',      col: 'bulk' },
-    { type: 'locator',   col: 'locator' },
-  ];
+  // Dynamic full column sequence (base + custom interleaved)
+  const colSequence = buildColSequence(customColumns);
+  const colXMap = buildColXMap(customColumns);
 
   const hasPowerNodes = topoState.nodes.some((n) =>
     ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
@@ -1350,18 +1408,21 @@ export default function PlantTopology() {
                 <rect width={maxX} height={maxY + 24} fill="#ffffff" />
                 <rect width={maxX} height={maxY + 24} fill="url(#dot-grid)" />
 
-                {/* Column lane backgrounds (water zone) */}
-                {waterColTypes.map(({ type, col }) => {
-                  const x = WATER_COLS[col];
+                {/* Column lane backgrounds — all columns in sequence order */}
+                {colSequence.map((slot) => {
+                  const x = colXMap[slot.key];
                   if (x === undefined) return null;
+                  const laneColor = slot.isCustom
+                    ? COLORS.customNode.lane
+                    : COLORS[slot.type!].lane;
                   return (
                     <rect
-                      key={type}
+                      key={`lane-${slot.key}`}
                       x={x - 10} y={24}
                       width={NODE_W + 20}
                       height={maxWaterY - 10}
                       rx={6}
-                      fill={COLORS[type].lane}
+                      fill={laneColor}
                       opacity={0.55}
                     />
                   );
@@ -1387,49 +1448,18 @@ export default function PlantTopology() {
                   </>
                 )}
 
-                {/* Column header labels */}
-                {[
-                  { x: WATER_COLS.well,      label: 'WELLS' },
-                  { x: WATER_COLS.rawMeter,  label: 'RAW METERS' },
-                  { x: WATER_COLS.pretreat,  label: 'PRE-TREAT' },
-                  { x: WATER_COLS.feedMeter, label: 'FEED' },
-                  { x: WATER_COLS.roTrain,   label: 'RO TRAINS' },
-                  { x: WATER_COLS.permeate,  label: 'PERMEATE / REJECT' },
-                  { x: WATER_COLS.bulk,      label: 'BULK METERS' },
-                  { x: WATER_COLS.locator,   label: 'LOCATORS' },
-                ].map(({ x, label }) => (
-                  <text key={label} x={x + NODE_W / 2} y={16}
-                    textAnchor="middle" fill="#64748b" fontSize={8.5}
-                    fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
-                    {label}
-                  </text>
-                ))}
-
-                {/* Custom column header labels */}
-                {customColumns.map((col, colIdx) => {
-                  const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
+                {/* Column header labels — all columns in sequence order */}
+                {colSequence.map((slot) => {
+                  const x = colXMap[slot.key];
+                  if (x === undefined) return null;
                   return (
-                    <text key={`cust-hdr-${col.id}`} x={x + NODE_W / 2} y={16}
-                      textAnchor="middle" fill="#475569" fontSize={8.5}
+                    <text key={`hdr-${slot.key}`} x={x + NODE_W / 2} y={16}
+                      textAnchor="middle"
+                      fill={slot.isCustom ? '#475569' : '#64748b'}
+                      fontSize={8.5}
                       fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
-                      {col.label.toUpperCase()}
+                      {slot.label.toUpperCase()}
                     </text>
-                  );
-                })}
-
-                {/* Custom column lane backgrounds */}
-                {customColumns.map((col, colIdx) => {
-                  const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
-                  return (
-                    <rect
-                      key={`cust-lane-${col.id}`}
-                      x={x - 10} y={24}
-                      width={NODE_W + 20}
-                      height={maxWaterY - 10}
-                      rx={6}
-                      fill={COLORS.customNode.lane}
-                      opacity={0.55}
-                    />
                   );
                 })}
                 {hasPowerNodes && [
