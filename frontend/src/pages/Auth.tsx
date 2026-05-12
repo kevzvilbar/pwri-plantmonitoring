@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
@@ -315,7 +315,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
     const { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
       token: code.trim(),
-      type: 'email',
+      type: 'magiclink',
     });
     setBusy(false);
     if (error) { toast.error('Invalid or expired code — try again'); return; }
