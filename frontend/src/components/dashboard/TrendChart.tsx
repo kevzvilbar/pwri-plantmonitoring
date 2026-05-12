@@ -265,6 +265,44 @@ function OverviewTable({
     );
   }
   // chemCost and powerCost are now part of productionCost (₱/m³ toggles)
+  if (metric === 'kwh') {
+    cols.push(
+      {
+        key: 'solarKwh',
+        label: '☀ Solar (kWh)',
+        fmt: (d) => (d.solarKwh ?? 0) > 0
+          ? (+d.solarKwh).toLocaleString(undefined, { maximumFractionDigits: 1 })
+          : <span className="text-muted-foreground/40">—</span>,
+      },
+      {
+        key: 'kwh',
+        label: '⚡ Grid (kWh)',
+        fmt: (d) => (d.kwh ?? 0) > 0
+          ? (+d.kwh).toLocaleString(undefined, { maximumFractionDigits: 1 })
+          : <span className="text-muted-foreground/40">—</span>,
+      },
+      {
+        key: 'totalKwh',
+        label: 'Total (kWh)',
+        fmt: (d) => {
+          const t = (d.solarKwh ?? 0) + (d.kwh ?? 0);
+          return t > 0
+            ? <span className="font-semibold text-teal-700 dark:text-teal-300">{t.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+            : <span className="text-muted-foreground/40">—</span>;
+        },
+      },
+      {
+        key: 'solarPct',
+        label: 'Solar %',
+        fmt: (d) => {
+          const t = (d.solarKwh ?? 0) + (d.kwh ?? 0);
+          return t > 0 && (d.solarKwh ?? 0) > 0
+            ? <span className="text-yellow-600 dark:text-yellow-400 font-medium">{(((d.solarKwh ?? 0) / t) * 100).toFixed(1)}%</span>
+            : <span className="text-muted-foreground/40">—</span>;
+        },
+      },
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -392,6 +430,7 @@ function DataSummaryPopup({
     : metric === 'productionCost' ? 'Cost Overview'
     : metric === 'chemCost' ? 'Chemical Cost'
     : metric === 'powerCost' ? 'Power Cost'
+    : metric === 'kwh' ? 'Solar vs Grid (kWh)'
     : 'Overview';
 
   const prodTabLabel =
@@ -2390,6 +2429,31 @@ export function TrendChart({
         )}
       </div>
 
+      {/* ── kwh: Subtitle — "last Xd · daily totals · Solar vs Grid (kWh)" ── */}
+      {metric === 'kwh' && (() => {
+        const kwhRangeLabel =
+          range === 'CUSTOM' ? `${from} → ${to}`
+          : range === '7D'   ? 'last 7d'
+          : range === '14D'  ? 'last 14d'
+          : range === '30D'  ? 'last 30d'
+          : range === '60D'  ? 'last 60d'
+          : 'last 90d';
+        const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+        const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
+        const sourceSuffix = hasSolarData && hasGridData
+          ? 'Solar vs Grid (kWh)'
+          : hasSolarData ? 'Solar only (kWh)' : 'Grid only (kWh)';
+        return (
+          <p className="text-[11px] text-muted-foreground -mt-1 mb-2 ml-0.5 flex items-center gap-1.5">
+            <span>{kwhRangeLabel}</span>
+            <span className="opacity-40">·</span>
+            <span>daily totals</span>
+            <span className="opacity-40">·</span>
+            <span>{sourceSuffix}</span>
+          </p>
+        );
+      })()}
+
       {/* ── Train filter panel ─────────────────────────────────────────────── */}
       {hasRoDrill && roDrillMode !== 'default' && showTrainFilter && (
         <div className="mb-2 rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-1.5">
@@ -2999,10 +3063,52 @@ export function TrendChart({
             (() => {
               const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
               const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
+
+              // Rich tooltip: shows Solar, Grid, Total, and Solar % in one popover
+              const KwhTooltip = ({ active, payload, label }: any) => {
+                if (!active || !payload?.length) return null;
+                const solarVal = payload.find((p: any) => p.dataKey === 'solarKwh')?.value ?? 0;
+                const gridVal  = payload.find((p: any) => p.dataKey === 'gridKwh')?.value  ?? 0;
+                const total    = solarVal + gridVal;
+                const pct      = total > 0 ? ((solarVal / total) * 100).toFixed(1) : null;
+                const fmt      = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+                return (
+                  <div style={{
+                    background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',
+                    borderRadius: 8, fontSize: 11, padding: '8px 10px',
+                    minWidth: 160, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                  }}>
+                    <p style={{ margin: '0 0 5px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{label}</p>
+                    {hasSolarData && kwhSource !== 'grid' && solarVal > 0 && (
+                      <p style={{ margin: '1px 0', color: 'hsl(48,96%,40%)' }}>
+                        ☀ Solar: <strong>{fmt(solarVal)} kWh</strong>
+                      </p>
+                    )}
+                    {hasGridData && kwhSource !== 'solar' && gridVal > 0 && (
+                      <p style={{ margin: '1px 0', color: 'hsl(213,94%,55%)' }}>
+                        ⚡ Grid: <strong>{fmt(gridVal)} kWh</strong>
+                      </p>
+                    )}
+                    {total > 0 && (
+                      <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
+                        <p style={{ margin: '1px 0', color: 'hsl(var(--foreground))', fontWeight: 600 }}>
+                          Total: {fmt(total)} kWh
+                        </p>
+                        {pct && hasSolarData && kwhSource === 'both' && (
+                          <p style={{ margin: '2px 0 0', fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
+                            Solar: <span style={{ color: 'hsl(48,96%,40%)', fontWeight: 600 }}>{pct}%</span> of mix
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
               return (
                 <ComposedChart
                   data={kwhChartRows}
-                  margin={{ top: 4, right: 4, left: -16, bottom: 20 }}
+                  margin={{ top: 4, right: 8, left: -12, bottom: 20 }}
                   barSize={Math.max(3, Math.min(18, 400 / Math.max(kwhChartRows.length, 1)))}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -3017,18 +3123,10 @@ export function TrendChart({
                   <YAxis
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickFormatter={formatYAxis}
-                    width={42}
+                    width={44}
+                    label={{ value: 'kWh', angle: -90, position: 'insideLeft', fontSize: 9, offset: 10 }}
                   />
-                  <Tooltip
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                    formatter={(v: any, name: string) => [
-                      v != null && +v > 0
-                        ? `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
-                        : '—',
-                      name,
-                    ]}
-                    labelFormatter={(label) => `Date: ${label}`}
-                  />
+                  <Tooltip content={<KwhTooltip />} />
                   {/* Solar — base of stack, no rounded corners */}
                   {hasSolarData && kwhSource !== 'grid' && (
                     <Bar dataKey="solarKwh" name="☀ Solar (kWh)" fill="hsl(48,96%,53%)"  stackId="kwh" radius={[0, 0, 0, 0]} />
