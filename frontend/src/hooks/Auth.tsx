@@ -850,7 +850,7 @@ export default function Auth() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center mb-3">
-            <img src="/og-image.png" alt="PWRI Logo" className="h-16 w-16 rounded-2xl object-cover shadow-elev" />
+            <img src="/og-image.png" alt="PWRI Logo" className="h-16 w-16 rounded-full object-cover shadow-elev" />
           </div>
           <h1 className="text-2xl font-bold text-topbar-foreground tracking-tight">PWRI Monitoring</h1>
           <p className="text-sm text-topbar-muted">Multi-plant water operations</p>
