@@ -979,13 +979,20 @@ export default function Dashboard() {
           value={`₱${fmtNum(chemCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
-          trend={dKwh} />
+          trend={dKwh}
+          onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
           calc threshold="1.2"
           calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
-      <ClusterCharts metrics={COST_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="cost" />
+      <ClusterCharts
+        metrics={[...COST_CHART_METRICS.filter((m: string) => m !== 'kwh'), 'kwh']}
+        viewMode={viewMode}
+        expandedMetric={expandedMetric}
+        plantIds={plantIds}
+        clusterId="cost"
+      />
 
       <Card className="p-3" data-testid="alerts-card">
         <div className="flex items-center gap-2 mb-2">
