@@ -44,7 +44,13 @@ import {
 type NodeType =
   | 'well' | 'rawMeter' | 'pretreat' | 'feedMeter'
   | 'roTrain' | 'permeate' | 'reject' | 'bulk' | 'locator'
-  | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter';
+  | 'solarSource' | 'gridSource' | 'solarMeter' | 'gridMeter'
+  | 'customNode';
+
+interface CustomColumn {
+  id: string;
+  label: string;
+}
 
 interface TopoNode {
   id: string;
@@ -56,6 +62,8 @@ interface TopoNode {
   detail?: string;
   /** true = added manually via "Add Box" */
   custom?: boolean;
+  /** custom column id this node belongs to */
+  colId?: string;
 }
 
 interface TopoLink {
@@ -74,6 +82,7 @@ interface TopologyState {
 
 const TOPO_LS_KEY   = (pid: string) => `plant_topology_links_${pid}`;
 const CUSTOM_LS_KEY = (pid: string) => `plant_topology_custom_${pid}`;
+const CUSTOM_COLS_KEY = (pid: string) => `plant_topology_cols_${pid}`;
 
 // ── Node dimensions (larger for readability) ──
 const NODE_W  = 148;
@@ -116,6 +125,7 @@ const NODE_LABELS: Record<NodeType, string> = {
   gridSource:  'GRID',
   solarMeter:  'SOLAR METER',
   gridMeter:   'GRID METER',
+  customNode:  'CUSTOM',
 };
 
 const COLORS: Record<NodeType, { bg: string; border: string; text: string; accent: string; lane: string }> = {
@@ -132,6 +142,7 @@ const COLORS: Record<NodeType, { bg: string; border: string; text: string; accen
   gridSource:  { bg: '#eef2ff', border: '#4338ca', text: '#1e1b4b', accent: '#4338ca', lane: '#eef2ff' },
   solarMeter:  { bg: '#fef9c3', border: '#a16207', text: '#713f12', accent: '#a16207', lane: '#fef9c3' },
   gridMeter:   { bg: '#e0e7ff', border: '#4f46e5', text: '#1e1b4b', accent: '#4f46e5', lane: '#e0e7ff' },
+  customNode:  { bg: '#f1f5f9', border: '#64748b', text: '#334155', accent: '#475569', lane: '#f8fafc' },
 };
 
 const EDITABLE_PAIRS: [NodeType, NodeType][] = [
@@ -167,6 +178,17 @@ function loadCustomNodes(plantId: string): TopoNode[] {
 
 function saveCustomNodes(plantId: string, nodes: TopoNode[]) {
   try { localStorage.setItem(CUSTOM_LS_KEY(plantId), JSON.stringify(nodes)); } catch { /**/ }
+}
+
+function loadCustomColumns(plantId: string): CustomColumn[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_COLS_KEY(plantId));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveCustomColumns(plantId: string, cols: CustomColumn[]) {
+  try { localStorage.setItem(CUSTOM_COLS_KEY(plantId), JSON.stringify(cols)); } catch { /**/ }
 }
 
 // ─── Data hook ──────────────────────────────────────────────────────────────────
@@ -379,7 +401,7 @@ function buildTopology(
 
 type Zone = 'water' | 'power';
 
-function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zone: Zone }> {
+function layoutNodes(nodes: TopoNode[], customColumns: CustomColumn[] = []): Map<string, { x: number; y: number; zone: Zone }> {
   const positions = new Map<string, { x: number; y: number; zone: Zone }>();
   const byType: Record<string, TopoNode[]> = {};
   nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
@@ -429,6 +451,18 @@ function layoutNodes(nodes: TopoNode[]): Map<string, { x: number; y: number; zon
     positions.set(n.id, { x: POWER_COLS.gridMeter, y: POWER_OFFSET_Y + (gridStart + i) * ROW_GAP, zone: 'power' });
   });
 
+  // Custom column nodes — grouped by colId, stacked vertically
+  const byColId: Record<string, TopoNode[]> = {};
+  nodes.filter((n) => n.colId).forEach((n) => {
+    (byColId[n.colId!] = byColId[n.colId!] ?? []).push(n);
+  });
+  customColumns.forEach((col, colIdx) => {
+    const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
+    (byColId[col.id] ?? []).forEach((n, rowIdx) => {
+      positions.set(n.id, { x, y: START_Y + rowIdx * ROW_GAP, zone: 'water' });
+    });
+  });
+
   // Orphan custom nodes
   nodes.filter((n) => !positions.has(n.id)).forEach((n, i) => {
     positions.set(n.id, { x: WATER_COLS.locator + COL_GAP, y: START_Y + i * ROW_GAP, zone: 'water' });
@@ -449,21 +483,26 @@ interface SidePanelProps {
   onClose: () => void;
   topoState: TopologyState | null;
   customNodes: TopoNode[];
+  customColumns: CustomColumn[];
   plantId: string;
   canEdit: boolean;
-  onAddNode: (type: 'bulk' | 'locator', name: string) => void;
+  onAddNode: (type: 'bulk' | 'locator' | 'customNode', name: string, colId?: string) => void;
   onDeleteCustomNode: (id: string) => void;
   onRenameCustomNode: (id: string, name: string) => void;
+  onAddColumn: (label: string) => void;
+  onDeleteColumn: (id: string) => void;
 }
 
 function SidePanel({
-  open, onClose, topoState, customNodes, canEdit,
-  onAddNode, onDeleteCustomNode, onRenameCustomNode,
+  open, onClose, topoState, customNodes, customColumns, canEdit,
+  onAddNode, onDeleteCustomNode, onRenameCustomNode, onAddColumn, onDeleteColumn,
 }: SidePanelProps) {
-  const [addType, setAddType] = useState<'bulk' | 'locator'>('bulk');
+  const [addType, setAddType] = useState<'bulk' | 'locator' | string>('bulk');
   const [addName, setAddName] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [newColName, setNewColName] = useState('');
+  const [activeTab, setActiveTab] = useState<'row' | 'column'>('row');
 
   const counts: Partial<Record<NodeType, number>> = {};
   (topoState?.nodes ?? []).forEach((n) => {
@@ -472,8 +511,20 @@ function SidePanel({
 
   function handleAdd() {
     if (!addName.trim()) return;
-    onAddNode(addType, addName.trim());
+    const isCustomCol = addType !== 'bulk' && addType !== 'locator';
+    if (isCustomCol) {
+      onAddNode('customNode', addName.trim(), addType);
+    } else {
+      onAddNode(addType as 'bulk' | 'locator', addName.trim());
+    }
     setAddName('');
+  }
+
+  function handleAddColumn() {
+    if (!newColName.trim()) return;
+    onAddColumn(newColName.trim());
+    setNewColName('');
+    setActiveTab('row');
   }
 
   return (
@@ -516,37 +567,111 @@ function SidePanel({
         </div>
       </div>
 
-      {/* Add Box */}
+      {/* Add Column / Add Row */}
       {canEdit && (
         <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
-          <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Add Box</p>
-          <div className="flex gap-1.5 mb-2">
-            {(['bulk', 'locator'] as const).map((t) => (
+
+          {/* Tabs */}
+          <div className="flex gap-0.5 mb-3 bg-muted rounded-md p-0.5">
+            {(['row', 'column'] as const).map((tab) => (
               <button
-                key={t}
-                onClick={() => setAddType(t)}
-                className={`flex-1 py-1 rounded text-[10px] font-semibold border transition-all ${
-                  addType === t
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground hover:border-primary/50'
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 py-1 rounded text-[10px] font-semibold transition-all ${
+                  activeTab === tab
+                    ? 'bg-card shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t === 'bulk' ? 'Bulk Meter' : 'Locator'}
+                {tab === 'row' ? '＋ Add Row' : '＋ Add Column'}
               </button>
             ))}
           </div>
-          <div className="flex gap-1.5">
-            <Input
-              value={addName}
-              onChange={(e) => setAddName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder={addType === 'bulk' ? 'e.g. Bulk Meter 3' : 'e.g. Zone A'}
-              className="h-7 text-xs"
-            />
-            <Button size="sm" onClick={handleAdd} className="h-7 px-2" disabled={!addName.trim()}>
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+
+          {activeTab === 'column' ? (
+            /* ── Add Column ── */
+            <div>
+              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">New Column Name</p>
+              <div className="flex gap-1.5">
+                <input
+                  value={newColName}
+                  onChange={(e) => setNewColName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
+                  placeholder="e.g. Storage Tank"
+                  className="h-7 text-xs flex-1 rounded-md border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <Button size="sm" onClick={handleAddColumn} className="h-7 px-2" disabled={!newColName.trim()}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {customColumns.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1">
+                  <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-1">Your Columns</p>
+                  {customColumns.map((col) => (
+                    <div key={col.id} className="flex items-center justify-between rounded px-2 py-1 bg-muted/50 border border-border">
+                      <span className="text-[10px] font-medium text-foreground truncate">{col.label}</span>
+                      <button
+                        onClick={() => onDeleteColumn(col.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors ml-2 shrink-0"
+                        title="Delete column and its nodes"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ── Add Row ── */
+            <div>
+              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Column</p>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {(['bulk', 'locator'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setAddType(t)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                      addType === t
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/50'
+                    }`}
+                  >
+                    {t === 'bulk' ? 'Bulk Meter' : 'Locator'}
+                  </button>
+                ))}
+                {customColumns.map((col) => (
+                  <button
+                    key={col.id}
+                    onClick={() => setAddType(col.id)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                      addType === col.id
+                        ? 'border-slate-500 bg-slate-100 text-slate-700'
+                        : 'border-border text-muted-foreground hover:border-slate-400'
+                    }`}
+                  >
+                    {col.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                  placeholder={
+                    addType === 'bulk' ? 'e.g. Bulk Meter 3'
+                    : addType === 'locator' ? 'e.g. Zone A'
+                    : 'e.g. Tank 1'
+                  }
+                  className="h-7 text-xs"
+                />
+                <Button size="sm" onClick={handleAdd} className="h-7 px-2" disabled={!addName.trim()}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -650,6 +775,7 @@ export default function PlantTopology() {
   const [panelOpen, setPanelOpen]     = useState(false);
   const [topoState, setTopoState]     = useState<TopologyState | null>(null);
   const [customNodes, setCustomNodes] = useState<TopoNode[]>([]);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
 
   // Pan + zoom
   const [zoom, setZoom]   = useState(1);
@@ -660,6 +786,7 @@ export default function PlantTopology() {
   useEffect(() => {
     if (!effectivePlantId) return;
     setCustomNodes(loadCustomNodes(effectivePlantId));
+    setCustomColumns(loadCustomColumns(effectivePlantId));
   }, [effectivePlantId]);
 
   useEffect(() => {
@@ -675,14 +802,14 @@ export default function PlantTopology() {
 
   // ── Custom node CRUD ─────────────────────────────────────────────────────────
 
-  const handleAddNode = useCallback((type: 'bulk' | 'locator', name: string) => {
+  const handleAddNode = useCallback((type: 'bulk' | 'locator' | 'customNode', name: string, colId?: string) => {
     if (!effectivePlantId) return;
     const id = `custom-${type}-${Date.now()}`;
-    const node: TopoNode = { id, type, label: name, status: 'Active', custom: true };
+    const node: TopoNode = { id, type, label: name, status: 'Active', custom: true, colId };
     const next = [...customNodes, node];
     setCustomNodes(next);
     saveCustomNodes(effectivePlantId, next);
-    toast.success(`${NODE_LABELS[type]} "${name}" added`);
+    toast.success(`${colId ? name : NODE_LABELS[type]} "${name}" added`);
   }, [customNodes, effectivePlantId]);
 
   const handleDeleteCustomNode = useCallback((id: string) => {
@@ -712,7 +839,26 @@ export default function PlantTopology() {
     }
   }, [customNodes, effectivePlantId, topoState]);
 
-  // ── Connection editing ───────────────────────────────────────────────────────
+  const handleAddColumn = useCallback((label: string) => {
+    if (!effectivePlantId) return;
+    const col: CustomColumn = { id: `col-${Date.now()}`, label };
+    const next = [...customColumns, col];
+    setCustomColumns(next);
+    saveCustomColumns(effectivePlantId, next);
+    toast.success(`Column "${label}" added`);
+  }, [customColumns, effectivePlantId]);
+
+  const handleDeleteColumn = useCallback((colId: string) => {
+    if (!effectivePlantId) return;
+    const nextCols = customColumns.filter((c) => c.id !== colId);
+    setCustomColumns(nextCols);
+    saveCustomColumns(effectivePlantId, nextCols);
+    // Remove all nodes belonging to this column
+    const nextNodes = customNodes.filter((n) => n.colId !== colId);
+    setCustomNodes(nextNodes);
+    saveCustomNodes(effectivePlantId, nextNodes);
+    toast.info('Column and its nodes removed');
+  }, [customColumns, customNodes, effectivePlantId]);
 
   function handleNodeClick(id: string, type: NodeType) {
     if (!canEdit || !editMode || !topoState) return;
@@ -786,7 +932,7 @@ export default function PlantTopology() {
     );
   }
 
-  const positions  = layoutNodes(topoState.nodes);
+  const positions  = layoutNodes(topoState.nodes, customColumns);
   const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
 
   let maxX = 0, maxY = 0;
@@ -1259,7 +1405,33 @@ export default function PlantTopology() {
                   </text>
                 ))}
 
-                {/* Power column header labels */}
+                {/* Custom column header labels */}
+                {customColumns.map((col, colIdx) => {
+                  const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
+                  return (
+                    <text key={`cust-hdr-${col.id}`} x={x + NODE_W / 2} y={16}
+                      textAnchor="middle" fill="#475569" fontSize={8.5}
+                      fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
+                      {col.label.toUpperCase()}
+                    </text>
+                  );
+                })}
+
+                {/* Custom column lane backgrounds */}
+                {customColumns.map((col, colIdx) => {
+                  const x = WATER_COLS.locator + COL_GAP * (colIdx + 1);
+                  return (
+                    <rect
+                      key={`cust-lane-${col.id}`}
+                      x={x - 10} y={24}
+                      width={NODE_W + 20}
+                      height={maxWaterY - 10}
+                      rx={6}
+                      fill={COLORS.customNode.lane}
+                      opacity={0.55}
+                    />
+                  );
+                })}
                 {hasPowerNodes && [
                   { x: POWER_COLS.solarSource, label: 'SOURCE' },
                   { x: POWER_COLS.solarMeter,  label: 'SOLAR / GRID METERS' },
@@ -1279,7 +1451,9 @@ export default function PlantTopology() {
 
           {/* ── Legend ──────────────────────────────────────────────────────────── */}
           <div className="mt-3 shrink-0 flex flex-wrap gap-x-4 gap-y-1.5 pt-3 border-t border-border">
-            {(Object.entries(COLORS) as [NodeType, (typeof COLORS)[NodeType]][]).map(([type, c]) => (
+            {(Object.entries(COLORS) as [NodeType, (typeof COLORS)[NodeType]][])
+              .filter(([type]) => type !== 'customNode')
+              .map(([type, c]) => (
               <div key={type} className="flex items-center gap-1.5">
                 <div className="w-3.5 h-3.5 rounded-sm border-[1.5px]"
                   style={{ background: c.bg, borderColor: c.border }} />
@@ -1309,11 +1483,14 @@ export default function PlantTopology() {
           onClose={() => setPanelOpen(false)}
           topoState={topoState}
           customNodes={customNodes}
+          customColumns={customColumns}
           plantId={effectivePlantId ?? ''}
           canEdit={canEdit}
           onAddNode={handleAddNode}
           onDeleteCustomNode={handleDeleteCustomNode}
           onRenameCustomNode={handleRenameCustomNode}
+          onAddColumn={handleAddColumn}
+          onDeleteColumn={handleDeleteColumn}
         />
       </div>
     </div>
