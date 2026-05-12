@@ -292,46 +292,35 @@ interface SharedTileProps {
 
 // ── Change Password Dialog ────────────────────────────────────────────────────
 
-// SQL shown to admins when the RPC hasn't been deployed yet
-const SETUP_SQL = `-- Run this once in your Supabase SQL Editor (Dashboard → SQL Editor)
--- It creates a SECURITY DEFINER function that lets admins reset any user's password.
-
+const SETUP_SQL = `-- Run once in Supabase Dashboard → SQL Editor
 create or replace function public.admin_set_user_password(
-  _user_id uuid,
-  _new_password text
+  _user_id uuid, _new_password text
 )
-returns void
-language plpgsql
-security definer
-set search_path = extensions, public, auth
-as $$
+returns void language plpgsql security definer
+set search_path = extensions, public, auth as $$
 begin
-  -- Only allow callers who have the Admin role in user_roles
   if not exists (
     select 1 from public.user_roles
     where user_id = auth.uid() and role = 'Admin'
   ) then
     raise exception 'Permission denied: Admin role required';
   end if;
-
   update auth.users
   set encrypted_password = crypt(_new_password, gen_salt('bf'))
   where id = _user_id;
 end;
 $$;
-
--- Grant execute to authenticated users (the function itself checks for Admin role)
 grant execute on function public.admin_set_user_password(uuid, text) to authenticated;`;
 
 function ChangePasswordDialog({ open, onClose, userId, userName }: {
   open: boolean; onClose: () => void; userId: string; userName: string;
 }) {
-  const [password, setPassword]   = useState('');
-  const [confirm, setConfirm]     = useState('');
-  const [showPass, setShowPass]   = useState(false);
-  const [busy, setBusy]           = useState(false);
+  const [password, setPassword]     = useState('');
+  const [confirm, setConfirm]       = useState('');
+  const [showPass, setShowPass]     = useState(false);
+  const [busy, setBusy]             = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
-  const [copied, setCopied]       = useState(false);
+  const [copied, setCopied]         = useState(false);
 
   const handleClose = () => {
     setPassword(''); setConfirm(''); setShowPass(false);
@@ -351,15 +340,14 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
     if (password !== confirm)  { toast.error('Passwords do not match'); return; }
     setBusy(true);
     const { error } = await (supabase.rpc as any)('admin_set_user_password', {
-      _user_id: userId,
-      _new_password: password,
+      _user_id: userId, _new_password: password,
     });
     setBusy(false);
     if (error) {
-      const isNotDeployed = error.message.includes('function') || error.message.includes('does not exist') || error.code === 'PGRST202';
-      if (isNotDeployed) { setNeedsSetup(true); return; }
-      toast.error(error.message);
-      return;
+      if (error.message.includes('function') || error.message.includes('does not exist') || error.code === 'PGRST202') {
+        setNeedsSetup(true); return;
+      }
+      toast.error(error.message); return;
     }
     toast.success(`Password updated for ${userName}`);
     handleClose();
@@ -376,16 +364,13 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
         </DialogHeader>
 
         {needsSetup ? (
-          /* ── One-time setup required ── */
           <div className="space-y-3">
             <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
               <p className="font-semibold">One-time database setup required</p>
-              <p>The <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">admin_set_user_password</code> function isn't deployed yet. Copy the SQL below and run it once in your <strong>Supabase SQL Editor</strong>, then try again.</p>
+              <p>Run the SQL below once in your <strong>Supabase Dashboard → SQL Editor</strong>, then try again.</p>
             </div>
             <div className="relative">
-              <pre className="rounded-lg border bg-muted text-[10.5px] font-mono p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
-                {SETUP_SQL}
-              </pre>
+              <pre className="rounded-lg border bg-muted text-[10.5px] font-mono p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">{SETUP_SQL}</pre>
               <button
                 onClick={handleCopy}
                 className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium border border-border/60 bg-background hover:bg-muted transition-colors"
@@ -393,20 +378,16 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
                 {copied ? '✓ Copied' : 'Copy'}
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              After running the SQL, close this dialog and try changing the password again.
-            </p>
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>Close</Button>
-              <Button onClick={() => { setNeedsSetup(false); }}>Try again</Button>
+              <Button onClick={() => setNeedsSetup(false)}>Try again</Button>
             </DialogFooter>
           </div>
         ) : (
-          /* ── Normal password form ── */
           <>
-            <div className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Setting a new password for <span className="font-medium text-foreground">{userName}</span>
-            </div>
+            </p>
             <div className="space-y-3">
               <div>
                 <Label>New password</Label>
