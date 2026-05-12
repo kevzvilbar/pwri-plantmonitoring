@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
@@ -224,67 +224,229 @@ function SignInForm() {
   );
 }
 
-// ─── Forgot Password ──────────────────────────────────────────────────────────
-function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
+// ─── OTP digit boxes ──────────────────────────────────────────────────────────
+function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const LENGTH = 6;
+  const boxRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const digits = value.padEnd(LENGTH, ' ').split('').slice(0, LENGTH);
 
-  const handleReset = async () => {
+  const commit = (idx: number, char: string) => {
+    const next = [...digits];
+    next[idx] = char || ' ';
+    onChange(next.join('').trimEnd());
+    if (char && idx < LENGTH - 1) boxRefs.current[idx + 1]?.focus();
+  };
+
+  const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      if (digits[idx].trim()) { commit(idx, ''); }
+      else if (idx > 0) { boxRefs.current[idx - 1]?.focus(); commit(idx - 1, ''); }
+    } else if (e.key === 'ArrowLeft' && idx > 0) {
+      boxRefs.current[idx - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && idx < LENGTH - 1) {
+      boxRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, LENGTH);
+    onChange(pasted);
+    boxRefs.current[Math.min(pasted.length, LENGTH - 1)]?.focus();
+  };
+
+  return (
+    <div className="flex gap-2 justify-center my-1">
+      {Array.from({ length: LENGTH }).map((_, idx) => (
+        <input
+          key={idx}
+          ref={(el) => { boxRefs.current[idx] = el; }}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={digits[idx].trim()}
+          onChange={(e) => commit(idx, e.target.value.replace(/\D/g, '').slice(-1))}
+          onKeyDown={(e) => handleKeyDown(idx, e)}
+          onPaste={handlePaste}
+          onFocus={(e) => e.target.select()}
+          className={[
+            'w-11 h-13 text-center text-xl font-mono font-bold rounded-lg border-2 bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent',
+            'transition-all caret-transparent',
+            digits[idx].trim() ? 'border-accent/60' : 'border-border',
+          ].join(' ')}
+          style={{ height: '3.25rem' }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Forgot Password (3-step OTP wizard) ─────────────────────────────────────
+type ForgotStep = 'email' | 'code' | 'newpass';
+
+function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
+  const [step, setStep]       = useState<ForgotStep>('email');
+  const [email, setEmail]     = useState('');
+  const [code, setCode]       = useState('');
+  const [password, setPass]   = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy]       = useState(false);
+
+  // ── Step 1: send OTP ──
+  const handleSendCode = async () => {
     const ve = emailSchema.safeParse(email);
     if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
     setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin, // matches Supabase Site URL — no /auth needed
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { shouldCreateUser: false },
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    setSent(true);
+    setStep('code');
   };
 
-  if (sent) {
-    return (
-      <div className="space-y-4 text-center py-2">
-        <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-accent/10 mx-auto">
-          <MailCheck className="h-6 w-6 text-accent" />
-        </div>
-        <div>
-          <p className="font-semibold text-sm">Check your email</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            A reset link was sent to <strong>{email}</strong>. Follow the instructions in the email to set a new password.
-          </p>
-        </div>
-        <Button variant="outline" className="w-full" onClick={onBack}>
-          <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back to sign in
-        </Button>
-      </div>
-    );
-  }
+  // ── Step 2: verify OTP ──
+  const handleVerifyCode = async () => {
+    if (code.replace(/\s/g, '').length < 6) { toast.error('Enter the full 6-digit code'); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: 'email',
+    });
+    setBusy(false);
+    if (error) { toast.error('Invalid or expired code — try again'); return; }
+    setStep('newpass');
+  };
 
-  return (
+  // ── Step 3: update password ──
+  const handleUpdatePassword = async () => {
+    const vp = passSchema.safeParse(password);
+    if (!vp.success) { toast.error(vp.error.issues[0].message); return; }
+    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Password updated! Please sign in.');
+    await supabase.auth.signOut();
+    onBack();
+  };
+
+  // ── Step indicator ──
+  const steps: ForgotStep[] = ['email', 'code', 'newpass'];
+  const stepIdx = steps.indexOf(step);
+
+  const StepDots = () => (
+    <div className="flex justify-center gap-1.5 mb-3">
+      {steps.map((s, i) => (
+        <span key={s} className={[
+          'h-1.5 rounded-full transition-all duration-300',
+          i === stepIdx ? 'w-5 bg-accent' : i < stepIdx ? 'w-1.5 bg-accent/40' : 'w-1.5 bg-border',
+        ].join(' ')} />
+      ))}
+    </div>
+  );
+
+  // ── Render: Step 1 — email ──
+  if (step === 'email') return (
     <div className="space-y-3">
-      <div className="text-center mb-1">
+      <div className="text-center">
         <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-muted mx-auto mb-2">
           <KeyRound className="h-5 w-5 text-muted-foreground" />
         </div>
         <p className="font-semibold text-sm">Forgot your password?</p>
-        <p className="text-xs text-muted-foreground mt-0.5">Enter your email and we'll send you a reset link.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">We'll send a 6-digit code to your email.</p>
       </div>
+      <StepDots />
       <div>
-        <Label>Email</Label>
+        <Label>Email address</Label>
         <Input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          onKeyDown={(e) => e.key === 'Enter' && handleReset()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
+          autoFocus
         />
       </div>
-      <Button onClick={handleReset} disabled={busy} className="w-full">
-        {busy ? 'Sending…' : 'Send reset link'}
+      <Button onClick={handleSendCode} disabled={busy} className="w-full">
+        {busy ? 'Sending…' : 'Send code'}
       </Button>
       <Button variant="ghost" size="sm" className="w-full" onClick={onBack}>
         <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Back to sign in
+      </Button>
+    </div>
+  );
+
+  // ── Render: Step 2 — OTP code ──
+  if (step === 'code') return (
+    <div className="space-y-3">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-accent/10 mx-auto mb-2">
+          <MailCheck className="h-5 w-5 text-accent" />
+        </div>
+        <p className="font-semibold text-sm">Enter the code</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          A 6-digit code was sent to <strong>{email}</strong>
+        </p>
+      </div>
+      <StepDots />
+      <OtpInput value={code} onChange={setCode} />
+      <Button
+        onClick={handleVerifyCode}
+        disabled={busy || code.replace(/\s/g, '').length < 6}
+        className="w-full"
+      >
+        {busy ? 'Verifying…' : 'Verify code'}
+      </Button>
+      <div className="flex items-center justify-between text-xs text-muted-foreground pt-0.5">
+        <button type="button" onClick={() => setStep('email')} className="hover:text-foreground underline underline-offset-2">
+          Change email
+        </button>
+        <button type="button" onClick={handleSendCode} disabled={busy} className="hover:text-foreground underline underline-offset-2">
+          Resend code
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Render: Step 3 — new password ──
+  return (
+    <div className="space-y-3">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-accent/10 mx-auto mb-2">
+          <KeyRound className="h-5 w-5 text-accent" />
+        </div>
+        <p className="font-semibold text-sm">Set a new password</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Choose a strong password for your account.</p>
+      </div>
+      <StepDots />
+      <div>
+        <Label>New password</Label>
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPass(e.target.value)}
+          placeholder="Min 8 characters"
+          autoFocus
+        />
+      </div>
+      <div>
+        <Label>Confirm new password</Label>
+        <Input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Repeat new password"
+          onKeyDown={(e) => e.key === 'Enter' && handleUpdatePassword()}
+        />
+      </div>
+      <Button onClick={handleUpdatePassword} disabled={busy} className="w-full">
+        {busy ? 'Updating…' : 'Update password'}
       </Button>
     </div>
   );
