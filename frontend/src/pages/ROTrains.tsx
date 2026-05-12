@@ -1302,8 +1302,14 @@ function PretreatmentAndROLog() {
   // Recovery uses effective flows (EM > meter-derived)
   const recovery    = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
     ? +((effPermFlow / effFeedFlow) * 100).toFixed(1) : null;
-  const rejection   = calc.rejection(num(roValues.permeate_tds), num(roValues.reject_tds));
-  const saltPassage = calc.saltPassage(num(roValues.permeate_tds), num(roValues.reject_tds));
+  // Salt Rejection = ((Feed TDS - Permeate TDS) / Feed TDS) x 100%
+  const feedTds = num(roValues.feed_tds);
+  const permTds = num(roValues.permeate_tds);
+  const rejection   = feedTds != null && feedTds > 0 && permTds != null
+    ? +( ((feedTds - permTds) / feedTds) * 100 ).toFixed(2) : null;
+  // Salt Passage = (Permeate TDS / Feed TDS) x 100%
+  const saltPassage = feedTds != null && feedTds > 0 && permTds != null
+    ? +( (permTds / feedTds) * 100 ).toFixed(2) : null;
   const rejectFlow  = effRejFlow;
 
   const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
@@ -2223,7 +2229,7 @@ function PretreatmentAndROLog() {
               {/* Rejection + Salt Passage in their own row below TDS inputs */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <Label className="text-[11px] text-muted-foreground">Rejection %</Label>
+                  <Label className="text-[11px] text-muted-foreground">Salt Rejection %</Label>
                   <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" />
                 </div>
                 <div>
