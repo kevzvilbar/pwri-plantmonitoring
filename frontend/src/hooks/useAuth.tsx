@@ -36,6 +36,9 @@ interface AuthContextValue {
   isAdmin: boolean;
   isManager: boolean;
   loading: boolean;
+  /** True when Supabase fires PASSWORD_RECOVERY (user clicked a reset-password link).
+   *  AuthProvider auto-navigates to /auth so ResetPasswordForm can render. */
+  isRecovery: boolean;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [operatorProfile, setOperatorProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   const activeOperatorId = useAppStore((s) => s.activeOperatorId);
 
@@ -76,6 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Set up listener FIRST (per Lovable Cloud auth knowledge)
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, sess) => {
+      // Intercept password-reset links — Supabase lands on the Site URL (/) with
+      // the recovery token in the hash. We detect it here (AuthProvider is always
+      // mounted) and redirect to /auth so ResetPasswordForm can render.
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+        if (!window.location.pathname.startsWith('/auth')) {
+          window.location.replace('/auth');
+        }
+        return; // don't overwrite session state during recovery
+      }
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
@@ -88,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOperatorProfile(null);
         setActiveOperatorIdRef.current(null); // use ref, not reactive setter
         setRoles([]);
+        setIsRecovery(false);
         setLoading(false);
       }
     });
@@ -118,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeOperator = operatorProfile ?? profile;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, activeOperator, activeOperatorId, roles, isAdmin, isManager, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, activeOperator, activeOperatorId, roles, isAdmin, isManager, loading, isRecovery, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );
