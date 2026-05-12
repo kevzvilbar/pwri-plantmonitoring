@@ -27,6 +27,8 @@ const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Profile = lazy(() => import("./pages/Profile"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+// ── NEW ──────────────────────────────────────────────────────────────────────
+const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 
 const RouteFallback = () => (
   <div className="flex h-[60vh] w-full items-center justify-center text-sm text-muted-foreground">
@@ -89,6 +91,8 @@ const App = () => (
                 <Route path="/plants/:id" element={<Plants />} />
                 <Route path="/operations" element={<Operations />} />
                 <Route path="/ro-trains" element={<ROTrains />} />
+                {/* ── NEW ── */}
+                <Route path="/topology" element={<PlantTopology />} />
                 <Route path="/costs" element={<Costs />} />
                 <Route path="/maintenance" element={<Maintenance />} />
                 <Route path="/incidents" element={<Incidents />} />
