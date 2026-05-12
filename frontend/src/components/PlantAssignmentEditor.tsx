@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
@@ -21,10 +22,12 @@ interface Props {
   disabled?: boolean;
   /** When true (Operator), only one plant may be selected at a time. */
   singlePlantOnly?: boolean;
+  /** Custom trigger element. When provided, replaces the default "Edit plants" button. */
+  trigger?: ReactNode;
 }
 
 export function PlantAssignmentEditor({
-  userId, userLabel, currentPlantIds, invalidateKeys, disabled, singlePlantOnly,
+  userId, userLabel, currentPlantIds, invalidateKeys, disabled, singlePlantOnly, trigger,
 }: Props) {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
@@ -72,15 +75,23 @@ export function PlantAssignmentEditor({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={disabled}
-          data-testid={`edit-plants-${userId}`}
-        >
-          <Building2 className="h-3.5 w-3.5 mr-1.5" />
-          Edit plants
-        </Button>
+        {trigger ? (
+          // Caller supplied a custom trigger (e.g. icon-only button); render it as-is.
+          // We wrap in a span so asChild can clone it even when disabled.
+          <span className="contents">
+            {trigger}
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            data-testid={`edit-plants-${userId}`}
+          >
+            <Building2 className="h-3.5 w-3.5 mr-1.5" />
+            Edit plants
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
