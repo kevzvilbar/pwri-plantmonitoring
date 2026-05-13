@@ -1480,6 +1480,11 @@ export default function PlantTopology() {
     );
   }
 
+  // Dynamic full column sequence (base + custom interleaved) — declared here so
+  // colXMap is available for both the maxX calculation below AND the render section.
+  const colSequence = buildColSequence(customColumns);
+  const colXMap = buildColXMap(customColumns, colWidths);
+
   const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths);
   const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
 
@@ -1715,10 +1720,6 @@ export default function PlantTopology() {
   }
 
   // ── Column lane backgrounds ───────────────────────────────────────────────────
-
-  // Dynamic full column sequence (base + custom interleaved)
-  const colSequence = buildColSequence(customColumns);
-  const colXMap = buildColXMap(customColumns, colWidths);
 
   const hasPowerNodes = topoState.nodes.some((n) =>
     ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
