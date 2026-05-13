@@ -4,8 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare, X, Send, Loader2, Clock,
   Building2, User, ShieldCheck, MapPin, ChevronRight,
-  Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
-  BarChart3, GitBranch, ClipboardList,
+  BookOpen, ChevronDown,
+  GitBranch, ClipboardList,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -532,7 +532,7 @@ function Staff() {
 function OrgNode({ member, allStaff, roles, depth = 0 }: {
   member: StaffMember; allStaff: StaffMember[]; roles: any[]; depth?: number;
 }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(false);
   const children = allStaff.filter((s) => s.immediate_head_id === member.id);
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
   const hasChildren = children.length > 0;
@@ -802,20 +802,26 @@ const MANUAL_SECTIONS: ManualSection[] = [
 ];
 
 function AppManual() {
-  const [open, setOpen] = useState<number | null>(0);
+  const [openSet, setOpenSet] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setOpenSet((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
   return (
     <div className="space-y-1.5">
       {MANUAL_SECTIONS.map((s, i) => (
         <div key={i} className="border rounded-lg overflow-hidden">
           <button
             className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
-            onClick={() => setOpen((p) => (p === i ? null : i))}
+            onClick={() => toggle(i)}
           >
             <span className="text-muted-foreground">{s.icon}</span>
             <span className="text-sm font-medium flex-1">{s.title}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', open === i && 'rotate-180')} />
+            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', openSet.has(i) && 'rotate-180')} />
           </button>
-          {open === i && (
+          {openSet.has(i) && (
             <div className="px-4 pb-3 pt-1 border-t bg-muted/20">
               {s.content}
             </div>
@@ -827,15 +833,13 @@ function AppManual() {
 }
 
 // ---------------------------------------------------------------------------
-// Info Tab (enhanced)
+// Info Tab
 // ---------------------------------------------------------------------------
 
 function RegisterInfo() {
-  const { isAdmin } = useAuth();
   const { data: plants = [] } = usePlants();
+  const [orgOpen, setOrgOpen] = useState(false);
 
-  // FIX: Reuse the same 'staff' queryKey so this shares the cached result
-  // from Staff tab (which already uses the RPC to bypass RLS).
   const { data: staff = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -851,14 +855,9 @@ function RegisterInfo() {
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
     queryFn: async () => {
-      // FIX: Use RPC to get all roles bypassing RLS, so Managers/Admins show
-      // the correct role label in the Reporting Tree instead of "Operator".
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
       if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id, user_roles(role)');
+      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
       return (data ?? []).flatMap((p: any) =>
         (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
       );
@@ -866,49 +865,34 @@ function RegisterInfo() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
 
-      {/* 1. Staff Directory Stats */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">Directory Overview</h3>
-        </div>
-        <DirectoryStats staff={staff} roles={roles} plants={plants} />
-      </Card>
-
-      {/* 2. Org Chart */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">Reporting Tree</h3>
-        </div>
-        <OrgChart staff={staff} roles={roles} plants={plants} />
-      </Card>
-
-      {/* 3. Pending Approvals — admin only */}
-      {isAdmin && (
-        <Card className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-500" />
-            <h3 className="font-semibold text-sm">Pending Approvals</h3>
-            {staff.filter((s) => s.status === 'Pending').length > 0 && (
-              <span className="ml-auto text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
-                {staff.filter((s) => s.status === 'Pending').length} pending
-              </span>
-            )}
+      {/* Org Chart */}
+      <Card className="overflow-hidden">
+        <button
+          className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+          onClick={() => setOrgOpen((p) => !p)}
+        >
+          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold flex-1">Reporting Tree</span>
+          <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', orgOpen && 'rotate-180')} />
+        </button>
+        {orgOpen && (
+          <div className="border-t px-4 py-3">
+            <OrgChart staff={staff} roles={roles} plants={plants} />
           </div>
-          <PendingApprovals staff={staff} />
-        </Card>
-      )}
+        )}
+      </Card>
 
-      {/* 4. App Manual */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">App Manual</h3>
+      {/* App Manual */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b">
+          <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold">App Manual</span>
         </div>
-        <AppManual />
+        <div className="p-3">
+          <AppManual />
+        </div>
       </Card>
 
     </div>
