@@ -509,7 +509,15 @@ export default function Dashboard() {
   // See `components/dashboard/types.ts` for definitions. Lazy-init
   // from localStorage so the user's preference survives reload
   // without a flash of "inline".
-  const [viewMode, setViewMode] = useState<DashboardViewMode>(readSavedViewMode);
+  // Default to 'sections' so clicking a KPI card expands its chart inline.
+  // Falls back to whatever was saved in localStorage from a previous visit.
+  const [viewMode, setViewMode] = useState<DashboardViewMode>(() => {
+    try {
+      const v = window.localStorage.getItem(VIEW_MODE_KEY) as DashboardViewMode | null;
+      if (v === 'inline' || v === 'sections' || v === 'popup') return v;
+    } catch { /* Safari private / quota */ }
+    return 'sections';
+  });
   // In `sections` mode, this holds the metric key whose chart is
   // currently fold-open. Single-open behaviour — clicking another KPI
   // auto-collapses the previous. `inline` mode shows everything;
@@ -525,18 +533,21 @@ export default function Dashboard() {
       console.warn('[Dashboard] could not persist view mode preference:', err);
     }
   };
-  // Returns the click handler for chart-bearing KPI cards. Behaviour
-  // depends on the current view mode:
-  //   • inline   → no click action (chart is already on screen below)
-  //   • sections → toggle this metric's collapsible chart (single-open)
-  //   • popup    → open the TrendModal (existing behaviour)
-  const handleMetricClick = (metric: string, title: string): (() => void) | undefined => {
-    if (viewMode === 'inline') return undefined;
+  // Returns the click handler for chart-bearing KPI cards. Behaviour:
+  //   • sections → toggle this metric's collapsible chart (single-open, default)
+  //   • popup    → open the TrendModal in a dialog
+  //   • inline   → auto-switch to sections mode and expand the clicked metric
+  //                (inline already shows charts; clicking gives a focused view)
+  const handleMetricClick = (metric: string, title: string): (() => void) => {
     return () => {
       if (viewMode === 'sections') {
         setExpandedMetric((prev) => (prev === metric ? null : metric));
-      } else {
+      } else if (viewMode === 'popup') {
         setModal({ metric, title });
+      } else {
+        // inline → switch to sections so the chart collapses into a focused view
+        persistViewMode('sections');
+        setExpandedMetric(metric);
       }
     };
   };
@@ -630,14 +641,35 @@ export default function Dashboard() {
     },
     enabled: plantIds.length > 0,
   });
-  const { data: todayPower } = useQuery({
-    queryKey: ['dash-power-today', plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('power_readings').select('daily_consumption_kwh,plant_id')
-          .in('plant_id', plantIds).gte('reading_datetime', today)).data ?? []
-      : [],
+  // Power readings — today first, fall back to most-recent per plant if today is empty.
+  // powerIsStale is set when the displayed value came from a prior day.
+  const { data: todayPowerRaw } = useQuery({
+    queryKey: ['dash-power-today', plantIds, today],
+    queryFn: async () => {
+      if (!plantIds.length) return { rows: [] as any[], isStale: false };
+      const { data: todayData } = await supabase
+        .from('power_readings')
+        .select('daily_consumption_kwh,plant_id,reading_datetime')
+        .in('plant_id', plantIds)
+        .gte('reading_datetime', today);
+      if ((todayData ?? []).length) return { rows: todayData!, isStale: false };
+      // Fallback: latest reading per plant
+      const { data: recent } = await supabase
+        .from('power_readings')
+        .select('daily_consumption_kwh,plant_id,reading_datetime')
+        .in('plant_id', plantIds)
+        .order('reading_datetime', { ascending: false })
+        .limit(plantIds.length * 5);
+      const latestByPlant = new Map<string, any>();
+      (recent ?? []).forEach((r: any) => {
+        if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
+      });
+      return { rows: Array.from(latestByPlant.values()), isStale: true };
+    },
     enabled: plantIds.length > 0,
   });
+  const todayPower   = todayPowerRaw?.rows ?? [];
+  const powerIsStale = todayPowerRaw?.isStale ?? false;
   // ----- Yesterday aggregates (for trend deltas on highlighted KPIs) -----
   const { data: yLocators } = useQuery({
     queryKey: ['dash-loc-yest', _locatorIds, yesterday, today],
@@ -706,15 +738,40 @@ export default function Dashboard() {
       : [],
     enabled: plantIds.length > 0,
   });
-  // Today's production cost (chem + power)
-  const { data: todayCosts } = useQuery({
+  // Today's production cost (chem + power).
+  // If no row exists for today's date, fall back to the latest available row per
+  // plant so the dashboard never displays ₱0 when real data exists.
+  // `costDataDate` + `costIsStale` drive the "as of MMM d" badge in the cluster header.
+  const { data: todayCostsRaw } = useQuery({
     queryKey: ['dash-costs-today', plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('production_costs').select('chem_cost,power_cost,total_cost,plant_id')
-          .in('plant_id', plantIds).eq('cost_date', format(new Date(), 'yyyy-MM-dd'))).data ?? []
-      : [],
+    queryFn: async () => {
+      if (!plantIds.length) return { rows: [] as any[], costDataDate: null as string | null };
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const { data: todayData } = await supabase
+        .from('production_costs')
+        .select('chem_cost,power_cost,total_cost,plant_id,cost_date')
+        .in('plant_id', plantIds)
+        .eq('cost_date', todayStr);
+      if ((todayData ?? []).length) return { rows: todayData!, costDataDate: todayStr };
+      // Fallback: latest cost row per plant
+      const { data: recent } = await supabase
+        .from('production_costs')
+        .select('chem_cost,power_cost,total_cost,plant_id,cost_date')
+        .in('plant_id', plantIds)
+        .order('cost_date', { ascending: false })
+        .limit(plantIds.length * 3);
+      const latestByPlant = new Map<string, any>();
+      (recent ?? []).forEach((r: any) => {
+        if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
+      });
+      const rows = Array.from(latestByPlant.values());
+      return { rows, costDataDate: rows[0]?.cost_date ?? null };
+    },
     enabled: plantIds.length > 0,
   });
+  const todayCosts   = todayCostsRaw?.rows ?? [];
+  const costDataDate = todayCostsRaw?.costDataDate ?? null;
+  const costIsStale  = costDataDate != null && costDataDate !== format(new Date(), 'yyyy-MM-dd');
   // Latest daily summary fallback per plant (today first, else latest)
   const { data: dailySummary } = useQuery({
     queryKey: ['dash-summary-recent', plantIds],
@@ -817,10 +874,13 @@ export default function Dashboard() {
     return m;
   }, [plants]);
 
-  // Costs aggregate (today). Fallback to most recent daily_plant_summary row per plant for missing fields.
-  const chemCost = (todayCosts ?? []).reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
-  const powerCost = (todayCosts ?? []).reduce((s, r: any) => s + (+r.power_cost || 0), 0);
-  const productionCost = chemCost + powerCost;
+  // Costs aggregate (today or most-recent fallback).
+  // Use null when the table has no rows at all (no data ever entered) so the
+  // stat cards can render '—' instead of the misleading ₱0.
+  const hasCostData    = todayCosts.length > 0;
+  const chemCost       = hasCostData ? todayCosts.reduce((s, r: any) => s + (+r.chem_cost  || 0), 0) : null;
+  const powerCost      = hasCostData ? todayCosts.reduce((s, r: any) => s + (+r.power_cost || 0), 0) : null;
+  const productionCost = hasCostData ? (chemCost! + powerCost!) : null;
 
   // Pull latest daily_plant_summary per plant (for blending, downtime, raw water)
   const latestPerPlant = useMemo(() => {
@@ -906,7 +966,7 @@ export default function Dashboard() {
           <ToggleGroupItem
             value="sections"
             className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            title="Sections — click a KPI card to fold/unfold its trend chart"
+            title="Sections — click any KPI card to fold/unfold its trend chart inline (recommended)"
             aria-label="Sections view"
           >
             <ListCollapse className="h-3 w-3 mr-1" /> Sections
@@ -914,10 +974,10 @@ export default function Dashboard() {
           <ToggleGroupItem
             value="popup"
             className="h-7 px-2 text-[11px] data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
-            title="Popup — click a KPI card to open its trend chart in a dialog"
-            aria-label="Popup view"
+            title="Dialog — click a KPI card to open its trend chart in a full-screen dialog"
+            aria-label="Dialog view"
           >
-            <ExternalLink className="h-3 w-3 mr-1" /> Popup
+            <ExternalLink className="h-3 w-3 mr-1" /> Dialog
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
@@ -926,7 +986,7 @@ export default function Dashboard() {
       {nrwBreached && (
         <div
           className="flex items-start gap-2 rounded-lg border border-rose-300/70 bg-gradient-to-r from-rose-50 to-rose-100/40 px-3 py-2 dark:from-rose-950/40 dark:to-rose-900/20 dark:border-rose-900/60 cursor-pointer hover:shadow-sm transition-shadow"
-          onClick={() => setModal({ metric: 'nrw', title: 'NRW trend' })}
+          onClick={handleMetricClick('nrw', 'NRW trend')}
           data-testid="nrw-banner"
           role="button"
         >
@@ -953,8 +1013,12 @@ export default function Dashboard() {
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
           size="lg" calc
-          calcTooltip="Production Cost = Power Cost + Chemical Cost (today)"
-          value={`₱${fmtNum(productionCost, 0)}`}
+          calcTooltip={
+            costIsStale && costDataDate
+              ? `Production Cost = Power + Chem (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
+              : 'Production Cost = Power Cost + Chemical Cost (today)'
+          }
+          value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
           trend={dConsumption}
@@ -1012,22 +1076,35 @@ export default function Dashboard() {
 
       {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
       {/* Spec order: Power Cost · Chemical Cost · Power kWh · PV Ratio.
-          The header doubles as the section title called out in the spec. */}
-      <ClusterHeader icon={Zap} title="Production Cost (Power + Chemical)" accent="text-chart-6" subtitle="Today" />
+          The header subtitle shows "Today" normally or "as of MMM d" when
+          cost data was pulled from the most-recent fallback (no today entry). */}
+      <ClusterHeader
+        icon={Zap}
+        title="Production Cost (Power + Chemical)"
+        accent="text-chart-6"
+        subtitle={
+          costIsStale && costDataDate
+            ? `as of ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d')}`
+            : 'Today'
+        }
+      />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
-          value={`₱${fmtNum(powerCost, 0)}`}
+          value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
-          value={`₱${fmtNum(chemCost, 0)}`}
+          value={chemCost == null ? '—' : `₱${fmtNum(chemCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
-        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh" value={fmtNum(kwh)} unit="kWh"
+        <StatCard icon={Zap} accent="text-chart-6" label="Power kWh"
+          value={powerIsStale || kwh > 0 ? fmtNum(kwh) : '—'}
+          unit={kwh > 0 ? 'kWh' : undefined}
           trend={dKwh}
           onClick={handleMetricClick('kwh', 'Power Consumption & Energy Mix')} />
         <StatCard icon={Zap} accent="text-chart-6" label="PV Ratio" value={pv == null ? '—' : pv} unit="kWh/m³"
           calc threshold="1.2"
           calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
+      </div>
       </div>
       <ClusterCharts
         metrics={[
