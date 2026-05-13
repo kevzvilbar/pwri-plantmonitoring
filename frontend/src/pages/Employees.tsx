@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare, X, Send, Loader2, Clock,
   Building2, User, ShieldCheck, MapPin, ChevronRight,
-  BookOpen, ChevronDown,
+  Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
   GitBranch, ClipboardList,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
