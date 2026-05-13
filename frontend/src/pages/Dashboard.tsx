@@ -46,17 +46,14 @@ type SummaryTab = 'consumption' | 'production';
  *   • first row after replacement  → delta 0, clear flag
  *   • normal row w/ dailyVolumeField → use that value (clamped ≥ 0)
  *   • normal row w/o dailyVolumeField → current − last (clamped ≥ 0)
- *   • no predecessor yet           → current − previous_reading if available
- * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
+ *   • no predecessor yet (first in range) → current − previous_reading (DB field)
+ *     This fixes the "millions delta" bug: without a prior row in the fetched
+ *     window, the cumulative meter value would be treated as the day's consumption.
+ *     Using the stored previous_reading gives the actual single-interval delta.
  *
- * NOTE: The "Negative reading" warning shown in the Production vs Consumption
- * chart tooltip is computed inside TrendChart.tsx (computeEntityDeltas), not
- * here. This function is only used for StatCard aggregates and DataSummaryModal.
- * The negative comes from TrendChart reading a raw delta of
- * (current_reading - previous_day_reading) when daily_volume is NULL and the
- * meter value legitimately decreased (e.g. meter reset, manual correction, or
- * a reading entered out of order). Fix: TrendChart should clamp both the drawn
- * value AND the tooltip value with Math.max(0, delta) — not just the chart point.
+ * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
+ * Estimated rows (is_estimated=true) are included in the pivot normally;
+ * the DataSummaryModal renders them with a distinct visual indicator.
  */
 function computePivotFromReadings(
   readings: any[],
@@ -92,23 +89,27 @@ function computePivotFromReadings(
       }
       let delta = 0;
       if (dailyVolumeField && r[dailyVolumeField] != null) {
-        // daily_volume is pre-computed by the server/operator — always clamp ≥ 0.
-        // A stored negative daily_volume indicates a data-entry error; treat as 0.
+        // daily_volume is GENERATED ALWAYS as (current_reading - previous_reading).
+        // For the very first row in the fetched window (no lastReading yet), this
+        // value correctly represents THAT reading's interval — which may span
+        // multiple days if readings were skipped. Use it as-is (it's already the
+        // correct single-interval delta stored at insert time), clamped ≥ 0.
         delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
       } else if (!lastReading.has(entityKey)) {
+        // FIX: No daily_volume and no prior row in range.
+        // Use the stored previous_reading field (written by Operations.tsx at insert
+        // time) instead of treating the full cumulative meter value as today's delta.
+        // This prevents the "millions" spike when the date range starts mid-history.
         if (r.previous_reading != null && r.current_reading != null)
-          // Clamp: if previous_reading > current_reading (meter reset / out-of-order
-          // entry) we emit 0 rather than a negative delta.
           delta = Math.max(0, +r.current_reading - +r.previous_reading);
         lastReading.set(entityKey, +r.current_reading);
       } else {
-        // Clamp: meter rollback or correction — emit 0, do NOT carry a negative
-        // forward into the running total.
+        // Normal: subtract the last seen reading. Clamp for meter rollbacks.
         delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
         lastReading.set(entityKey, +r.current_reading);
       }
-      // Final accumulation guard — ensures no negative leaks through edge cases.
+      // Final accumulation guard.
       const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
       pivot.get(dateKey)!.set(entityKey, prev + delta);
     });
@@ -178,7 +179,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       if (!locatorIds.length) return [];
       const { data } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -207,7 +208,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     queryFn: async () => {
       if (!meterIds.length) return [];
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('meter_id', meterIds)
         .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
@@ -220,6 +221,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
   // computePivotFromReadings mirrors TrendChart computeEntityDeltas so
   // meter-replacement rows and their successors are correctly zeroed.
+  // Build pivot + estimated-key set together so the table can mark auto-filled cells.
   const consPivot = useMemo(() => {
     const sortedLocs = [...(locators ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
@@ -228,8 +230,17 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     });
     const pivot = computePivotFromReadings(consReadings ?? [], 'locator_id', 'daily_volume');
 
+    // Track which (dateKey, locatorId) cells come from estimated rows so the
+    // table can render them with a distinct "~" indicator and tooltip.
+    const estimatedKeys = new Set<string>();
+    (consReadings ?? []).forEach((r: any) => {
+      if (r.is_estimated) {
+        const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        estimatedKeys.add(`${dk}__${r.locator_id}`);
+      }
+    });
+
     // Fill every date in the selected range — not just dates that have readings.
-    // Without this, days with zero consumption are invisible in the table.
     const allDates: string[] = [];
     const cur = new Date(fromStr + 'T00:00:00');
     const end = new Date(toStr   + 'T00:00:00');
@@ -237,7 +248,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       allDates.push(format(cur, 'yyyy-MM-dd'));
       cur.setDate(cur.getDate() + 1);
     }
-    return { dates: allDates, entities: sortedLocs, pivot };
+    return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
   }, [locators, consReadings, plantCodeById, fromStr, toStr]);
 
   const prodPivot = useMemo(() => {
@@ -248,6 +259,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     });
     const pivot = computePivotFromReadings(prodReadings ?? [], 'meter_id', 'daily_volume');
 
+    const estimatedKeys = new Set<string>();
+    (prodReadings ?? []).forEach((r: any) => {
+      if (r.is_estimated) {
+        const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        estimatedKeys.add(`${dk}__${r.meter_id}`);
+      }
+    });
+
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
     const cur2 = new Date(fromStr + 'T00:00:00');
@@ -256,11 +275,11 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       allDates2.push(format(cur2, 'yyyy-MM-dd'));
       cur2.setDate(cur2.getDate() + 1);
     }
-    return { dates: allDates2, entities: sortedMeters, pivot };
+    return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
   }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
 
   const isLoading = tab === 'consumption' ? consLoading : prodLoading;
-  const { dates, entities, pivot } = tab === 'consumption' ? consPivot : prodPivot;
+  const { dates, entities, pivot, estimatedKeys } = tab === 'consumption' ? consPivot : prodPivot;
   const entityIdField = tab === 'consumption' ? 'id' : 'id';
 
   // Column totals (sum per entity across all dates)
@@ -415,14 +434,32 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                       ].join(' ')}>
                         {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
                       </td>
-                      {rowVols.map((vol, ei) => (
-                        <td key={entities[ei].id} className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border">
-                          {vol != null && vol > 0
-                            ? vol.toLocaleString(undefined, { maximumFractionDigits: 1 })
-                            : <span className="text-muted-foreground/40">—</span>
-                          }
-                        </td>
-                      ))}
+                      {rowVols.map((vol, ei) => {
+                        const entityId = entities[ei].id;
+                        const estKey = `${date}__${entityId}`;
+                        const isEst = estimatedKeys.has(estKey);
+                        return (
+                          <td
+                            key={entityId}
+                            className={[
+                              "px-2 py-1.5 text-right font-mono-num tabular-nums border-border",
+                              isEst ? "bg-amber-50/60 dark:bg-amber-950/20" : "",
+                            ].join(" ")}
+                            title={isEst ? "Auto-estimated via Polynomial Regression (degree 3) — no reading was recorded for this day. Value will be replaced when actual data is entered." : undefined}
+                          >
+                            {vol != null && vol > 0 ? (
+                              <span className="inline-flex items-center gap-0.5">
+                                {isEst && (
+                                  <span className="text-amber-500 dark:text-amber-400 text-[9px] font-bold leading-none" aria-label="estimated">~</span>
+                                )}
+                                {vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/40">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className={[
                         'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border',
                         tab === 'consumption' ? 'text-highlight' : 'text-primary',
@@ -445,6 +482,12 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               ? <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator per day</>
               : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter per day</>
             }
+            {estimatedKeys.size > 0 && (
+              <span className="flex items-center gap-1 ml-3 text-amber-600 dark:text-amber-400">
+                <span className="font-bold text-[10px]">~</span>
+                Auto-estimated (Poly. Regression deg. 3) — hover cell for details
+              </span>
+            )}
             <span className="ml-auto">{entities.length} {tab === 'consumption' ? 'locators' : 'meters'} · {dates.length} days</span>
           </div>
         )}
@@ -546,7 +589,7 @@ export default function Dashboard() {
       if (!_locatorIds?.length) return [];
       const { data } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
@@ -602,7 +645,7 @@ export default function Dashboard() {
       if (!_locatorIds?.length) return [];
       const { data } = await supabase
         .from('locator_readings')
-        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)

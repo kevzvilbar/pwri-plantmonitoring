@@ -1203,6 +1203,8 @@ export default function PlantTopology() {
   }, [effectivePlantId, customNodes, topoState]);
 
   // ── Connection editing ────────────────────────────────────────────────────────
+
+  function handleNodeClick(id: string, type: NodeType) {
     if (!canEdit || !editMode || !topoState) return;
     if (!pendingFrom) { setPendingFrom({ id, type }); return; }
     if (pendingFrom.id === id) { setPendingFrom(null); return; }

@@ -613,7 +613,8 @@ async function insertLocatorReadings(
       // Build update payload.
       // FIX: daily_volume is a GENERATED ALWAYS column — omit it from UPDATE too;
       //      Postgres recomputes it automatically from current_reading - previous_reading.
-      const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId };
+      // Clear is_estimated: operator is entering actual data, overriding any regression estimate.
+      const updatePayload: Record<string, any> = { reading_datetime: dt, recorded_by: userId, is_estimated: false };
       if (isDirect) {
         updatePayload.current_reading  = r.previous_reading ? +r.previous_reading : 0;
         updatePayload.previous_reading = r.previous_reading ? +r.previous_reading : null;
@@ -643,6 +644,7 @@ async function insertLocatorReadings(
       plant_id:         plantId,
       reading_datetime: dt,
       recorded_by:      userId,
+      is_estimated:     false, // operator-entered — never an estimate
     };
 
     if (isDirect) {
@@ -1337,19 +1339,19 @@ function LocatorRow({
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
-    // FIX: daily_volume removed — it is a GENERATED ALWAYS column in Postgres
-    //      (auto-computed as current_reading - previous_reading). Supplying it
-    //      causes: "cannot insert a non-DEFAULT value into column daily_volume".
+    // FIX: daily_volume removed — GENERATED ALWAYS column.
     //      plant_id IS required (NOT NULL) — keep it.
+    //      is_estimated: false — this is an operator-entered real reading;
+    //      clears any regression estimate that may have been written for this slot.
     const payload: any = locInputMode === 'direct'
       ? {
-          // Direct m³: stored value IS the daily volume; current_reading stays at prev
           locator_id: locator.id, plant_id: plantId,
           current_reading: previous ?? cur,
           previous_reading: previous,
           // daily_volume intentionally omitted — GENERATED ALWAYS column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
+          is_estimated: false,
         }
       : {
           locator_id: locator.id, plant_id: plantId,
@@ -1357,6 +1359,7 @@ function LocatorRow({
           // daily_volume intentionally omitted — GENERATED ALWAYS column
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
+          is_estimated: false,
         };
     const { error } = editingId
       ? await supabase.from('locator_readings').update(payload).eq('id', editingId)
