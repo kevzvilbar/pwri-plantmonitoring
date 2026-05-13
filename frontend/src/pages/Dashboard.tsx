@@ -1080,7 +1080,7 @@ export default function Dashboard() {
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
       <ClusterCharts
-        metrics={[\
+        metrics={[
           ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
           { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
         ] as ChartMetric[]}
