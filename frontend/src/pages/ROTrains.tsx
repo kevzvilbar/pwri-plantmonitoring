@@ -3111,7 +3111,13 @@ function CIPLog() {
       const today = format(new Date(), 'yyyy-MM-dd');
       const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
       const map: Record<string, number> = {};
-      (data ?? []).forEach((p: any) => { if (!(p.chemical_name in map)) map[p.chemical_name] = p.unit_price; });
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
       return map;
     },
   });
@@ -3910,7 +3916,13 @@ function ChemDosingForm() {
       const today = format(new Date(), 'yyyy-MM-dd');
       const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
       const map: Record<string, number> = {};
-      (data ?? []).forEach((p: any) => { if (!(p.chemical_name in map)) map[p.chemical_name] = p.unit_price; });
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
       return map;
     },
   });
@@ -4190,7 +4202,13 @@ function DosingHistoryLog() {
       const today = format(new Date(), 'yyyy-MM-dd');
       const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
       const map: Record<string, number> = {};
-      (data ?? []).forEach((p: any) => { if (!(p.chemical_name in map)) map[p.chemical_name] = p.unit_price; });
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
       return map;
     },
   });
