@@ -2153,7 +2153,7 @@ export function TrendChart({
         padding: '8px 10px',
         minWidth: 148,
         maxWidth: 300,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.8, backdropFilter: 'blur(4px)',
       }}>
         <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
         {payload.map((entry: any) => {
@@ -2269,7 +2269,7 @@ export function TrendChart({
         background: 'hsl(var(--card))',
         border: '1px solid hsl(var(--border))',
         borderRadius: 8, fontSize: 11, padding: '8px 10px',
-        minWidth: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        minWidth: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.8, backdropFilter: 'blur(4px)',
       }}>
         <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
         <p style={{ margin: '1px 0', color: '#f59e0b' }}>
@@ -3298,7 +3298,7 @@ export function TrendChart({
                   <div style={{
                     background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',
                     borderRadius: 8, fontSize: 11, padding: '8px 10px',
-                    minWidth: 160, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                    minWidth: 160, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.8, backdropFilter: 'blur(4px)',
                   }}>
                     <p style={{ margin: '0 0 5px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{label}</p>
                     {hasSolarData && kwhSource !== 'grid' && solarVal > 0 && (
@@ -3376,7 +3376,7 @@ export function TrendChart({
                     background: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: 8, fontSize: 11, padding: '8px 10px',
-                    minWidth: 170, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                    minWidth: 170, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.8, backdropFilter: 'blur(4px)',
                   }}>
                     <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
                     <p style={{ margin: '1px 0', color: dotColor, fontWeight: 700 }}>
