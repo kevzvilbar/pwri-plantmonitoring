@@ -1022,7 +1022,7 @@ export default function Dashboard() {
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
           trend={dConsumption}
-          onClick={() => setSummaryOpen(true)} />
+          onClick={handleMetricClick('production', 'Production vs Consumption')} />
         <StatCard icon={Activity} label="NRW" value={nrw == null ? '—' : nrw} unit="%" tone={nrwColor(nrw)}
           size="lg" calc threshold="20%"
           calcTooltip="NRW % = (Production − Locator Consumption) ÷ Production × 100"
