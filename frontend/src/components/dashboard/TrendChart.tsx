@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Legend, ComposedChart, Bar, BarChart,
+  Legend, ComposedChart, Bar, BarChart, ReferenceLine,
 } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
 import { toast } from 'sonner';
@@ -772,6 +772,12 @@ export function TrendChart({
   const [trainSearch, setTrainSearch] = useState('');
   const [showTrainFilter, setShowTrainFilter] = useState(false);
 
+  // ── Plant Health drill state ─────────────────────────────────────────────
+  // Three granularities: daily average (default), hourly slots, monthly average.
+  type PhDrillMode = 'daily' | 'hourly' | 'monthly';
+  const [phDrillMode, setPhDrillMode] = useState<PhDrillMode>('daily');
+  const hasPlantHealth = metric === 'plantHealth';
+
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
     if (range === 'CUSTOM') {
@@ -796,7 +802,7 @@ export function TrendChart({
   const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv' || metric === 'productionCost';
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
   const needsLocReadings = metric === 'production' || metric === 'nrw';
-  const needsRoReadings = metric === 'recovery' || metric === 'tds';
+  const needsRoReadings = metric === 'recovery' || metric === 'tds' || metric === 'plantHealth';
   // productionCost also needs power readings (kWh delta × multiplier) and tariffs (₱/kWh).
   // 'kwh' = Power Consumption & Energy Mix chart (Solar vs Grid stacked bars).
   const needsPowerReadings = metric === 'pv' || metric === 'productionCost' || metric === 'kwh';
@@ -1127,6 +1133,50 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsCostReadings,
   });
 
+  // Chemical dosing logs: actual per-day chemical cost for the production cost chart.
+  // This replaces the manually-entered production_costs.chem_cost as the primary source.
+  // For each log row, `calculated_cost` is used when > 0; otherwise cost is computed live
+  // from quantity × current unit price (same fallback logic used in ROTrains dosing history).
+  const { data: dosingLogs, isFetching: fetchingDosing } = useQuery({
+    queryKey: ['trend-dosing-logs', metric, startKey, endKey, plantIds],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chemical_dosing_logs')
+        .select('log_datetime,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg,calculated_cost')
+        .in('plant_id', plantIds)
+        .gte('log_datetime', `${startKey}T00:00:00`)
+        .lte('log_datetime', `${endKey}T23:59:59`);
+      if (error) throw new Error(`chemical_dosing_logs: ${error.message}`);
+      return (data as any[]) ?? [];
+    },
+    enabled: plantIds.length > 0 && needsCostReadings,
+  });
+
+  // Chemical prices: for computing live cost when a dosing log's calculated_cost is 0.
+  // Prices are stored as "Chemical (unit)" (e.g. "Chlorine (kg)") so we index by both
+  // the full name and the plain base name to handle either lookup key.
+  const { data: chemPrices } = useQuery({
+    queryKey: ['trend-chem-prices'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase
+        .from('chemical_prices')
+        .select('*')
+        .lte('effective_date', today)
+        .order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Strip trailing " (unit)" so plain-name lookups (e.g. "Chlorine") also work
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
+      return map;
+    },
+    enabled: needsCostReadings,
+  });
+
   // CT multiplier from electric_bills — mirrors PowerChart's authoritative multiplier source.
   // TrendChart's power-delta computation falls back to power_readings.multiplier, then to 1.
   // Adding the bill multiplier as an intermediate fallback matches PowerChart behaviour exactly,
@@ -1153,7 +1203,7 @@ export function TrendChart({
     staleTime: 120_000,
   });
 
-  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
+  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct || fetchingDosing;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
 
   const chartData = useMemo(() => {
@@ -1541,12 +1591,36 @@ export function TrendChart({
       row.solarKwh += solarVal;
     });
 
-    // Chemical cost: chem_cost (₱/day) from production_costs table.
-    // Operators log this manually in Costs → Rollup (or via CSV import).
-    // Chem Cost (₱/m³) = chem_cost / production_m3  (computed in final map below)
+    // Chemical cost — primary source: chemical_dosing_logs.
+    // For each dosing record, use `calculated_cost` when > 0; otherwise compute
+    // live from quantity × unit price (handles old records saved before prices existed).
+    // Prices use base-name lookup ("Chlorine") to match the "Chlorine (kg)" DB key.
+    const DOSING_KEYS_TREND = [
+      { key: 'chlorine_kg',    name: 'Chlorine' },
+      { key: 'smbs_kg',        name: 'SMBS' },
+      { key: 'anti_scalant_l', name: 'Anti Scalant' },
+      { key: 'soda_ash_kg',    name: 'Soda Ash' },
+    ] as const;
+
+    const daysWithDosingCoverage = new Set<string>();
+    (dosingLogs ?? []).forEach((r: any) => {
+      const dt = new Date(r.log_datetime);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      const storedCost = +(r.calculated_cost ?? 0);
+      const liveCost = DOSING_KEYS_TREND.reduce(
+        (s, c) => s + (+(r[c.key] ?? 0)) * (chemPrices?.[c.name] ?? 0), 0,
+      );
+      row._chemCostPeso += storedCost > 0 ? storedCost : liveCost;
+      daysWithDosingCoverage.add(key);
+    });
+
+    // Fallback: production_costs.chem_cost (manually entered in Costs → Rollup).
+    // Only applied for days that have no dosing log coverage to avoid double-counting.
     (costReadings ?? []).forEach((r: any) => {
       const dt = new Date(`${r.cost_date}T00:00:00`);
       const key = format(dt, 'MMM d');
+      if (daysWithDosingCoverage.has(key)) return;
       const row = ensure(key, dt.getTime());
       const chem = +(r.chem_cost ?? 0);
       row._chemCostPeso += chem;
@@ -1612,7 +1686,8 @@ export function TrendChart({
             : [] as string[],
         };
       });
-  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
+  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
+      dosingLogs, chemPrices, powerTariffs,
       billMultiplierMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
 
@@ -1871,6 +1946,120 @@ export function TrendChart({
         };
       });
   }, [hasRoDrill, roDrillMode, roReadings, selectedTrainIds, valueKey, metric]);
+
+  // ── Plant Health data ────────────────────────────────────────────────────
+  // Derived from ro_train_readings: for each time slot, count how many
+  // distinct trains had ≥1 reading, divide by total trains for the plant(s).
+  // totalTrains = _roTrainIdsForReadings.length (same scope as the readings query).
+
+  const phTotalTrains = (_roTrainIdsForReadings ?? []).length;
+
+  /** Build one health row per time slot from ro_train_readings.
+   *  slotKeyFn: Date → grouping bucket key
+   *  labelFn:   Date → X-axis display label */
+  function buildPhHealthRows(
+    readings: any[],
+    slotKeyFn: (d: Date) => string,
+    labelFn:   (d: Date) => string,
+  ) {
+    if (!phTotalTrains) return [] as {
+      date: string; healthPct: number | null;
+      onlineCount: number | null; offlineCount: number | null;
+      totalTrains: number; offlineTrains: string[];
+    }[];
+    const acc = new Map<string, { trains: Set<string>; ts: number }>();
+    readings.forEach((r: any) => {
+      if (!r.train_id) return;
+      const dt  = new Date(r.reading_datetime);
+      const key = slotKeyFn(dt);
+      if (!acc.has(key)) acc.set(key, { trains: new Set(), ts: dt.getTime() });
+      acc.get(key)!.trains.add(r.train_id);
+    });
+    const allTrainIds  = new Set(_roTrainIdsForReadings ?? []);
+    const trainLabel   = (id: string) =>
+      roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}`;
+
+    return Array.from(acc.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([key, { trains, ts }]) => {
+        const onlineCount  = trains.size;
+        const totalTrains  = phTotalTrains;
+        const offlineCount = Math.max(0, totalTrains - onlineCount);
+        const healthPct    = totalTrains > 0
+          ? Math.round((onlineCount / totalTrains) * 100) : null;
+        const offlineTrains = Array.from(allTrainIds)
+          .filter(id => !trains.has(id))
+          .map(trainLabel);
+        const dt = new Date(ts);
+        return {
+          date: labelFn(dt),
+          healthPct,
+          onlineCount,
+          offlineCount,
+          totalTrains,
+          offlineTrains,
+          _slotKey: key,
+        };
+      });
+  }
+
+  const phDailyData = useMemo(() => {
+    if (!hasPlantHealth) return [];
+    return buildPhHealthRows(
+      roReadings ?? [],
+      (d) => format(d, 'yyyy-MM-dd'),
+      (d) => format(d, 'MMM d'),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPlantHealth, roReadings, _roTrainIdsForReadings, roTrainNames, phTotalTrains]);
+
+  const phHourlyData = useMemo(() => {
+    if (!hasPlantHealth) return [];
+    return buildPhHealthRows(
+      roReadings ?? [],
+      (d) => format(d, 'yyyy-MM-dd HH'),
+      (d) => format(d, 'MMM d, haaa'),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPlantHealth, roReadings, _roTrainIdsForReadings, roTrainNames, phTotalTrains]);
+
+  const phMonthlyData = useMemo(() => {
+    if (!hasPlantHealth || !phTotalTrains) return [];
+    // Aggregate daily health % per calendar month → average
+    const dayAcc = new Map<string, Set<string>>();
+    (roReadings ?? []).forEach((r: any) => {
+      if (!r.train_id) return;
+      const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      if (!dayAcc.has(dk)) dayAcc.set(dk, new Set());
+      dayAcc.get(dk)!.add(r.train_id);
+    });
+    const monthAcc = new Map<string, { sumPct: number; count: number; ts: number }>();
+    dayAcc.forEach((trains, dk) => {
+      const mk  = dk.slice(0, 7);
+      const pct = (trains.size / phTotalTrains) * 100;
+      const ts  = new Date(dk + 'T00:00:00').getTime();
+      const prev = monthAcc.get(mk) ?? { sumPct: 0, count: 0, ts };
+      monthAcc.set(mk, { sumPct: prev.sumPct + pct, count: prev.count + 1, ts: prev.ts });
+    });
+    return Array.from(monthAcc.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([, { sumPct, count, ts }]) => ({
+        date:         format(new Date(ts), 'MMM yyyy'),
+        healthPct:    Math.round(sumPct / count),
+        onlineCount:  null as number | null,
+        offlineCount: null as number | null,
+        totalTrains:  phTotalTrains,
+        offlineTrains: [] as string[],
+        _slotKey:     '',
+      }));
+  }, [hasPlantHealth, roReadings, phTotalTrains]);
+
+  const phActiveData = hasPlantHealth
+    ? phDrillMode === 'hourly'  ? phHourlyData
+    : phDrillMode === 'monthly' ? phMonthlyData
+    : phDailyData
+    : [];
+
 
   // ── Per-day negative-value index ────────────────────────────────────────
   // Built from the _raw* fields stored in chartData. Each entry lists only
@@ -2429,7 +2618,52 @@ export function TrendChart({
         )}
       </div>
 
-      {/* ── kwh: Subtitle — "last Xd · daily totals · Solar vs Grid (kWh)" ── */}
+        {/* Plant Health granularity controls */}
+        {hasPlantHealth && (
+          <div className="flex items-center gap-0.5 shrink-0" title="Plant Health granularity">
+            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">View:</span>
+            <button
+              onClick={() => setPhDrillMode('daily')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                phDrillMode === 'daily'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Daily average health %"
+            >
+              <BarChart2 className="h-3 w-3" />
+              Daily
+            </button>
+            <button
+              onClick={() => setPhDrillMode('hourly')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                phDrillMode === 'hourly'
+                  ? 'bg-chart-2 text-white border-chart-2'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Hourly health — one slot per hour"
+            >
+              <ChevronsDown className="h-3 w-3" />
+              Hourly
+            </button>
+            <button
+              onClick={() => setPhDrillMode('monthly')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                phDrillMode === 'monthly'
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Monthly average health %"
+            >
+              <ChevronsUp className="h-3 w-3" />
+              Monthly
+            </button>
+          </div>
+        )}
+      </div>
       {metric === 'kwh' && (() => {
         const kwhRangeLabel =
           range === 'CUSTOM' ? `${from} → ${to}`
@@ -2804,12 +3038,12 @@ export function TrendChart({
             </div>
           </div>
         )}
-        {!queryError && !isFetching && chartData.length === 0 && drilldownData.length === 0 && drillupData.length === 0 && metric !== 'kwh' && (
+        {!queryError && !isFetching && chartData.length === 0 && drilldownData.length === 0 && drillupData.length === 0 && phActiveData.length === 0 && metric !== 'kwh' && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="rounded-md border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground text-center pointer-events-auto max-w-md shadow-sm">
               <div className="font-medium text-foreground">No data in selected range</div>
               <div className="text-[11px] mt-0.5">
-                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.
+                Try a wider range, switch plant, or log readings for {metric === 'nrw' ? 'wells & locators' : metric === 'pv' ? 'wells & power' : metric === 'tds' || metric === 'recovery' || metric === 'plantHealth' ? 'RO trains' : metric === 'productionCost' ? 'power readings (Operations) + tariff rate (Costs → Power tab) + production volume (product meter readings)' : 'wells'}.
               </div>
             </div>
           </div>
@@ -3135,6 +3369,108 @@ export function TrendChart({
                   {hasGridData && kwhSource !== 'solar' && (
                     <Bar dataKey="gridKwh"  name="⚡ Grid (kWh)"  fill="hsl(213,94%,68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
                   )}
+                </ComposedChart>
+              );
+            })()
+          ) : hasPlantHealth ? (
+            // ── Plant Health — % of trains Online per slot ───────────────────────
+            // Color zones: ≥80% emerald, ≥50% amber, <50% rose.
+            // Tooltip shows online/offline counts + named offline trains.
+            (() => {
+              const PhTooltip = ({ active, payload, label }: any) => {
+                if (!active || !payload?.length) return null;
+                const row = phActiveData.find((d) => d.date === label);
+                if (!row) return null;
+                const pct = row.healthPct ?? 0;
+                const dotColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                return (
+                  <div style={{
+                    background: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 8, fontSize: 11, padding: '8px 10px',
+                    minWidth: 170, boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                  }}>
+                    <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
+                    <p style={{ margin: '1px 0', color: dotColor, fontWeight: 700 }}>
+                      Health: {pct != null ? `${pct}%` : '—'}
+                    </p>
+                    {row.onlineCount != null && (
+                      <>
+                        <p style={{ margin: '1px 0', color: '#10b981' }}>
+                          ● Online: {row.onlineCount} / {row.totalTrains}
+                        </p>
+                        <p style={{ margin: '1px 0', color: '#ef4444' }}>
+                          ● Offline: {row.offlineCount}
+                        </p>
+                      </>
+                    )}
+                    {row.offlineTrains.length > 0 && (
+                      <div style={{
+                        marginTop: 6, paddingTop: 5,
+                        borderTop: '1px solid hsl(var(--border))',
+                      }}>
+                        <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#ef4444' }}>
+                          Offline trains:
+                        </p>
+                        {row.offlineTrains.map((name) => (
+                          <p key={name} style={{ margin: '1px 0', fontSize: 10, color: '#ef4444', opacity: 0.85 }}>
+                            · {name}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              // Color each dot by health zone
+              const dotFill = (entry: any) => {
+                const p = entry?.healthPct ?? 0;
+                return p >= 80 ? '#10b981' : p >= 50 ? '#f59e0b' : '#ef4444';
+              };
+
+              return (
+                <ComposedChart data={phActiveData} margin={{ top: 8, right: 8, left: 0, bottom: phDrillMode === 'hourly' ? 32 : 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: phDrillMode === 'hourly' ? 8 : 10 }}
+                    stroke="hsl(var(--muted-foreground))"
+                    angle={phDrillMode === 'hourly' ? -35 : 0}
+                    textAnchor={phDrillMode === 'hourly' ? 'end' : 'middle'}
+                    height={phDrillMode === 'hourly' ? 48 : 20}
+                    interval={phDrillMode === 'hourly'
+                      ? Math.max(0, Math.floor(phActiveData.length / 12) - 1)
+                      : 'preserveStartEnd'}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    stroke="hsl(var(--muted-foreground))"
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    width={36}
+                    label={{ value: 'Health %', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+                  />
+                  <Tooltip content={<PhTooltip />} />
+                  {/* ── Green zone ≥80% ── */}
+                  <ReferenceLine y={80} stroke="#10b981" strokeDasharray="4 3" strokeWidth={1}
+                    label={{ value: '80%', position: 'right', fontSize: 9, fill: '#10b981' }} />
+                  {/* ── Amber zone ≥50% ── */}
+                  <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1}
+                    label={{ value: '50%', position: 'right', fontSize: 9, fill: '#f59e0b' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="healthPct"
+                    name="Plant Health (%)"
+                    strokeWidth={2}
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      const fill = dotFill(payload);
+                      return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
+                    }}
+                    stroke="#10b981"
+                    connectNulls
+                  />
                 </ComposedChart>
               );
             })()
