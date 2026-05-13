@@ -5,7 +5,7 @@ import {
   MessageSquare, X, Send, Loader2, Clock,
   Building2, User, ShieldCheck, MapPin, ChevronRight,
   Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
-  GitBranch, ClipboardList,
+  GitBranch, ClipboardList, Check, CheckCheck, ChevronsDownUp, ChevronsUpDown,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,9 +52,7 @@ type PresenceState = 'active' | 'idle' | 'away' | 'offline';
 
 function getPresence(updatedAt: string, accountStatus: string, isOnline = false): PresenceState {
   if (accountStatus === 'Suspended' || accountStatus === 'Pending') return 'offline';
-  // Realtime Presence channel confirms the user is currently connected — trust it first.
   if (isOnline) return 'active';
-  // Fall back to updated_at heartbeat timestamp
   const diffMin = (Date.now() - new Date(updatedAt).getTime()) / 60_000;
   if (diffMin < 15)  return 'active';
   if (diffMin < 60)  return 'idle';
@@ -81,6 +79,16 @@ const TILE_ACCENTS = [
 const AVATAR_COLORS = [
   'bg-sky-500', 'bg-violet-500', 'bg-teal-500', 'bg-rose-500',
   'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-pink-500',
+];
+
+// Per-plant column accent colours for the reporting tree
+const PLANT_COLUMN_ACCENTS = [
+  { header: 'from-sky-500 to-cyan-500',     border: 'border-sky-200',    bg: 'bg-sky-50/60',    text: 'text-sky-700'    },
+  { header: 'from-violet-500 to-indigo-500', border: 'border-violet-200', bg: 'bg-violet-50/60', text: 'text-violet-700' },
+  { header: 'from-teal-500 to-emerald-500',  border: 'border-teal-200',   bg: 'bg-teal-50/60',   text: 'text-teal-700'   },
+  { header: 'from-rose-500 to-pink-500',     border: 'border-rose-200',   bg: 'bg-rose-50/60',   text: 'text-rose-700'   },
+  { header: 'from-amber-500 to-orange-500',  border: 'border-amber-200',  bg: 'bg-amber-50/60',  text: 'text-amber-700'  },
+  { header: 'from-indigo-500 to-blue-500',   border: 'border-indigo-200', bg: 'bg-indigo-50/60', text: 'text-indigo-700' },
 ];
 
 function hashId(id: string) {
@@ -118,8 +126,34 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// Animated typing indicator — three bouncing dots
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-0.5 px-3 py-2 bg-muted rounded-lg rounded-bl-sm w-fit">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
+          style={{ animationDelay: `${i * 150}ms`, animationDuration: '900ms' }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Message status tick (sent = single check, delivered/read = double check)
+function MsgStatus({ isMine, msgId, messages }: { isMine: boolean; msgId: string; messages: ChatMsg[] }) {
+  if (!isMine) return null;
+  // If a later message exists it means DB confirmed — show delivered (double tick)
+  const idx = messages.findIndex((m) => m.id === msgId);
+  const delivered = idx !== -1;
+  return delivered
+    ? <CheckCheck className="h-2.5 w-2.5 text-sky-300 shrink-0" />
+    : <Check className="h-2.5 w-2.5 text-white/50 shrink-0" />;
+}
+
 // ---------------------------------------------------------------------------
-// Chat Window
+// Chat Window — improved with typing indicator, message status, mobile-safe
 // ---------------------------------------------------------------------------
 
 function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
@@ -127,12 +161,16 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
 }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  // peerTyping: whether the peer is currently typing (via broadcast)
+  const [peerTyping, setPeerTyping] = useState(false);
+  const peerTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track locally-inserted optimistic IDs so we can show a sending state
+  const [optimisticIds] = useState(() => new Set<string>());
   const bottomRef = useRef<HTMLDivElement>(null);
-  // Keep a ref to the subscribed broadcast channel so send() can reuse it
-  // instead of creating a brand-new, unsubscribed channel on every call.
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Track whether we've typed since last broadcast to debounce
+  const typingBroadcastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch messages for this conversation (both directions, non-expired).
   const fetchMessages = useCallback(async (): Promise<ChatMsg[]> => {
     const { data, error } = await (supabase as any)
       .from('chat_messages').select('*')
@@ -146,41 +184,56 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
   const { data: messages = [], refetch } = useQuery<ChatMsg[]>({
     queryKey: ['chat', currentUserId, peer.id],
     queryFn: fetchMessages,
-    // Realtime broadcast handles updates; no polling needed.
   });
 
   useEffect(() => {
-    // Use a Broadcast channel (no REPLICA IDENTITY FULL required) so both the
-    // sender and receiver are notified the moment a message is inserted.
-    // Channel name is deterministic for the pair so both sides join the same room.
     const channelName = `chat:${[currentUserId, peer.id].sort().join(':')}`;
     const ch = supabase
       .channel(channelName)
       .on('broadcast', { event: 'new_message' }, () => refetch())
+      .on('broadcast', { event: 'typing' }, ({ payload }: any) => {
+        // Only show indicator if the peer is the one typing
+        if (payload?.sender_id && payload.sender_id !== currentUserId) {
+          setPeerTyping(true);
+          // Auto-clear if no further typing event within 3 s
+          if (peerTypingTimer.current) clearTimeout(peerTypingTimer.current);
+          peerTypingTimer.current = setTimeout(() => setPeerTyping(false), 3000);
+        }
+      })
       .subscribe();
     channelRef.current = ch;
     return () => {
       supabase.removeChannel(ch);
       channelRef.current = null;
+      if (peerTypingTimer.current) clearTimeout(peerTypingTimer.current);
+      if (typingBroadcastTimer.current) clearTimeout(typingBroadcastTimer.current);
     };
   }, [currentUserId, peer.id, refetch]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
+  // Scroll on new messages or typing indicator toggle
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length, peerTyping]);
+
+  // Broadcast a typing event (debounced, max once per 1.5 s)
+  const broadcastTyping = useCallback(() => {
+    if (typingBroadcastTimer.current) return; // already debouncing
+    if (channelRef.current) {
+      channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { sender_id: currentUserId } });
+    }
+    typingBroadcastTimer.current = setTimeout(() => {
+      typingBroadcastTimer.current = null;
+    }, 1500);
+  }, [currentUserId]);
 
   const send = useCallback(async () => {
     const body = input.trim();
     if (!body) return;
-    setInput(''); setSending(true);
+    setInput('');
+    setSending(true);
     try {
-      // 1. Persist the message to the DB.
       await (supabase as any).from('chat_messages').insert({ sender_id: currentUserId, recipient_id: peer.id, body });
-      // 2. Broadcast on the ALREADY-SUBSCRIBED channel so the peer's window
-      //    refetches immediately. The sender's own listener will fire too and
-      //    call refetch() — no manual refetch needed here.
       if (channelRef.current) {
         await channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: {} });
       } else {
-        // Fallback if channel isn't ready yet (shouldn't normally happen).
         refetch();
       }
     } finally { setSending(false); }
@@ -189,55 +242,109 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
   const presence = getPresence(peer.updated_at, peer.status, onlineIds.has(peer.id));
   const pc = presenceConfig[presence];
 
+  // Mobile-safe positioning: bottom-right on desktop, bottom-0 full-width on very small screens
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 shadow-2xl rounded-xl overflow-hidden border border-border bg-background flex flex-col" style={{ height: 420 }}>
-      <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-sky-600 to-teal-600 text-white shrink-0">
-        <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', avatarColor(peer.id))}>
-          {initials(peer)}
+    <div
+      className={cn(
+        'fixed z-50 bg-background border border-border shadow-2xl flex flex-col overflow-hidden',
+        // Mobile: full-width at bottom
+        'bottom-0 left-0 right-0 rounded-t-xl',
+        // md+: floating window bottom-right
+        'md:bottom-4 md:left-auto md:right-4 md:rounded-xl md:w-80',
+      )}
+      style={{ height: 'min(460px, 80dvh)' }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white shrink-0">
+        <div className="relative shrink-0">
+          <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold', avatarColor(peer.id))}>
+            {initials(peer)}
+          </div>
+          <span className={cn('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-sky-600', pc.dot)} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm truncate">{fullName(peer)}</div>
-          <div className="flex items-center gap-1 text-[10px] opacity-80">
-            <span className={cn('h-1.5 w-1.5 rounded-full', pc.dot)} />
-            {pc.label} · @{peer.username ?? '—'}
+          <div className="font-semibold text-sm truncate leading-tight">{fullName(peer)}</div>
+          <div className="text-[10px] opacity-75 leading-tight">
+            {peerTyping ? (
+              <span className="animate-pulse">typing…</span>
+            ) : (
+              <span>{pc.label} · @{peer.username ?? '—'}</span>
+            )}
           </div>
         </div>
-        <Button size="icon" variant="ghost" className="h-6 w-6 text-white hover:bg-white/20" onClick={onClose}>
+        <Button size="icon" variant="ghost" className="h-6 w-6 text-white hover:bg-white/20 shrink-0" onClick={onClose}>
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
 
+      {/* Ephemeral notice */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100 text-amber-700 text-[10px] shrink-0">
         <Clock className="h-3 w-3 shrink-0" />
         Messages auto-delete after 8 hours. No content is retained.
       </div>
 
+      {/* Message list */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
-        {messages.length === 0
-          ? <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-4">No messages yet. Say hello!</div>
-          : messages.map((m) => {
+        {messages.length === 0 && !peerTyping ? (
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-6">
+            No messages yet. Say hello!
+          </div>
+        ) : (
+          <>
+            {messages.map((m) => {
               const mine = m.sender_id === currentUserId;
               return (
                 <div key={m.id} className={cn('flex flex-col gap-0.5', mine ? 'items-end' : 'items-start')}>
-                  <div className={cn('rounded-lg px-2.5 py-1.5 text-xs max-w-[85%] break-words',
-                    mine ? 'bg-sky-600 text-white rounded-br-sm' : 'bg-muted text-foreground rounded-bl-sm')}>
+                  <div className={cn(
+                    'rounded-2xl px-3 py-2 text-xs max-w-[85%] break-words leading-relaxed',
+                    mine
+                      ? 'bg-sky-600 text-white rounded-br-sm'
+                      : 'bg-muted text-foreground rounded-bl-sm',
+                  )}>
                     {m.body}
                   </div>
-                  <div className="flex items-center gap-1 text-[9px] text-muted-foreground px-0.5">
-                    <span>{formatTime(m.sent_at)}</span><span>·</span>
-                    <Clock className="h-2.5 w-2.5" /><span>{timeUntilExpiry(m.expires_at)}</span>
+                  <div className="flex items-center gap-1 text-[9px] text-muted-foreground px-1">
+                    <span>{formatTime(m.sent_at)}</span>
+                    <span className="opacity-40">·</span>
+                    <Clock className="h-2 w-2 opacity-60" />
+                    <span>{timeUntilExpiry(m.expires_at)}</span>
+                    <MsgStatus isMine={mine} msgId={m.id} messages={messages} />
                   </div>
                 </div>
               );
             })}
+
+            {/* Typing indicator bubble */}
+            {peerTyping && (
+              <div className="flex items-start">
+                <div className="flex flex-col gap-0.5 items-start">
+                  <TypingIndicator />
+                  <span className="text-[9px] text-muted-foreground px-1">{peer.first_name ?? peer.username} is typing…</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t p-2 flex gap-1.5 shrink-0">
-        <Input value={input} onChange={(e) => setInput(e.target.value)}
+      {/* Input bar */}
+      <div className="border-t p-2 flex gap-1.5 shrink-0 bg-background">
+        <Input
+          value={input}
+          onChange={(e) => { setInput(e.target.value); broadcastTyping(); }}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Type a message…" className="flex-1 h-8 text-xs" disabled={sending} autoFocus />
-        <Button size="sm" className="h-8 px-2" onClick={send} disabled={sending || !input.trim()}>
+          placeholder="Type a message…"
+          className="flex-1 h-9 text-xs rounded-full px-4"
+          disabled={sending}
+          autoFocus
+        />
+        <Button
+          size="sm"
+          className="h-9 w-9 p-0 rounded-full shrink-0"
+          onClick={send}
+          disabled={sending || !input.trim()}
+        >
           {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
         </Button>
       </div>
@@ -301,10 +408,10 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
           </div>
 
           <div className="px-4 space-y-3 pb-6">
-            <InfoRow icon={<User className="h-3.5 w-3.5" />}       label="Designation"  value={member.designation ?? '—'} />
-            <InfoRow icon={<ShieldCheck className="h-3.5 w-3.5" />} label="Role(s)"      value={memberRoles.join(', ') || '—'} />
-            <InfoRow icon={<Building2 className="h-3.5 w-3.5" />}  label="Plants"       value={memberPlants.join(', ') || '—'} />
-            <InfoRow icon={<MapPin className="h-3.5 w-3.5" />}     label="Reports to"   value={head ? fullName(head) : '—'} />
+            <InfoRow icon={<User className="h-3.5 w-3.5" />}       label="Designation"    value={member.designation ?? '—'} />
+            <InfoRow icon={<ShieldCheck className="h-3.5 w-3.5" />} label="Role(s)"        value={memberRoles.join(', ') || '—'} />
+            <InfoRow icon={<Building2 className="h-3.5 w-3.5" />}  label="Plants"         value={memberPlants.join(', ') || '—'} />
+            <InfoRow icon={<MapPin className="h-3.5 w-3.5" />}     label="Reports to"     value={head ? fullName(head) : '—'} />
             <InfoRow icon={<Clock className="h-3.5 w-3.5" />}      label="Account status" value={member.status} />
           </div>
         </div>
@@ -386,17 +493,12 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
 
 function Staff() {
   const { data: plants } = usePlants();
-  // activeOperator = the switched-to operator (or own profile if no switch).
-  // All presence/identity logic must use activeOperator, NOT raw user.
   const { isAdmin, user, activeOperator } = useAuth();
   const queryClient = useQueryClient();
 
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
 
-  // Heartbeat: touch updated_at for the ACTIVE OPERATOR so their tile shows
-  // "Active" while the session is in use. Also patch the query cache immediately
-  // so the dot flips without waiting for the next DB refetch.
   useEffect(() => {
     const operatorId = activeOperator?.id ?? user?.id;
     if (!operatorId) return;
@@ -410,59 +512,38 @@ function Staff() {
     heartbeat();
     const interval = setInterval(heartbeat, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  // Re-run whenever the active operator switches so the new operator gets the heartbeat.
   }, [activeOperator?.id, user?.id, queryClient]);
 
-  // ── Supabase Realtime Presence — primary online/offline signal ──────────────
-  // Uses the Presence channel (no DB write needed). Each connected session tracks
-  // itself; we subscribe to 'sync' events to maintain a live Set of online IDs.
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const operatorId = activeOperator?.id ?? user?.id;
     if (!operatorId) return;
-
     const ch = supabase.channel('online-users', {
       config: { presence: { key: operatorId } },
     });
-
-    // Helper: rebuild the online set from current presence state.
-    // Since the channel key IS the operatorId, Object.keys() is sufficient
-    // and avoids any dependency on the tracked payload shape.
     const syncIds = () => setOnlineIds(new Set<string>(Object.keys(ch.presenceState())));
-
     ch.on('presence', { event: 'sync' },  syncIds)
       .on('presence', { event: 'join' },  syncIds)
       .on('presence', { event: 'leave' }, syncIds)
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await ch.track({ user_id: operatorId });
-        }
+        if (status === 'SUBSCRIBED') await ch.track({ user_id: operatorId });
       });
-
     return () => { supabase.removeChannel(ch); };
   }, [activeOperator?.id, user?.id]);
 
   const { data: staff = [], refetch: refetchStaff } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
     queryFn: async () => {
-      // FIX: Use an RPC with SECURITY DEFINER to bypass RLS so that Operators
-      // can see ALL staff (including Managers and Admins) for communication.
-      // Falls back to a direct select (which RLS may restrict for non-admins).
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
       if (!rpcError && rpcData) return rpcData as StaffMember[];
-
-      // Fallback: direct select (will be limited by RLS for non-admin roles)
       const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
       if (error) throw error;
       return (data ?? []) as StaffMember[];
     },
-    // staleTime 0 so presence dots stay fresh; realtime postgres_changes triggers re-fetches.
     staleTime: 0,
   });
 
-  // FIX: Subscribe to realtime updated_at changes so that when any user's
-  // heartbeat fires the staff list re-fetches and their presence dot updates.
   useEffect(() => {
     const ch = supabase
       .channel('staff-presence')
@@ -473,17 +554,12 @@ function Staff() {
     return () => { supabase.removeChannel(ch); };
   }, [refetchStaff]);
 
-  // FIX: Use RPC to get all roles — bypasses RLS so non-admins see correct
-  // role labels for all users (not just their own row from user_roles).
   const { data: roles = [] } = useQuery({
     queryKey: ['all-roles'],
     queryFn: async () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
       if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id, user_roles(role)');
+      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
       return (data ?? []).flatMap((p: any) =>
         (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
       );
@@ -519,101 +595,271 @@ function Staff() {
       )}
 
       {chatPeer && user && chatPeer.id !== (activeOperator?.id ?? user.id) && (
-        <ChatWindow peer={chatPeer} currentUserId={activeOperator?.id ?? user.id} onlineIds={onlineIds} onClose={() => setChatPeer(null)} />
+        <ChatWindow
+          peer={chatPeer}
+          currentUserId={activeOperator?.id ?? user.id}
+          onlineIds={onlineIds}
+          onClose={() => setChatPeer(null)}
+        />
       )}
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Org Chart Node (recursive)
+// Org Chart Node (recursive) — improved layout with plant badge chips
 // ---------------------------------------------------------------------------
 
-function OrgNode({ member, allStaff, roles, depth = 0 }: {
-  member: StaffMember; allStaff: StaffMember[]; roles: any[]; depth?: number;
+function OrgNode({ member, allStaff, roles, plants, depth = 0 }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[]; depth?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const children = allStaff.filter((s) => s.immediate_head_id === member.id);
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
   const hasChildren = children.length > 0;
 
+  // Plant badges (only first 2 to avoid overflow; show +N for rest)
+  const memberPlants = (plants ?? [])
+    .filter((p) => member.plant_assignments?.includes(p.id))
+    .map((p) => p.name as string);
+
   return (
-    <div className={cn('flex flex-col', depth > 0 && 'ml-5 border-l border-dashed border-muted-foreground/30 pl-4 mt-1')}>
+    <div className={cn('flex flex-col', depth > 0 && 'ml-4 border-l-2 border-dashed border-muted-foreground/20 pl-3 mt-1')}>
       <div
         className={cn(
-          'flex items-center gap-2 py-1.5 px-2 rounded-md group',
-          hasChildren && 'cursor-pointer hover:bg-muted/50',
+          'flex items-center gap-2 py-1.5 px-2 rounded-lg group transition-colors',
+          hasChildren && 'cursor-pointer hover:bg-muted/60',
+          !hasChildren && 'cursor-default',
         )}
         onClick={() => hasChildren && setExpanded((p) => !p)}
       >
+        {/* Avatar */}
         <div className={cn('h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(member.id))}>
           {initials(member)}
         </div>
+
+        {/* Name + info */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium leading-none truncate">{fullName(member)}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-            {member.designation
-              ? <><span>{member.designation}</span><span className="mx-1 opacity-40">·</span><span>{memberRole}</span></>
-              : memberRole}
+          <div className="text-[13px] font-semibold leading-snug truncate">{fullName(member)}</div>
+          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium">{memberRole}</span>
+            {member.designation && (
+              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{member.designation}</span>
+            )}
           </div>
+          {/* Plant badges — shown on the org node for context */}
+          {memberPlants.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap mt-1">
+              {memberPlants.slice(0, 2).map((name) => (
+                <span key={name} className="inline-flex items-center gap-0.5 text-[9px] bg-sky-50 text-sky-600 border border-sky-200 rounded px-1.5 py-0.5 font-medium">
+                  <Building2 className="h-2 w-2 shrink-0" />{name}
+                </span>
+              ))}
+              {memberPlants.length > 2 && (
+                <span className="text-[9px] text-muted-foreground">+{memberPlants.length - 2}</span>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Expand chevron */}
         {hasChildren && (
-          <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform', expanded && 'rotate-180')} />
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[9px] text-muted-foreground">{children.length}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
+          </div>
         )}
       </div>
+
       {expanded && hasChildren && children.map((child) => (
-        <OrgNode key={child.id} member={child} allStaff={allStaff} roles={roles} depth={depth + 1} />
+        <OrgNode key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants} depth={depth + 1} />
       ))}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Org Chart — 4-column layout, one column per plant
+// ---------------------------------------------------------------------------
+
 function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
-  // Group into per-plant sections. Staff assigned to multiple plants appear in each.
-  // Falls back to a single unscoped tree when no plant data is available.
+  // Track expand-all per-plant column: plantId -> boolean
+  const [expandedPlants, setExpandedPlants] = useState<Record<string, boolean>>({});
+
   const plantsWithStaff = plants.filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
 
+  const toggleAll = (plantId: string, force?: boolean) => {
+    setExpandedPlants((prev) => ({
+      ...prev,
+      [plantId]: force !== undefined ? force : !prev[plantId],
+    }));
+  };
+
   if (plantsWithStaff.length === 0) {
-    // No plant info — render flat tree as before
+    // Fallback: flat tree with no plant data
     const staffIds = new Set(staff.map((s) => s.id));
     const roots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
     if (roots.length === 0)
       return <p className="text-xs text-muted-foreground text-center py-4">No reporting relationships configured.</p>;
     return (
       <div className="space-y-1">
-        {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} depth={0} />)}
+        {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} plants={plants} depth={0} />)}
       </div>
     );
   }
 
+  // Responsive: on small screens stack columns; on md+ show up to 4 columns
   return (
-    <div className="space-y-5">
-      {plantsWithStaff.map((plant) => {
-        const plantStaff = staff.filter((s) => s.plant_assignments?.includes(plant.id));
-        const plantStaffIds = new Set(plantStaff.map((s) => s.id));
-        // Roots within this plant: no head, or head is outside this plant's staff
-        const roots = plantStaff.filter(
-          (s) => !s.immediate_head_id || !plantStaffIds.has(s.immediate_head_id)
-        );
-        return (
-          <div key={plant.id} className="space-y-1">
-            {/* Plant header */}
-            <div className="flex items-center gap-2 pb-1 border-b border-dashed border-muted-foreground/20">
-              <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {plant.name}
-              </span>
-              <span className="ml-auto text-[10px] text-muted-foreground">{plantStaff.length} staff</span>
+    <div>
+      {/* Legend / summary strip */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {plantsWithStaff.map((plant, idx) => {
+          const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
+          const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
+          return (
+            <div key={plant.id} className={cn('flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border', accent.bg, accent.border, accent.text)}>
+              <Building2 className="h-3 w-3 shrink-0" />
+              {plant.name}
+              <span className="opacity-60">·</span>
+              <span className="opacity-80">{count}</span>
             </div>
-            {roots.length === 0
-              ? <p className="text-xs text-muted-foreground py-2 pl-2">No reporting relationships configured for this plant.</p>
-              : roots.map((r) => (
-                  <OrgNode key={r.id} member={r} allStaff={plantStaff} roles={roles} depth={0} />
-                ))
-            }
+          );
+        })}
+      </div>
+
+      {/* 4-column grid */}
+      <div className={cn(
+        'grid gap-3',
+        plantsWithStaff.length === 1 && 'grid-cols-1',
+        plantsWithStaff.length === 2 && 'grid-cols-1 sm:grid-cols-2',
+        plantsWithStaff.length === 3 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+        plantsWithStaff.length >= 4 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+      )}>
+        {plantsWithStaff.map((plant, idx) => {
+          const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
+          const plantStaff = staff.filter((s) => s.plant_assignments?.includes(plant.id));
+          const plantStaffIds = new Set(plantStaff.map((s) => s.id));
+          const roots = plantStaff.filter(
+            (s) => !s.immediate_head_id || !plantStaffIds.has(s.immediate_head_id)
+          );
+
+          const isExpanded = !!expandedPlants[plant.id];
+
+          return (
+            <div key={plant.id} className={cn('rounded-xl border overflow-hidden flex flex-col', accent.border)}>
+              {/* Plant column header */}
+              <div className={cn('px-3 py-2.5 bg-gradient-to-r text-white', accent.header)}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                    <span className="text-[12px] font-bold uppercase tracking-wide truncate">{plant.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full">
+                      {plantStaff.length}
+                    </span>
+                    {/* Expand-all / Collapse-all toggle */}
+                    <button
+                      className="h-5 w-5 flex items-center justify-center rounded hover:bg-white/20 transition-colors"
+                      onClick={() => toggleAll(plant.id)}
+                      title={isExpanded ? 'Collapse all' : 'Expand all'}
+                    >
+                      {isExpanded
+                        ? <ChevronsDownUp className="h-3 w-3 opacity-80" />
+                        : <ChevronsUpDown className="h-3 w-3 opacity-80" />
+                      }
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tree nodes */}
+              <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 320 }}>
+                {roots.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground py-3 text-center">No hierarchy configured.</p>
+                ) : (
+                  <ExpandAllContext.Provider value={isExpanded}>
+                    {roots.map((r) => (
+                      <OrgNodeControlled key={r.id} member={r} allStaff={plantStaff} roles={roles} plants={plants} depth={0} forceExpand={isExpanded} />
+                    ))}
+                  </ExpandAllContext.Provider>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Context for propagating expand-all state into OrgNodeControlled
+import { createContext, useContext } from 'react';
+const ExpandAllContext = createContext(false);
+
+// Controlled org node that respects forceExpand from the column header toggle
+function OrgNodeControlled({ member, allStaff, roles, plants, depth = 0, forceExpand }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[]; depth?: number; forceExpand: boolean;
+}) {
+  // Local expanded state; syncs when forceExpand changes
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const expanded = forceExpand || localExpanded;
+
+  useEffect(() => {
+    if (!forceExpand) setLocalExpanded(false);
+  }, [forceExpand]);
+
+  const children = allStaff.filter((s) => s.immediate_head_id === member.id);
+  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
+  const hasChildren = children.length > 0;
+
+  const memberPlants = (plants ?? [])
+    .filter((p) => member.plant_assignments?.includes(p.id))
+    .map((p) => p.name as string);
+
+  const toggle = () => {
+    if (!forceExpand) setLocalExpanded((p) => !p);
+    else setLocalExpanded((p) => !p); // allow individual collapse even during expand-all
+  };
+
+  return (
+    <div className={cn('flex flex-col', depth > 0 && 'ml-3 border-l-2 border-dashed border-muted-foreground/20 pl-2.5 mt-0.5')}>
+      <div
+        className={cn(
+          'flex items-center gap-2 py-1.5 px-2 rounded-lg group transition-colors',
+          hasChildren && 'cursor-pointer hover:bg-white/60',
+          !hasChildren && 'cursor-default',
+        )}
+        onClick={() => hasChildren && toggle()}
+      >
+        {/* Avatar */}
+        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0', avatarColor(member.id))}>
+          {initials(member)}
+        </div>
+
+        {/* Name + role */}
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-semibold leading-snug truncate">{fullName(member)}</div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="text-[9px] text-muted-foreground bg-white/70 border px-1 rounded font-medium">{memberRole}</span>
+            {member.designation && (
+              <span className="text-[9px] text-muted-foreground truncate max-w-[80px]">{member.designation}</span>
+            )}
           </div>
-        );
-      })}
+        </div>
+
+        {/* Chevron + child count */}
+        {hasChildren && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <span className="text-[9px] text-muted-foreground">{children.length}</span>
+            <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
+          </div>
+        )}
+      </div>
+
+      {expanded && hasChildren && children.map((child) => (
+        <OrgNodeControlled key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants} depth={depth + 1} forceExpand={forceExpand} />
+      ))}
     </div>
   );
 }
@@ -643,7 +889,6 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
 
   return (
     <div className="space-y-3">
-      {/* Summary row */}
       <div className="grid grid-cols-3 gap-2">
         {statItems.map((s) => (
           <div key={s.label} className="flex flex-col items-center bg-muted/50 rounded-lg py-3 px-2 text-center gap-1">
@@ -653,7 +898,6 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
           </div>
         ))}
       </div>
-      {/* Role breakdown */}
       <div className="grid grid-cols-2 gap-2">
         {roleCounts.map(({ role, count }) => (
           <div key={role} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
@@ -679,7 +923,6 @@ function PendingApprovals({ staff }: { staff: StaffMember[] }) {
   const approve = useCallback(async (id: string) => {
     setApproving(id);
     try {
-      // Set confirmed = true in user_profiles; adjust field name to match your schema
       await (supabase as any)
         .from('user_profiles')
         .update({ confirmed: true, status: 'Active' })
@@ -775,7 +1018,7 @@ const MANUAL_SECTIONS: ManualSection[] = [
     icon: <GitBranch className="h-3.5 w-3.5" />,
     content: (
       <div className="text-xs text-muted-foreground">
-        <p>The reporting tree is built from the <strong className="text-foreground">immediate_head_id</strong> field on each profile. During onboarding or via the Admin Console, each user's direct supervisor can be set. The chart auto-nests and is collapsible at each level.</p>
+        <p>The reporting tree is grouped by plant into 4 columns. Each column shows the hierarchy for that plant based on the <strong className="text-foreground">immediate_head_id</strong> field. Use the expand/collapse button in each column header to toggle all nodes at once.</p>
       </div>
     ),
   },
@@ -875,6 +1118,7 @@ function RegisterInfo() {
         >
           <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-semibold flex-1">Reporting Tree</span>
+          <span className="text-[10px] text-muted-foreground mr-1">by plant</span>
           <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', orgOpen && 'rotate-180')} />
         </button>
         {orgOpen && (
