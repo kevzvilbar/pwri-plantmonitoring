@@ -1097,30 +1097,53 @@ export function TrendChart({
 
   // Chemical cost comes from TWO sources which are merged per day:
   //   1. production_costs.chem_cost  — legacy manual entry (₱/day)
-  //   2. chemical_dosing_logs.calculated_cost — operator dosing records (₱ per log entry)
-  // Both are summed per calendar day so neither source is lost.
+  //   2. chemical_dosing_logs — operator dosing records
+  //      Uses calculated_cost when > 0, otherwise falls back to
+  //      qty × unit_price (same logic as ROTrains dosing history display).
+  //      Old records saved before prices were configured have calculated_cost = 0.
   //   Chem Cost (₱/m³) = total_chem_₱_per_day / production_m3
-  // The power side is computed live from power_readings × tariff rate.
   const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
     queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
     queryFn: async () => {
-      // Fetch both sources in parallel
-      const [prodCostRes, dosingRes] = await Promise.all([
+      const today = format(new Date(), 'yyyy-MM-dd');
+      // Fetch all three sources in parallel
+      const [prodCostRes, dosingRes, pricesRes] = await Promise.all([
         supabase.from('production_costs')
           .select('cost_date,chem_cost,plant_id')
           .in('plant_id', plantIds)
           .gte('cost_date', startKey)
           .lte('cost_date', endKey),
         supabase.from('chemical_dosing_logs')
-          .select('log_datetime,calculated_cost,plant_id')
+          .select('log_datetime,calculated_cost,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg')
           .in('plant_id', plantIds)
           .gte('log_datetime', `${startKey}T00:00:00`)
           .lte('log_datetime', `${endKey}T23:59:59`),
+        supabase.from('chemical_prices')
+          .select('chemical_name,unit_price')
+          .lte('effective_date', today)
+          .order('effective_date', { ascending: false }),
       ]);
       if (prodCostRes.error) throw new Error(`production_costs: ${prodCostRes.error.message}`);
       if (dosingRes.error)   throw new Error(`chemical_dosing_logs: ${dosingRes.error.message}`);
 
-      // Build a map: `${plant_id}|${cost_date}` → accumulated chem_cost ₱
+      // Build price lookup map (first price per chemical name = most recent)
+      const priceMap: Record<string, number> = {};
+      for (const p of (pricesRes.data ?? []) as any[]) {
+        // Strip "(unit)" suffix to get base name, same as ROTrains
+        const base = (p.chemical_name as string).replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(p.chemical_name in priceMap)) priceMap[p.chemical_name] = +p.unit_price;
+        if (!(base in priceMap))            priceMap[base]            = +p.unit_price;
+      }
+
+      // chemical_name → dosing quantity field (matches DOSING_KEYS in ROTrains)
+      const DOSING_KEYS = [
+        { key: 'chlorine_kg',    name: 'Chlorine'    },
+        { key: 'smbs_kg',        name: 'SMBS'        },
+        { key: 'anti_scalant_l', name: 'Anti Scalant'},
+        { key: 'soda_ash_kg',    name: 'Soda Ash'    },
+      ];
+
+      // Build map: `${plant_id}|${yyyy-MM-dd}` → accumulated ₱
       const costMap = new Map<string, number>();
 
       // 1. Seed from production_costs (manual entries)
@@ -1129,15 +1152,21 @@ export function TrendChart({
         costMap.set(k, (costMap.get(k) ?? 0) + +(r.chem_cost ?? 0));
       }
 
-      // 2. Merge dosing logs — convert log_datetime → yyyy-MM-dd date key
+      // 2. Merge dosing logs — mirror ROTrains fallback: use calculated_cost
+      //    when > 0, else compute live from qty × price
       for (const r of (dosingRes.data ?? []) as any[]) {
-        if (!r.calculated_cost || +r.calculated_cost <= 0) continue;
+        const storedCost = +r.calculated_cost || 0;
+        const liveCost   = DOSING_KEYS.reduce(
+          (s, c) => s + (+r[c.key] || 0) * (priceMap[c.name] ?? 0), 0,
+        );
+        const cost = storedCost > 0 ? storedCost : liveCost;
+        if (cost <= 0) continue;
         const dateKey = format(new Date(r.log_datetime), 'yyyy-MM-dd');
         const k = `${r.plant_id}|${dateKey}`;
-        costMap.set(k, (costMap.get(k) ?? 0) + +r.calculated_cost);
+        costMap.set(k, (costMap.get(k) ?? 0) + cost);
       }
 
-      // Return as flat array in the same shape the accumulator below expects
+      // Return flat array in the shape the accumulator below expects
       return Array.from(costMap.entries()).map(([key, chem_cost]) => {
         const [plant_id, cost_date] = key.split('|');
         return { plant_id, cost_date, chem_cost };
