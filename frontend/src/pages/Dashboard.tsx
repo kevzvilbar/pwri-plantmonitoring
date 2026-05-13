@@ -1105,7 +1105,6 @@ export default function Dashboard() {
           calcTooltip="PV Ratio = Power kWh ÷ Production m³ (lower is more efficient)"
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
-      </div>
       <ClusterCharts
         metrics={[
           ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
