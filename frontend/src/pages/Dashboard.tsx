@@ -1042,7 +1042,7 @@ export default function Dashboard() {
 
       {/* ─── Cluster 4: Plant Health ─────────────────────────────────────── */}
       <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-emerald-500" subtitle="RO trains" />
-      <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} />
+      <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
 
       <Card className="p-3" data-testid="alerts-card">
         <div className="flex items-center gap-2 mb-2">
