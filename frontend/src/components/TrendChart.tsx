@@ -1095,23 +1095,53 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsPowerReadings,
   });
 
-  // Production-cost rows use a date column (`cost_date`) rather than a
-  // datetime, so the generic `supaSelect` helper (which filters on
-  // `reading_datetime`) doesn't fit. Inline this single query instead.
-  // production_costs stores chem_cost (₱/day) entered by operators.
-  // We use it for the chemical side of the cost formula:
-  //   Chem Cost (₱/m³) = chem_cost / production_m3
-  // The power side is now computed live from power_readings × tariff rate.
+  // Chemical cost comes from TWO sources which are merged per day:
+  //   1. production_costs.chem_cost  — legacy manual entry (₱/day)
+  //   2. chemical_dosing_logs.calculated_cost — operator dosing records (₱ per log entry)
+  // Both are summed per calendar day so neither source is lost.
+  //   Chem Cost (₱/m³) = total_chem_₱_per_day / production_m3
+  // The power side is computed live from power_readings × tariff rate.
   const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
     queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
     queryFn: async () => {
-      const { data, error } = await supabase.from('production_costs')
-        .select('cost_date,chem_cost,plant_id')
-        .in('plant_id', plantIds)
-        .gte('cost_date', startKey)
-        .lte('cost_date', endKey);
-      if (error) throw new Error(`production_costs: ${error.message}`);
-      return (data as any[]) ?? [];
+      // Fetch both sources in parallel
+      const [prodCostRes, dosingRes] = await Promise.all([
+        supabase.from('production_costs')
+          .select('cost_date,chem_cost,plant_id')
+          .in('plant_id', plantIds)
+          .gte('cost_date', startKey)
+          .lte('cost_date', endKey),
+        supabase.from('chemical_dosing_logs')
+          .select('log_datetime,calculated_cost,plant_id')
+          .in('plant_id', plantIds)
+          .gte('log_datetime', `${startKey}T00:00:00`)
+          .lte('log_datetime', `${endKey}T23:59:59`),
+      ]);
+      if (prodCostRes.error) throw new Error(`production_costs: ${prodCostRes.error.message}`);
+      if (dosingRes.error)   throw new Error(`chemical_dosing_logs: ${dosingRes.error.message}`);
+
+      // Build a map: `${plant_id}|${cost_date}` → accumulated chem_cost ₱
+      const costMap = new Map<string, number>();
+
+      // 1. Seed from production_costs (manual entries)
+      for (const r of (prodCostRes.data ?? []) as any[]) {
+        const k = `${r.plant_id}|${r.cost_date}`;
+        costMap.set(k, (costMap.get(k) ?? 0) + +(r.chem_cost ?? 0));
+      }
+
+      // 2. Merge dosing logs — convert log_datetime → yyyy-MM-dd date key
+      for (const r of (dosingRes.data ?? []) as any[]) {
+        if (!r.calculated_cost || +r.calculated_cost <= 0) continue;
+        const dateKey = format(new Date(r.log_datetime), 'yyyy-MM-dd');
+        const k = `${r.plant_id}|${dateKey}`;
+        costMap.set(k, (costMap.get(k) ?? 0) + +r.calculated_cost);
+      }
+
+      // Return as flat array in the same shape the accumulator below expects
+      return Array.from(costMap.entries()).map(([key, chem_cost]) => {
+        const [plant_id, cost_date] = key.split('|');
+        return { plant_id, cost_date, chem_cost };
+      });
     },
     enabled: plantIds.length > 0 && needsCostReadings,
   });
