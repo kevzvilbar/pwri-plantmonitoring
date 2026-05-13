@@ -16,6 +16,7 @@ import {
 import { DesignationCombobox, accessLevelFromRoles } from '@/components/DesignationCombobox';
 import { toast } from '@/components/ui/sonner';
 import { Loader2, Pencil, ShieldCheck, Building2, MapPin } from 'lucide-react';
+import { ProfileEmailChange } from '@/components/ProfileEmailChange';
 
 export default function Profile() {
   const { user, profile, activeOperator, roles, refreshProfile, loading } = useAuth();
@@ -231,7 +232,6 @@ export default function Profile() {
             <Meta label="Name" value={displayName} />
             <Meta label="Username" value={displayProfile?.username ? `@${displayProfile.username}` : '—'} />
             <Meta label="Designation" value={displayProfile?.designation ?? '—'} />
-            <Meta label="Email" value={user.email ?? '—'} />
             <Meta label="Status" value={displayProfile?.status ?? '—'} />
           </div>
         )}
@@ -247,6 +247,16 @@ export default function Profile() {
           </div>
         )}
       </Card>
+
+      {/* Email — self-service change for non-operators; read-only notice for operators */}
+      {!isOverride && (
+        <Card className="p-3 space-y-2" data-testid="profile-email-card">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Email address
+          </Label>
+          <ProfileEmailChange />
+        </Card>
+      )}
 
       {/* Assigned plants (EnumList badges) */}
       <Card className="p-3 space-y-2" data-testid="profile-plants-card">
