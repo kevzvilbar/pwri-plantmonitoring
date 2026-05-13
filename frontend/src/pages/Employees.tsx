@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -105,7 +105,8 @@ function fullName(s: StaffMember) {
 // Chat helpers
 // ---------------------------------------------------------------------------
 
-function timeUntilExpiry(expiresAt: string) {
+function timeUntilExpiry(expiresAt: string | null | undefined) {
+  if (!expiresAt) return '—';
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return 'expired';
   const h = Math.floor(ms / 3_600_000);
@@ -127,6 +128,9 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Keep a ref to the subscribed broadcast channel so send() can reuse it
+  // instead of creating a brand-new, unsubscribed channel on every call.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Fetch messages for this conversation (both directions, non-expired).
   const fetchMessages = useCallback(async (): Promise<ChatMsg[]> => {
@@ -154,7 +158,11 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
       .channel(channelName)
       .on('broadcast', { event: 'new_message' }, () => refetch())
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    channelRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      channelRef.current = null;
+    };
   }, [currentUserId, peer.id, refetch]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
@@ -166,11 +174,15 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
     try {
       // 1. Persist the message to the DB.
       await (supabase as any).from('chat_messages').insert({ sender_id: currentUserId, recipient_id: peer.id, body });
-      // 2. Broadcast to the shared channel so the peer's window refetches immediately.
-      const channelName = `chat:${[currentUserId, peer.id].sort().join(':')}`;
-      await supabase.channel(channelName).send({ type: 'broadcast', event: 'new_message', payload: {} });
-      // 3. Refetch our own window immediately too.
-      refetch();
+      // 2. Broadcast on the ALREADY-SUBSCRIBED channel so the peer's window
+      //    refetches immediately. The sender's own listener will fire too and
+      //    call refetch() — no manual refetch needed here.
+      if (channelRef.current) {
+        await channelRef.current.send({ type: 'broadcast', event: 'new_message', payload: {} });
+      } else {
+        // Fallback if channel isn't ready yet (shouldn't normally happen).
+        refetch();
+      }
     } finally { setSending(false); }
   }, [input, currentUserId, peer.id, refetch]);
 
@@ -237,7 +249,7 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
 // InfoRow helper
 // ---------------------------------------------------------------------------
 
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex gap-2.5">
       <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
@@ -414,21 +426,19 @@ function Staff() {
       config: { presence: { key: operatorId } },
     });
 
-    ch.on('presence', { event: 'sync' }, () => {
-      const state = ch.presenceState<{ user_id: string }>();
-      const ids = new Set<string>(
-        (Object.values(state) as any[])
-          .flat()
-          .map((p: any) => p.user_id as string)
-          .filter(Boolean)
-      );
-      setOnlineIds(ids);
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.track({ user_id: operatorId });
-      }
-    });
+    // Helper: rebuild the online set from current presence state.
+    // Since the channel key IS the operatorId, Object.keys() is sufficient
+    // and avoids any dependency on the tracked payload shape.
+    const syncIds = () => setOnlineIds(new Set<string>(Object.keys(ch.presenceState())));
+
+    ch.on('presence', { event: 'sync' },  syncIds)
+      .on('presence', { event: 'join' },  syncIds)
+      .on('presence', { event: 'leave' }, syncIds)
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({ user_id: operatorId });
+        }
+      });
 
     return () => { supabase.removeChannel(ch); };
   }, [activeOperator?.id, user?.id]);
@@ -718,7 +728,7 @@ function PendingApprovals({ staff }: { staff: StaffMember[] }) {
 // App Manual
 // ---------------------------------------------------------------------------
 
-type ManualSection = { title: string; icon: React.ReactNode; content: React.ReactNode };
+type ManualSection = { title: string; icon: ReactNode; content: ReactNode };
 
 const MANUAL_SECTIONS: ManualSection[] = [
   {
