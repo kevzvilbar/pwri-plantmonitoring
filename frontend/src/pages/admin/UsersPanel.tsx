@@ -22,9 +22,10 @@ import {
 import { toast } from '@/components/ui/sonner';
 import {
   Search, Hourglass, UserPlus, Zap, Building2, MoreVertical,
-  ShieldCheck, ChevronLeft, ChevronRight, KeyRound, Eye, EyeOff,
+  ShieldCheck, ChevronLeft, ChevronRight, KeyRound, Eye, EyeOff, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EmailChangeDialog, EmailChangeTarget } from '@/components/EmailChangeDialog';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,7 @@ interface SharedTileProps {
   approveUser: (uid: string, label: string) => Promise<void>;
   invalidate: () => void;
   onChangePassword: (userId: string, userName: string) => void;
+  onChangeEmail: (target: EmailChangeTarget) => void;
 }
 
 // ── Change Password Dialog ────────────────────────────────────────────────────
@@ -546,6 +548,21 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             <KeyRound className="w-3 h-3" />
           </button>
 
+          {/* Change email */}
+          <button
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 transition-colors shrink-0"
+            title="Change email"
+            aria-label="Change email"
+            onClick={() => shared.onChangeEmail({
+              mode: 'admin-instant',
+              userId: s.id,
+              currentEmail: s.email ?? '',
+              displayName: label,
+            })}
+          >
+            <Mail className="w-3 h-3" />
+          </button>
+
           {/* Edit plants */}
           <PlantAssignmentEditor
             userId={s.id}
@@ -720,6 +737,21 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               <KeyRound className="w-3 h-3" />
             </button>
 
+            {/* Change email */}
+            <button
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 transition-colors shrink-0"
+              title="Change email"
+              aria-label="Change email"
+              onClick={() => shared.onChangeEmail({
+                mode: 'admin-instant',
+                userId: s.id,
+                currentEmail: s.email ?? '',
+                displayName: label,
+              })}
+            >
+              <Mail className="w-3 h-3" />
+            </button>
+
             {/* Edit plants */}
             <PlantAssignmentEditor
               userId={s.id}
@@ -878,6 +910,7 @@ export function UsersPanel() {
   const [pendingOnly, setPendingOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [changePw, setChangePw] = useState<{ userId: string; userName: string } | null>(null);
+  const [changeEmailTarget, setChangeEmailTarget] = useState<EmailChangeTarget | null>(null);
 
   const { data: staff } = useQuery({
     queryKey: ['admin-users'],
@@ -965,6 +998,7 @@ export function UsersPanel() {
     approveUser,
     invalidate,
     onChangePassword: (userId, userName) => setChangePw({ userId, userName }),
+    onChangeEmail: (target) => setChangeEmailTarget(target),
   };
 
   const activeCardGroups  = [...CARD_ROLES,  'No role' as const].filter((r) => grouped[r]?.length > 0);
@@ -1047,6 +1081,14 @@ export function UsersPanel() {
           onClose={() => setChangePw(null)}
           userId={changePw.userId}
           userName={changePw.userName}
+        />
+      )}
+      {changeEmailTarget && (
+        <EmailChangeDialog
+          open={!!changeEmailTarget}
+          onOpenChange={(open) => { if (!open) setChangeEmailTarget(null); }}
+          target={changeEmailTarget}
+          onSuccess={invalidate}
         />
       )}
     </div>
