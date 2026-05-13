@@ -81,14 +81,24 @@ const AVATAR_COLORS = [
   'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-pink-500',
 ];
 
-// Per-plant column accent colours for the reporting tree
+// Per-plant column accents — sky/teal theme palette, cycling through tonal variants
 const PLANT_COLUMN_ACCENTS = [
-  { header: 'from-sky-500 to-cyan-500',     border: 'border-sky-200',    bg: 'bg-sky-50/60',    text: 'text-sky-700'    },
-  { header: 'from-violet-500 to-indigo-500', border: 'border-violet-200', bg: 'bg-violet-50/60', text: 'text-violet-700' },
-  { header: 'from-teal-500 to-emerald-500',  border: 'border-teal-200',   bg: 'bg-teal-50/60',   text: 'text-teal-700'   },
-  { header: 'from-rose-500 to-pink-500',     border: 'border-rose-200',   bg: 'bg-rose-50/60',   text: 'text-rose-700'   },
-  { header: 'from-amber-500 to-orange-500',  border: 'border-amber-200',  bg: 'bg-amber-50/60',  text: 'text-amber-700'  },
-  { header: 'from-indigo-500 to-blue-500',   border: 'border-indigo-200', bg: 'bg-indigo-50/60', text: 'text-indigo-700' },
+  { header: 'from-sky-600 to-sky-500',      border: 'border-sky-200',   bg: 'bg-sky-50',    text: 'text-sky-700',    line: '#0ea5e9' },
+  { header: 'from-teal-600 to-teal-500',    border: 'border-teal-200',  bg: 'bg-teal-50',   text: 'text-teal-700',   line: '#14b8a6' },
+  { header: 'from-cyan-600 to-cyan-500',    border: 'border-cyan-200',  bg: 'bg-cyan-50',   text: 'text-cyan-700',   line: '#06b6d4' },
+  { header: 'from-sky-700 to-teal-600',     border: 'border-sky-300',   bg: 'bg-sky-100',   text: 'text-sky-800',    line: '#0369a1' },
+  { header: 'from-teal-700 to-cyan-600',    border: 'border-teal-300',  bg: 'bg-teal-100',  text: 'text-teal-800',   line: '#0f766e' },
+  { header: 'from-cyan-700 to-sky-600',     border: 'border-cyan-300',  bg: 'bg-cyan-100',  text: 'text-cyan-800',   line: '#0e7490' },
+];
+
+// Depth-based bg shading within a column (sky/teal tonal scale, depth 0–5+)
+const DEPTH_SHADES = [
+  'bg-white',
+  'bg-sky-50/80',
+  'bg-sky-100/70',
+  'bg-teal-50/80',
+  'bg-teal-100/70',
+  'bg-cyan-50/80',
 ];
 
 function hashId(id: string) {
@@ -607,32 +617,58 @@ function Staff() {
 }
 
 // ---------------------------------------------------------------------------
-// Org Chart Node (recursive) — improved layout with plant badge chips
+// Org Chart Node (recursive) — connector lines + depth color shading
 // ---------------------------------------------------------------------------
 
-function OrgNode({ member, allStaff, roles, plants, depth = 0 }: {
-  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[]; depth?: number;
+// Depth-tinted connector line colors (sky→teal→cyan gradient per level)
+const CONNECTOR_COLORS = ['#0ea5e9', '#14b8a6', '#06b6d4', '#0369a1', '#0f766e', '#0e7490'];
+
+function OrgNode({ member, allStaff, roles, plants, depth = 0, isLast = false }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[];
+  depth?: number; isLast?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const children = allStaff.filter((s) => s.immediate_head_id === member.id);
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
   const hasChildren = children.length > 0;
+  const depthShade = DEPTH_SHADES[Math.min(depth, DEPTH_SHADES.length - 1)];
+  const connectorColor = CONNECTOR_COLORS[Math.min(depth - 1, CONNECTOR_COLORS.length - 1)];
 
-  // Plant badges (only first 2 to avoid overflow; show +N for rest)
   const memberPlants = (plants ?? [])
     .filter((p) => member.plant_assignments?.includes(p.id))
     .map((p) => p.name as string);
 
   return (
-    <div className={cn('flex flex-col', depth > 0 && 'ml-4 border-l-2 border-dashed border-muted-foreground/20 pl-3 mt-1')}>
+    <div className="flex flex-col">
+      {/* Connector row: horizontal elbow line at depth > 0 */}
+      {depth > 0 && (
+        <div className="flex items-center" style={{ paddingLeft: (depth - 1) * 20 }}>
+          {/* Vertical segment + horizontal arm */}
+          <div className="flex items-center shrink-0" style={{ width: 20 }}>
+            <div style={{ width: 2, height: 12, background: connectorColor, opacity: 0.5 }} />
+            <div style={{ width: 10, height: 2, background: connectorColor, opacity: 0.5 }} />
+          </div>
+        </div>
+      )}
+
       <div
+        style={{ paddingLeft: depth * 20 }}
         className={cn(
-          'flex items-center gap-2 py-1.5 px-2 rounded-lg group transition-colors',
-          hasChildren && 'cursor-pointer hover:bg-muted/60',
+          'flex items-center gap-2 py-1.5 pr-2 rounded-lg group transition-colors relative',
+          hasChildren && 'cursor-pointer hover:bg-sky-100/60',
           !hasChildren && 'cursor-default',
+          depthShade,
         )}
         onClick={() => hasChildren && setExpanded((p) => !p)}
       >
+        {/* Left depth accent bar */}
+        {depth > 0 && (
+          <div
+            className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full opacity-40"
+            style={{ background: connectorColor, left: depth * 20 - 8 }}
+          />
+        )}
+
         {/* Avatar */}
         <div className={cn('h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(member.id))}>
           {initials(member)}
@@ -642,16 +678,15 @@ function OrgNode({ member, allStaff, roles, plants, depth = 0 }: {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold leading-snug truncate">{fullName(member)}</div>
           <div className="flex items-center gap-1 flex-wrap mt-0.5">
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium">{memberRole}</span>
+            <span className="text-[10px] text-sky-700 bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{memberRole}</span>
             {member.designation && (
               <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{member.designation}</span>
             )}
           </div>
-          {/* Plant badges — shown on the org node for context */}
           {memberPlants.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap mt-1">
               {memberPlants.slice(0, 2).map((name) => (
-                <span key={name} className="inline-flex items-center gap-0.5 text-[9px] bg-sky-50 text-sky-600 border border-sky-200 rounded px-1.5 py-0.5 font-medium">
+                <span key={name} className="inline-flex items-center gap-0.5 text-[9px] bg-teal-50 text-teal-600 border border-teal-200 rounded px-1.5 py-0.5 font-medium">
                   <Building2 className="h-2 w-2 shrink-0" />{name}
                 </span>
               ))}
@@ -662,18 +697,32 @@ function OrgNode({ member, allStaff, roles, plants, depth = 0 }: {
           )}
         </div>
 
-        {/* Expand chevron */}
+        {/* Expand chevron + child count */}
         {hasChildren && (
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[9px] text-muted-foreground">{children.length}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
+          <div className="flex items-center gap-0.5 shrink-0">
+            <span className="text-[9px] text-sky-400 font-medium bg-sky-100 px-1 rounded">{children.length}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 text-sky-400 transition-transform duration-200', expanded && 'rotate-180')} />
           </div>
         )}
       </div>
 
-      {expanded && hasChildren && children.map((child) => (
-        <OrgNode key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants} depth={depth + 1} />
-      ))}
+      {/* Vertical trunk line alongside children */}
+      {expanded && hasChildren && (
+        <div className="flex">
+          {/* Trunk line */}
+          <div style={{ width: depth * 20 + 10, paddingLeft: depth * 20, flexShrink: 0 }}>
+            <div style={{ width: 2, height: '100%', background: CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)], opacity: 0.3, marginLeft: 10 }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            {children.map((child, i) => (
+              <OrgNode
+                key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants}
+                depth={depth + 1} isLast={i === children.length - 1}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -717,11 +766,17 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
           const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
           const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
           return (
-            <div key={plant.id} className={cn('flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full border', accent.bg, accent.border, accent.text)}>
-              <Building2 className="h-3 w-3 shrink-0" />
+            <div
+              key={plant.id}
+              className={cn('flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full border', accent.bg, accent.border, accent.text)}
+            >
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ background: accent.line }}
+              />
               {plant.name}
-              <span className="opacity-60">·</span>
-              <span className="opacity-80">{count}</span>
+              <span className="opacity-50 mx-0.5">·</span>
+              <span className="font-bold">{count} staff</span>
             </div>
           );
         })}
@@ -774,15 +829,16 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
               </div>
 
               {/* Tree nodes */}
-              <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 320 }}>
+              <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 340 }}>
                 {roots.length === 0 ? (
                   <p className="text-[11px] text-muted-foreground py-3 text-center">No hierarchy configured.</p>
                 ) : (
-                  <ExpandAllContext.Provider value={isExpanded}>
-                    {roots.map((r) => (
-                      <OrgNodeControlled key={r.id} member={r} allStaff={plantStaff} roles={roles} plants={plants} depth={0} forceExpand={isExpanded} />
-                    ))}
-                  </ExpandAllContext.Provider>
+                  roots.map((r) => (
+                    <OrgNodeControlled
+                      key={r.id} member={r} allStaff={plantStaff} roles={roles} plants={plants}
+                      depth={0} forceExpand={isExpanded} accentLine={accent.line}
+                    />
+                  ))
                 )}
               </div>
             </div>
@@ -793,15 +849,12 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
   );
 }
 
-// Context for propagating expand-all state into OrgNodeControlled
-import { createContext, useContext } from 'react';
-const ExpandAllContext = createContext(false);
-
 // Controlled org node that respects forceExpand from the column header toggle
-function OrgNodeControlled({ member, allStaff, roles, plants, depth = 0, forceExpand }: {
-  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[]; depth?: number; forceExpand: boolean;
+// Uses connector lines + depth-based background shading (sky/teal theme)
+function OrgNodeControlled({ member, allStaff, roles, plants, depth = 0, forceExpand, accentLine }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[];
+  depth?: number; forceExpand: boolean; accentLine?: string;
 }) {
-  // Local expanded state; syncs when forceExpand changes
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = forceExpand || localExpanded;
 
@@ -813,53 +866,99 @@ function OrgNodeControlled({ member, allStaff, roles, plants, depth = 0, forceEx
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
   const hasChildren = children.length > 0;
 
-  const memberPlants = (plants ?? [])
-    .filter((p) => member.plant_assignments?.includes(p.id))
-    .map((p) => p.name as string);
+  // Depth shading: root = white, deeper = progressively tinted sky/teal
+  const depthShade = DEPTH_SHADES[Math.min(depth, DEPTH_SHADES.length - 1)];
+  // Connector line color cycles through sky→teal→cyan per level
+  const lineColor = accentLine ?? CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)];
+  const childLineColor = CONNECTOR_COLORS[Math.min(depth + 1, CONNECTOR_COLORS.length - 1)];
 
-  const toggle = () => {
-    if (!forceExpand) setLocalExpanded((p) => !p);
-    else setLocalExpanded((p) => !p); // allow individual collapse even during expand-all
-  };
+  const toggle = () => setLocalExpanded((p) => !p);
 
   return (
-    <div className={cn('flex flex-col', depth > 0 && 'ml-3 border-l-2 border-dashed border-muted-foreground/20 pl-2.5 mt-0.5')}>
+    <div className="flex flex-col">
+      {/* Elbow connector at depth > 0 */}
+      {depth > 0 && (
+        <div className="flex items-center" style={{ paddingLeft: (depth - 1) * 16 }}>
+          <div className="flex items-center shrink-0" style={{ width: 16 }}>
+            <div style={{ width: 2, height: 10, background: lineColor, opacity: 0.45 }} />
+            <div style={{ width: 8, height: 2, background: lineColor, opacity: 0.45 }} />
+          </div>
+        </div>
+      )}
+
       <div
+        style={{ paddingLeft: depth * 16 }}
         className={cn(
-          'flex items-center gap-2 py-1.5 px-2 rounded-lg group transition-colors',
-          hasChildren && 'cursor-pointer hover:bg-white/60',
+          'flex items-center gap-1.5 py-1.5 pr-2 rounded-lg group transition-colors relative',
+          hasChildren && 'cursor-pointer hover:bg-sky-200/40',
           !hasChildren && 'cursor-default',
+          depthShade,
         )}
         onClick={() => hasChildren && toggle()}
       >
-        {/* Avatar */}
-        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0', avatarColor(member.id))}>
+        {/* Depth accent bar on left edge */}
+        {depth > 0 && (
+          <div
+            className="absolute top-1 bottom-1 w-0.5 rounded-full"
+            style={{ background: lineColor, opacity: 0.35, left: depth * 16 - 4 }}
+          />
+        )}
+
+        {/* Avatar — smaller inside columns */}
+        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0', avatarColor(member.id))}>
           {initials(member)}
         </div>
 
         {/* Name + role */}
         <div className="flex-1 min-w-0">
-          <div className="text-[12px] font-semibold leading-snug truncate">{fullName(member)}</div>
+          <div className="text-[11px] font-semibold leading-snug truncate">{fullName(member)}</div>
           <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[9px] text-muted-foreground bg-white/70 border px-1 rounded font-medium">{memberRole}</span>
+            <span
+              className="text-[9px] font-medium px-1 py-0.5 rounded border"
+              style={{ color: lineColor, background: `${lineColor}15`, borderColor: `${lineColor}40` }}
+            >
+              {memberRole}
+            </span>
             {member.designation && (
-              <span className="text-[9px] text-muted-foreground truncate max-w-[80px]">{member.designation}</span>
+              <span className="text-[9px] text-muted-foreground truncate max-w-[72px]">{member.designation}</span>
             )}
           </div>
         </div>
 
-        {/* Chevron + child count */}
+        {/* Chevron + count */}
         {hasChildren && (
           <div className="flex items-center gap-0.5 shrink-0">
-            <span className="text-[9px] text-muted-foreground">{children.length}</span>
-            <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
+            <span
+              className="text-[8px] font-bold px-1 rounded"
+              style={{ color: lineColor, background: `${lineColor}20` }}
+            >
+              {children.length}
+            </span>
+            <ChevronDown
+              className={cn('h-3 w-3 transition-transform duration-200', expanded && 'rotate-180')}
+              style={{ color: lineColor }}
+            />
           </div>
         )}
       </div>
 
-      {expanded && hasChildren && children.map((child) => (
-        <OrgNodeControlled key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants} depth={depth + 1} forceExpand={forceExpand} />
-      ))}
+      {/* Children with vertical trunk line */}
+      {expanded && hasChildren && (
+        <div className="flex">
+          {/* Trunk line */}
+          <div style={{ width: depth * 16 + 9, flexShrink: 0, paddingLeft: depth * 16 }}>
+            <div style={{ width: 2, height: '100%', background: childLineColor, opacity: 0.25, marginLeft: 9 }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            {children.map((child) => (
+              <OrgNodeControlled
+                key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants}
+                depth={depth + 1} forceExpand={forceExpand} accentLine={childLineColor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
