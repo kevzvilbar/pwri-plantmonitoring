@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
@@ -85,11 +87,35 @@ const teamGroup = {
 export function BottomNav() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile, roles } = useAuth();
   const fullPath = pathname + search;
-  const visibleGroups = isAdmin
-    ? [...sideSheetGroups, teamGroup, adminGroup]
-    : [...sideSheetGroups, teamGroup];
+
+  const isOperator =
+    profile?.designation === OPERATOR_DESIGNATION ||
+    (roles.length > 0 && roles.every((r) => r === 'Operator'));
+
+  // For operators: filter every sheet group's items to allowed paths only,
+  // then drop empty groups. This also removes Finance/AI/Compliance/Admin entirely.
+  const filterGroupForOperator = (group: typeof teamGroup) => {
+    const items = group.items.filter((item) => {
+      const path = item.to.split('?')[0];
+      return OPERATOR_ALLOWED_PATHS.some(
+        (allowed) => allowed === '/' ? path === '/' : path.startsWith(allowed),
+      );
+    });
+    return items.length > 0 ? { ...group, items } : null;
+  };
+
+  let visibleGroups: typeof sideSheetGroups;
+  if (isOperator) {
+    visibleGroups = [...sideSheetGroups, teamGroup]
+      .map(filterGroupForOperator)
+      .filter((g): g is typeof teamGroup => g !== null);
+  } else if (isAdmin) {
+    visibleGroups = [...sideSheetGroups, teamGroup, adminGroup];
+  } else {
+    visibleGroups = [...sideSheetGroups, teamGroup];
+  }
 
   const isPriorityActive = (item: Priority) => {
     const target = item.to.split('?')[0];

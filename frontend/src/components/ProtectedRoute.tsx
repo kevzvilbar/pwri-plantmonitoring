@@ -1,9 +1,23 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+
+// Routes an Operator is allowed to visit. Everything else redirects to /.
+// Keep this in sync with AppSidebar and BottomNav allowed items.
+export const OPERATOR_ALLOWED_PATHS = [
+  '/',
+  '/plants',
+  '/operations',
+  '/ro-trains',
+  '/maintenance',
+  '/incidents',
+  '/employees',
+  '/profile',
+];
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading, profile } = useAuth();
+  const { user, loading, profile, roles } = useAuth();
   const loc = useLocation();
 
   if (loading) {
@@ -24,5 +38,22 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   ) {
     return <Navigate to="/pending-approval" replace />;
   }
+
+  // Operator restriction: only allowed paths are accessible.
+  // We check designation AND role — a user is treated as an Operator
+  // when their primary role is Operator (regardless of designation),
+  // OR when their designation is Operator (regardless of role),
+  // to cover edge cases where one or the other hasn't been set yet.
+  const isOperator =
+    profile?.designation === OPERATOR_DESIGNATION ||
+    (roles.length > 0 && roles.every((r) => r === 'Operator'));
+
+  if (isOperator) {
+    const allowed = OPERATOR_ALLOWED_PATHS.some(
+      (p) => p === '/' ? loc.pathname === '/' : loc.pathname.startsWith(p),
+    );
+    if (!allowed) return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }

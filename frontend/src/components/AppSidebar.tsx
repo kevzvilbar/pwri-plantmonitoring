@@ -10,6 +10,8 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
+import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
 import { cn } from '@/lib/utils';
 
 type SidebarItem = {
@@ -72,15 +74,39 @@ const sharedGroup: SidebarGroup = {
   ],
 };
 
+// Filter a group's items to only those whose path is in OPERATOR_ALLOWED_PATHS,
+// then drop the group entirely if it ends up empty.
+function filterGroupForOperator(group: SidebarGroup): SidebarGroup | null {
+  const items = group.items.filter((item) => {
+    const path = item.to.split('?')[0];
+    return OPERATOR_ALLOWED_PATHS.some(
+      (allowed) => allowed === '/' ? path === '/' : path.startsWith(allowed),
+    );
+  });
+  return items.length > 0 ? { ...group, items } : null;
+}
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile, roles } = useAuth();
 
-  const visibleGroups = isAdmin
-    ? [...groups, sharedGroup, adminGroup]
-    : [...groups, sharedGroup];
+  const isOperator =
+    profile?.designation === OPERATOR_DESIGNATION ||
+    (roles.length > 0 && roles.every((r) => r === 'Operator'));
+
+  let visibleGroups: SidebarGroup[];
+  if (isOperator) {
+    // Only show nav items whose routes Operators are allowed to visit
+    visibleGroups = [...groups, sharedGroup]
+      .map(filterGroupForOperator)
+      .filter((g): g is SidebarGroup => g !== null);
+  } else if (isAdmin) {
+    visibleGroups = [...groups, sharedGroup, adminGroup];
+  } else {
+    visibleGroups = [...groups, sharedGroup];
+  }
 
   return (
     <Sidebar collapsible="icon">
