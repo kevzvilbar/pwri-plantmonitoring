@@ -96,11 +96,15 @@ function buildColSequence(customColumns: CustomColumn[]): ColSlot[] {
   return result;
 }
 
-/** Returns a map of column key → x position based on the ordered sequence. */
-function buildColXMap(customColumns: CustomColumn[]): Record<string, number> {
+/** Returns a map of column key → x position based on the ordered sequence + per-column widths. */
+function buildColXMap(customColumns: CustomColumn[], colWidths: Record<string, number> = {}): Record<string, number> {
   const seq = buildColSequence(customColumns);
   const map: Record<string, number> = {};
-  seq.forEach((slot, i) => { map[slot.key] = 28 + i * COL_GAP; });
+  let cursor = 28;
+  seq.forEach((slot) => {
+    map[slot.key] = cursor;
+    cursor += colWidths[slot.key] ?? COL_GAP;
+  });
   // reject shares same x as permeate
   if (map['permeate'] !== undefined) map['reject'] = map['permeate'];
   return map;
@@ -136,6 +140,12 @@ interface DragItem {
   nodeType: NodeType;
   label: string;
   colId?: string;
+  skipRename?: boolean;  // true = palette item already has a name
+}
+
+interface PaletteItem {
+  id: string;
+  label: string;
 }
 
 interface TopologyState {
@@ -146,10 +156,12 @@ interface TopologyState {
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
-const TOPO_LS_KEY     = (pid: string) => `plant_topology_links_${pid}`;
-const CUSTOM_LS_KEY   = (pid: string) => `plant_topology_custom_${pid}`;
-const CUSTOM_COLS_KEY = (pid: string) => `plant_topology_cols_${pid}`;
+const TOPO_LS_KEY       = (pid: string) => `plant_topology_links_${pid}`;
+const CUSTOM_LS_KEY     = (pid: string) => `plant_topology_custom_${pid}`;
+const CUSTOM_COLS_KEY   = (pid: string) => `plant_topology_cols_${pid}`;
 const POS_OVERRIDES_KEY = (pid: string) => `plant_topology_pos_${pid}`;
+const PALETTE_ITEMS_KEY = (pid: string) => `plant_topology_palette_${pid}`;
+const COL_WIDTHS_KEY    = (pid: string) => `plant_topology_colwidths_${pid}`;
 
 // ── Node dimensions (larger for readability) ──
 const NODE_W  = 148;
@@ -254,6 +266,28 @@ function loadPosOverrides(plantId: string): Record<string, NodePositionOverride>
 
 function savePosOverrides(plantId: string, overrides: Record<string, NodePositionOverride>) {
   try { localStorage.setItem(POS_OVERRIDES_KEY(plantId), JSON.stringify(overrides)); } catch { /**/ }
+}
+
+function loadPaletteItems(plantId: string): PaletteItem[] {
+  try {
+    const raw = localStorage.getItem(PALETTE_ITEMS_KEY(plantId));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function savePaletteItems(plantId: string, items: PaletteItem[]) {
+  try { localStorage.setItem(PALETTE_ITEMS_KEY(plantId), JSON.stringify(items)); } catch { /**/ }
+}
+
+function loadColWidths(plantId: string): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(COL_WIDTHS_KEY(plantId));
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveColWidths(plantId: string, widths: Record<string, number>) {
+  try { localStorage.setItem(COL_WIDTHS_KEY(plantId), JSON.stringify(widths)); } catch { /**/ }
 }
 
 // ─── Data hook ──────────────────────────────────────────────────────────────────
@@ -470,8 +504,9 @@ function layoutNodes(
   nodes: TopoNode[],
   customColumns: CustomColumn[] = [],
   posOverrides: Record<string, NodePositionOverride> = {},
+  colWidths: Record<string, number> = {},
 ): Map<string, { x: number; y: number; zone: Zone }> {
-  const colXMap = buildColXMap(customColumns);
+  const colXMap = buildColXMap(customColumns, colWidths);
   const positions = new Map<string, { x: number; y: number; zone: Zone }>();
   const byType: Record<string, TopoNode[]> = {};
   nodes.forEach((n) => { (byType[n.type] = byType[n.type] ?? []).push(n); });
@@ -560,14 +595,19 @@ function cubicPath(x1: number, y1: number, x2: number, y2: number) {
 
 const PALETTE_TYPES: NodeType[] = [
   'well', 'rawMeter', 'pretreat', 'feedMeter', 'roTrain',
-  'permeate', 'reject', 'bulk', 'locator', 'customNode',
+  'permeate', 'reject', 'bulk', 'locator',
+  // 'customNode' handled by CustomNodePaletteSection below
 ];
 
 interface NodePaletteProps {
   onDragStart: (item: DragItem, e: React.PointerEvent) => void;
+  paletteItems: PaletteItem[];
+  onAddPaletteItem: (label: string) => void;
+  onRenamePaletteItem: (id: string, label: string) => void;
+  onDeletePaletteItem: (id: string) => void;
 }
 
-function NodePalette({ onDragStart }: NodePaletteProps) {
+function NodePalette({ onDragStart, paletteItems, onAddPaletteItem, onRenamePaletteItem, onDeletePaletteItem }: NodePaletteProps) {
   return (
     <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 overflow-x-auto">
       <div className="flex items-center gap-1 mr-2 shrink-0">
@@ -593,6 +633,134 @@ function NodePalette({ onDragStart }: NodePaletteProps) {
           </div>
         );
       })}
+
+      {/* Divider */}
+      <div className="h-5 w-px bg-border mx-1 shrink-0" />
+
+      {/* Custom node section */}
+      <CustomNodePaletteSection
+        paletteItems={paletteItems}
+        onDragStart={onDragStart}
+        onAddPaletteItem={onAddPaletteItem}
+        onRenamePaletteItem={onRenamePaletteItem}
+        onDeletePaletteItem={onDeletePaletteItem}
+      />
+    </div>
+  );
+}
+
+// ─── Custom Node Palette Section ─────────────────────────────────────────────
+
+interface CustomNodePaletteSectionProps {
+  paletteItems: PaletteItem[];
+  onDragStart: (item: DragItem, e: React.PointerEvent) => void;
+  onAddPaletteItem: (label: string) => void;
+  onRenamePaletteItem: (id: string, label: string) => void;
+  onDeletePaletteItem: (id: string) => void;
+}
+
+function CustomNodePaletteSection({
+  paletteItems, onDragStart, onAddPaletteItem, onRenamePaletteItem, onDeletePaletteItem,
+}: CustomNodePaletteSectionProps) {
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const c = COLORS.customNode;
+
+  function confirmAdd() {
+    if (newName.trim()) onAddPaletteItem(newName.trim());
+    setNewName('');
+    setAdding(false);
+  }
+
+  function confirmEdit() {
+    if (editId && editName.trim()) onRenamePaletteItem(editId, editName.trim());
+    setEditId(null);
+    setEditName('');
+  }
+
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <span className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mr-1 whitespace-nowrap">Custom:</span>
+
+      {/* Existing palette chips */}
+      {paletteItems.map((item) => (
+        <div key={item.id} className="flex items-center gap-0.5 group shrink-0">
+          {editId === item.id ? (
+            /* ── Inline edit input ── */
+            <input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmEdit();
+                if (e.key === 'Escape') { setEditId(null); setEditName(''); }
+              }}
+              onBlur={confirmEdit}
+              className="h-6 w-24 text-[10px] rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          ) : (
+            /* ── Draggable chip ── */
+            <div
+              className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-md border cursor-grab active:cursor-grabbing select-none transition-all hover:shadow-sm hover:-translate-y-0.5"
+              style={{ background: c.bg, borderColor: c.border + '80' }}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                onDragStart({ nodeType: 'customNode', label: item.label, skipRename: true }, e);
+              }}
+            >
+              <GripVertical className="h-2.5 w-2.5 opacity-40" style={{ color: c.accent }} />
+              <span className="text-[9px] font-mono font-bold tracking-wide max-w-[80px] truncate" style={{ color: c.text }}>
+                {item.label}
+              </span>
+              {/* Edit icon */}
+              <button
+                className="ml-0.5 p-0.5 rounded hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setEditId(item.id); setEditName(item.label); }}
+                title="Rename"
+              >
+                <Pencil className="h-2.5 w-2.5" style={{ color: c.accent }} />
+              </button>
+              {/* Delete icon */}
+              <button
+                className="p-0.5 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); onDeletePaletteItem(item.id); }}
+                title="Remove from palette"
+              >
+                <Trash2 className="h-2.5 w-2.5 text-red-400" />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* ── Add new custom chip ── */}
+      {adding ? (
+        <div className="flex items-center gap-1 shrink-0">
+          <input
+            autoFocus
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') confirmAdd();
+              if (e.key === 'Escape') { setAdding(false); setNewName(''); }
+            }}
+            onBlur={confirmAdd}
+            placeholder="Node name…"
+            className="h-6 w-28 text-[10px] rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-slate-400 text-slate-500 hover:border-slate-600 hover:text-slate-700 hover:bg-slate-50 transition-all shrink-0"
+          title="Add custom node"
+        >
+          <Plus className="h-3 w-3" />
+          <span className="text-[9px] font-mono font-bold tracking-wide">ADD</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1017,6 +1185,8 @@ export default function PlantTopology() {
   const [customNodes, setCustomNodes] = useState<TopoNode[]>([]);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const [posOverrides, setPosOverrides]   = useState<Record<string, NodePositionOverride>>({});
+  const [paletteItems, setPaletteItems]   = useState<PaletteItem[]>([]);
+  const [colWidths, setColWidths]         = useState<Record<string, number>>({});
 
   // Drag-and-drop state
   const [dragItem, setDragItem]       = useState<DragItem | null>(null);
@@ -1029,6 +1199,10 @@ export default function PlantTopology() {
   dragItemRef.current = dragItem;
   snapRef.current     = snapTarget;
 
+  // Column resize state
+  const [resizingCol, setResizingCol]         = useState<{ key: string; startSvgX: number; startWidth: number } | null>(null);
+  const [hoveredLaneResizer, setHoveredLaneResizer] = useState<string | null>(null);
+
   // Pan + zoom
   const [zoom, setZoom]   = useState(1);
   const [pan, setPan]     = useState({ x: 0, y: 0 });
@@ -1040,6 +1214,8 @@ export default function PlantTopology() {
     setCustomNodes(loadCustomNodes(effectivePlantId));
     setCustomColumns(loadCustomColumns(effectivePlantId));
     setPosOverrides(loadPosOverrides(effectivePlantId));
+    setPaletteItems(loadPaletteItems(effectivePlantId));
+    setColWidths(loadColWidths(effectivePlantId));
   }, [effectivePlantId]);
 
   useEffect(() => {
@@ -1113,6 +1289,30 @@ export default function PlantTopology() {
     toast.info('Column and its nodes removed');
   }, [customColumns, customNodes, effectivePlantId]);
 
+  // ── Palette item CRUD ─────────────────────────────────────────────────────────
+
+  const handleAddPaletteItem = useCallback((label: string) => {
+    if (!effectivePlantId) return;
+    const item: PaletteItem = { id: `palette-${Date.now()}`, label };
+    const next = [...paletteItems, item];
+    setPaletteItems(next);
+    savePaletteItems(effectivePlantId, next);
+  }, [paletteItems, effectivePlantId]);
+
+  const handleRenamePaletteItem = useCallback((id: string, label: string) => {
+    if (!effectivePlantId) return;
+    const next = paletteItems.map((i) => i.id === id ? { ...i, label } : i);
+    setPaletteItems(next);
+    savePaletteItems(effectivePlantId, next);
+  }, [paletteItems, effectivePlantId]);
+
+  const handleDeletePaletteItem = useCallback((id: string) => {
+    if (!effectivePlantId) return;
+    const next = paletteItems.filter((i) => i.id !== id);
+    setPaletteItems(next);
+    savePaletteItems(effectivePlantId, next);
+  }, [paletteItems, effectivePlantId]);
+
   // ── Drag-and-drop ────────────────────────────────────────────────────────────
 
   const computeSnap = useCallback((clientX: number, clientY: number): { colKey: string; rowIdx: number } | null => {
@@ -1122,7 +1322,7 @@ export default function PlantTopology() {
     if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
     const canvasX = (clientX - rect.left + el.scrollLeft) / zoom;
     const canvasY = (clientY - rect.top  + el.scrollTop)  / zoom;
-    const xMap = buildColXMap(customColumns);
+    const xMap = buildColXMap(customColumns, colWidths);
     // Exclude 'reject' (shares x with permeate)
     const entries = Object.entries(xMap).filter(([k]) => k !== 'reject');
     let nearestKey = entries[0]?.[0] ?? 'well';
@@ -1159,15 +1359,19 @@ export default function PlantTopology() {
       // ── Drop new node from palette ──
       const id = `custom-${item.nodeType}-${Date.now()}`;
       const colId = colSlot?.isCustom ? snap.colKey : undefined;
-      const newNode: TopoNode = { id, type: item.nodeType, label: NODE_LABELS[item.nodeType], status: 'Active', custom: true, colId };
+      const newNode: TopoNode = { id, type: item.nodeType, label: item.label, status: 'Active', custom: true, colId };
       const nextNodes = [...customNodes, newNode];
       setCustomNodes(nextNodes);
       saveCustomNodes(effectivePlantId, nextNodes);
       const newOverrides = { ...posOverrides, [id]: snap };
       setPosOverrides(newOverrides);
       savePosOverrides(effectivePlantId, newOverrides);
-      // Show rename dialog
-      setPendingRename({ id, nodeType: item.nodeType, defaultName: NODE_LABELS[item.nodeType] });
+      // Show rename dialog only for generic (non-pre-named) drops
+      if (!item.skipRename) {
+        setPendingRename({ id, nodeType: item.nodeType, defaultName: item.label });
+      } else {
+        toast.success(`"${item.label}" placed on canvas`);
+      }
     }
   }, [effectivePlantId, customNodes, customColumns, posOverrides]);
 
@@ -1276,7 +1480,7 @@ export default function PlantTopology() {
     );
   }
 
-  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides);
+  const positions  = layoutNodes(topoState.nodes, customColumns, posOverrides, colWidths);
   const allLinks   = [...topoState.fixedLinks, ...topoState.editLinks];
 
   let maxX = 0, maxY = 0;
@@ -1284,6 +1488,8 @@ export default function PlantTopology() {
     maxX = Math.max(maxX, x + NODE_W + 40);
     maxY = Math.max(maxY, y + NODE_H + 40);
   });
+  // Also account for total canvas width from column layout
+  Object.values(colXMap).forEach((x) => { maxX = Math.max(maxX, x + NODE_W + 60); });
 
   let maxWaterY = 0;
   positions.forEach(({ y, zone }) => { if (zone === 'water') maxWaterY = Math.max(maxWaterY, y + NODE_H); });
@@ -1512,7 +1718,7 @@ export default function PlantTopology() {
 
   // Dynamic full column sequence (base + custom interleaved)
   const colSequence = buildColSequence(customColumns);
-  const colXMap = buildColXMap(customColumns);
+  const colXMap = buildColXMap(customColumns, colWidths);
 
   const hasPowerNodes = topoState.nodes.some((n) =>
     ['solarSource', 'gridSource', 'solarMeter', 'gridMeter'].includes(n.type)
@@ -1668,7 +1874,15 @@ export default function PlantTopology() {
         <div className="flex-1 flex flex-col min-h-0 bg-muted/20 overflow-hidden">
 
           {/* ── Node Palette ── drag chips onto canvas to create nodes ─────────── */}
-          {canEdit && <NodePalette onDragStart={startDrag} />}
+          {canEdit && (
+            <NodePalette
+              onDragStart={startDrag}
+              paletteItems={paletteItems}
+              onAddPaletteItem={handleAddPaletteItem}
+              onRenamePaletteItem={handleRenamePaletteItem}
+              onDeletePaletteItem={handleDeletePaletteItem}
+            />
+          )}
 
           <div className="flex-1 flex flex-col min-h-0 p-4 overflow-hidden">
           {/* Zone label */}
@@ -1738,6 +1952,73 @@ export default function PlantTopology() {
                       fill={laneColor}
                       opacity={0.55}
                     />
+                  );
+                })}
+
+                {/* Column resize handles — drag right edge to widen/narrow */}
+                {colSequence.map((slot) => {
+                  const x = colXMap[slot.key];
+                  if (x === undefined) return null;
+                  const slotW = colWidths[slot.key] ?? COL_GAP;
+                  // Handle sits at the boundary between this col and the next
+                  const handleX = x + slotW - 8;
+                  const isActive = resizingCol?.key === slot.key || hoveredLaneResizer === slot.key;
+                  const laneColor = slot.isCustom ? COLORS.customNode.accent : COLORS[slot.type!].accent;
+                  return (
+                    <g key={`resize-${slot.key}`}>
+                      {/* Visual dotted line */}
+                      <line
+                        x1={handleX} y1={20} x2={handleX} y2={maxWaterY + 10}
+                        stroke={isActive ? laneColor : '#cbd5e1'}
+                        strokeWidth={isActive ? 2 : 1}
+                        strokeDasharray={isActive ? undefined : '3,3'}
+                        opacity={isActive ? 0.8 : 0.4}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      {/* Grip pill icon */}
+                      {isActive && (
+                        <g transform={`translate(${handleX - 4}, ${(maxWaterY + 20) / 2 - 12})`}>
+                          <rect x={0} y={0} width={8} height={24} rx={4}
+                            fill={laneColor} opacity={0.15} />
+                          <rect x={2} y={5}  width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                          <rect x={2} y={10} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                          <rect x={2} y={15} width={4} height={2} rx={1} fill={laneColor} opacity={0.7} />
+                        </g>
+                      )}
+                      {/* Wide invisible hit area for pointer events */}
+                      <rect
+                        x={handleX - 6} y={20}
+                        width={12} height={maxWaterY - 10}
+                        fill="transparent"
+                        style={{ cursor: 'col-resize' }}
+                        onPointerEnter={() => setHoveredLaneResizer(slot.key)}
+                        onPointerLeave={() => { if (resizingCol?.key !== slot.key) setHoveredLaneResizer(null); }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          (e.currentTarget as SVGRectElement).setPointerCapture(e.pointerId);
+                          const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
+                          const svgRect = svgEl.getBoundingClientRect();
+                          const svgX = (e.clientX - svgRect.left) / zoom;
+                          setResizingCol({ key: slot.key, startSvgX: svgX, startWidth: slotW });
+                          setHoveredLaneResizer(slot.key);
+                        }}
+                        onPointerMove={(e) => {
+                          if (!resizingCol || resizingCol.key !== slot.key) return;
+                          const svgEl = (e.currentTarget as SVGElement).closest('svg')!;
+                          const svgRect = svgEl.getBoundingClientRect();
+                          const svgX = (e.clientX - svgRect.left) / zoom;
+                          const delta = svgX - resizingCol.startSvgX;
+                          const newW = Math.max(NODE_W + 20, resizingCol.startWidth + delta);
+                          const next = { ...colWidths, [slot.key]: newW };
+                          setColWidths(next);
+                          if (effectivePlantId) saveColWidths(effectivePlantId, next);
+                        }}
+                        onPointerUp={() => {
+                          setResizingCol(null);
+                          setHoveredLaneResizer(null);
+                        }}
+                      />
+                    </g>
                   );
                 })}
 
