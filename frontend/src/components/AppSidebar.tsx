@@ -57,10 +57,17 @@ const groups: SidebarGroup[] = [
   },
 ];
 
-const adminGroup: SidebarGroup = {
+const adminOnlyGroup: SidebarGroup = {
   label: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+  ],
+};
+
+// Data import/export — visible to Admins AND Managers
+const dataGroup: SidebarGroup = {
+  label: 'Data',
+  items: [
     { to: '/exports', label: 'Data Exports', icon: Download },
     { to: '/import', label: 'Smart Import', icon: Upload },
   ],
@@ -90,7 +97,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
-  const { isAdmin, profile, roles } = useAuth();
+  const { isAdmin, isManager, profile, roles } = useAuth();
 
   const isOperator =
     profile?.designation === OPERATOR_DESIGNATION ||
@@ -103,7 +110,9 @@ export function AppSidebar() {
       .map(filterGroupForOperator)
       .filter((g): g is SidebarGroup => g !== null);
   } else if (isAdmin) {
-    visibleGroups = [...groups, sharedGroup, adminGroup];
+    visibleGroups = [...groups, sharedGroup, dataGroup, adminOnlyGroup];
+  } else if (isManager) {
+    visibleGroups = [...groups, sharedGroup, dataGroup];
   } else {
     visibleGroups = [...groups, sharedGroup];
   }

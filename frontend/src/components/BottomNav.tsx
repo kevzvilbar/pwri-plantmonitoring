@@ -67,10 +67,17 @@ const sideSheetGroups = [
   },
 ];
 
-const adminGroup = {
+const adminOnlyGroup = {
   title: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+  ],
+};
+
+// Data import/export — visible to Admins AND Managers
+const dataGroup = {
+  title: 'Data',
+  items: [
     { to: '/exports', label: 'Data Exports', icon: Download },
     { to: '/import', label: 'Smart Import', icon: Upload },
   ],
@@ -87,7 +94,7 @@ const teamGroup = {
 export function BottomNav() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const { isAdmin, profile, roles } = useAuth();
+  const { isAdmin, isManager, profile, roles } = useAuth();
   const fullPath = pathname + search;
 
   const isOperator =
@@ -112,7 +119,9 @@ export function BottomNav() {
       .map(filterGroupForOperator)
       .filter((g): g is typeof teamGroup => g !== null);
   } else if (isAdmin) {
-    visibleGroups = [...sideSheetGroups, teamGroup, adminGroup];
+    visibleGroups = [...sideSheetGroups, teamGroup, dataGroup, adminOnlyGroup];
+  } else if (isManager) {
+    visibleGroups = [...sideSheetGroups, teamGroup, dataGroup];
   } else {
     visibleGroups = [...sideSheetGroups, teamGroup];
   }
