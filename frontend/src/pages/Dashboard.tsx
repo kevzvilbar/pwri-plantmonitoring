@@ -9,6 +9,10 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  ReferenceLine,
+} from 'recharts';
+import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
@@ -504,6 +508,7 @@ export default function Dashboard() {
   const [modal, setModal] = useState<null | { metric: string; title: string }>(null);
   const [downtimeOpen, setDowntimeOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [healthGranularity, setHealthGranularity] = useState<'daily' | 'hourly'>('daily');
 
   // View mode controls how trend graphs surface on the dashboard.
   // See `components/dashboard/types.ts` for definitions. Lazy-init
@@ -546,6 +551,51 @@ export default function Dashboard() {
     [plants, selectedPlantId],
   );
   const plantIds = visiblePlants?.map((p) => p.id) ?? [];
+  const plantIdsKey = plantIds.join(',');
+
+  // ── Plant Health Trend ────────────────────────────────────────────────────
+  // Fetches ro_train_readings bucketed by day (30 d) or hour (48 h).
+  // Health = % of trains that submitted at least one reading in that bucket.
+  const { data: healthTrendData = [] } = useQuery({
+    queryKey: ['dash-health-trend', plantIdsKey, healthGranularity],
+    queryFn: async () => {
+      if (!plantIds.length) return [];
+      // Step 1: get all train IDs for the selected plant(s)
+      const { data: trainRows } = await supabase
+        .from('ro_trains')
+        .select('id')
+        .in('plant_id', plantIds);
+      const trainIds = (trainRows ?? []).map((t: any) => t.id);
+      if (!trainIds.length) return [];
+
+      const days = healthGranularity === 'daily' ? 30 : 2;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id, reading_datetime')
+        .in('train_id', trainIds)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+
+      if (!data?.length) return [];
+      const total = trainIds.length;
+      const buckets = new Map<string, Set<string>>();
+      for (const r of data) {
+        const key = healthGranularity === 'daily'
+          ? format(new Date(r.reading_datetime), 'MMM d')
+          : format(new Date(r.reading_datetime), 'MM/dd HH:00');
+        if (!buckets.has(key)) buckets.set(key, new Set());
+        buckets.get(key)!.add(r.train_id);
+      }
+      return Array.from(buckets.entries()).map(([label, active]) => ({
+        label,
+        health: Math.round((active.size / total) * 100),
+        online: active.size,
+        total,
+      }));
+    },
+    enabled: plantIds.length > 0,
+  });
 
   // Bug 4 fix: build today/yesterday boundaries in UTC using the local calendar date,
   // so that readings entered at e.g. 08:00 PST (= 00:00 UTC) are not pushed into yesterday.
@@ -1030,7 +1080,7 @@ export default function Dashboard() {
           onClick={handleMetricClick('pv', 'PV Ratio Trend')} />
       </div>
       <ClusterCharts
-        metrics={[
+        metrics={[\
           ...COST_CHART_METRICS.filter((m: ChartMetric) => m.metric !== 'kwh'),
           { metric: 'kwh', title: 'Power Consumption & Energy Mix' },
         ] as ChartMetric[]}
@@ -1039,6 +1089,87 @@ export default function Dashboard() {
         plantIds={plantIds}
         clusterId="cost"
       />
+
+      {/* ─── Plant Health Trend ──────────────────────────────────────────── */}
+      <Card className="p-3 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-emerald-500" />
+            <h2 className="text-sm font-semibold">Plant Health Trend</h2>
+            <span className="text-[10px] text-muted-foreground">
+              % of RO trains active per {healthGranularity === 'daily' ? 'day' : 'hour'}
+            </span>
+          </div>
+          {/* Granularity toggle */}
+          <div className="flex gap-0 rounded-md border border-border overflow-hidden text-[11px] font-medium">
+            {(['daily', 'hourly'] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setHealthGranularity(g)}
+                className={`px-3 py-1 transition-colors capitalize ${
+                  healthGranularity === g
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {g === 'daily' ? 'Daily (30 d)' : 'Hourly (48 h)'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {healthTrendData.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-8">
+            {plantIds.length === 0 ? 'Select a plant to view health trend.' : 'No RO train data for this period.'}
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={healthTrendData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                interval="preserveStartEnd"
+                tickLine={false}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tickFormatter={(v: number) => `${v}%`}
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                tickLine={false}
+                axisLine={false}
+                width={36}
+              />
+              <ReferenceLine y={80} stroke="#10b981" strokeDasharray="4 2" strokeWidth={1} label={{ value: 'Optimal', position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
+              <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} label={{ value: 'Degraded', position: 'insideTopRight', fontSize: 9, fill: '#f59e0b' }} />
+              <Tooltip
+                content={({ active, payload, label }: any) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  const color = d.health >= 80 ? '#10b981' : d.health >= 50 ? '#f59e0b' : '#ef4444';
+                  const status = d.health >= 80 ? 'Optimal' : d.health >= 50 ? 'Degraded' : 'Critical';
+                  return (
+                    <div className="rounded-lg border border-border bg-background shadow-md px-3 py-2 text-xs space-y-0.5">
+                      <p className="font-semibold">{label}</p>
+                      <p className="font-bold" style={{ color }}>{d.health}% — {status}</p>
+                      <p className="text-muted-foreground">{d.online} / {d.total} trains active</p>
+                    </div>
+                  );
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="health"
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
+                dot={healthTrendData.length <= 15}
+                activeDot={{ r: 4 }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
 
       <Card className="p-3" data-testid="alerts-card">
         <div className="flex items-center gap-2 mb-2">
