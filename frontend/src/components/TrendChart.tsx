@@ -2661,30 +2661,30 @@ export function TrendChart({
             </button>
           </div>
         )}
-        {metric === 'kwh' && (() => {
-          const kwhRangeLabel =
-            range === 'CUSTOM' ? `${from} → ${to}`
-            : range === '7D'   ? 'last 7d'
-            : range === '14D'  ? 'last 14d'
-            : range === '30D'  ? 'last 30d'
-            : range === '60D'  ? 'last 60d'
-            : 'last 90d';
-          const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
-          const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
-          const sourceSuffix = hasSolarData && hasGridData
-            ? 'Solar vs Grid (kWh)'
-            : hasSolarData ? 'Solar only (kWh)' : 'Grid only (kWh)';
-          return (
-            <p className="text-[11px] text-muted-foreground -mt-1 mb-2 ml-0.5 flex items-center gap-1.5">
-              <span>{kwhRangeLabel}</span>
-              <span className="opacity-40">·</span>
-              <span>daily totals</span>
-              <span className="opacity-40">·</span>
-              <span>{sourceSuffix}</span>
-            </p>
-          );
-        })()}
       </div>
+      {metric === 'kwh' && (() => {
+        const kwhRangeLabel =
+          range === 'CUSTOM' ? `${from} -> ${to}`
+          : range === '7D'   ? 'last 7d'
+          : range === '14D'  ? 'last 14d'
+          : range === '30D'  ? 'last 30d'
+          : range === '60D'  ? 'last 60d'
+          : 'last 90d';
+        const hasSolarData = chartData.some((d: any) => (d.solarKwh ?? 0) > 0);
+        const hasGridData  = chartData.some((d: any) => (d.kwh      ?? 0) > 0);
+        const sourceSuffix = hasSolarData && hasGridData
+          ? 'Solar vs Grid (kWh)'
+          : hasSolarData ? 'Solar only (kWh)' : 'Grid only (kWh)';
+        return (
+          <p className="text-[11px] text-muted-foreground -mt-1 mb-2 ml-0.5 flex items-center gap-1.5">
+            <span>{kwhRangeLabel}</span>
+            <span className="opacity-40">·</span>
+            <span>daily totals</span>
+            <span className="opacity-40">·</span>
+            <span>{sourceSuffix}</span>
+          </p>
+        );
+      })()}
 
       {/* ── Train filter panel ─────────────────────────────────────────────── */}
       {hasRoDrill && roDrillMode !== 'default' && showTrainFilter && (
