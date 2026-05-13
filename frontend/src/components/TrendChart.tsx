@@ -1133,6 +1133,50 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsCostReadings,
   });
 
+  // Chemical dosing logs: actual per-day chemical cost for the production cost chart.
+  // This replaces the manually-entered production_costs.chem_cost as the primary source.
+  // For each log row, `calculated_cost` is used when > 0; otherwise cost is computed live
+  // from quantity × current unit price (same fallback logic used in ROTrains dosing history).
+  const { data: dosingLogs, isFetching: fetchingDosing } = useQuery({
+    queryKey: ['trend-dosing-logs', metric, startKey, endKey, plantIds],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chemical_dosing_logs')
+        .select('log_datetime,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg,calculated_cost')
+        .in('plant_id', plantIds)
+        .gte('log_datetime', `${startKey}T00:00:00`)
+        .lte('log_datetime', `${endKey}T23:59:59`);
+      if (error) throw new Error(`chemical_dosing_logs: ${error.message}`);
+      return (data as any[]) ?? [];
+    },
+    enabled: plantIds.length > 0 && needsCostReadings,
+  });
+
+  // Chemical prices: for computing live cost when a dosing log's calculated_cost is 0.
+  // Prices are stored as "Chemical (unit)" (e.g. "Chlorine (kg)") so we index by both
+  // the full name and the plain base name to handle either lookup key.
+  const { data: chemPrices } = useQuery({
+    queryKey: ['trend-chem-prices'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase
+        .from('chemical_prices')
+        .select('*')
+        .lte('effective_date', today)
+        .order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Strip trailing " (unit)" so plain-name lookups (e.g. "Chlorine") also work
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
+      return map;
+    },
+    enabled: needsCostReadings,
+  });
+
   // CT multiplier from electric_bills — mirrors PowerChart's authoritative multiplier source.
   // TrendChart's power-delta computation falls back to power_readings.multiplier, then to 1.
   // Adding the bill multiplier as an intermediate fallback matches PowerChart behaviour exactly,
@@ -1159,7 +1203,7 @@ export function TrendChart({
     staleTime: 120_000,
   });
 
-  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
+  const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct || fetchingDosing;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
 
   const chartData = useMemo(() => {
@@ -1547,12 +1591,36 @@ export function TrendChart({
       row.solarKwh += solarVal;
     });
 
-    // Chemical cost: chem_cost (₱/day) from production_costs table.
-    // Operators log this manually in Costs → Rollup (or via CSV import).
-    // Chem Cost (₱/m³) = chem_cost / production_m3  (computed in final map below)
+    // Chemical cost — primary source: chemical_dosing_logs.
+    // For each dosing record, use `calculated_cost` when > 0; otherwise compute
+    // live from quantity × unit price (handles old records saved before prices existed).
+    // Prices use base-name lookup ("Chlorine") to match the "Chlorine (kg)" DB key.
+    const DOSING_KEYS_TREND = [
+      { key: 'chlorine_kg',    name: 'Chlorine' },
+      { key: 'smbs_kg',        name: 'SMBS' },
+      { key: 'anti_scalant_l', name: 'Anti Scalant' },
+      { key: 'soda_ash_kg',    name: 'Soda Ash' },
+    ] as const;
+
+    const daysWithDosingCoverage = new Set<string>();
+    (dosingLogs ?? []).forEach((r: any) => {
+      const dt = new Date(r.log_datetime);
+      const key = format(dt, 'MMM d');
+      const row = ensure(key, dt.getTime());
+      const storedCost = +(r.calculated_cost ?? 0);
+      const liveCost = DOSING_KEYS_TREND.reduce(
+        (s, c) => s + (+(r[c.key] ?? 0)) * (chemPrices?.[c.name] ?? 0), 0,
+      );
+      row._chemCostPeso += storedCost > 0 ? storedCost : liveCost;
+      daysWithDosingCoverage.add(key);
+    });
+
+    // Fallback: production_costs.chem_cost (manually entered in Costs → Rollup).
+    // Only applied for days that have no dosing log coverage to avoid double-counting.
     (costReadings ?? []).forEach((r: any) => {
       const dt = new Date(`${r.cost_date}T00:00:00`);
       const key = format(dt, 'MMM d');
+      if (daysWithDosingCoverage.has(key)) return;
       const row = ensure(key, dt.getTime());
       const chem = +(r.chem_cost ?? 0);
       row._chemCostPeso += chem;
@@ -1618,7 +1686,8 @@ export function TrendChart({
             : [] as string[],
         };
       });
-  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
+  }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings,
+      dosingLogs, chemPrices, powerTariffs,
       billMultiplierMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
 
