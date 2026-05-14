@@ -51,6 +51,42 @@ import {
 const MAX_READINGS_PER_DAY = 3;
 const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
+// ─── Shared Dashboard invalidator ────────────────────────────────────────────
+// Called after every successful save/import in any Operations sub-form so that
+// the Dashboard stat cards, NRW, PV ratio, and TrendChart series all refresh
+// immediately — no page reload or 60-second poll wait required.
+// The broad qc.invalidateQueries() at the end is a safety-net for any mounted
+// queries not listed here (e.g. new keys added in future features).
+import type { QueryClient } from '@tanstack/react-query';
+
+function invalidateDashboard(qc: QueryClient) {
+  // Dashboard stat-card sources
+  qc.invalidateQueries({ queryKey: ['dash-loc-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-loc-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-wells-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-wells-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['dash-chem'] });
+  qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+  // TrendChart series
+  qc.invalidateQueries({ queryKey: ['trend-loc'] });
+  qc.invalidateQueries({ queryKey: ['trend-product'] });
+  qc.invalidateQueries({ queryKey: ['trend-well'] });
+  qc.invalidateQueries({ queryKey: ['trend-power'] });
+  qc.invalidateQueries({ queryKey: ['trend-cost'] });
+  qc.invalidateQueries({ queryKey: ['trend-ro'] });
+  // Broad safety-net — catches any other mounted queries
+  qc.invalidateQueries();
+}
+
 // ─── CSV helpers ────────────────────────────────────────────────────────────
 
 // Fix #6 — RFC-4180 compliant CSV parser. Handles quoted fields that contain
@@ -1259,7 +1295,7 @@ function LocatorReadingForm() {
                     todayReadings={todayByLocator[l.id] ?? []}
                     avgVol={avgByLocator[l.id] ?? null}
                     userId={user?.id}
-                    onSaved={() => qc.invalidateQueries()}
+                    onSaved={() => invalidateDashboard(qc)}
                     isManagerOrAdmin={isAdmin || isManager}
                   />
                 </li>
@@ -1283,7 +1319,7 @@ function LocatorReadingForm() {
           validateRow={validateLocatorReadingRow}
           insertRows={(rows, pid) => insertLocatorReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
+          onImported={() => { setImportOpen(false); invalidateDashboard(qc); }}
         />
       )}
     </div>
@@ -1554,7 +1590,7 @@ function WellReadingForm() {
                     todayReadings={todayByWell[w.id] ?? []}
                     userId={user?.id}
                     isBlending={blendingSet.has(w.id)}
-                    onSaved={() => qc.invalidateQueries()}
+                    onSaved={() => invalidateDashboard(qc)}
                     isManagerOrAdmin={isAdmin || isManager}
                   />
                 </li>
@@ -1578,7 +1614,7 @@ function WellReadingForm() {
           validateRow={validateWellReadingRow}
           insertRows={(rows, pid) => insertWellReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
+          onImported={() => { setImportOpen(false); invalidateDashboard(qc); }}
         />
       )}
     </div>
@@ -2059,6 +2095,8 @@ function ProductForm() {
     // Targeted Dashboard stat-card keys so new readings appear immediately
     qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
     qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
     qc.invalidateQueries({ queryKey: ['dash-loc-today'] });
     qc.invalidateQueries({ queryKey: ['dash-loc-yest'] });
     qc.invalidateQueries({ queryKey: ['dash-wells-today'] });
@@ -2073,6 +2111,7 @@ function ProductForm() {
     qc.invalidateQueries({ queryKey: ['trend-well'] });
     qc.invalidateQueries({ queryKey: ['trend-power'] });
     qc.invalidateQueries({ queryKey: ['trend-cost'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
     qc.invalidateQueries();
   };
 

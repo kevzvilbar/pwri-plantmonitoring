@@ -1401,6 +1401,15 @@ function PretreatmentAndROLog() {
       // Persist prev snapshot + delta so the table shows full meter history without joins.
       permeate_meter_prev: prevPermMeter ?? null,
       permeate_meter_delta: permDelta ?? null,
+      // When this plant's permeate meter IS the production source, tag each reading with
+      // the calendar day it counts toward — respecting the plant-level cutoff time.
+      // getPermeateDayLabel handles the midnight-crossover case (e.g. 00:20 cutoff).
+      // This field is what Dashboard.tsx reads to sum today's RO-sourced production.
+      ...(
+        (meterCfg?.permeate_is_production ?? false) && permDelta && permDelta > 0
+          ? { permeate_production_date: getPermeateDayLabel(new Date(dt).toISOString(), meterCfg?.permeate_cutoff_time ?? '00:20') }
+          : {}
+      ),
       // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
       power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
       // Delta & derived — null when prevPowerMeter not yet established (first reading)
@@ -1506,19 +1515,34 @@ function PretreatmentAndROLog() {
       reject_meter_curr: '',
       power_meter_curr: '',
     });
-    qc.invalidateQueries();
-    // Also explicitly target Dashboard and TrendChart keys so the Quality cluster,
-    // RO trend charts, and stat cards update immediately without a page refresh.
+    // Invalidate in specific order: targeted keys first so mounted Dashboard/TrendChart/Overview
+    // queries are individually marked stale, then a broad catch-all as a safety net for any
+    // other mounted queries (e.g. future features). This also triggers the new permeate-
+    // as-production queries added to Dashboard so the Production stat updates immediately.
+    // RO Overview / spark
+    qc.invalidateQueries({ queryKey: ['ro-overview'] });
+    qc.invalidateQueries({ queryKey: ['ro-last-all'] });
+    qc.invalidateQueries({ queryKey: ['ro-spark'] });
+    qc.invalidateQueries({ queryKey: ['ro-prev'] });
+    // Dashboard stat-cards
     qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
-    qc.invalidateQueries({ queryKey: ['trend-ro'] });
-    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
     qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
     qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
-    qc.invalidateQueries({ queryKey: ['trend-product'] });
     qc.invalidateQueries({ queryKey: ['dash-power-today'] });
-    qc.invalidateQueries({ queryKey: ['trend-power'] });
+    qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
     qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
     qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+    // TrendChart series
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['trend-power'] });
+    qc.invalidateQueries({ queryKey: ['trend-cost'] });
+    // Broad catch-all — safety net for any other mounted queries
+    qc.invalidateQueries();
   };
 
   const f = (k: keyof typeof roValues) => ({ value: roValues[k], onChange: (e: any) => setRoValues({ ...roValues, [k]: e.target.value }) });
@@ -1547,7 +1571,27 @@ function PretreatmentAndROLog() {
               permeateCutoffTime: meterCfg.permeate_cutoff_time ?? '00:20',
             }}
             onClose={() => setShowImport(false)}
-            onImported={() => { setShowImport(false); qc.invalidateQueries(); }}
+            onImported={() => {
+              setShowImport(false);
+              // Mirror the same invalidation set as manual submit() so the Dashboard,
+              // TrendChart, and RO Overview all refresh after a CSV import.
+              qc.invalidateQueries({ queryKey: ['ro-overview'] });
+              qc.invalidateQueries({ queryKey: ['ro-last-all'] });
+              qc.invalidateQueries({ queryKey: ['ro-spark'] });
+              qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+              qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+              qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+              qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+              qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+              qc.invalidateQueries({ queryKey: ['trend-ro'] });
+              qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+              qc.invalidateQueries({ queryKey: ['trend-product'] });
+              qc.invalidateQueries({ queryKey: ['trend-power'] });
+              qc.invalidateQueries();
+            }}
           />
         )}
       </div>

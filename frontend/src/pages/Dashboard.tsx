@@ -563,6 +563,7 @@ export default function Dashboard() {
   // We construct YYYY-MM-DD from local time and then parse it as a UTC midnight to avoid
   // the double-offset problem that startOfDay(new Date()).toISOString() causes in UTC+8.
   const _localDateStr = format(new Date(), 'yyyy-MM-dd');          // local calendar date
+  const _yesterdayKey = format(subDays(new Date(), 1), 'yyyy-MM-dd'); // promoted here so permeate queries can use it
   const today     = new Date(_localDateStr + 'T00:00:00').toISOString();   // local midnight → ISO
   const yesterday = new Date(format(subDays(new Date(), 1), 'yyyy-MM-dd') + 'T00:00:00').toISOString();
 
@@ -644,6 +645,72 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
+  });
+
+  // ── Plant meter configs — detect which plants use RO permeate as production ──
+  // When permeate_is_production=true the permeate meter delta in ro_train_readings
+  // IS the production figure; those rows must be included in the Dashboard production
+  // total and the NRW / PV-ratio calculations that depend on it.
+  const { data: plantMeterConfigs } = useQuery({
+    queryKey: ['dash-plant-meter-configs', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+        .select('plant_id,permeate_is_production,permeate_cutoff_time')
+        .in('plant_id', plantIds);
+      return (data ?? []) as any[];
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 60_000, // config rarely changes — cache for 1 min
+  });
+
+  // Plant IDs that use the RO permeate meter as their production source
+  const permeateProductionPlantIds = useMemo(
+    () => (plantMeterConfigs ?? [])
+      .filter((c: any) => c.permeate_is_production)
+      .map((c: any) => c.plant_id as string),
+    [plantMeterConfigs],
+  );
+
+  // Today's production from RO permeate meter deltas
+  // (only for plants where permeate_is_production = true)
+  // permeate_production_date is the calendar day the reading counts toward — set by
+  // ROTrains.tsx submit() and the CSV importer via getPermeateDayLabel().
+  const { data: todayRoPermeate } = useQuery({
+    queryKey: ['dash-ro-permeate-today', permeateProductionPlantIds, _localDateStr],
+    queryFn: async () => {
+      if (!permeateProductionPlantIds.length) return [] as any[];
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('plant_id,train_number,permeate_meter_delta,permeate_production_date')
+        .in('plant_id', permeateProductionPlantIds)
+        .eq('permeate_production_date', _localDateStr)
+        .not('permeate_meter_delta', 'is', null)
+        .gt('permeate_meter_delta', 0);
+      return (data ?? []) as any[];
+    },
+    enabled: permeateProductionPlantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
+  });
+
+  // Yesterday's RO permeate production (for trend delta on the Production stat card)
+  const { data: yRoPermeate } = useQuery({
+    queryKey: ['dash-ro-permeate-yest', permeateProductionPlantIds, _yesterdayKey],
+    queryFn: async () => {
+      if (!permeateProductionPlantIds.length) return [] as any[];
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('plant_id,permeate_meter_delta,permeate_production_date')
+        .in('plant_id', permeateProductionPlantIds)
+        .eq('permeate_production_date', _yesterdayKey)
+        .not('permeate_meter_delta', 'is', null)
+        .gt('permeate_meter_delta', 0);
+      return (data ?? []) as any[];
+    },
+    enabled: permeateProductionPlantIds.length > 0,
     staleTime: 0,
     refetchInterval: 60_000,
   });
@@ -805,16 +872,31 @@ export default function Dashboard() {
   // ── Stat card aggregates ────────────────────────────────────────────────────
   // Uses computePivotFromReadings (same replacement-aware logic as TrendChart)
   // so meter-replacement spikes don't inflate today's totals.
-  const _todayKey     = format(new Date(), 'yyyy-MM-dd');
-  const _yesterdayKey = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+  const _todayKey = format(new Date(), 'yyyy-MM-dd');
+  // _yesterdayKey is defined earlier (line ~565) so the permeate-production queries can use it.
 
   const rawWaterVol = useMemo(() => pivotDayTotal(
     computePivotFromReadings(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
   ), [todayWells, _todayKey]);
 
-  const production = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
-  ), [todayProductMeters, _todayKey]);
+  // RO permeate contribution to production (plants with permeate_is_production = true).
+  // Summed separately and added to the product-meter total so NRW and PV ratio
+  // stay accurate even when the plant has no separate product_meter_readings rows.
+  const roPermeateProduction = useMemo(
+    () => (todayRoPermeate ?? []).reduce((s: number, r: any) => s + (r.permeate_meter_delta ?? 0), 0),
+    [todayRoPermeate],
+  );
+  const yRoPermeateProduction = useMemo(
+    () => (yRoPermeate ?? []).reduce((s: number, r: any) => s + (r.permeate_meter_delta ?? 0), 0),
+    [yRoPermeate],
+  );
+
+  // Production = product meter readings delta + RO permeate delta (if permeate_is_production)
+  const production = useMemo(() =>
+    pivotDayTotal(
+      computePivotFromReadings(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
+    ) + roPermeateProduction,
+  [todayProductMeters, _todayKey, roPermeateProduction]);
 
   const consumption = useMemo(() => pivotDayTotal(
     computePivotFromReadings(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
@@ -830,9 +912,11 @@ export default function Dashboard() {
     computePivotFromReadings(yWells ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
   ), [yWells, _yesterdayKey]);
 
-  const yProduction = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
-  ), [yProductMeters, _yesterdayKey]);
+  const yProduction = useMemo(() =>
+    pivotDayTotal(
+      computePivotFromReadings(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
+    ) + yRoPermeateProduction,
+  [yProductMeters, _yesterdayKey, yRoPermeateProduction]);
 
   const yConsumption = useMemo(() => pivotDayTotal(
     computePivotFromReadings(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
