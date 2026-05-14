@@ -1283,7 +1283,7 @@ function LocatorReadingForm() {
           validateRow={validateLocatorReadingRow}
           insertRows={(rows, pid) => insertLocatorReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-loc-recent', plantId] }); }}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
         />
       )}
     </div>
@@ -1578,7 +1578,7 @@ function WellReadingForm() {
           validateRow={validateWellReadingRow}
           insertRows={(rows, pid) => insertWellReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-well-recent', plantId] }); }}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
         />
       )}
     </div>
@@ -2056,6 +2056,9 @@ function ProductForm() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
     qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
+    // Invalidate all Dashboard queries so new product meter readings appear
+    // immediately without a manual page refresh (fixes the "auto-capture" bug).
+    qc.invalidateQueries();
   };
 
   return (
@@ -3519,7 +3522,7 @@ function PowerForm() {
           validateRow={validatePowerRow}
           insertRows={(rows, pid) => insertPowerReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ['op-power', plantId] }); }}
+          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
         />
       )}
       {powerHistoryOpen && plantId && (
