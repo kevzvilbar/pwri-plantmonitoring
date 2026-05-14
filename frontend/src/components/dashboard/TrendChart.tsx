@@ -832,8 +832,9 @@ export function TrendChart({
   const [drillMode, setDrillMode] = useState<DrillMode>('default');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
 
-  // Production drill source: 'locator' = per distribution locator, 'well' = per raw water well
-  type ProdDrillSource = 'locator' | 'well';
+  // Production drill source: 'locator' = per distribution locator, 'source' = per production source
+  // (product meter if the plant uses dedicated meters; RO Train permeate if permeate_is_production=true)
+  type ProdDrillSource = 'locator' | 'source';
   const [prodDrillSource, setProdDrillSource] = useState<ProdDrillSource>('locator');
 
   // Locator filter for drill modes — null means "all selected" (default)
@@ -1835,22 +1836,41 @@ export function TrendChart({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [hasConsumptionDrill, locReadings, locatorNames]);
 
-  // wellDrillEntities: per-well breakdown for production chart
-  const wellDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+  // sourceDrillEntities: per production-source breakdown for production chart.
+  // Uses RO Train permeate IDs when the plant has permeate_is_production=true,
+  // otherwise uses dedicated product meter IDs — mirroring the main chart's
+  // production accumulation logic exactly.
+  const usePermeateForSource = (metric === 'production')
+    && (productReadings ?? []).length === 0
+    && (roReadings ?? []).length > 0;
+
+  const sourceDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (metric !== 'production') return [];
-    const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
+    if (usePermeateForSource) {
+      // RO train permeate source
+      const ids = Array.from(new Set((roReadings ?? []).map((r: any) => r.train_id).filter(Boolean)));
+      return ids
+        .map((id, i) => ({
+          id,
+          label: roTrainNames?.get(id) ?? `RO Train ${String(id).slice(-4)}`,
+          color: DRILL_COLORS[i % DRILL_COLORS.length],
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    // Product meter source
+    const ids = Array.from(new Set((productReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
     return ids
       .map((id, i) => ({
         id,
-        label: wellNames?.get(id) ?? `Well ${id.slice(-4)}`,
+        label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}`,
         color: DRILL_COLORS[i % DRILL_COLORS.length],
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [metric, wellReadings, wellNames]);
+  }, [metric, usePermeateForSource, productReadings, roReadings, productMeterNames, roTrainNames]);
 
-  // activeEntities: locator or well depending on prodDrillSource
-  const activeEntities = metric === 'production' && prodDrillSource === 'well'
-    ? wellDrillEntities : drillEntities;
+  // activeEntities: locator or production source depending on prodDrillSource
+  const activeEntities = metric === 'production' && prodDrillSource === 'source'
+    ? sourceDrillEntities : drillEntities;
 
   // visibleEntities: subset of activeEntities that pass the current locator selection.
   // null selectedLocatorIds = all visible.
@@ -1891,12 +1911,49 @@ export function TrendChart({
   function selectAllLocators() { setSelectedLocatorIds(null); }
   function clearAllLocators() { setSelectedLocatorIds(new Set()); }
 
-  // drilldownData: one row per day, each VISIBLE entity (locator or well) gets its own key
+  // drilldownData: one row per day, each VISIBLE entity (locator or production source) gets its own key
   const drilldownData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drilldown') return [];
-    const isWell = metric === 'production' && prodDrillSource === 'well';
-    const sourceReadings = isWell ? (wellReadings ?? []) : (locReadings ?? []);
-    const entityField   = isWell ? 'well_id' : 'locator_id';
+    const isSource = metric === 'production' && prodDrillSource === 'source';
+    let sourceReadings: any[];
+    let entityField: string;
+    if (isSource) {
+      if (usePermeateForSource) {
+        // Build pivot from RO permeate readings, using permeate_meter_delta
+        const roSorted = [...(roReadings ?? [])].sort(
+          (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+        );
+        const pivot = new Map<string, Map<string, number>>();
+        roSorted.forEach((r: any) => {
+          if (r.is_meter_replacement) return;
+          const delta = r.permeate_meter_delta != null
+            ? Math.max(0, +r.permeate_meter_delta)
+            : r.permeate_meter != null && r.permeate_meter_prev != null
+              ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
+              : null;
+          if (delta === null || delta === 0) return;
+          const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+          const tid = r.train_id ?? '__';
+          if (!pivot.has(dk)) pivot.set(dk, new Map());
+          pivot.get(dk)!.set(tid, (pivot.get(dk)!.get(tid) ?? 0) + delta);
+        });
+        const dateKeys = Array.from(pivot.keys()).sort();
+        if (dateKeys.length === 0) return [];
+        const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
+        return allDates.map((dateKey) => {
+          const row: any = { date: fmtDateKey(dateKey), isoDate: dateKey };
+          visibleEntities.forEach(({ id }) => { row[id] = pivot.get(dateKey)?.get(id) ?? null; });
+          row._total = visibleEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
+          return row;
+        });
+      }
+      // Product meter source
+      sourceReadings = (productReadings ?? []);
+      entityField = 'meter_id';
+    } else {
+      sourceReadings = (locReadings ?? []);
+      entityField = 'locator_id';
+    }
     const sorted = [...sourceReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
@@ -1911,40 +1968,68 @@ export function TrendChart({
       row._total = visibleEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, wellReadings, visibleEntities]);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities]);
 
   // drillupData: one row per month — grouped bars (not stacked) per entity
   const drillupData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drillup') return [];
-    const isWell = metric === 'production' && prodDrillSource === 'well';
-    const sourceReadings = isWell ? (wellReadings ?? []) : (locReadings ?? []);
-    const entityField   = isWell ? 'well_id' : 'locator_id';
-    const sorted = [...sourceReadings].sort(
+    const isSource = metric === 'production' && prodDrillSource === 'source';
+
+    const buildMonthRows = (pivot: Map<string, Map<string, number>>, dateKeys: string[]) => {
+      const byMonth = new Map<string, Map<string, number>>();
+      dateKeys.forEach((dk) => {
+        const monthKey = dk.slice(0, 7);
+        if (!byMonth.has(monthKey)) byMonth.set(monthKey, new Map());
+        visibleEntities.forEach(({ id }) => {
+          const v = pivot.get(dk)?.get(id) ?? 0;
+          byMonth.get(monthKey)!.set(id, (byMonth.get(monthKey)!.get(id) ?? 0) + v);
+        });
+      });
+      return Array.from(byMonth.keys()).sort().map((mk) => {
+        const row: any = { date: format(new Date(`${mk}-01T00:00:00`), 'MMM yyyy'), isoDate: `${mk}-01` };
+        visibleEntities.forEach(({ id }) => { row[id] = byMonth.get(mk)!.get(id) ?? null; });
+        row._total = visibleEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
+        return row;
+      });
+    };
+
+    if (isSource) {
+      if (usePermeateForSource) {
+        // RO permeate monthly pivot
+        const roSorted = [...(roReadings ?? [])].sort(
+          (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+        );
+        const pivot = new Map<string, Map<string, number>>();
+        roSorted.forEach((r: any) => {
+          if (r.is_meter_replacement) return;
+          const delta = r.permeate_meter_delta != null
+            ? Math.max(0, +r.permeate_meter_delta)
+            : r.permeate_meter != null && r.permeate_meter_prev != null
+              ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
+              : null;
+          if (delta === null || delta === 0) return;
+          const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+          const tid = r.train_id ?? '__';
+          if (!pivot.has(dk)) pivot.set(dk, new Map());
+          pivot.get(dk)!.set(tid, (pivot.get(dk)!.get(tid) ?? 0) + delta);
+        });
+        return buildMonthRows(pivot, Array.from(pivot.keys()).sort());
+      }
+      // Product meter monthly pivot
+      const sorted = [...(productReadings ?? [])].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+      const { pivot, dateKeys } = buildEntityPivot(sorted, 'meter_id');
+      return buildMonthRows(pivot, dateKeys);
+    }
+
+    // Default: locator consumption
+    const sorted = [...(locReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, entityField);
-    const byMonth = new Map<string, Map<string, number>>();
-    dateKeys.forEach((dk) => {
-      const monthKey = dk.slice(0, 7);
-      if (!byMonth.has(monthKey)) byMonth.set(monthKey, new Map());
-      visibleEntities.forEach(({ id }) => {
-        const v = pivot.get(dk)?.get(id) ?? 0;
-        byMonth.get(monthKey)!.set(id, (byMonth.get(monthKey)!.get(id) ?? 0) + v);
-      });
-    });
-    const monthKeys = Array.from(byMonth.keys()).sort();
-    return monthKeys.map((mk) => {
-      const row: any = {
-        date: format(new Date(`${mk}-01T00:00:00`), 'MMM yyyy'),
-        isoDate: `${mk}-01`,
-      };
-      visibleEntities.forEach(({ id }) => {
-        row[id] = byMonth.get(mk)!.get(id) ?? null;
-      });
-      row._total = visibleEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
-      return row;
-    });
-  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, wellReadings, visibleEntities]);
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    return buildMonthRows(pivot, dateKeys);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities]);
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -2566,7 +2651,7 @@ export function TrendChart({
           </div>
         )}
 
-        {/* Production source toggle — Per Locator vs Per Well — only for production metric in drill mode */}
+        {/* Production source toggle — Per Locator vs Per Source — only for production metric in drill mode */}
         {metric === 'production' && drillMode !== 'default' && (
           <div className="flex items-center gap-0.5 shrink-0">
             <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">View:</span>
@@ -2581,15 +2666,15 @@ export function TrendChart({
               title="Breakdown by distribution locator"
             >Per Locator</button>
             <button
-              onClick={() => { setProdDrillSource('well'); setSelectedLocatorIds(null); }}
+              onClick={() => { setProdDrillSource('source'); setSelectedLocatorIds(null); }}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                prodDrillSource === 'well'
+                prodDrillSource === 'source'
                   ? 'bg-teal-700 text-white border-teal-700'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Breakdown by raw water well"
-            >Per Well</button>
+              title={usePermeateForSource ? 'Breakdown by RO Train permeate' : 'Breakdown by product meter'}
+            >Per Source</button>
           </div>
         )}
 
