@@ -272,6 +272,9 @@ async function insertROTrainReadings(
     // DB column is `permeate_meter` (single cumulative odometer snapshot).
     // TrendChart computes the delta via computeEntityDeltas (curr - prev per train).
     if (permCurr !== null)  optionalPayload.permeate_meter           = permCurr;
+    // Also persist prev + delta so the table is self-contained (no join needed).
+    if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
+    if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
     if (permeateDayLabel)   optionalPayload.permeate_production_date = permeateDayLabel;
 
     // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
@@ -279,7 +282,7 @@ async function insertROTrainReadings(
     // DBs degrade gracefully instead of failing every row.
     const OPTIONAL_KEYS = [
       'remarks', 'recorded_by',
-      'permeate_meter', 'permeate_production_date',
+      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
@@ -1395,6 +1398,9 @@ function PretreatmentAndROLog() {
       // Permeate meter — persist raw odometer so next session can auto-fill prevPermMeter
       // and TrendChart can compute the delta via computeEntityDeltas (like well meters).
       permeate_meter: permCurr && !isNaN(permCurr) ? permCurr : null,
+      // Persist prev snapshot + delta so the table shows full meter history without joins.
+      permeate_meter_prev: prevPermMeter ?? null,
+      permeate_meter_delta: permDelta ?? null,
       // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
       power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
       // Delta & derived — null when prevPowerMeter not yet established (first reading)
