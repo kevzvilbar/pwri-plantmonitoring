@@ -607,6 +607,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   const { data: todayWells } = useQuery({
@@ -622,6 +624,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   // Production = sum of Product Meter deltas (treated/distributed water)
   const { data: todayProductMeters } = useQuery({
@@ -640,6 +644,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   // Power readings — today first, fall back to most-recent per plant if today is empty.
   // powerIsStale is set when the displayed value came from a prior day.
@@ -667,6 +673,8 @@ export default function Dashboard() {
       return { rows: Array.from(latestByPlant.values()), isStale: true };
     },
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const todayPower   = todayPowerRaw?.rows ?? [];
   const powerIsStale = todayPowerRaw?.isStale ?? false;
@@ -685,6 +693,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const { data: yWells } = useQuery({
     queryKey: ['dash-wells-yest', _wellIds, yesterday, today],
@@ -700,6 +710,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   // Yesterday product meters for production trend delta
   const { data: yProductMeters } = useQuery({
@@ -719,6 +731,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const { data: yPower } = useQuery({
     queryKey: ['dash-power-yest', plantIds],
