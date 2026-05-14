@@ -751,6 +751,8 @@ export default function Dashboard() {
           .order('reading_datetime', { ascending: false })).data ?? []
       : [],
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   // Today's production cost (chem + power).
   // If no row exists for today's date, fall back to the latest available row per
@@ -782,6 +784,8 @@ export default function Dashboard() {
       return { rows, costDataDate: rows[0]?.cost_date ?? null };
     },
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const todayCosts   = todayCostsRaw?.rows ?? [];
   const costDataDate = todayCostsRaw?.costDataDate ?? null;
@@ -794,6 +798,8 @@ export default function Dashboard() {
           .order('summary_date', { ascending: false }).limit(plantIds.length * 5)).data ?? []
       : [],
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // ── Stat card aggregates ────────────────────────────────────────────────────
@@ -911,6 +917,8 @@ export default function Dashboard() {
       ? (await supabase.from('chemical_inventory').select('*').in('plant_id', plantIds)).data ?? []
       : [],
     enabled: plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   const trainGaps = useTrainAutoOffline(plantIds);
@@ -943,6 +951,8 @@ export default function Dashboard() {
       }
     },
     retry: false,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const feedAlerts = feed?.alerts ?? [];
 

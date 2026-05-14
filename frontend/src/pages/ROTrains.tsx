@@ -1507,6 +1507,18 @@ function PretreatmentAndROLog() {
       power_meter_curr: '',
     });
     qc.invalidateQueries();
+    // Also explicitly target Dashboard and TrendChart keys so the Quality cluster,
+    // RO trend charts, and stat cards update immediately without a page refresh.
+    qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+    qc.invalidateQueries({ queryKey: ['trend-power'] });
+    qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+    qc.invalidateQueries({ queryKey: ['alerts-feed'] });
   };
 
   const f = (k: keyof typeof roValues) => ({ value: roValues[k], onChange: (e: any) => setRoValues({ ...roValues, [k]: e.target.value }) });

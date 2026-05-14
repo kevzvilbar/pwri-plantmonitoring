@@ -2056,8 +2056,23 @@ function ProductForm() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
     qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
-    // Invalidate all Dashboard queries so new product meter readings appear
-    // immediately without a manual page refresh (fixes the "auto-capture" bug).
+    // Targeted Dashboard stat-card keys so new readings appear immediately
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-loc-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-loc-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-wells-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-wells-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+    qc.invalidateQueries({ queryKey: ['dash-chem'] });
+    qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+    // Targeted TrendChart keys so charts refresh immediately
+    qc.invalidateQueries({ queryKey: ['trend-loc'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['trend-well'] });
+    qc.invalidateQueries({ queryKey: ['trend-power'] });
+    qc.invalidateQueries({ queryKey: ['trend-cost'] });
     qc.invalidateQueries();
   };
 
