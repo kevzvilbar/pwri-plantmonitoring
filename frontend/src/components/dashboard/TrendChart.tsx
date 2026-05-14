@@ -349,7 +349,7 @@ function DataSummaryPopup({
   locReadings, productReadings, wellReadings, costReadings,
   roReadings,
   permeateIsProductionPlants,
-  locatorNames, productMeterNames, wellNames, plantNames,
+  locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
 }: {
   open: boolean;
   onClose: () => void;
@@ -366,6 +366,7 @@ function DataSummaryPopup({
   productMeterNames?: Map<string, string>;
   wellNames?: Map<string, string>;
   plantNames?: Map<string, string>;
+  roTrainNames?: Map<string, string>;
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');
 
@@ -470,16 +471,17 @@ function DataSummaryPopup({
         .sort((a, b) => a.label.localeCompare(b.label));
     }
     if (usePermeate) {
-      // Permeate-is-production: use RO train IDs as entities
+      // Permeate-is-production: use RO train IDs as entities, labelled by their
+      // actual train names from the roTrainNames lookup (same map used in the chart).
       const ids = Array.from(new Set(filteredRoReadings.map((r: any) => r.train_id).filter(Boolean)));
-      return ids.map((id) => ({ id, label: plantNames?.get(id) ?? `Train ${String(id).slice(-4)}` }))
+      return ids.map((id) => ({ id, label: roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}` }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
     // product meters
     const ids = Array.from(new Set((filteredProductReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
     return ids.map((id) => ({ id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate, productMeterNames, wellNames, plantNames]);
+  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate, productMeterNames, wellNames, roTrainNames]);
 
   const prodPivot = useMemo(() => {
     if (metric === 'rawwater' || metric === 'pv') {
@@ -700,7 +702,7 @@ function DataSummaryPopup({
         <div className="px-5 py-2 border-t shrink-0 flex items-center gap-3 text-[10px] text-muted-foreground bg-muted/20">
           <span className="font-medium">{tabDates.length} days in range</span>
           {activeTab === 'production' && hasProdTab && (
-            <span>· {prodEntities.length} {metric === 'rawwater' ? 'wells' : 'product meters'}</span>
+            <span>· {prodEntities.length} {metric === 'rawwater' ? 'wells' : usePermeate ? 'RO trains' : 'product meters'}</span>
           )}
           {activeTab === 'consumption' && hasConsTab && (
             <span>· {consEntities.length} locators</span>
@@ -3018,6 +3020,7 @@ export function TrendChart({
           productMeterNames={productMeterNames}
           wellNames={wellNames}
           plantNames={plantNames}
+          roTrainNames={roTrainNames}
         />
       )}
 
