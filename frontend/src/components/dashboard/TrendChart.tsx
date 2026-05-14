@@ -914,6 +914,8 @@ export function TrendChart({
     },
     // Wait for locator IDs to resolve before fetching readings.
     enabled: plantIds.length > 0 && needsLocReadings && (_locatorIdsForReadings !== undefined),
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // Product meter readings — the treated-water output meters installed on
@@ -947,6 +949,8 @@ export function TrendChart({
       return (data as any[]) ?? [];
     },
     enabled: plantIds.length > 0 && needsProductMeterReadings,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // ── Well readings — fetch with well_id so deltas are scoped per well ────────
@@ -964,6 +968,8 @@ export function TrendChart({
       'well_id,current_reading,previous_reading,reading_datetime,is_meter_replacement,plant_id',
     ),
     enabled: plantIds.length > 0 && needsWellReadings,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // ── BUG FIX: ro_train_readings may not have plant_id (same as locator_readings).
@@ -1026,6 +1032,8 @@ export function TrendChart({
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0 && (needsRoReadings || needsPermeateProduction) && (_roTrainIdsForReadings !== undefined),
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // RO train name lookup — reuses the IDs already fetched above
@@ -1093,6 +1101,8 @@ export function TrendChart({
       );
     },
     enabled: plantIds.length > 0 && needsPowerReadings,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // Chemical cost comes from TWO sources which are merged per day:
@@ -1173,6 +1183,8 @@ export function TrendChart({
       });
     },
     enabled: plantIds.length > 0 && needsCostReadings,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 
   // Power tariffs: rate_per_kwh (₱/kWh) effective on or before each day.
