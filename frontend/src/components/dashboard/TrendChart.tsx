@@ -347,6 +347,8 @@ function DataSummaryPopup({
   open, onClose, metric, title,
   chartData,
   locReadings, productReadings, wellReadings, costReadings,
+  roReadings,
+  permeateIsProductionPlants,
   locatorNames, productMeterNames, wellNames, plantNames,
 }: {
   open: boolean;
@@ -358,6 +360,8 @@ function DataSummaryPopup({
   productReadings: any[];
   wellReadings: any[];
   costReadings: any[];
+  roReadings?: any[];
+  permeateIsProductionPlants?: Set<string>;
   locatorNames?: Map<string, string>;
   productMeterNames?: Map<string, string>;
   wellNames?: Map<string, string>;
@@ -440,6 +444,24 @@ function DataSummaryPopup({
 
   // Build entity lists and pivots
   // --- Production entities ---
+  // When the plant uses permeate_is_production, production volume comes from
+  // roReadings (permeate meter deltas) rather than a dedicated product meter.
+  // In that case productReadings is empty, so we fall back to roReadings here.
+  const usePermeate = (metric === 'production' || metric === 'nrw' || metric === 'pv')
+    && (filteredProductReadings ?? []).length === 0
+    && (roReadings ?? []).length > 0;
+
+  const filteredRoReadings = useMemo(() => {
+    if (!roReadings) return [];
+    if (!parsedFrom && !parsedTo) return roReadings;
+    return roReadings.filter((r) => {
+      const dt = new Date(r.reading_datetime);
+      if (parsedFrom && dt < parsedFrom) return false;
+      if (parsedTo && dt > parsedTo) return false;
+      return true;
+    });
+  }, [roReadings, filterFrom, filterTo]);
+
   const prodEntities = useMemo<{ id: string; label: string }[]>(() => {
     if (metric === 'rawwater' || metric === 'pv') {
       // wells
@@ -447,20 +469,54 @@ function DataSummaryPopup({
       return ids.map((id) => ({ id, label: wellNames?.get(id) ?? `Well ${id.slice(-4)}` }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
+    if (usePermeate) {
+      // Permeate-is-production: use RO train IDs as entities
+      const ids = Array.from(new Set(filteredRoReadings.map((r: any) => r.train_id).filter(Boolean)));
+      return ids.map((id) => ({ id, label: plantNames?.get(id) ?? `Train ${String(id).slice(-4)}` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
     // product meters
     const ids = Array.from(new Set((filteredProductReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
     return ids.map((id) => ({ id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [metric, filteredProductReadings, filteredWellReadings, productMeterNames, wellNames]);
+  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate, productMeterNames, wellNames, plantNames]);
 
   const prodPivot = useMemo(() => {
-    const readings = (metric === 'rawwater' || metric === 'pv') ? (filteredWellReadings ?? []) : (filteredProductReadings ?? []);
-    const field = (metric === 'rawwater' || metric === 'pv') ? 'well_id' : 'meter_id';
+    if (metric === 'rawwater' || metric === 'pv') {
+      return buildEntityPivot(
+        [...(filteredWellReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+        'well_id',
+      );
+    }
+    if (usePermeate) {
+      // Build pivot from permeate_meter_delta stored in roReadings.
+      // Mirror the primary path in TrendChart.chartData: use permeate_meter_delta
+      // when available, fall back to current − previous.
+      const roSorted = [...filteredRoReadings].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+      const pivot = new Map<string, Map<string, number>>();
+      const dateKeys: string[] = [];
+      roSorted.forEach((r: any) => {
+        if (r.is_meter_replacement) return;
+        const delta = r.permeate_meter_delta != null
+          ? Math.max(0, +r.permeate_meter_delta)
+          : r.permeate_meter != null && r.permeate_meter_prev != null
+            ? Math.max(0, +r.permeate_meter - +r.permeate_meter_prev)
+            : null;
+        if (delta === null || delta === 0) return;
+        const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        if (!pivot.has(dk)) { pivot.set(dk, new Map()); dateKeys.push(dk); }
+        const tid = r.train_id ?? '__';
+        pivot.get(dk)!.set(tid, (pivot.get(dk)!.get(tid) ?? 0) + delta);
+      });
+      return { pivot, dateKeys: Array.from(new Set(dateKeys)).sort() };
+    }
     return buildEntityPivot(
-      [...readings].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
-      field,
+      [...(filteredProductReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+      'meter_id',
     );
-  }, [metric, filteredProductReadings, filteredWellReadings]);
+  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate]);
   const prodPivotMap = prodPivot.pivot;
   const prodDateKeys = prodPivot.dateKeys;
 
@@ -496,16 +552,46 @@ function DataSummaryPopup({
     return fillDateRange(start, end);
   }, [prodDateKeys, filterFrom, filterTo]);
 
-  // Overview dates: union of all available data, or filter-bounded
+  // Overview dates: union of all available data, or filter-bounded.
+  // fillDateRange fills EVERY calendar day so months with no readings
+  // (e.g. April when data jumps Mar → May) are still shown as rows.
   const overviewDates = useMemo(() => {
     const allKeys = filteredChartData
       .filter((d) => d.isoDate)
-      .map((d) => d.isoDate.slice(0, 10) as string);
+      .map((d) => (d.isoDate as string).slice(0, 10));
     if (allKeys.length === 0) return [];
     const start = filterFrom || allKeys[0];
     const end   = filterTo   || allKeys[allKeys.length - 1];
     return fillDateRange(start, end);
   }, [filteredChartData, filterFrom, filterTo]);
+
+  // Build a lookup map dateKey (yyyy-MM-dd) → chartData row so OverviewTable
+  // can display all calendar days even when some days have no readings.
+  const overviewByDate = useMemo(() => {
+    const map = new Map<string, any>();
+    filteredChartData.forEach((d) => {
+      if (d.isoDate) map.set((d.isoDate as string).slice(0, 10), d);
+    });
+    return map;
+  }, [filteredChartData]);
+
+  // Full-coverage chart rows for the Overview tab: one entry per calendar day,
+  // null-filled for days with no readings.  Passed to OverviewTable so it can
+  // iterate overviewDates instead of the sparse filteredChartData array.
+  const overviewChartRows = useMemo(() =>
+    overviewDates.map((dk) => {
+      const existing = overviewByDate.get(dk);
+      if (existing) return existing;
+      // Stub row for a day with no readings — all metrics null / 0
+      return {
+        date: format(new Date(dk + 'T00:00:00'), 'MMM d'),
+        isoDate: dk + 'T00:00:00.000Z',
+        production: null, consumption: null, rawwater: null,
+        recovery: null, tds: null, kwh: null, solarKwh: null,
+        nrw: null, powerCost: null, chemCost: null, totalCost: null,
+      };
+    }),
+  [overviewDates, overviewByDate]);
 
   // Tab guard: if active tab becomes irrelevant, reset
   const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
@@ -585,7 +671,7 @@ function DataSummaryPopup({
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
               {activeTab === 'overview' && (
-                <OverviewTable metric={metric} chartData={filteredChartData} />
+                <OverviewTable metric={metric} chartData={overviewChartRows} />
               )}
               {activeTab === 'production' && hasProdTab && (
                 <PivotTable
@@ -1629,7 +1715,7 @@ export function TrendChart({
       row._chemCostPeso += chem;
     });
 
-    return Array.from(byDay.values())
+    const sparseRows = Array.from(byDay.values())
       .sort((a, b) => a.sortKey - b.sortKey)
       .map(({ sortKey: _s, recoverySamples, tdsSamples, _powerCostPeso, _solarKwhForCost, _chemCostPeso, _hasTariff, _permeateSourcePlants, ...d }) => {
         // ── Production Cost formula ────────────────────────────────────────────
@@ -1689,6 +1775,32 @@ export function TrendChart({
             : [] as string[],
         };
       });
+
+    // ── Gap-fill: insert null-value stub rows for every calendar day that has
+    // no readings (e.g. April when data spans Mar→May with a full month gap).
+    // Without this, the chart line jumps across the gap and the Overview table
+    // omits entire months.  We only fill when the window is ≤ 366 days to
+    // avoid generating thousands of stubs for very long ranges.
+    if (sparseRows.length < 2) return sparseRows;
+    const firstDk = format(new Date(sparseRows[0].isoDate), 'yyyy-MM-dd');
+    const lastDk  = format(new Date(sparseRows[sparseRows.length - 1].isoDate), 'yyyy-MM-dd');
+    const spanDays = (new Date(lastDk).getTime() - new Date(firstDk).getTime()) / 86_400_000;
+    if (spanDays > 366) return sparseRows;
+    const sparseByDate = new Map(sparseRows.map((r) => [format(new Date(r.isoDate), 'yyyy-MM-dd'), r]));
+    const allCalDays = fillDateRange(firstDk, lastDk);
+    return allCalDays.map((dk) => {
+      if (sparseByDate.has(dk)) return sparseByDate.get(dk)!;
+      const dt = new Date(dk + 'T00:00:00');
+      return {
+        date: format(dt, 'MMM d'),
+        isoDate: dt.toISOString(),
+        production: null, consumption: null, rawwater: null,
+        recovery: null, tds: null, kwh: null, solarKwh: null,
+        nrw: null, powerCost: null, chemCost: null, totalCost: null,
+        _meterReplacements: [], _permeateSourceNames: [],
+        _rawProduction: null, _rawConsumption: null, _rawRawwater: null, _rawKwh: null,
+      };
+    });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
       permeateIsProductionPlants, _trainPlantMap]);
@@ -2900,6 +3012,8 @@ export function TrendChart({
           productReadings={productReadings ?? []}
           wellReadings={wellReadings ?? []}
           costReadings={costReadings ?? []}
+          roReadings={roReadings ?? []}
+          permeateIsProductionPlants={permeateIsProductionPlants}
           locatorNames={locatorNames}
           productMeterNames={productMeterNames}
           wellNames={wellNames}
