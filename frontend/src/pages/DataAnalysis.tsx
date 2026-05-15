@@ -60,14 +60,19 @@ const SOURCE_TABLES: Record<string, string[]> = {
   well_readings:          ['daily_volume', 'current_reading', 'previous_reading', 'power_meter_reading'],
   locator_readings:       ['daily_volume', 'current_reading', 'previous_reading'],
   product_meter_readings: ['daily_volume', 'current_reading', 'previous_reading'],
-  ro_train_readings:      ['permeate_tds', 'permeate_ph', 'raw_turbidity', 'dp_psi', 'recovery_pct'],
+  ro_train_readings:      ['permeate_tds', 'permeate_ph', 'turbidity_ntu', 'dp_psi', 'recovery_pct', 'permeate_meter', 'feed_meter', 'reject_meter'],
+  power_readings:         ['daily_consumption_kwh', 'meter_reading_kwh', 'daily_solar_kwh', 'daily_grid_kwh'],
 };
+
+/** Tables that do not have a norm_status column — skip it in SELECT. */
+const TABLES_WITHOUT_NORM_STATUS = new Set(['power_readings']);
 
 const TABLE_LABELS: Record<string, string> = {
   well_readings:          'Well Readings',
   locator_readings:       'Locator Readings',
   product_meter_readings: 'Product Meter Readings',
   ro_train_readings:      'RO Train Readings',
+  power_readings:         'Grid & Solar Readings',
 };
 
 
@@ -463,15 +468,26 @@ function RawDataTable({
     (entityRows ?? []).map(r => [String(r.id), entityCfgRT ? entityCfgRT.labelFn(r) : String(r.id)])
   );
 
-    const { data, isLoading } = useQuery({
+  const hasNormStatus = !TABLES_WITHOUT_NORM_STATUS.has(sourceTable);
+
+  const { data, isLoading } = useQuery({
     queryKey: ['raw-readings', sourceTable, column, plantId, entityId, dateFrom, dateTo],
     queryFn: async () => {
+      const entityCfg = ENTITY_CONFIG[sourceTable];
+      const selectCols = [
+        'id',
+        'reading_datetime',
+        column,
+        hasNormStatus ? 'norm_status' : null,
+        'plant_id',
+        entityCfg ? entityCfg.fkColumn : null,
+      ].filter(Boolean).join(',');
+
       let q = supabase.from(sourceTable as 'well_readings')
-        .select(`id,reading_datetime,${column},norm_status,plant_id${ENTITY_CONFIG[sourceTable] ? ',' + ENTITY_CONFIG[sourceTable].fkColumn : ''}`)
+        .select(selectCols)
         .order('reading_datetime', { ascending: false })
         .limit(200);
       if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-      const entityCfg = ENTITY_CONFIG[sourceTable];
       if (entityCfg && entityId && entityId !== 'all') q = q.eq(entityCfg.fkColumn as never, entityId);
       if (dateFrom) q = q.gte('reading_datetime', dateFrom);
       if (dateTo)   q = q.lte('reading_datetime', dateTo + 'T23:59:59');
@@ -481,6 +497,16 @@ function RawDataTable({
     },
     enabled: !!sourceTable && !!column,
   });
+
+  // Delta: data is DESC by reading_datetime; delta[i] = value[i] − value[i+1] (the prior reading)
+  const deltaMap = new Map<string, number | null>();
+  if (data) {
+    data.forEach((row, i) => {
+      const curr = row[column] as number | null;
+      const prev = i + 1 < data.length ? (data[i + 1][column] as number | null) : null;
+      deltaMap.set(row.id, curr != null && prev != null ? curr - prev : null);
+    });
+  }
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading raw data…</div>;
   if (!data?.length) return <div className="py-8 text-center text-sm text-muted-foreground">No readings found for this selection.</div>;
@@ -493,36 +519,53 @@ function RawDataTable({
             <TableHead>Date</TableHead>
             {ENTITY_CONFIG[sourceTable] && <TableHead>{ENTITY_CONFIG[sourceTable].filterLabel}</TableHead>}
             <TableHead className="text-right">{column}</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Δ Delta</TableHead>
+            {hasNormStatus && <TableHead>Status</TableHead>}
             {canEdit && <TableHead className="w-10" />}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map(row => (
-            <TableRow key={row.id} className={cn('text-xs', row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
-              <TableCell className="font-mono">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
-              {ENTITY_CONFIG[sourceTable] && (
-                <TableCell className="text-xs text-muted-foreground font-mono">
-                  {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
+          {data.map(row => {
+            const delta = deltaMap.get(row.id) ?? null;
+            return (
+              <TableRow key={row.id} className={cn('text-xs', hasNormStatus && row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
+                <TableCell className="font-mono">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
+                {ENTITY_CONFIG[sourceTable] && (
+                  <TableCell className="text-xs text-muted-foreground font-mono">
+                    {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
+                  </TableCell>
+                )}
+                <TableCell className="text-right font-mono">
+                  {row[column] != null ? Number(row[column]).toFixed(3) : <span className="text-muted-foreground">—</span>}
                 </TableCell>
-              )}
-              <TableCell className="text-right font-mono">
-                {row[column] != null ? Number(row[column]).toFixed(3) : <span className="text-muted-foreground">—</span>}
-              </TableCell>
-              <TableCell><NormBadge status={row.norm_status} /></TableCell>
-              {canEdit && (
-                <TableCell>
-                  <button
-                    className="text-muted-foreground hover:text-primary transition-colors"
-                    title="Edit raw value"
-                    onClick={() => onEdit(row)}
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
+                <TableCell className="text-right font-mono">
+                  {delta != null ? (
+                    <span className={cn(
+                      delta > 0  && 'text-teal-600',
+                      delta < 0  && 'text-danger',
+                      delta === 0 && 'text-muted-foreground',
+                    )}>
+                      {delta > 0 ? '+' : ''}{delta.toFixed(3)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/50">—</span>
+                  )}
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
+                {hasNormStatus && <TableCell><NormBadge status={row.norm_status} /></TableCell>}
+                {canEdit && (
+                  <TableCell>
+                    <button
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                      title="Edit raw value"
+                      onClick={() => onEdit(row)}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </TableCell>
+                )}
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
