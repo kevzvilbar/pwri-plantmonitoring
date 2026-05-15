@@ -67,6 +67,16 @@ const SOURCE_TABLES: Record<string, string[]> = {
 /** Tables that do not have a norm_status column — skip it in SELECT. */
 const TABLES_WITHOUT_NORM_STATUS = new Set(['power_readings']);
 
+/** Tables recorded at sub-daily frequency — show full datetime (YYYY-MM-DD HH:mm), not just date. */
+const TABLES_WITH_TIME = new Set(['ro_train_readings']);
+
+/** Format a reading_datetime string based on whether the table uses time. */
+function fmtDatetime(raw: string, showTime: boolean): { date: string; time?: string } {
+  const s = raw.replace('T', ' ').replace('Z', '');
+  if (!showTime) return { date: s.slice(0, 10) };
+  return { date: s.slice(0, 10), time: s.slice(11, 16) };
+}
+
 const TABLE_LABELS: Record<string, string> = {
   well_readings:          'Well Readings',
   locator_readings:       'Locator Readings',
@@ -541,12 +551,16 @@ function RawDataTable({
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading raw data…</div>;
   if (!data?.length) return <div className="py-8 text-center text-sm text-muted-foreground">No readings found for this selection.</div>;
 
+  const showTime = TABLES_WITH_TIME.has(sourceTable);
+
   return (
     <div className="overflow-auto max-h-[560px] rounded border">
-      <Table>
+      <Table className="text-[11px]">
         <TableHeader className="sticky top-0 bg-card z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
-          <TableRow className="text-[11px]">
-            <TableHead className="whitespace-nowrap w-[88px]">Date</TableHead>
+          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <TableHead className={cn('whitespace-nowrap', showTime ? 'w-[118px]' : 'w-[88px]')}>
+              {showTime ? 'Date & Time' : 'Date'}
+            </TableHead>
             {ENTITY_CONFIG[sourceTable] && <TableHead className="whitespace-nowrap">{ENTITY_CONFIG[sourceTable].filterLabel}</TableHead>}
             <TableHead className="text-right whitespace-nowrap">{column}</TableHead>
             <TableHead className="text-right whitespace-nowrap">Δ Delta</TableHead>
@@ -557,18 +571,28 @@ function RawDataTable({
         <TableBody>
           {data.map(row => {
             const delta = deltaMap.get(row.id) ?? null;
+            const { date, time } = fmtDatetime(String(row.reading_datetime || ''), showTime);
             return (
-              <TableRow key={row.id} className={cn('text-xs', hasNormStatus && row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
-                <TableCell className="font-mono whitespace-nowrap">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
+              <TableRow key={row.id} className={cn(hasNormStatus && row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
+                <TableCell className="font-mono whitespace-nowrap py-1.5">
+                  {showTime ? (
+                    <span className="flex flex-col leading-tight">
+                      <span className="text-[11px]">{date}</span>
+                      <span className="text-[10px] text-muted-foreground">{time}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px]">{date}</span>
+                  )}
+                </TableCell>
                 {ENTITY_CONFIG[sourceTable] && (
-                  <TableCell className="text-xs text-muted-foreground font-mono">
+                  <TableCell className="text-[11px] text-muted-foreground font-mono py-1.5">
                     {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
                   </TableCell>
                 )}
-                <TableCell className="text-right font-mono">
+                <TableCell className="text-right font-mono text-[11px] py-1.5">
                   {row[column] != null ? Number(row[column]).toFixed(3) : <span className="text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="text-right font-mono">
+                <TableCell className="text-right font-mono text-[11px] py-1.5">
                   {delta != null ? (
                     <span className={cn(
                       delta > 0  && 'text-teal-600',
@@ -581,9 +605,9 @@ function RawDataTable({
                     <span className="text-muted-foreground/50">—</span>
                   )}
                 </TableCell>
-                {hasNormStatus && <TableCell><NormBadge status={row.norm_status} /></TableCell>}
+                {hasNormStatus && <TableCell className="py-1.5"><NormBadge status={row.norm_status} /></TableCell>}
                 {canEdit && (
-                  <TableCell>
+                  <TableCell className="py-1.5">
                     <button
                       className="text-muted-foreground hover:text-primary transition-colors"
                       title="Edit raw value"
