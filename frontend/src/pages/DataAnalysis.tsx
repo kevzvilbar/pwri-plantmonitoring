@@ -408,7 +408,7 @@ function RawDataTable({
         .select(`id,reading_datetime,${column},norm_status,plant_id`)
         .order('reading_datetime', { ascending: false })
         .limit(200);
-      if (plantId) q = q.eq('plant_id', plantId);
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
       if (dateFrom) q = q.gte('reading_datetime', dateFrom);
       if (dateTo)   q = q.lte('reading_datetime', dateTo + 'T23:59:59');
       const { data, error } = await q;
@@ -516,7 +516,7 @@ export default function DataAnalysis() {
   // Filter state
   const [sourceTable, setSourceTable] = useState('well_readings');
   const [column, setColumn]           = useState('daily_volume');
-  const [plantId, setPlantId]         = useState('');
+  const [plantId, setPlantId]         = useState('all');
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
 
@@ -545,7 +545,7 @@ export default function DataAnalysis() {
     queryFn: () => {
       const qs = new URLSearchParams();
       if (sourceTable) qs.set('source_table', sourceTable);
-      if (plantId)     qs.set('plant_id', plantId);
+      if (plantId && plantId !== 'all') qs.set('plant_id', plantId);
       qs.set('limit', '20');
       return apiGet<{ results: RegressionResult[] }>(`/api/data-analysis/results?${qs}`, token);
     },
@@ -567,7 +567,7 @@ export default function DataAnalysis() {
       await apiPost('/api/data-analysis/run-regression', {
         source_table: sourceTable,
         column_name:  column,
-        plant_id:     plantId || undefined,
+        plant_id:     (plantId && plantId !== 'all') ? plantId : undefined,
         date_from:    dateFrom || undefined,
         date_to:      dateTo   || undefined,
       }, token);
@@ -657,7 +657,7 @@ export default function DataAnalysis() {
                   <SelectValue placeholder="All plants" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="" className="text-xs text-muted-foreground">All plants</SelectItem>
+                  <SelectItem value="all" className="text-xs text-muted-foreground">All plants</SelectItem>
                   {plants.map(p => (
                     <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
                   ))}
