@@ -1,0 +1,6 @@
+project_id = "lreqxclzoxmswglvdstv"
+
+[functions.poly-regression-fill]
+enabled = true
+verify_jwt = false
+schedule = "0 6 * * *"
