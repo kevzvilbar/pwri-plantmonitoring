@@ -70,6 +70,40 @@ const TABLE_LABELS: Record<string, string> = {
   ro_train_readings:      'RO Train Readings',
 };
 
+
+/** For each source table: which Supabase lookup table + FK column on the readings row */
+const ENTITY_CONFIG: Record<string, {
+  lookupTable: string;
+  fkColumn: string;         // FK column on the *_readings table
+  labelFn: (row: Record<string, unknown>) => string;
+  filterLabel: string;
+}> = {
+  well_readings: {
+    lookupTable: 'wells',
+    fkColumn:    'well_id',
+    labelFn:     r => String(r.name ?? r.id),
+    filterLabel: 'Well',
+  },
+  locator_readings: {
+    lookupTable: 'locators',
+    fkColumn:    'locator_id',
+    labelFn:     r => String(r.name ?? r.id),
+    filterLabel: 'Locator',
+  },
+  ro_train_readings: {
+    lookupTable: 'ro_trains',
+    fkColumn:    'train_id',
+    labelFn:     r => r.name ? String(r.name) : `Train ${r.train_number}`,
+    filterLabel: 'RO Train',
+  },
+  product_meter_readings: {
+    lookupTable: 'product_meters',
+    fkColumn:    'meter_id',
+    labelFn:     r => String(r.name ?? r.id),
+    filterLabel: 'Meter',
+  },
+};
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type NormStatus = 'normal' | 'erroneous' | 'normalized' | 'retracted';
@@ -108,6 +142,7 @@ interface RegressionResult {
 }
 
 interface Plant { id: string; name: string; }
+interface EntityOption { id: string; label: string; }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 
@@ -395,20 +430,41 @@ function RegressionDetail({
 // ── Raw Data Table ─────────────────────────────────────────────────────────────
 
 function RawDataTable({
-  sourceTable, column, plantId, dateFrom, dateTo, canEdit, token, onEdit,
+  sourceTable, column, plantId, entityId, dateFrom, dateTo, canEdit, token, onEdit,
 }: {
-  sourceTable: string; column: string; plantId: string; dateFrom: string; dateTo: string;
+  sourceTable: string; column: string; plantId: string; entityId: string; dateFrom: string; dateTo: string;
   canEdit: boolean; token: string;
   onEdit: (reading: RawReading) => void;
 }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['raw-readings', sourceTable, column, plantId, dateFrom, dateTo],
+  // Fetch entity name map for display in the table (well / locator / train / meter names)
+  const entityCfgRT = ENTITY_CONFIG[sourceTable];
+  const { data: entityRows } = useQuery({
+    queryKey: ['entity-options', sourceTable, plantId],
+    queryFn: async () => {
+      if (!entityCfgRT) return [];
+      let q = (supabase.from(entityCfgRT.lookupTable as never) as any)
+        .select('id, name, train_number')
+        .order('name');
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      const { data } = await q;
+      return (data ?? []) as Record<string, unknown>[];
+    },
+    enabled: !!entityCfgRT,
+  });
+  const entityLookup: Record<string, string> = Object.fromEntries(
+    (entityRows ?? []).map(r => [String(r.id), entityCfgRT ? entityCfgRT.labelFn(r) : ''])
+  );
+
+    const { data, isLoading } = useQuery({
+    queryKey: ['raw-readings', sourceTable, column, plantId, entityId, dateFrom, dateTo],
     queryFn: async () => {
       let q = supabase.from(sourceTable as 'well_readings')
-        .select(`id,reading_datetime,${column},norm_status,plant_id`)
+        .select(`id,reading_datetime,${column},norm_status,plant_id${ENTITY_CONFIG[sourceTable] ? ',' + ENTITY_CONFIG[sourceTable].fkColumn : ''}`)
         .order('reading_datetime', { ascending: false })
         .limit(200);
       if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      const entityCfg = ENTITY_CONFIG[sourceTable];
+      if (entityCfg && entityId && entityId !== 'all') q = q.eq(entityCfg.fkColumn as never, entityId);
       if (dateFrom) q = q.gte('reading_datetime', dateFrom);
       if (dateTo)   q = q.lte('reading_datetime', dateTo + 'T23:59:59');
       const { data, error } = await q;
@@ -427,6 +483,7 @@ function RawDataTable({
         <TableHeader className="sticky top-0 bg-background z-10">
           <TableRow className="text-[11px]">
             <TableHead>Date</TableHead>
+            {ENTITY_CONFIG[sourceTable] && <TableHead>{ENTITY_CONFIG[sourceTable].filterLabel}</TableHead>}
             <TableHead className="text-right">{column}</TableHead>
             <TableHead>Status</TableHead>
             {canEdit && <TableHead className="w-10" />}
@@ -436,6 +493,11 @@ function RawDataTable({
           {data.map(row => (
             <TableRow key={row.id} className={cn('text-xs', row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
               <TableCell className="font-mono">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
+              {ENTITY_CONFIG[sourceTable] && (
+                <TableCell className="text-xs text-muted-foreground font-mono">
+                  {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
+                </TableCell>
+              )}
               <TableCell className="text-right font-mono">
                 {row[column] != null ? Number(row[column]).toFixed(3) : <span className="text-muted-foreground">—</span>}
               </TableCell>
@@ -517,6 +579,7 @@ export default function DataAnalysis() {
   const [sourceTable, setSourceTable] = useState('well_readings');
   const [column, setColumn]           = useState('daily_volume');
   const [plantId, setPlantId]         = useState('all');
+  const [entityId, setEntityId]         = useState('all');
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
 
@@ -539,13 +602,34 @@ export default function DataAnalysis() {
   });
   const plants = plantsData ?? [];
 
+  // Entity options (wells / locators / ro_trains / product_meters) for drill-down
+  const entityCfgMain = ENTITY_CONFIG[sourceTable];
+  const { data: entityOptionsData } = useQuery({
+    queryKey: ['entity-options-main', sourceTable, plantId],
+    queryFn: async () => {
+      if (!entityCfgMain) return [];
+      let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
+        .select('id, name, train_number')
+        .order('name');
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      const { data } = await q;
+      return (data ?? []) as Record<string, unknown>[];
+    },
+    enabled: !!entityCfgMain,
+  });
+  const entityOptions: EntityOption[] = (entityOptionsData ?? []).map(r => ({
+    id: String(r.id),
+    label: entityCfgMain ? entityCfgMain.labelFn(r) : String(r.id),
+  }));
+
   // Regression results
   const { data: resultsData, refetch: refetchResults } = useQuery({
-    queryKey: ['regression-results', sourceTable, plantId],
+    queryKey: ['regression-results', sourceTable, plantId, entityId],
     queryFn: () => {
       const qs = new URLSearchParams();
       if (sourceTable) qs.set('source_table', sourceTable);
       if (plantId && plantId !== 'all') qs.set('plant_id', plantId);
+      if (entityId && entityId !== 'all' && entityCfgMain) qs.set(entityCfgMain.fkColumn, entityId);
       qs.set('limit', '20');
       return apiGet<{ results: RegressionResult[] }>(`/api/data-analysis/results?${qs}`, token);
     },
@@ -558,6 +642,12 @@ export default function DataAnalysis() {
   const handleTableChange = (t: string) => {
     setSourceTable(t);
     setColumn(SOURCE_TABLES[t]?.[0] ?? '');
+    setEntityId('all');
+  };
+
+  const handlePlantChange = (p: string) => {
+    setPlantId(p);
+    setEntityId('all');
   };
 
   const handleRunRegression = async () => {
@@ -568,6 +658,7 @@ export default function DataAnalysis() {
         source_table: sourceTable,
         column_name:  column,
         plant_id:     (plantId && plantId !== 'all') ? plantId : undefined,
+        ...(entityId && entityId !== 'all' && entityCfgMain ? { [entityCfgMain.fkColumn]: entityId } : {}),
         date_from:    dateFrom || undefined,
         date_to:      dateTo   || undefined,
       }, token);
@@ -618,7 +709,7 @@ export default function DataAnalysis() {
       {/* ── Filter bar ── */}
       <Card>
         <CardContent className="pt-4 pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
             {/* Source table */}
             <div className="space-y-1">
               <Label className="text-xs">Source table</Label>
@@ -652,7 +743,7 @@ export default function DataAnalysis() {
             {/* Plant */}
             <div className="space-y-1">
               <Label className="text-xs">Plant (optional)</Label>
-              <Select value={plantId} onValueChange={setPlantId}>
+              <Select value={plantId} onValueChange={handlePlantChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="All plants" />
                 </SelectTrigger>
@@ -664,6 +755,28 @@ export default function DataAnalysis() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Entity drill-down: well / locator / RO train / meter — shown only when a table with entities is selected */}
+            {entityCfgMain && (
+              <div className="space-y-1">
+                <Label className="text-xs">{entityCfgMain.filterLabel}</Label>
+                <Select value={entityId} onValueChange={setEntityId}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder={`All ${entityCfgMain.filterLabel}s`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs text-muted-foreground">
+                      All {entityCfgMain.filterLabel}s
+                    </SelectItem>
+                    {entityOptions.map(opt => (
+                      <SelectItem key={opt.id} value={opt.id} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Date from */}
             <div className="space-y-1">
@@ -713,6 +826,7 @@ export default function DataAnalysis() {
               sourceTable={sourceTable}
               column={column}
               plantId={plantId}
+              entityId={entityId}
               dateFrom={dateFrom}
               dateTo={dateTo}
               canEdit={canEdit}
