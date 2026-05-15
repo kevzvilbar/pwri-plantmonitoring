@@ -249,7 +249,10 @@ function EditRawDialog({ open, onClose, reading, column, token, onSuccess }: Edi
       onSuccess();
       onClose();
     } catch (e: unknown) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      toast.error(/failed to fetch|network|load failed/i.test(msg)
+        ? 'Backend not connected — cannot save edits.'
+        : msg);
     } finally {
       setSaving(false);
     }
@@ -322,7 +325,10 @@ function RegressionDetail({
       toast.success(`Applied ${r.applied} correction(s)`);
       onRefresh();
     } catch (e: unknown) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      toast.error(/failed to fetch|network|load failed/i.test(msg)
+        ? 'Backend not connected — cannot apply corrections.'
+        : msg);
     } finally {
       setApplying(false);
     }
@@ -336,7 +342,10 @@ function RegressionDetail({
       toast.success(`Retracted ${r.retracted} correction(s)`);
       onRefresh();
     } catch (e: unknown) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      toast.error(/failed to fetch|network|load failed/i.test(msg)
+        ? 'Backend not connected — cannot retract corrections.'
+        : msg);
     } finally {
       setRetracting(false);
     }
@@ -498,30 +507,51 @@ function RawDataTable({
     enabled: !!sourceTable && !!column,
   });
 
-  // Delta: data is DESC by reading_datetime; delta[i] = value[i] − value[i+1] (the prior reading)
+  // Delta: group rows by entity FK so we never diff across different trains/wells/etc.
+  // Data arrives DESC by reading_datetime; within each group the same order holds.
   const deltaMap = new Map<string, number | null>();
   if (data) {
-    data.forEach((row, i) => {
-      const curr = row[column] as number | null;
-      const prev = i + 1 < data.length ? (data[i + 1][column] as number | null) : null;
-      deltaMap.set(row.id, curr != null && prev != null ? curr - prev : null);
-    });
+    const entityFk = ENTITY_CONFIG[sourceTable]?.fkColumn;
+    if (entityFk) {
+      // Bucket rows by their entity ID, preserving DESC order
+      const groups = new Map<string, RawReading[]>();
+      data.forEach(row => {
+        const key = String(row[entityFk] ?? '__none__');
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(row);
+      });
+      // Compute delta within each bucket
+      groups.forEach(rows => {
+        rows.forEach((row, i) => {
+          const curr = row[column] as number | null;
+          const prev = i + 1 < rows.length ? (rows[i + 1][column] as number | null) : null;
+          deltaMap.set(row.id, curr != null && prev != null ? curr - prev : null);
+        });
+      });
+    } else {
+      // Plant-level table (e.g. power_readings) — no entity grouping needed
+      data.forEach((row, i) => {
+        const curr = row[column] as number | null;
+        const prev = i + 1 < data.length ? (data[i + 1][column] as number | null) : null;
+        deltaMap.set(row.id, curr != null && prev != null ? curr - prev : null);
+      });
+    }
   }
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading raw data…</div>;
   if (!data?.length) return <div className="py-8 text-center text-sm text-muted-foreground">No readings found for this selection.</div>;
 
   return (
-    <div className="overflow-auto max-h-[520px] rounded border">
+    <div className="overflow-auto max-h-[560px] rounded border">
       <Table>
-        <TableHeader className="sticky top-0 bg-background z-10">
+        <TableHeader className="sticky top-0 bg-card z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
           <TableRow className="text-[11px]">
-            <TableHead>Date</TableHead>
-            {ENTITY_CONFIG[sourceTable] && <TableHead>{ENTITY_CONFIG[sourceTable].filterLabel}</TableHead>}
-            <TableHead className="text-right">{column}</TableHead>
-            <TableHead className="text-right">Δ Delta</TableHead>
-            {hasNormStatus && <TableHead>Status</TableHead>}
-            {canEdit && <TableHead className="w-10" />}
+            <TableHead className="whitespace-nowrap w-[88px]">Date</TableHead>
+            {ENTITY_CONFIG[sourceTable] && <TableHead className="whitespace-nowrap">{ENTITY_CONFIG[sourceTable].filterLabel}</TableHead>}
+            <TableHead className="text-right whitespace-nowrap">{column}</TableHead>
+            <TableHead className="text-right whitespace-nowrap">Δ Delta</TableHead>
+            {hasNormStatus && <TableHead className="whitespace-nowrap">Status</TableHead>}
+            {canEdit && <TableHead className="w-8" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -529,7 +559,7 @@ function RawDataTable({
             const delta = deltaMap.get(row.id) ?? null;
             return (
               <TableRow key={row.id} className={cn('text-xs', hasNormStatus && row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
-                <TableCell className="font-mono">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
+                <TableCell className="font-mono whitespace-nowrap">{String(row.reading_datetime || '').slice(0, 10)}</TableCell>
                 {ENTITY_CONFIG[sourceTable] && (
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
@@ -583,6 +613,7 @@ function AuditLogTab({ token, sourceTable }: { token: string; sourceTable: strin
     ),
     enabled: !!sourceTable && !!token,
     retry: false,
+    throwOnError: false,
     meta: { silent: true },
   });
 
@@ -704,6 +735,7 @@ export default function DataAnalysis() {
     enabled: !!token && canView,
     staleTime: 15_000,
     retry: false,
+    throwOnError: false,
     meta: { silent: true },
   });
   const regressionResults = (resultsData as { results: RegressionResult[] } | undefined)?.results ?? [];
@@ -736,7 +768,12 @@ export default function DataAnalysis() {
       refetchResults();
       qc.invalidateQueries({ queryKey: ['raw-readings'] });
     } catch (e: unknown) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      if (/failed to fetch|network|load failed/i.test(msg)) {
+        toast.error('Backend not connected — regression requires the Python backend to be running.');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setRunning(false);
     }
@@ -903,9 +940,9 @@ export default function DataAnalysis() {
       </Card>
 
       {/* ── Two-table layout ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* LEFT — Raw Data Table */}
-        <Card>
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        {/* LEFT — Raw Data Table (wider) */}
+        <Card className="xl:col-span-3">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
               <Database className="h-4 w-4 text-muted-foreground" />
@@ -932,8 +969,8 @@ export default function DataAnalysis() {
           </CardContent>
         </Card>
 
-        {/* RIGHT — Regression / Correction Table */}
-        <Card>
+        {/* RIGHT — Regression / Correction Table (narrower) */}
+        <Card className="xl:col-span-2">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
