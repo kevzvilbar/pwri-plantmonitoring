@@ -436,21 +436,21 @@ function RawDataTable({
   canEdit: boolean; token: string;
   onEdit: (reading: RawReading) => void;
 }) {
-  // Fetch entity name map for display in the table (well / locator / train / meter names)
+  // Fetch ALL entity names for the lookup map — no plant filter here.
+  // Filtering by plant would cause "—" if the entity table lacks plant_id
+  // or if a reading's FK points to an entity not in the current plant filter.
   const entityCfgRT = ENTITY_CONFIG[sourceTable];
   const { data: entityRows } = useQuery({
-    queryKey: ['entity-options', sourceTable, plantId],
+    queryKey: ['entity-name-lookup', sourceTable],
     queryFn: async () => {
       if (!entityCfgRT) return [];
-      // Always join plant for "Well 1 (Guizo)" label in table cells
-      let q = (supabase.from(entityCfgRT.lookupTable as never) as any)
+      const { data } = await (supabase.from(entityCfgRT.lookupTable as never) as any)
         .select('id, name, train_number')
         .order('name');
-      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-      const { data } = await q;
       return (data ?? []) as Record<string, unknown>[];
     },
     enabled: !!entityCfgRT,
+    staleTime: 60_000,
   });
   const entityLookup: Record<string, string> = Object.fromEntries(
     (entityRows ?? []).map(r => [String(r.id), entityCfgRT ? entityCfgRT.labelFn(r) : String(r.id)])
@@ -533,6 +533,7 @@ function AuditLogTab({ token, sourceTable }: { token: string; sourceTable: strin
     ),
     enabled: !!sourceTable && !!token,
     retry: false,
+    meta: { silent: true },
   });
 
   const rows = (data as { log: Array<Record<string, unknown>> } | undefined)?.log ?? [];
@@ -605,20 +606,32 @@ export default function DataAnalysis() {
   });
   const plants = plantsData ?? [];
 
-  // Entity options (wells / locators / ro_trains / product_meters) for drill-down
+  // Entity drill-down options — filtered by plant when a plant is selected.
+  // Falls back gracefully if the entity table has no plant_id column.
   const entityCfgMain = ENTITY_CONFIG[sourceTable];
-  const { data: entityOptionsData } = useQuery({
+  const { data: entityOptionsData, isFetching: entityFetching } = useQuery({
     queryKey: ['entity-options-main', sourceTable, plantId],
     queryFn: async () => {
       if (!entityCfgMain) return [];
-      let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
-        .select('id, name, train_number')
-        .order('name');
-      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-      const { data } = await q;
-      return (data ?? []) as Record<string, unknown>[];
+      // Fetch with plant_id filter first; if that errors, fall back to unfiltered.
+      try {
+        let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
+          .select('id, name, train_number, plant_id')
+          .order('name');
+        if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+        const { data, error } = await q;
+        if (error) throw error;
+        return (data ?? []) as Record<string, unknown>[];
+      } catch {
+        // Fallback: fetch without plant filter (entity table may lack plant_id)
+        const { data } = await (supabase.from(entityCfgMain.lookupTable as never) as any)
+          .select('id, name, train_number')
+          .order('name');
+        return (data ?? []) as Record<string, unknown>[];
+      }
     },
     enabled: !!entityCfgMain,
+    staleTime: 30_000,
   });
   const entityOptions: EntityOption[] = (entityOptionsData ?? []).map(r => ({
     id: String(r.id),
@@ -639,6 +652,7 @@ export default function DataAnalysis() {
     enabled: !!token && canView,
     staleTime: 15_000,
     retry: false,
+    meta: { silent: true },
   });
   const regressionResults = (resultsData as { results: RegressionResult[] } | undefined)?.results ?? [];
 
@@ -746,7 +760,7 @@ export default function DataAnalysis() {
 
             {/* Plant */}
             <div className="space-y-1">
-              <Label className="text-xs">Plant (optional)</Label>
+              <Label className="text-xs">Plant</Label>
               <Select value={plantId} onValueChange={handlePlantChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="All plants" />
@@ -760,18 +774,44 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Entity drill-down: well / locator / RO train / meter — shown only when a table with entities is selected */}
+            {/* Entity drill-down: cascades from Source Table → Plant → Entity */}
             {entityCfgMain && (
               <div className="space-y-1">
-                <Label className="text-xs">{entityCfgMain.filterLabel}</Label>
-                <Select value={entityId} onValueChange={setEntityId}>
+                <Label className="text-xs flex items-center gap-1">
+                  {entityCfgMain.filterLabel}
+                  {entityOptions.length > 0 && (
+                    <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-[10px] text-muted-foreground font-normal">
+                      {entityOptions.length}
+                    </span>
+                  )}
+                </Label>
+                <Select
+                  value={entityId}
+                  onValueChange={setEntityId}
+                  disabled={entityFetching && entityOptions.length === 0}
+                >
                   <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder={`All ${entityCfgMain.filterLabel}s`} />
+                    <SelectValue
+                      placeholder={
+                        entityFetching
+                          ? `Loading ${entityCfgMain.filterLabel}s…`
+                          : `All ${entityCfgMain.filterLabel}s`
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs text-muted-foreground">
                       All {entityCfgMain.filterLabel}s
+                      {entityOptions.length > 0 && (
+                        <span className="ml-1.5 text-[10px] opacity-60">({entityOptions.length})</span>
+                      )}
                     </SelectItem>
+                    {entityOptions.length === 0 && !entityFetching && (
+                      <div className="px-3 py-2 text-[11px] text-muted-foreground italic">
+                        No {entityCfgMain.filterLabel.toLowerCase()}s found
+                        {plantId !== 'all' ? ' for this plant' : ''}
+                      </div>
+                    )}
                     {entityOptions.map(opt => (
                       <SelectItem key={opt.id} value={opt.id} className="text-xs">
                         {opt.label}
@@ -854,7 +894,13 @@ export default function DataAnalysis() {
             </p>
           </CardHeader>
           <CardContent className="px-3 pb-4 space-y-3">
-            {regressionResults.length === 0 && (
+            {resultsError && (
+              <div className="flex items-center gap-2 rounded bg-muted/60 border px-3 py-2 text-[11px] text-muted-foreground">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                Regression results unavailable — backend not connected.
+              </div>
+            )}
+            {!resultsError && regressionResults.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 {canEdit
                   ? 'No regression runs yet. Select a column and click "Run Regression".'
