@@ -71,34 +71,41 @@ const TABLE_LABELS: Record<string, string> = {
 };
 
 
-/** For each source table: which Supabase lookup table + FK column on the readings row */
+/** For each source table: which Supabase lookup table + FK column on the readings row.
+ *  selectCols MUST match the actual columns in the lookup table — requesting a non-existent
+ *  column (e.g. train_number on wells) causes Supabase to return an error and null data. */
 const ENTITY_CONFIG: Record<string, {
   lookupTable: string;
-  fkColumn: string;         // FK column on the *_readings table
+  fkColumn: string;
+  selectCols: string;       // exact columns that exist on lookupTable
   labelFn: (row: Record<string, unknown>) => string;
   filterLabel: string;
 }> = {
   well_readings: {
     lookupTable: 'wells',
     fkColumn:    'well_id',
+    selectCols:  'id, name, plant_id, status',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Well',
   },
   locator_readings: {
     lookupTable: 'locators',
     fkColumn:    'locator_id',
+    selectCols:  'id, name, plant_id, status',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Locator',
   },
   ro_train_readings: {
     lookupTable: 'ro_trains',
     fkColumn:    'train_id',
+    selectCols:  'id, name, train_number, plant_id, status',
     labelFn:     r => r.name ? String(r.name) : `Train ${r.train_number}`,
     filterLabel: 'RO Train',
   },
   product_meter_readings: {
     lookupTable: 'product_meters',
     fkColumn:    'meter_id',
+    selectCols:  'id, name, plant_id',
     labelFn:     r => String(r.name ?? r.id),
     filterLabel: 'Meter',
   },
@@ -436,17 +443,17 @@ function RawDataTable({
   canEdit: boolean; token: string;
   onEdit: (reading: RawReading) => void;
 }) {
-  // Fetch ALL entity names for the lookup map — no plant filter here.
-  // Filtering by plant would cause "—" if the entity table lacks plant_id
-  // or if a reading's FK points to an entity not in the current plant filter.
+  // Fetch ALL entity names (no plant/status filter) for display in table rows.
+  // Uses table-specific selectCols — querying a non-existent column returns null data.
   const entityCfgRT = ENTITY_CONFIG[sourceTable];
   const { data: entityRows } = useQuery({
     queryKey: ['entity-name-lookup', sourceTable],
     queryFn: async () => {
       if (!entityCfgRT) return [];
-      const { data } = await (supabase.from(entityCfgRT.lookupTable as never) as any)
-        .select('id, name, train_number')
+      const { data, error } = await (supabase.from(entityCfgRT.lookupTable as never) as any)
+        .select(entityCfgRT.selectCols)
         .order('name');
+      if (error) console.warn('[entity-name-lookup] error for', entityCfgRT.lookupTable, error.message);
       return (data ?? []) as Record<string, unknown>[];
     },
     enabled: !!entityCfgRT,
@@ -606,29 +613,31 @@ export default function DataAnalysis() {
   });
   const plants = plantsData ?? [];
 
-  // Entity drill-down options — filtered by plant when a plant is selected.
-  // Falls back gracefully if the entity table has no plant_id column.
+  // Entity drill-down options — each table uses only its own valid columns (selectCols).
+  // Requesting a column that doesn't exist causes Supabase to return an error + null data,
+  // which is why all tables previously showed "No *** found".
   const entityCfgMain = ENTITY_CONFIG[sourceTable];
   const { data: entityOptionsData, isFetching: entityFetching } = useQuery({
     queryKey: ['entity-options-main', sourceTable, plantId],
     queryFn: async () => {
       if (!entityCfgMain) return [];
-      // Fetch with plant_id filter first; if that errors, fall back to unfiltered.
-      try {
-        let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
-          .select('id, name, train_number, plant_id')
+      let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
+        .select(entityCfgMain.selectCols)      // use table-specific columns only
+        .order('name');
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      // Only show Active entities in the drill-down (matches Operations page behaviour)
+      q = q.eq('status', 'Active');
+      const { data, error } = await q;
+      if (error) {
+        // status column may not exist on product_meters — retry without status filter
+        let fbq = (supabase.from(entityCfgMain.lookupTable as never) as any)
+          .select(entityCfgMain.selectCols)
           .order('name');
-        if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-        const { data, error } = await q;
-        if (error) throw error;
-        return (data ?? []) as Record<string, unknown>[];
-      } catch {
-        // Fallback: fetch without plant filter (entity table may lack plant_id)
-        const { data } = await (supabase.from(entityCfgMain.lookupTable as never) as any)
-          .select('id, name, train_number')
-          .order('name');
-        return (data ?? []) as Record<string, unknown>[];
+        if (plantId && plantId !== 'all') fbq = fbq.eq('plant_id', plantId);
+        const { data: fallback } = await fbq;
+        return (fallback ?? []) as Record<string, unknown>[];
       }
+      return (data ?? []) as Record<string, unknown>[];
     },
     enabled: !!entityCfgMain,
     staleTime: 30_000,
