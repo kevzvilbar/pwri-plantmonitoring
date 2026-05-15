@@ -442,6 +442,7 @@ function RawDataTable({
     queryKey: ['entity-options', sourceTable, plantId],
     queryFn: async () => {
       if (!entityCfgRT) return [];
+      // Always join plant for "Well 1 (Guizo)" label in table cells
       let q = (supabase.from(entityCfgRT.lookupTable as never) as any)
         .select('id, name, train_number')
         .order('name');
@@ -452,7 +453,7 @@ function RawDataTable({
     enabled: !!entityCfgRT,
   });
   const entityLookup: Record<string, string> = Object.fromEntries(
-    (entityRows ?? []).map(r => [String(r.id), entityCfgRT ? entityCfgRT.labelFn(r) : ''])
+    (entityRows ?? []).map(r => [String(r.id), entityCfgRT ? entityCfgRT.labelFn(r) : String(r.id)])
   );
 
     const { data, isLoading } = useQuery({
@@ -524,18 +525,20 @@ function RawDataTable({
 // ── Audit log tab ──────────────────────────────────────────────────────────────
 
 function AuditLogTab({ token, sourceTable }: { token: string; sourceTable: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['raw-edit-log', sourceTable],
     queryFn: () => apiGet<{ log: object[] }>(
       `/api/data-analysis/raw-edit-log?source_table=${encodeURIComponent(sourceTable)}&limit=100`,
       token,
     ),
     enabled: !!sourceTable && !!token,
+    retry: false,
   });
 
   const rows = (data as { log: Array<Record<string, unknown>> } | undefined)?.log ?? [];
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</div>;
+  if (isError)   return <div className="py-8 text-center text-sm text-muted-foreground">Audit log unavailable — backend not connected.</div>;
   if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No edits recorded yet.</div>;
 
   return (
@@ -623,7 +626,7 @@ export default function DataAnalysis() {
   }));
 
   // Regression results
-  const { data: resultsData, refetch: refetchResults } = useQuery({
+  const { data: resultsData, refetch: refetchResults, isError: resultsError } = useQuery({
     queryKey: ['regression-results', sourceTable, plantId, entityId],
     queryFn: () => {
       const qs = new URLSearchParams();
@@ -635,6 +638,7 @@ export default function DataAnalysis() {
     },
     enabled: !!token && canView,
     staleTime: 15_000,
+    retry: false,
   });
   const regressionResults = (resultsData as { results: RegressionResult[] } | undefined)?.results ?? [];
 
