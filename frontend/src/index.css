@@ -1,153 +1,206 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=JetBrains+Mono:wght@500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* PWRI Monitoring & Alert System — Modern Aqua palette
-   Refined for clarity and softer surfaces.
-   Primary deep teal · Accent warm coral · Mint success · Amber warn · Crimson danger
+/*
+  PWRI Monitoring & Alert System — Design System
+  ────────────────────────────────────────────────
+  Primary   deep teal  #1a5f6b  (brand, sidebar, topbar)
+  Accent    mint teal  #2d9e85  (success, positive data)
+  Highlight coral      #d9612b  (CTAs, sidebar active)
+  Warn      amber      #e8933a
+  Danger    crimson    #c23a55
+  Info      sky        #2b84c8
 */
 
 @layer base {
   :root {
-    --background: 200 30% 98%;
-    --foreground: 200 45% 11%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 200 45% 11%;
-
-    --popover: 0 0% 100%;
+    /* ── Surfaces ──────────────────────────────────────────────── */
+    --background:         200 30% 98%;
+    --foreground:         200 45% 11%;
+    --card:               0 0% 100%;
+    --card-foreground:    200 45% 11%;
+    --popover:            0 0% 100%;
     --popover-foreground: 200 45% 11%;
 
-    /* Brand teal — slightly cooler, more modern */
-    --primary: 195 75% 24%;
+    /* ── Brand teal ─────────────────────────────────────────────── */
+    --primary:            195 75% 24%;
     --primary-foreground: 200 30% 98%;
-    --primary-soft: 195 55% 94%;
-    --primary-glow: 190 65% 42%;
+    --primary-soft:       195 55% 94%;
+    --primary-glow:       190 65% 42%;
 
-    --secondary: 200 25% 95%;
-    --secondary-foreground: 195 65% 18%;
+    /* ── Secondary / muted ─────────────────────────────────────── */
+    --secondary:           200 25% 95%;
+    --secondary-foreground:195 65% 18%;
+    --muted:               200 20% 96%;
+    --muted-foreground:    200 10% 42%;
 
-    --muted: 200 20% 96%;
-    --muted-foreground: 200 10% 42%;
+    /* ── Semantic: Mint (success / good readings) ───────────────── */
+    --accent:              174 58% 39%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         174 50% 92%;
 
-    /* Mint success — used for accent semantics */
-    --accent: 174 58% 39%;
-    --accent-foreground: 0 0% 100%;
-    --accent-soft: 174 50% 92%;
+    /* ── Semantic: Coral (CTA / active nav) ─────────────────────── */
+    --highlight:           20 83% 49%;
+    --highlight-foreground:0 0% 100%;
+    --highlight-soft:      20 80% 94%;
 
-    /* Coral highlight — for icons/CTAs */
-    --highlight: 20 83% 49%;
-    --highlight-foreground: 0 0% 100%;
-    --highlight-soft: 20 80% 94%;
+    /* ── Semantic: Amber (warnings) ─────────────────────────────── */
+    --warn:                27 87% 60%;
+    --warn-foreground:     27 90% 18%;
+    --warn-soft:           27 80% 94%;
 
-    --warn: 27 87% 60%;
-    --warn-foreground: 27 90% 18%;
-    --warn-soft: 27 80% 94%;
-
-    --danger: 351 64% 47%;
-    --danger-foreground: 0 0% 100%;
-    --danger-soft: 351 60% 95%;
-
-    --destructive: 351 64% 47%;
+    /* ── Semantic: Crimson (danger / errors) ────────────────────── */
+    --danger:              351 64% 47%;
+    --danger-foreground:   0 0% 100%;
+    --danger-soft:         351 60% 95%;
+    --destructive:         351 64% 47%;
     --destructive-foreground: 0 0% 100%;
 
-    --info: 200 80% 42%;
-    --info-soft: 200 60% 94%;
+    /* ── Semantic: Sky (informational) ─────────────────────────── */
+    --info:                200 80% 42%;
+    --info-soft:           200 60% 94%;
 
-    --border: 200 20% 90%;
-    --input: 200 20% 88%;
-    --ring: 195 75% 32%;
+    /* ── Chrome ─────────────────────────────────────────────────── */
+    --border:              200 20% 90%;
+    --input:               200 20% 88%;
+    --ring:                195 75% 32%;
+    --radius:              0.75rem;
 
-    --radius: 0.875rem;
+    /* ── Topbar ─────────────────────────────────────────────────── */
+    --topbar:              195 75% 24%;
+    --topbar-foreground:   200 30% 98%;
+    --topbar-muted:        200 25% 72%;
 
-    /* Topbar */
-    --topbar: 195 75% 24%;
-    --topbar-foreground: 200 30% 98%;
-    --topbar-muted: 200 20% 75%;
+    /* ── Sidebar (same hue as topbar for visual unity) ──────────── */
+    --sidebar-background:  195 75% 24%;
+    --sidebar-foreground:  200 30% 98%;
+    --sidebar-primary:     20 83% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:      195 60% 30%;
+    --sidebar-accent-foreground:  200 30% 98%;
+    --sidebar-border:      195 50% 30%;
+    --sidebar-ring:        20 83% 49%;
 
-    /* Charts — distinct hues for each metric */
-    --chart-1: 192 71% 28%;     /* teal — production */
-    --chart-2: 20 83% 49%;      /* coral — consumption */
-    --chart-3: 174 58% 39%;     /* mint — recovery / good */
-    --chart-4: 27 87% 60%;      /* amber — NRW warn */
-    --chart-5: 351 64% 47%;     /* crimson — alerts */
-    --chart-6: 280 50% 48%;     /* purple — power */
+    /* ── Charts ─────────────────────────────────────────────────── */
+    --chart-1: 192 71% 28%;   /* teal — production */
+    --chart-2: 20 83% 49%;    /* coral — consumption */
+    --chart-3: 174 58% 39%;   /* mint — recovery */
+    --chart-4: 27 87% 60%;    /* amber — NRW warn */
+    --chart-5: 351 64% 47%;   /* crimson — alerts */
+    --chart-6: 280 50% 48%;   /* purple — power */
 
-    /* Effects */
-    --shadow-card: 0 1px 2px 0 hsl(200 50% 11% / 0.04), 0 1px 3px 0 hsl(200 50% 11% / 0.06);
-    --shadow-elev: 0 4px 16px -4px hsl(200 50% 11% / 0.10), 0 2px 6px -1px hsl(200 50% 11% / 0.05);
+    /* ── Elevation shadows ──────────────────────────────────────── */
+    --shadow-card:  0 1px 2px 0 hsl(200 50% 11% / 0.04),
+                    0 1px 3px 0 hsl(200 50% 11% / 0.06);
+    --shadow-elev:  0 4px 16px -4px hsl(200 50% 11% / 0.10),
+                    0 2px 6px -1px hsl(200 50% 11% / 0.05);
     --shadow-modal: 0 24px 48px -12px hsl(200 60% 8% / 0.28);
 
-    --gradient-stat: linear-gradient(135deg, hsl(195 75% 24%) 0%, hsl(190 65% 38%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(174 58% 39%) 0%, hsl(170 55% 44%) 100%);
+    /* ── Brand gradients ────────────────────────────────────────── */
+    --gradient-stat:      linear-gradient(135deg, hsl(195 75% 24%) 0%, hsl(190 65% 38%) 100%);
+    --gradient-accent:    linear-gradient(135deg, hsl(174 58% 39%) 0%, hsl(170 55% 44%) 100%);
     --gradient-highlight: linear-gradient(135deg, hsl(20 83% 49%) 0%, hsl(28 85% 56%) 100%);
 
     --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-
-    --sidebar-background: 195 75% 24%;
-    --sidebar-foreground: 200 30% 98%;
-    --sidebar-primary: 20 83% 49%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 195 60% 30%;
-    --sidebar-accent-foreground: 200 30% 98%;
-    --sidebar-border: 195 50% 30%;
-    --sidebar-ring: 20 83% 49%;
   }
 
+  /* ── Dark mode overrides ─────────────────────────────────────── */
   .dark {
-    --background: 192 50% 8%;
-    --foreground: 38 40% 94%;
-    --card: 192 45% 12%;
-    --card-foreground: 38 40% 94%;
-    --popover: 192 45% 12%;
-    --popover-foreground: 38 40% 94%;
-    --primary: 188 60% 48%;
-    --primary-foreground: 192 60% 8%;
-    --primary-soft: 192 40% 18%;
-    --secondary: 192 30% 16%;
-    --secondary-foreground: 38 40% 94%;
-    --muted: 192 30% 16%;
-    --muted-foreground: 38 15% 65%;
-    --accent: 174 58% 48%;
-    --accent-foreground: 192 60% 8%;
-    --accent-soft: 174 40% 18%;
-    --highlight: 20 85% 56%;
-    --highlight-foreground: 0 0% 100%;
-    --highlight-soft: 20 50% 20%;
-    --warn: 27 87% 64%;
-    --warn-foreground: 27 90% 14%;
-    --warn-soft: 27 50% 22%;
-    --danger: 351 64% 56%;
-    --danger-foreground: 0 0% 100%;
-    --danger-soft: 351 50% 22%;
-    --destructive: 351 64% 56%;
+    --background:          192 50% 8%;
+    --foreground:          38 40% 94%;
+    --card:                192 45% 12%;
+    --card-foreground:     38 40% 94%;
+    --popover:             192 45% 12%;
+    --popover-foreground:  38 40% 94%;
+    --primary:             188 60% 48%;
+    --primary-foreground:  192 60% 8%;
+    --primary-soft:        192 40% 18%;
+    --secondary:           192 30% 16%;
+    --secondary-foreground:38 40% 94%;
+    --muted:               192 30% 16%;
+    --muted-foreground:    38 15% 65%;
+    --accent:              174 58% 48%;
+    --accent-foreground:   192 60% 8%;
+    --accent-soft:         174 40% 18%;
+    --highlight:           20 85% 56%;
+    --highlight-foreground:0 0% 100%;
+    --highlight-soft:      20 50% 20%;
+    --warn:                27 87% 64%;
+    --warn-foreground:     27 90% 14%;
+    --warn-soft:           27 50% 22%;
+    --danger:              351 64% 56%;
+    --danger-foreground:   0 0% 100%;
+    --danger-soft:         351 50% 22%;
+    --destructive:         351 64% 56%;
     --destructive-foreground: 0 0% 100%;
-    --info: 200 80% 60%;
-    --info-soft: 200 50% 22%;
-    --border: 192 30% 22%;
-    --input: 192 30% 22%;
-    --ring: 188 60% 48%;
+    --info:                200 80% 60%;
+    --info-soft:           200 50% 22%;
+    --border:              192 30% 22%;
+    --input:               192 30% 22%;
+    --ring:                188 60% 48%;
+    --topbar-muted:        200 20% 55%;
   }
 }
 
+/* ── Base resets & typography ──────────────────────────────────────────────── */
 @layer base {
-  * { @apply border-border; }
-  html { -webkit-font-smoothing: antialiased; }
+  *, *::before, *::after { @apply border-border; box-sizing: border-box; }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, sans-serif;
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'cv11', 'ss01', 'cv02';
   }
+
+  /* ── Focus ring — consistent brand color, skip for mouse ─────── */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Radix-powered elements that use the ring class */
+  [data-radix-focus-guard] { outline: none !important; }
+
+  /* ── Monospace numbers ──────────────────────────────────────────── */
   .font-mono-num {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
     font-weight: 500;
   }
+
+  /* ── Thin themed scrollbars (webkit + Firefox) ──────────────────── */
+  :root {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  ::-webkit-scrollbar          { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track    { background: transparent; }
+  ::-webkit-scrollbar-thumb    {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+  ::-webkit-scrollbar-corner   { background: transparent; }
+
+  /* ── Number inputs ─────────────────────────────────────────────── */
+  input[type="number"]  { text-align: right; }
+  input[readonly]       { text-align: left; }
 }
 
+/* ── Component utilities ───────────────────────────────────────────────────── */
 @layer components {
+
+  /* Pulse dot — live data indicator */
   .pulse-dot {
     @apply relative inline-flex h-2 w-2 rounded-full bg-danger;
   }
@@ -156,44 +209,49 @@
     @apply absolute inset-0 rounded-full bg-danger opacity-75;
     animation: pulse-ring 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
-  @keyframes pulse-ring {
-    0% { transform: scale(1); opacity: 0.6; }
-    80%, 100% { transform: scale(2.5); opacity: 0; }
-  }
-  .stat-card {
-    @apply rounded-xl border bg-card p-4 transition-all cursor-pointer hover:shadow-[var(--shadow-elev)];
-  }
-  /* Consistent field-group spacing inside cards */
-  .field-group {
-    @apply space-y-1;
-  }
-  /* Section divider label inside forms */
-  .section-divider {
-    @apply text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 pt-1;
-  }
-}
 
-/* Mobile-friendly tap targets — only on coarse pointer devices (phones/tablets) */
-@media (pointer: coarse) and (max-width: 768px) {
-  button, [role="button"], a.button, .btn {
-    min-height: 44px;
+  /* Stat card — clickable metric surface */
+  .stat-card {
+    @apply rounded-xl border bg-card p-4 transition-all duration-200
+           cursor-pointer hover:shadow-[var(--shadow-elev)] hover:-translate-y-px;
   }
-  button[data-size="sm"], .h-8 {
-    min-height: 40px;
+
+  /* Page entry — wrap page root divs for route transition */
+  .page-enter {
+    animation: page-fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  input, select, textarea {
-    min-height: 44px;
-    font-size: 16px !important; /* prevents iOS auto-zoom */
+
+  /* ── Typography helpers ────────────────────────────────────────── */
+
+  /* Section divider label inside forms / cards */
+  .section-label {
+    @apply text-[9.5px] font-bold uppercase tracking-[0.12em]
+           text-muted-foreground/50 px-0.5;
   }
-  /* Prevent datetime-local inputs from overflowing containers */
-  input[type="datetime-local"],
-  input[type="date"],
-  input[type="time"] {
-    width: 100%;
-    min-width: 0 !important;
-    box-sizing: border-box;
+
+  /* Legacy alias (used in existing pages) */
+  .section-divider   { @apply section-label; }
+  .form-section-label { @apply section-label; }
+
+  /* ── Card hover glow ───────────────────────────────────────────── */
+  .card-interactive {
+    @apply transition-all duration-200
+           hover:shadow-[var(--shadow-elev)] hover:-translate-y-px
+           active:translate-y-0 active:shadow-[var(--shadow-card)];
   }
-  /* Sticky save bar utility for forms */
+
+  /* ── Status dot ────────────────────────────────────────────────── */
+  .status-online  { @apply h-2 w-2 rounded-full bg-accent shrink-0; }
+  .status-offline { @apply h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0; }
+  .status-warn    { @apply h-2 w-2 rounded-full bg-warn shrink-0; }
+  .status-danger  { @apply h-2 w-2 rounded-full bg-danger shrink-0; }
+
+  /* ── Data table row ────────────────────────────────────────────── */
+  .table-row-hover {
+    @apply transition-colors duration-100 hover:bg-muted/40;
+  }
+
+  /* ── Sticky save bar (mobile forms) ───────────────────────────── */
   .sticky-save {
     position: sticky;
     bottom: 0;
@@ -202,28 +260,60 @@
     border-top: 1px solid hsl(var(--border));
     z-index: 10;
   }
+
+  /* ── Field group spacing ───────────────────────────────────────── */
+  .field-group { @apply space-y-1.5; }
 }
 
-/* Number inputs — right-align for readability in data-entry forms */
-input[type="number"] {
-  text-align: right;
+/* ── Keyframe definitions ─────────────────────────────────────────────────── */
+@layer base {
+  @keyframes pulse-ring {
+    0%       { transform: scale(1); opacity: 0.6; }
+    80%, 100%{ transform: scale(2.5); opacity: 0; }
+  }
+
+  @keyframes page-fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+
+  /* Skeleton loading shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--secondary)) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: calc(var(--radius) * 0.5);
+  }
 }
 
-/* Computed / read-only inputs keep center/left alignment */
-input[readonly] {
-  text-align: left;
+/* ── Mobile tap targets ───────────────────────────────────────────────────── */
+@media (pointer: coarse) and (max-width: 768px) {
+  button, [role="button"], a.button, .btn { min-height: 44px; }
+  button[data-size="sm"], .h-8 { min-height: 40px; }
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* prevents iOS auto-zoom */
+  }
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"] {
+    width: 100%;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
 }
 
-/* Form section divider label */
-.form-section-label {
-  font-size: 0.625rem; /* 10px */
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: hsl(var(--muted-foreground) / 0.7);
-  padding-inline: 2px;
-}
-
+/* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
   body { background: white; }
   .no-print { display: none !important; }
