@@ -1275,6 +1275,8 @@ export type Database = {
         Row: {
           created_at: string
           daily_consumption_kwh: number | null
+          daily_solar_kwh: number | null
+          daily_grid_kwh: number | null
           id: string
           meter_reading_kwh: number
           plant_id: string
@@ -1284,6 +1286,8 @@ export type Database = {
         Insert: {
           created_at?: string
           daily_consumption_kwh?: number | null
+          daily_solar_kwh?: number | null
+          daily_grid_kwh?: number | null
           id?: string
           meter_reading_kwh: number
           plant_id: string
@@ -1293,6 +1297,8 @@ export type Database = {
         Update: {
           created_at?: string
           daily_consumption_kwh?: number | null
+          daily_solar_kwh?: number | null
+          daily_grid_kwh?: number | null
           id?: string
           meter_reading_kwh?: number
           plant_id?: string
@@ -2110,6 +2116,211 @@ export type Database = {
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meters: {
+        Row: {
+          id: string
+          name: string
+          plant_id: string
+          status: string
+          sort_order: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          plant_id: string
+          status?: string
+          sort_order?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          plant_id?: string
+          status?: string
+          sort_order?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meters_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meter_readings: {
+        Row: {
+          id: string
+          meter_id: string
+          plant_id: string
+          current_reading: number
+          previous_reading: number | null
+          daily_volume: number | null
+          reading_datetime: string
+          recorded_by: string | null
+          norm_status: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          meter_id: string
+          plant_id: string
+          current_reading: number
+          previous_reading?: number | null
+          daily_volume?: number | null
+          reading_datetime?: string
+          recorded_by?: string | null
+          norm_status?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          meter_id?: string
+          plant_id?: string
+          current_reading?: number
+          previous_reading?: number | null
+          daily_volume?: number | null
+          reading_datetime?: string
+          recorded_by?: string | null
+          norm_status?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meter_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_edit_log: {
+        Row: {
+          id: string
+          source_table: string
+          source_id: string
+          column_name: string
+          old_value: number | null
+          new_value: number | null
+          edited_by: string | null
+          edited_role: string
+          edited_at: string
+          note: string | null
+        }
+        Insert: {
+          id?: string
+          source_table: string
+          source_id: string
+          column_name: string
+          old_value?: number | null
+          new_value?: number | null
+          edited_by?: string | null
+          edited_role: string
+          edited_at?: string
+          note?: string | null
+        }
+        Update: {
+          id?: string
+          source_table?: string
+          source_id?: string
+          column_name?: string
+          old_value?: number | null
+          new_value?: number | null
+          edited_by?: string | null
+          edited_role?: string
+          edited_at?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_edit_log_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      regression_results: {
+        Row: {
+          id: string
+          source_table: string
+          column_name: string
+          plant_id: string | null
+          date_from: string | null
+          date_to: string | null
+          created_at: string
+          created_by: string | null
+          created_role: string
+          row_count: number
+          r_squared: number | null
+          slope: number | null
+          intercept: number | null
+          corrections: Json
+          status: string
+        }
+        Insert: {
+          id?: string
+          source_table: string
+          column_name: string
+          plant_id?: string | null
+          date_from?: string | null
+          date_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_role?: string
+          row_count?: number
+          r_squared?: number | null
+          slope?: number | null
+          intercept?: number | null
+          corrections?: Json
+          status?: string
+        }
+        Update: {
+          id?: string
+          source_table?: string
+          column_name?: string
+          plant_id?: string | null
+          date_from?: string | null
+          date_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_role?: string
+          row_count?: number
+          r_squared?: number | null
+          slope?: number | null
+          intercept?: number | null
+          corrections?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regression_results_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "regression_results_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
