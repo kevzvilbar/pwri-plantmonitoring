@@ -217,7 +217,7 @@ export function BottomNav() {
                         to={r.to}
                         className={({ isActive }) => cn(
                           'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors',
-                          isActive ? 'bg-accent-soft text-accent font-medium' : 'hover:bg-muted',
+                          isActive ? 'bg-primary-soft text-primary font-medium shadow-[inset_2px_0_0_hsl(var(--primary))]' : 'hover:bg-muted text-foreground/75',
                         )}
                       >
                         <r.icon className="h-4 w-4" />

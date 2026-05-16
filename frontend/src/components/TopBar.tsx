@@ -1,4 +1,4 @@
-import { Bell, AlertTriangle, Info } from 'lucide-react';
+import { Bell, AlertTriangle, Info, Droplets } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,18 +29,21 @@ interface Notification {
 const EMPTY_NOTIFICATIONS: Notification[] = [];
 const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
 
-// ── Severity icon + colour helpers for PlantAlerts ───────────────────────────
 const sevIcon = (severity: string) =>
   severity === 'critical' ? AlertTriangle :
   severity === 'warning'  ? AlertTriangle : Info;
 
 const sevDotCls = (severity: string) =>
-  severity === 'critical' ? 'bg-red-500' :
-  severity === 'warning'  ? 'bg-amber-500' : 'bg-blue-500';
+  severity === 'critical' ? 'bg-danger' :
+  severity === 'warning'  ? 'bg-warn'   : 'bg-info';
 
 const sevTextCls = (severity: string) =>
-  severity === 'critical' ? 'text-red-600 dark:text-red-400' :
-  severity === 'warning'  ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400';
+  severity === 'critical' ? 'text-danger'  :
+  severity === 'warning'  ? 'text-warn-foreground' : 'text-info';
+
+const sevBgCls = (severity: string) =>
+  severity === 'critical' ? 'bg-danger-soft dark:bg-danger/10' :
+  severity === 'warning'  ? 'bg-warn-soft dark:bg-warn/10'     : '';
 
 export function TopBar() {
   const { user, profile } = useAuth();
@@ -80,16 +83,10 @@ export function TopBar() {
   const nextUnreadCount = useMemo(() => notifs.filter((n) => !n.read).length, [notifs]);
 
   useEffect(() => {
-    if (unreadCount !== nextUnreadCount) {
-      setUnreadCount(nextUnreadCount);
-    }
+    if (unreadCount !== nextUnreadCount) setUnreadCount(nextUnreadCount);
   }, [nextUnreadCount, setUnreadCount, unreadCount]);
 
-  // Clear plant alerts when user switches plant
-  useEffect(() => {
-    clearAlerts();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlantId]);
+  useEffect(() => { clearAlerts(); }, [selectedPlantId]); // eslint-disable-line
 
   const markAllRead = async () => {
     if (!user) return;
@@ -97,10 +94,8 @@ export function TopBar() {
     qc.invalidateQueries({ queryKey: ['notifications'] });
   };
 
-  // Total badge = DB unread notifs + in-memory plant alerts
   const totalBadge = unreadCount + plantAlerts.length;
 
-  // Sorted plant alerts: critical first, then by newest
   const sortedAlerts = useMemo(() =>
     [...plantAlerts].sort((a, b) => {
       const order: Record<string, number> = { critical: 0, warning: 1, info: 2 };
@@ -111,19 +106,37 @@ export function TopBar() {
   const hasCritical = plantAlerts.some((a) => a.severity === 'critical');
 
   return (
-    <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-topbar/0 shadow-sm">
-      <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 h-14">
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm sm:text-base font-semibold tracking-tight">PWRI</span>
-          <span className="text-[10px] sm:text-xs text-topbar-muted hidden sm:block">Monitoring & Alert System</span>
+    <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
+
+        {/* ── Brand mark ─────────────────────────────────────────── */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 shrink-0">
+            <Droplets className="h-4 w-4 text-white/90" />
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="text-[13px] font-semibold tracking-tight text-topbar-foreground">PWRI</span>
+            <span className="text-[9px] text-topbar-muted hidden sm:block tracking-wide uppercase">
+              Monitoring & Alert System
+            </span>
+          </div>
         </div>
 
+        {/* ── Plant selector ─────────────────────────────────────── */}
         <div className="flex-1 flex justify-center">
           <Select
             value={selectedPlantId ?? 'all'}
             onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
           >
-            <SelectTrigger className="w-[140px] sm:w-[200px] h-9 bg-topbar/40 border-topbar-muted/30 text-topbar-foreground">
+            <SelectTrigger
+              className={cn(
+                'w-[140px] sm:w-[210px] h-8',
+                'bg-white/10 border-white/15 text-topbar-foreground',
+                'hover:bg-white/15 focus:ring-white/30 focus:ring-1',
+                'text-[12.5px] font-medium placeholder:text-topbar-muted',
+                '[&>span]:text-topbar-foreground [&>svg]:text-topbar-muted',
+              )}
+            >
               <SelectValue placeholder="Select plant" />
             </SelectTrigger>
             <SelectContent>
@@ -135,16 +148,27 @@ export function TopBar() {
           </Select>
         </div>
 
+        {/* ── Notifications bell ─────────────────────────────────── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-topbar-foreground hover:bg-topbar/40 hover:text-topbar-foreground">
-              <Bell className="h-5 w-5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'relative h-8 w-8 text-topbar-foreground',
+                'hover:bg-white/10 hover:text-topbar-foreground',
+                'focus-visible:ring-white/30',
+              )}
+            >
+              <Bell className="h-[17px] w-[17px]" />
               {totalBadge > 0 && (
                 <span
                   className={cn(
-                    'absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1',
-                    'flex items-center justify-center rounded-full text-[10px] font-bold text-white leading-none',
-                    hasCritical ? 'bg-red-500' : unreadCount > 0 ? 'bg-danger' : 'bg-amber-500',
+                    'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-[3px]',
+                    'flex items-center justify-center rounded-full',
+                    'text-[9px] font-bold text-white leading-none',
+                    'ring-2 ring-topbar',
+                    hasCritical ? 'bg-danger' : unreadCount > 0 ? 'bg-danger' : 'bg-warn',
                   )}
                   aria-label={`${totalBadge} alerts`}
                 >
@@ -156,25 +180,25 @@ export function TopBar() {
 
           <DropdownMenuContent align="end" className="w-80 max-h-[75vh] overflow-y-auto">
 
-            {/* ── Plant Alerts section (in-memory, from modules) ─────────── */}
+            {/* Plant alerts */}
             {sortedAlerts.length > 0 && (
               <>
-                <DropdownMenuLabel className="flex items-center justify-between">
+                <DropdownMenuLabel className="flex items-center justify-between py-2">
                   <span className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-                    Plant Alerts
+                    <AlertTriangle className="h-3.5 w-3.5 text-danger" />
+                    <span className="text-[12px]">Plant Alerts</span>
                     <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1',
+                      'text-[9.5px] font-bold px-1.5 py-0.5 rounded-full',
                       hasCritical
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300',
+                        ? 'bg-danger-soft text-danger'
+                        : 'bg-warn-soft text-warn-foreground',
                     )}>
                       {sortedAlerts.length}
                     </span>
                   </span>
                   <button
                     onClick={clearAlerts}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                   >
                     Clear all
                   </button>
@@ -187,25 +211,24 @@ export function TopBar() {
                       key={alert.id}
                       className={cn(
                         'flex gap-2.5 px-3 py-2.5 border-b border-border/40 last:border-0',
-                        alert.severity === 'critical' && 'bg-red-50/60 dark:bg-red-950/20',
-                        alert.severity === 'warning'  && 'bg-amber-50/60 dark:bg-amber-950/20',
+                        sevBgCls(alert.severity),
                       )}
                     >
-                      <Icon className={cn('h-4 w-4 mt-0.5 shrink-0', sevTextCls(alert.severity))} />
+                      <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', sevTextCls(alert.severity))} />
                       <div className="flex-1 min-w-0 space-y-0.5">
                         <div className="flex items-start justify-between gap-1">
-                          <span className={cn('text-xs font-semibold leading-snug', sevTextCls(alert.severity))}>
+                          <span className={cn('text-[12px] font-semibold leading-snug', sevTextCls(alert.severity))}>
                             {alert.title}
                           </span>
                           <button
                             onClick={() => removeAlerts([alert.id])}
-                            className="text-muted-foreground/50 hover:text-muted-foreground text-[10px] shrink-0 ml-1"
+                            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-[10px] shrink-0 ml-1 mt-0.5"
                             aria-label="Dismiss"
                           >
                             ✕
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-snug">{alert.description}</p>
+                        <p className="text-[11px] text-muted-foreground leading-snug">{alert.description}</p>
                         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
                           <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', sevDotCls(alert.severity))} />
                           <span>{alert.source}</span>
@@ -216,40 +239,59 @@ export function TopBar() {
                     </div>
                   );
                 })}
-
                 <DropdownMenuSeparator />
               </>
             )}
 
-            {/* ── DB Notifications section ──────────────────────────────── */}
-            <DropdownMenuLabel className="flex items-center justify-between">
-              <span>Notifications</span>
+            {/* DB Notifications */}
+            <DropdownMenuLabel className="flex items-center justify-between py-2">
+              <span className="text-[12px]">Notifications</span>
               {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs text-accent hover:underline">Mark all read</button>
+                <button
+                  onClick={markAllRead}
+                  className="text-[11px] text-accent hover:text-accent/80 underline underline-offset-2 transition-colors"
+                >
+                  Mark all read
+                </button>
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+
             {notifs.length === 0 && (
-              <div className="px-3 py-6 text-center text-sm text-muted-foreground">No notifications</div>
+              <div className="px-3 py-6 text-center">
+                <Bell className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No notifications</p>
+              </div>
             )}
+
             {notifs.map((n) => (
               <DropdownMenuItem
                 key={n.id}
                 onClick={() => n.link_path && navigate(n.link_path)}
-                className="flex flex-col items-start gap-1 py-2"
+                className="flex flex-col items-start gap-1 py-2.5 cursor-pointer"
               >
                 <div className="flex items-center gap-2 w-full">
-                  {!n.read && <span className="h-2 w-2 rounded-full bg-danger flex-shrink-0" />}
-                  <span className="text-sm font-medium flex-1">{n.title}</span>
-                  <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</span>
+                  {!n.read && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
+                  )}
+                  <span className={cn('text-[12.5px] flex-1', n.read ? 'font-normal' : 'font-semibold')}>
+                    {n.title}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                  </span>
                 </div>
-                {n.message && <div className="text-xs text-muted-foreground line-clamp-2">{n.message}</div>}
+                {n.message && (
+                  <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2 pl-3.5">
+                    {n.message}
+                  </p>
+                )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Operator switcher replaces the old static avatar + sign-out dropdown */}
+        {/* ── User avatar / switcher ─────────────────────────────── */}
         <OperatorSwitcher />
       </div>
     </header>
