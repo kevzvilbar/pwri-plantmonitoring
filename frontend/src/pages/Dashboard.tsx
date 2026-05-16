@@ -189,6 +189,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && locatorIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -202,6 +203,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -220,6 +222,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && meterIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -323,6 +326,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -433,31 +437,6 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
   const grandTotal = colTotals.reduce((s, v) => s + v, 0);
 
-  // ── Tab-independent grand totals for the "Prod. vs Consum." comparison tab ──
-  // These always mirror the detail-tab grandTotal formula (colTotals sum), but are
-  // computed from the dedicated production and consumption pivots regardless of
-  // which tab is currently active. This guarantees that the TOTAL row in
-  // "Prod. vs Consum." shows exactly the same numbers as the "Production" and
-  // "Consumption" detail tabs — no independent recomputation in the IIFE.
-  const prodGrandTotal = useMemo(() => {
-    const activePivot = useRoProd ? roProdPivot : prodPivot;
-    return activePivot.entities.reduce(
-      (s: number, e: any) =>
-        s + activePivot.dates.reduce((ds: number, d: string) => ds + (activePivot.pivot.get(d)?.get(e.id) ?? 0), 0),
-      0,
-    );
-  }, [useRoProd, roProdPivot, prodPivot]);
-
-  const consGrandTotal = useMemo(
-    () =>
-      consPivot.entities.reduce(
-        (s: number, e: any) =>
-          s + consPivot.dates.reduce((ds: number, d: string) => ds + (consPivot.pivot.get(d)?.get(e.id) ?? 0), 0),
-        0,
-      ),
-    [consPivot],
-  );
-
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
@@ -547,10 +526,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
             });
-            // Use the tab-independent memos so the TOTAL row always matches
-            // the grand totals shown in the "Production" and "Consumption" detail tabs.
-            const totProd = prodGrandTotal;
-            const totCons = consGrandTotal;
+            const totProd = rows.reduce((s, r) => s + r.prod, 0);
+            const totCons = rows.reduce((s, r) => s + r.cons, 0);
             const totBal  = totProd - totCons;
             const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
             return (
