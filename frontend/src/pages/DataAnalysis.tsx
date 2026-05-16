@@ -14,17 +14,20 @@
  *
  * Workflow:
  *   1. Select source table + column + optional plant + date range
- *   2. Run Regression  → backend fits OLS, flags outliers, stores result
+ *   2. Run Regression  → OLS fit runs client-side, result stored in Supabase
  *   3. Review the regression table
  *   4. Apply (writes corrected values + reading_normalizations rows)
  *      or Retract if already applied
  *   5. All edits are logged; dashboard picks up ⚠️ / 🔄 / ⏪ symbols
+ *
+ * Backend: 100% Supabase — no Python backend required.
  */
 
-import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppStore } from '@/store/appStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +45,6 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import {
@@ -53,8 +55,6 @@ import {
 import { cn } from '@/lib/utils';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
 
 const SOURCE_TABLES: Record<string, string[]> = {
   well_readings:          ['daily_volume', 'current_reading', 'previous_reading', 'power_meter_reading'],
@@ -85,14 +85,11 @@ const TABLE_LABELS: Record<string, string> = {
   power_readings:         'Grid & Solar Readings',
 };
 
-
-/** For each source table: which Supabase lookup table + FK column on the readings row.
- *  selectCols MUST match the actual columns in the lookup table — requesting a non-existent
- *  column (e.g. train_number on wells) causes Supabase to return an error and null data. */
+/** For each source table: which Supabase lookup table + FK column on the readings row. */
 const ENTITY_CONFIG: Record<string, {
   lookupTable: string;
   fkColumn: string;
-  selectCols: string;       // exact columns that exist on lookupTable
+  selectCols: string;
   labelFn: (row: Record<string, unknown>) => string;
   filterLabel: string;
 }> = {
@@ -166,30 +163,116 @@ interface RegressionResult {
 interface Plant { id: string; name: string; }
 interface EntityOption { id: string; label: string; }
 
-// ── API helpers ────────────────────────────────────────────────────────────────
+// ── OLS Regression (client-side) ───────────────────────────────────────────────
 
-async function apiPost<T>(path: string, body: unknown, token: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
+const Z_THRESHOLD = 2.5;
+const MIN_ROWS = 5;
+
+interface OLSResult {
+  corrections: CorrectionRow[];
+  stats: { r_squared: number | null; slope: number | null; intercept: number | null };
 }
 
-async function apiGet<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+function runOLS(readings: RawReading[], column: string): OLSResult {
+  // Collect valid (index, value) pairs
+  const pairs: Array<{ idx: number; val: number }> = [];
+  readings.forEach((row, i) => {
+    const raw = row[column];
+    if (raw != null && !isNaN(Number(raw))) {
+      pairs.push({ idx: i, val: Number(raw) });
+    }
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+
+  if (pairs.length < MIN_ROWS) {
+    return {
+      corrections: readings.map(row => ({
+        reading_id:       String(row.id),
+        reading_datetime: String(row.reading_datetime),
+        original_value:   row[column] != null ? Number(row[column]) : null,
+        corrected_value:  null,
+        z_score:          null,
+        is_outlier:       false,
+        note:             'Insufficient data for regression',
+      })),
+      stats: { r_squared: null, slope: null, intercept: null },
+    };
   }
-  return res.json();
+
+  const n   = pairs.length;
+  const xs  = pairs.map(p => p.idx);
+  const ys  = pairs.map(p => p.val);
+
+  // Least-squares
+  const sumX  = xs.reduce((a, b) => a + b, 0);
+  const sumY  = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+  const sumX2 = xs.reduce((acc, x) => acc + x * x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  const slope     = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Predictions and residuals
+  const yPred    = xs.map(x => slope * x + intercept);
+  const residuals = ys.map((y, i) => y - yPred[i]);
+
+  // R²
+  const meanY  = sumY / n;
+  const ssTot  = ys.reduce((acc, y) => acc + (y - meanY) ** 2, 0);
+  const ssRes  = residuals.reduce((acc, r) => acc + r * r, 0);
+  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : null;
+
+  // Z-scores on residuals
+  const meanRes = residuals.reduce((a, b) => a + b, 0) / n;
+  const stdRes  = Math.sqrt(residuals.reduce((acc, r) => acc + (r - meanRes) ** 2, 0) / n) || 0;
+  const zScores = residuals.map(r => (stdRes > 0 ? r / stdRes : 0));
+
+  // Build lookup: row-index → {val, z, pred}
+  const pairMap = new Map<number, { val: number; z: number; pred: number }>();
+  pairs.forEach((p, i) => pairMap.set(p.idx, { val: p.val, z: zScores[i], pred: yPred[i] }));
+
+  const corrections: CorrectionRow[] = readings.map((row, i) => {
+    const rid = String(row.id);
+    const rdt = String(row.reading_datetime);
+    const entry = pairMap.get(i);
+
+    if (!entry) {
+      return {
+        reading_id:       rid,
+        reading_datetime: rdt,
+        original_value:   null,
+        corrected_value:  null,
+        z_score:          null,
+        is_outlier:       false,
+        note:             'Missing value — skipped',
+      };
+    }
+
+    const { val, z, pred } = entry;
+    const isOutlier = Math.abs(z) > Z_THRESHOLD;
+    const direction  = z > 0 ? 'high' : 'low';
+    const note = isOutlier
+      ? `out of range (z=${z.toFixed(2)}, ${direction}); regression-corrected`
+      : 'within normal range';
+
+    return {
+      reading_id:       rid,
+      reading_datetime: rdt,
+      original_value:   val,
+      corrected_value:  isOutlier ? parseFloat(pred.toFixed(4)) : null,
+      z_score:          parseFloat(z.toFixed(4)),
+      is_outlier:       isOutlier,
+      note,
+    };
+  });
+
+  return {
+    corrections,
+    stats: {
+      r_squared: rSquared != null ? parseFloat(rSquared.toFixed(6)) : null,
+      slope:     parseFloat(slope.toFixed(6)),
+      intercept: parseFloat(intercept.toFixed(6)),
+    },
+  };
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -212,8 +295,8 @@ function NormBadge({ status }: { status?: NormStatus }) {
 
 function StatusBadge({ status }: { status: RegressionResult['status'] }) {
   const cfg = {
-    pending:   { label: 'Pending',  cls: 'bg-amber-100 text-amber-800 border-amber-300' },
-    applied:   { label: 'Applied',  cls: 'bg-teal-100  text-teal-800  border-teal-300'  },
+    pending:   { label: 'Pending',   cls: 'bg-amber-100 text-amber-800 border-amber-300' },
+    applied:   { label: 'Applied',   cls: 'bg-teal-100  text-teal-800  border-teal-300'  },
     retracted: { label: 'Retracted', cls: 'bg-muted     text-muted-foreground border-border' },
   }[status];
   return (
@@ -230,14 +313,14 @@ interface EditRawDialogProps {
   onClose: () => void;
   reading: RawReading | null;
   column: string;
-  token: string;
   onSuccess: () => void;
 }
 
-function EditRawDialog({ open, onClose, reading, column, token, onSuccess }: EditRawDialogProps) {
+function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDialogProps) {
+  const { session, isAdmin, roles } = useAuth();
   const [newValue, setNewValue] = useState('');
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [note, setNote]         = useState('');
+  const [saving, setSaving]     = useState(false);
 
   const oldValue = reading ? (reading[column] as number | null) : null;
 
@@ -247,22 +330,32 @@ function EditRawDialog({ open, onClose, reading, column, token, onSuccess }: Edi
     if (isNaN(parsed)) { toast.error('Enter a valid number'); return; }
     setSaving(true);
     try {
-      await apiPost('/api/data-analysis/edit-raw', {
+      // 1. Update the source table value
+      const { error: updateErr } = await (supabase
+        .from(reading._sourceTable as never) as any)
+        .update({ [column]: parsed })
+        .eq('id', reading.id);
+      if (updateErr) throw new Error(updateErr.message);
+
+      // 2. Log to audit table
+      const userRole = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
+      await (supabase.from('raw_edit_log' as never) as any).insert({
         source_table: reading._sourceTable,
         source_id:    reading.id,
         column_name:  column,
         old_value:    oldValue,
         new_value:    parsed,
-        note:         note || undefined,
-      }, token);
+        edited_by:    session?.user?.id ?? null,
+        edited_role:  userRole,
+        edited_at:    new Date().toISOString(),
+        note:         note || '',
+      });
+
       toast.success('Value updated and logged');
       onSuccess();
       onClose();
     } catch (e: unknown) {
-      const msg = (e as Error).message ?? '';
-      toast.error(/failed to fetch|network|load failed/i.test(msg)
-        ? 'Backend not connected — cannot save edits.'
-        : msg);
+      toast.error((e as Error).message ?? 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -319,26 +412,65 @@ function EditRawDialog({ open, onClose, reading, column, token, onSuccess }: Edi
 // ── Regression Results Detail ──────────────────────────────────────────────────
 
 function RegressionDetail({
-  result, token, canEdit, onRefresh,
-}: { result: RegressionResult; token: string; canEdit: boolean; onRefresh: () => void }) {
-  const [applying, setApplying] = useState(false);
+  result, canEdit, onRefresh,
+}: { result: RegressionResult; canEdit: boolean; onRefresh: () => void }) {
+  const { session, isAdmin, roles } = useAuth();
+  const [applying, setApplying]     = useState(false);
   const [retracting, setRetracting] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded]     = useState(false);
 
   const outliers = result.corrections.filter(c => c.is_outlier);
+
+  const userRole = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
 
   const handleApply = async () => {
     setApplying(true);
     try {
-      const r = await apiPost<{ applied: number }>('/api/data-analysis/apply-regression',
-        { result_id: result.result_id }, token);
-      toast.success(`Applied ${r.applied} correction(s)`);
+      // Fetch full row (corrections may be truncated in list view)
+      const { data: row, error: fetchErr } = await (supabase
+        .from('regression_results' as never) as any)
+        .select('*')
+        .eq('id', result.result_id)
+        .maybeSingle();
+      if (fetchErr || !row) throw new Error(fetchErr?.message ?? 'Result not found');
+      if (row.status !== 'pending') throw new Error(`Result is '${row.status}' — can only apply pending results`);
+
+      const toApply: CorrectionRow[] = (row.corrections ?? []).filter(
+        (c: CorrectionRow) => c.is_outlier && c.corrected_value != null,
+      );
+
+      // Update norm_status on each source row
+      for (const c of toApply) {
+        await (supabase.from(row.source_table as never) as any)
+          .update({ norm_status: 'normalized' })
+          .eq('id', c.reading_id);
+      }
+
+      // Insert reading_normalizations rows
+      if (toApply.length > 0) {
+        const normRows = toApply.map((c: CorrectionRow) => ({
+          source_table:   row.source_table,
+          source_id:      c.reading_id,
+          action:         'normalize',
+          original_value: c.original_value,
+          adjusted_value: c.corrected_value,
+          note:           c.note || `Regression correction (result_id=${result.result_id})`,
+          performed_by:   session?.user?.id ?? null,
+          performed_role: userRole,
+          retractable:    true,
+        }));
+        await (supabase.from('reading_normalizations' as never) as any).insert(normRows);
+      }
+
+      // Mark result applied
+      await (supabase.from('regression_results' as never) as any)
+        .update({ status: 'applied' })
+        .eq('id', result.result_id);
+
+      toast.success(`Applied ${toApply.length} correction(s)`);
       onRefresh();
     } catch (e: unknown) {
-      const msg = (e as Error).message ?? '';
-      toast.error(/failed to fetch|network|load failed/i.test(msg)
-        ? 'Backend not connected — cannot apply corrections.'
-        : msg);
+      toast.error((e as Error).message ?? 'Apply failed');
     } finally {
       setApplying(false);
     }
@@ -347,15 +479,47 @@ function RegressionDetail({
   const handleRetract = async () => {
     setRetracting(true);
     try {
-      const r = await apiPost<{ retracted: number }>('/api/data-analysis/retract-regression',
-        { result_id: result.result_id }, token);
-      toast.success(`Retracted ${r.retracted} correction(s)`);
+      const { data: row, error: fetchErr } = await (supabase
+        .from('regression_results' as never) as any)
+        .select('*')
+        .eq('id', result.result_id)
+        .maybeSingle();
+      if (fetchErr || !row) throw new Error(fetchErr?.message ?? 'Result not found');
+      if (row.status !== 'applied') throw new Error(`Result is '${row.status}' — can only retract applied results`);
+
+      const toRetract: CorrectionRow[] = (row.corrections ?? []).filter(
+        (c: CorrectionRow) => c.is_outlier,
+      );
+
+      for (const c of toRetract) {
+        await (supabase.from(row.source_table as never) as any)
+          .update({ norm_status: 'retracted' })
+          .eq('id', c.reading_id);
+      }
+
+      if (toRetract.length > 0) {
+        const normRows = toRetract.map((c: CorrectionRow) => ({
+          source_table:   row.source_table,
+          source_id:      c.reading_id,
+          action:         'retract',
+          original_value: c.original_value,
+          adjusted_value: null,
+          note:           `Retracted regression correction (result_id=${result.result_id})`,
+          performed_by:   session?.user?.id ?? null,
+          performed_role: userRole,
+          retractable:    false,
+        }));
+        await (supabase.from('reading_normalizations' as never) as any).insert(normRows);
+      }
+
+      await (supabase.from('regression_results' as never) as any)
+        .update({ status: 'retracted' })
+        .eq('id', result.result_id);
+
+      toast.success(`Retracted ${toRetract.length} correction(s)`);
       onRefresh();
     } catch (e: unknown) {
-      const msg = (e as Error).message ?? '';
-      toast.error(/failed to fetch|network|load failed/i.test(msg)
-        ? 'Backend not connected — cannot retract corrections.'
-        : msg);
+      toast.error((e as Error).message ?? 'Retract failed');
     } finally {
       setRetracting(false);
     }
@@ -398,10 +562,10 @@ function RegressionDetail({
       {/* Stats row */}
       <div className="grid grid-cols-4 divide-x text-center px-0 py-2 border-b">
         {[
-          { label: 'Rows',      value: result.row_count },
-          { label: 'Outliers',  value: outliers.length },
-          { label: 'R²',        value: result.r_squared != null ? result.r_squared.toFixed(4) : '—' },
-          { label: 'Run at',    value: result.created_at ? format(parseISO(result.created_at), 'MMM d HH:mm') : '—' },
+          { label: 'Rows',     value: result.row_count },
+          { label: 'Outliers', value: outliers.length },
+          { label: 'R²',       value: result.r_squared != null ? result.r_squared.toFixed(4) : '—' },
+          { label: 'Run at',   value: result.created_at ? format(parseISO(result.created_at), 'MMM d HH:mm') : '—' },
         ].map(s => (
           <div key={s.label} className="px-3 py-1">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</div>
@@ -424,7 +588,7 @@ function RegressionDetail({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.corrections.filter(c => c.is_outlier).map(c => (
+              {outliers.map(c => (
                 <TableRow key={c.reading_id} className="text-xs">
                   <TableCell className="font-mono">{c.reading_datetime?.slice(0, 10)}</TableCell>
                   <TableCell className="text-right font-mono text-danger">
@@ -461,14 +625,12 @@ function RegressionDetail({
 // ── Raw Data Table ─────────────────────────────────────────────────────────────
 
 function RawDataTable({
-  sourceTable, column, plantId, entityId, dateFrom, dateTo, canEdit, token, onEdit,
+  sourceTable, column, plantId, entityId, dateFrom, dateTo, canEdit, onEdit,
 }: {
   sourceTable: string; column: string; plantId: string; entityId: string; dateFrom: string; dateTo: string;
-  canEdit: boolean; token: string;
+  canEdit: boolean;
   onEdit: (reading: RawReading) => void;
 }) {
-  // Fetch ALL entity names (no plant/status filter) for display in table rows.
-  // Uses table-specific selectCols — querying a non-existent column returns null data.
   const entityCfgRT = ENTITY_CONFIG[sourceTable];
   const { data: entityRows } = useQuery({
     queryKey: ['entity-name-lookup', sourceTable],
@@ -518,19 +680,16 @@ function RawDataTable({
   });
 
   // Delta: group rows by entity FK so we never diff across different trains/wells/etc.
-  // Data arrives DESC by reading_datetime; within each group the same order holds.
   const deltaMap = new Map<string, number | null>();
   if (data) {
     const entityFk = ENTITY_CONFIG[sourceTable]?.fkColumn;
     if (entityFk) {
-      // Bucket rows by their entity ID, preserving DESC order
       const groups = new Map<string, RawReading[]>();
       data.forEach(row => {
         const key = String(row[entityFk] ?? '__none__');
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push(row);
       });
-      // Compute delta within each bucket
       groups.forEach(rows => {
         rows.forEach((row, i) => {
           const curr = row[column] as number | null;
@@ -539,7 +698,6 @@ function RawDataTable({
         });
       });
     } else {
-      // Plant-level table (e.g. power_readings) — no entity grouping needed
       data.forEach((row, i) => {
         const curr = row[column] as number | null;
         const prev = i + 1 < data.length ? (data[i + 1][column] as number | null) : null;
@@ -626,25 +784,30 @@ function RawDataTable({
   );
 }
 
-// ── Audit log tab ──────────────────────────────────────────────────────────────
+// ── Audit Log Tab — reads raw_edit_log via Supabase ────────────────────────────
 
-function AuditLogTab({ token, sourceTable }: { token: string; sourceTable: string }) {
+function AuditLogTab({ sourceTable }: { sourceTable: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['raw-edit-log', sourceTable],
-    queryFn: () => apiGet<{ log: object[] }>(
-      `/api/data-analysis/raw-edit-log?source_table=${encodeURIComponent(sourceTable)}&limit=100`,
-      token,
-    ),
-    enabled: !!sourceTable && !!token,
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from('raw_edit_log' as never) as any)
+        .select('*')
+        .eq('source_table', sourceTable)
+        .order('edited_at', { ascending: false })
+        .limit(100);
+      if (error) throw new Error(error.message);
+      return { log: (data ?? []) as Array<Record<string, unknown>> };
+    },
+    enabled: !!sourceTable,
     retry: false,
     throwOnError: false,
-    meta: { silent: true },
   });
 
-  const rows = (data as { log: Array<Record<string, unknown>> } | undefined)?.log ?? [];
+  const rows = data?.log ?? [];
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</div>;
-  if (isError)   return <div className="py-8 text-center text-sm text-muted-foreground">Audit log unavailable — backend not connected.</div>;
+  if (isError)   return <div className="py-8 text-center text-sm text-muted-foreground">Audit log unavailable.</div>;
   if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No edits recorded yet.</div>;
 
   return (
@@ -677,20 +840,100 @@ function AuditLogTab({ token, sourceTable }: { token: string; sourceTable: strin
   );
 }
 
+// ── Normalization Audit Tab ────────────────────────────────────────────────────
+
+function NormalizationAuditTab({ sourceTable }: { sourceTable: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['norm-audit', sourceTable],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reading_normalizations')
+        .select('*')
+        .eq('source_table', sourceTable)
+        .order('performed_at', { ascending: false })
+        .limit(100);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: !!sourceTable,
+  });
+
+  const rows = data ?? [];
+
+  if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>;
+  if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No normalization records for this table.</div>;
+
+  const actionCfg = {
+    tag:       { emoji: '⚠️', cls: 'text-amber-700  bg-amber-50  border-amber-300  dark:bg-amber-950/30 dark:text-amber-300' },
+    normalize: { emoji: '🔄', cls: 'text-teal-700   bg-teal-50   border-teal-300   dark:bg-teal-950/30  dark:text-teal-300'  },
+    retract:   { emoji: '⏪', cls: 'text-muted-foreground bg-muted border-border' },
+  } as const;
+
+  return (
+    <div className="overflow-auto max-h-[400px] rounded border">
+      <Table>
+        <TableHeader className="sticky top-0 bg-background z-10">
+          <TableRow className="text-[11px]">
+            <TableHead>Date</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead className="text-right">Original</TableHead>
+            <TableHead className="text-right">Adjusted</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Note</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r: Record<string, unknown>) => {
+            const cfg = actionCfg[r.action as keyof typeof actionCfg] ?? actionCfg.retract;
+            return (
+              <TableRow key={r.id as string} className="text-xs">
+                <TableCell className="font-mono">{String(r.performed_at ?? '').slice(0, 16)}</TableCell>
+                <TableCell>
+                  <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border', cfg.cls)}>
+                    {cfg.emoji} {r.action as string}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right font-mono text-danger">
+                  {r.original_value != null ? Number(r.original_value).toFixed(3) : '—'}
+                </TableCell>
+                <TableCell className="text-right font-mono text-teal-600">
+                  {r.adjusted_value != null ? Number(r.adjusted_value).toFixed(3) : '—'}
+                </TableCell>
+                <TableCell><Badge variant="outline" className="text-[10px]">{String(r.performed_role ?? '')}</Badge></TableCell>
+                <TableCell className="text-muted-foreground max-w-[200px] truncate">{String(r.note ?? '')}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DataAnalysis() {
-  const { isAdmin, isDataAnalyst, isManager, session } = useAuth();
+  const { isAdmin, isDataAnalyst, isManager, session, roles } = useAuth();
   const qc = useQueryClient();
-  const token = session?.access_token ?? '';
 
-  // Filter state
+  // ── Universal plant selection — initialize from global store ─────────────
+  const selectedPlantId    = useAppStore(s => s.selectedPlantId);
+  const setSelectedPlantId = useAppStore(s => s.setSelectedPlantId);
+
+  // Filter state — plant defaults to the app-wide plant selection
   const [sourceTable, setSourceTable] = useState('well_readings');
   const [column, setColumn]           = useState('daily_volume');
-  const [plantId, setPlantId]         = useState('all');
-  const [entityId, setEntityId]         = useState('all');
+  // Convert null (all plants) to 'all' for Select component
+  const [plantId, setPlantId]         = useState<string>(selectedPlantId ?? 'all');
+  const [entityId, setEntityId]       = useState('all');
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
+
+  // Keep local plantId in sync whenever the global store changes
+  useEffect(() => {
+    setPlantId(selectedPlantId ?? 'all');
+    setEntityId('all');
+  }, [selectedPlantId]);
 
   // Edit dialog
   const [editReading, setEditReading] = useState<RawReading | null>(null);
@@ -711,23 +954,19 @@ export default function DataAnalysis() {
   });
   const plants = plantsData ?? [];
 
-  // Entity drill-down options — each table uses only its own valid columns (selectCols).
-  // Requesting a column that doesn't exist causes Supabase to return an error + null data,
-  // which is why all tables previously showed "No *** found".
+  // Entity drill-down options
   const entityCfgMain = ENTITY_CONFIG[sourceTable];
   const { data: entityOptionsData, isFetching: entityFetching } = useQuery({
     queryKey: ['entity-options-main', sourceTable, plantId],
     queryFn: async () => {
       if (!entityCfgMain) return [];
       let q = (supabase.from(entityCfgMain.lookupTable as never) as any)
-        .select(entityCfgMain.selectCols)      // use table-specific columns only
+        .select(entityCfgMain.selectCols)
         .order('name');
       if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
-      // Only show Active entities in the drill-down (matches Operations page behaviour)
       q = q.eq('status', 'Active');
       const { data, error } = await q;
       if (error) {
-        // status column may not exist on product_meters — retry without status filter
         let fbq = (supabase.from(entityCfgMain.lookupTable as never) as any)
           .select(entityCfgMain.selectCols)
           .order('name');
@@ -741,63 +980,122 @@ export default function DataAnalysis() {
     staleTime: 30_000,
   });
   const entityOptions: EntityOption[] = (entityOptionsData ?? []).map(r => ({
-    id: String(r.id),
+    id:    String(r.id),
     label: entityCfgMain ? entityCfgMain.labelFn(r) : String(r.id),
   }));
 
-  // Regression results
+  // ── Regression results — fetched directly from Supabase ──────────────────
   const { data: resultsData, refetch: refetchResults, isError: resultsError } = useQuery({
     queryKey: ['regression-results', sourceTable, plantId, entityId],
-    queryFn: () => {
-      const qs = new URLSearchParams();
-      if (sourceTable) qs.set('source_table', sourceTable);
-      if (plantId && plantId !== 'all') qs.set('plant_id', plantId);
-      if (entityId && entityId !== 'all' && entityCfgMain) qs.set(entityCfgMain.fkColumn, entityId);
-      qs.set('limit', '20');
-      return apiGet<{ results: RegressionResult[] }>(`/api/data-analysis/results?${qs}`, token);
+    queryFn: async () => {
+      let q = (supabase.from('regression_results' as never) as any)
+        .select('*')
+        .eq('source_table', sourceTable)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      // Map DB `id` → `result_id`; compute outlier_count from corrections JSONB
+      const results: RegressionResult[] = (data ?? []).map((r: Record<string, unknown>) => {
+        const corrections = (r.corrections ?? []) as CorrectionRow[];
+        return {
+          result_id:     String(r.id),
+          source_table:  String(r.source_table),
+          column_name:   String(r.column_name),
+          plant_id:      r.plant_id ? String(r.plant_id) : null,
+          row_count:     Number(r.row_count ?? 0),
+          outlier_count: corrections.filter(c => c.is_outlier).length,
+          r_squared:     r.r_squared != null ? Number(r.r_squared) : null,
+          slope:         r.slope     != null ? Number(r.slope)     : null,
+          intercept:     r.intercept != null ? Number(r.intercept) : null,
+          corrections,
+          status:        (r.status as RegressionResult['status']) ?? 'pending',
+          created_at:    String(r.created_at ?? ''),
+        };
+      });
+      return { results };
     },
-    enabled: !!token && canView,
+    enabled: canView,
     staleTime: 15_000,
     retry: false,
     throwOnError: false,
-    meta: { silent: true },
   });
-  const regressionResults = (resultsData as { results: RegressionResult[] } | undefined)?.results ?? [];
+  const regressionResults = resultsData?.results ?? [];
 
-  // When source table changes, reset column to first valid one
+  // When source table changes, reset column and entity
   const handleTableChange = (t: string) => {
     setSourceTable(t);
     setColumn(SOURCE_TABLES[t]?.[0] ?? '');
     setEntityId('all');
   };
 
+  // When plant changes here, also update the global store so other pages stay in sync
   const handlePlantChange = (p: string) => {
     setPlantId(p);
     setEntityId('all');
+    setSelectedPlantId(p === 'all' ? null : p);
   };
 
+  // ── Run Regression — OLS computed client-side, result saved to Supabase ──
   const handleRunRegression = async () => {
     if (!sourceTable || !column) { toast.error('Select a table and column first'); return; }
     setRunning(true);
     try {
-      await apiPost('/api/data-analysis/run-regression', {
+      const entityCfg = ENTITY_CONFIG[sourceTable];
+      const hasNorm   = !TABLES_WITHOUT_NORM_STATUS.has(sourceTable);
+      const selectCols = [
+        'id', 'reading_datetime', column,
+        hasNorm ? 'norm_status' : null,
+        'plant_id',
+        entityCfg ? entityCfg.fkColumn : null,
+      ].filter(Boolean).join(',');
+
+      let q = supabase
+        .from(sourceTable as 'well_readings')
+        .select(selectCols)
+        .order('reading_datetime', { ascending: true })
+        .limit(2000);
+      if (plantId && plantId !== 'all') q = q.eq('plant_id', plantId);
+      if (entityCfg && entityId && entityId !== 'all') q = q.eq(entityCfg.fkColumn as never, entityId);
+      if (dateFrom) q = q.gte('reading_datetime', dateFrom);
+      if (dateTo)   q = q.lte('reading_datetime', dateTo + 'T23:59:59');
+
+      const { data: readings, error: readErr } = await q;
+      if (readErr) throw new Error(readErr.message);
+
+      const { corrections, stats } = runOLS((readings || []) as RawReading[], column);
+      const resultId    = crypto.randomUUID();
+      const outlierCount = corrections.filter(c => c.is_outlier).length;
+      const userRole    = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
+
+      const doc = {
+        id:           resultId,
         source_table: sourceTable,
         column_name:  column,
-        plant_id:     (plantId && plantId !== 'all') ? plantId : undefined,
-        ...(entityId && entityId !== 'all' && entityCfgMain ? { [entityCfgMain.fkColumn]: entityId } : {}),
-        date_from:    dateFrom || undefined,
-        date_to:      dateTo   || undefined,
-      }, token);
-      toast.success('Regression complete — results updated');
+        plant_id:     (plantId && plantId !== 'all') ? plantId : null,
+        date_from:    dateFrom || null,
+        date_to:      dateTo   || null,
+        created_by:   session?.user?.id ?? null,
+        created_role: userRole,
+        row_count:    (readings || []).length,
+        r_squared:    stats.r_squared,
+        slope:        stats.slope,
+        intercept:    stats.intercept,
+        corrections,
+        status:       'pending',
+      };
+
+      const { error: insertErr } = await (supabase
+        .from('regression_results' as never) as any)
+        .insert(doc);
+      if (insertErr) throw new Error(insertErr.message);
+
+      toast.success(`Regression complete — ${outlierCount} outlier(s) detected`);
       refetchResults();
       qc.invalidateQueries({ queryKey: ['raw-readings'] });
     } catch (e: unknown) {
-      const msg = (e as Error).message ?? '';
-      if (/failed to fetch|network|load failed/i.test(msg)) {
-        toast.error('Backend not connected — regression requires the Python backend to be running.');
-      } else {
-        toast.error(msg);
-      }
+      toast.error((e as Error).message ?? 'Regression failed');
     } finally {
       setRunning(false);
     }
@@ -871,7 +1169,7 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Plant */}
+            {/* Plant — mirrors the universal plant selection from the top bar */}
             <div className="space-y-1">
               <Label className="text-xs">Plant</Label>
               <Select value={plantId} onValueChange={handlePlantChange}>
@@ -887,7 +1185,7 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Entity drill-down: cascades from Source Table → Plant → Entity */}
+            {/* Entity drill-down */}
             {entityCfgMain && (
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
@@ -987,7 +1285,6 @@ export default function DataAnalysis() {
               dateFrom={dateFrom}
               dateTo={dateTo}
               canEdit={canEdit}
-              token={token}
               onEdit={r => setEditReading(r)}
             />
           </CardContent>
@@ -1010,7 +1307,7 @@ export default function DataAnalysis() {
             {resultsError && (
               <div className="flex items-center gap-2 rounded bg-muted/60 border px-3 py-2 text-[11px] text-muted-foreground">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                Regression results unavailable — backend not connected.
+                Could not load regression results.
               </div>
             )}
             {!resultsError && regressionResults.length === 0 && (
@@ -1024,7 +1321,6 @@ export default function DataAnalysis() {
               <RegressionDetail
                 key={r.result_id}
                 result={r}
-                token={token}
                 canEdit={canEdit}
                 onRefresh={() => { refetchResults(); qc.invalidateQueries({ queryKey: ['raw-readings'] }); }}
               />
@@ -1048,10 +1344,10 @@ export default function DataAnalysis() {
           </CardHeader>
           <CardContent className="pt-3 px-3 pb-4">
             <TabsContent value="audit" className="mt-0">
-              <AuditLogTab token={token} sourceTable={sourceTable} />
+              <AuditLogTab sourceTable={sourceTable} />
             </TabsContent>
             <TabsContent value="normalization" className="mt-0">
-              <NormalizationAuditTab token={token} sourceTable={sourceTable} />
+              <NormalizationAuditTab sourceTable={sourceTable} />
             </TabsContent>
           </CardContent>
         </Tabs>
@@ -1063,79 +1359,8 @@ export default function DataAnalysis() {
         onClose={() => setEditReading(null)}
         reading={editReading}
         column={column}
-        token={token}
         onSuccess={() => qc.invalidateQueries({ queryKey: ['raw-readings'] })}
       />
-    </div>
-  );
-}
-
-// ── Normalization Audit Tab ────────────────────────────────────────────────────
-
-function NormalizationAuditTab({ token, sourceTable }: { token: string; sourceTable: string }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['norm-audit', sourceTable],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('reading_normalizations')
-        .select('*')
-        .eq('source_table', sourceTable)
-        .order('performed_at', { ascending: false })
-        .limit(100);
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-    enabled: !!sourceTable,
-  });
-
-  const rows = data ?? [];
-
-  if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>;
-  if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No normalization records for this table.</div>;
-
-  const actionCfg = {
-    tag:       { emoji: '⚠️', cls: 'text-amber-700  bg-amber-50  border-amber-300  dark:bg-amber-950/30 dark:text-amber-300' },
-    normalize: { emoji: '🔄', cls: 'text-teal-700   bg-teal-50   border-teal-300   dark:bg-teal-950/30  dark:text-teal-300'  },
-    retract:   { emoji: '⏪', cls: 'text-muted-foreground bg-muted border-border' },
-  } as const;
-
-  return (
-    <div className="overflow-auto max-h-[400px] rounded border">
-      <Table>
-        <TableHeader className="sticky top-0 bg-background z-10">
-          <TableRow className="text-[11px]">
-            <TableHead>Date</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead className="text-right">Original</TableHead>
-            <TableHead className="text-right">Adjusted</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Note</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r: Record<string, unknown>) => {
-            const cfg = actionCfg[r.action as keyof typeof actionCfg] ?? actionCfg.retract;
-            return (
-              <TableRow key={r.id as string} className="text-xs">
-                <TableCell className="font-mono">{String(r.performed_at ?? '').slice(0, 16)}</TableCell>
-                <TableCell>
-                  <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border', cfg.cls)}>
-                    {cfg.emoji} {r.action as string}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right font-mono text-danger">
-                  {r.original_value != null ? Number(r.original_value).toFixed(3) : '—'}
-                </TableCell>
-                <TableCell className="text-right font-mono text-teal-600">
-                  {r.adjusted_value != null ? Number(r.adjusted_value).toFixed(3) : '—'}
-                </TableCell>
-                <TableCell><Badge variant="outline" className="text-[10px]">{String(r.performed_role ?? '')}</Badge></TableCell>
-                <TableCell className="text-muted-foreground max-w-[200px] truncate">{String(r.note ?? '')}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
     </div>
   );
 }
