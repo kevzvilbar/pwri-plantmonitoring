@@ -159,7 +159,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
 
   // ── Locators (meta) ────────────────────────────────────────────────────────
-  const { data: locators } = useQuery({
+  const { data: locators, isLoading: locatorsLoading } = useQuery({
     queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -190,7 +190,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   });
 
   // ── Product meters (meta) ──────────────────────────────────────────────────
-  const { data: productMeters } = useQuery({
+  const { data: productMeters, isLoading: metersLoading } = useQuery({
     queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -284,7 +284,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // instead of re-deriving deltas from permeate_meter (cumulative), which caused
   // the "millions delta" spike seen when the first row in the date range had no
   // prior reading and its cumulative value was treated as a single-day delta.
-  const { data: modalMeterConfigs } = useQuery({
+  const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
     queryKey: ['dsm-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
@@ -304,7 +304,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   );
 
   // RO train meta — for column headers (train_number, plant_id)
-  const { data: roTrainsMeta } = useQuery({
+  const { data: roTrainsMeta, isLoading: trainsLoading } = useQuery({
     queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
@@ -375,9 +375,19 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
   const useRoProd = permeateIsProductionPlantIds.length > 0;
 
-  const isLoading = tab === 'consumption' ? consLoading
-    : tab === 'production' ? (useRoProd ? roLoading : prodLoading)
-    : (consLoading || (useRoProd ? roLoading : prodLoading));
+  // isLoading must cover ALL queries in the chain, including meta-queries
+  // (locators, productMeters, modalMeterConfigs, roTrainsMeta) whose loading
+  // states were previously untracked. Without this, the "Prod. vs Consum." tab
+  // could render while roTrainsMeta was still pending, causing roProdPivot.entities
+  // to be [] and every production total to compute as 0 — mismatching the
+  // "Production" tab which showed correct values once all data had settled.
+  const prodDataLoading = configLoading
+    || (useRoProd ? (roLoading || trainsLoading) : (metersLoading || prodLoading));
+  const isLoading = tab === 'consumption'
+    ? (locatorsLoading || consLoading)
+    : tab === 'production'
+      ? prodDataLoading
+      : (locatorsLoading || consLoading || prodDataLoading);
 
   // Active pivot data for the detail tabs
   const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
