@@ -169,6 +169,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
@@ -187,6 +189,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && locatorIds.length > 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   // ── Product meters (meta) ──────────────────────────────────────────────────
@@ -199,6 +202,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
@@ -216,6 +220,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && meterIds.length > 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
@@ -294,6 +299,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   const permeateIsProductionPlantIds = useMemo(
@@ -316,6 +323,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
@@ -335,6 +343,8 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: open ? 30_000 : false,
   });
 
   // RO production pivot — simple SUM of permeate_meter_delta per permeate_production_date per train.
@@ -373,15 +383,24 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
 
   // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
-  const useRoProd = permeateIsProductionPlantIds.length > 0;
+  //
+  // BUG FIX — race condition:
+  // modalMeterConfigs can be `undefined` on the very first render after the modal
+  // opens, even though `configLoading` is already `false` (TanStack Query sets
+  // isPending=true only after the query key resolves to "loading" state, but
+  // there is a 1-tick gap where the query hasn't been scheduled yet).
+  // If we evaluate `useRoProd` while configs are undefined we get an empty
+  // permeateIsProductionPlantIds array → useRoProd = false → the "Prod. vs
+  // Consum." tab renders using prodPivot (product meters) while the
+  // "Production" detail tab correctly uses roProdPivot (RO trains) once data
+  // arrives.  This caused the two tabs to show different production numbers.
+  //
+  // Fix: treat configs as "not yet ready" until the array is defined, and
+  // block rendering (isLoading=true) until then.
+  const configsReady = !configLoading && modalMeterConfigs !== undefined;
+  const useRoProd    = configsReady && permeateIsProductionPlantIds.length > 0;
 
-  // isLoading must cover ALL queries in the chain, including meta-queries
-  // (locators, productMeters, modalMeterConfigs, roTrainsMeta) whose loading
-  // states were previously untracked. Without this, the "Prod. vs Consum." tab
-  // could render while roTrainsMeta was still pending, causing roProdPivot.entities
-  // to be [] and every production total to compute as 0 — mismatching the
-  // "Production" tab which showed correct values once all data had settled.
-  const prodDataLoading = configLoading
+  const prodDataLoading = !configsReady
     || (useRoProd ? (roLoading || trainsLoading) : (metersLoading || prodLoading));
   const isLoading = tab === 'consumption'
     ? (locatorsLoading || consLoading)
@@ -481,17 +500,24 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // Use the canonical date lists from each pivot (already cover the full selected range).
-            // Taking the union ensures no date is missing if the two pivots differ by one edge day.
+            // Use the production pivot as the single canonical date list (fromStr→toStr).
+            // Avoid a union that can gain phantom dates if the two pivot memos recompute
+            // at slightly different times or have readings outside the selected range.
             const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
-            const allDateSet = new Set([...activeProdPivot.dates, ...consPivot.dates]);
-            const allDates = [...allDateSet].sort();
-            // pivotDayTotal sums ALL entity values stored under a date key — identical to what
-            // the Production / Consumption detail tabs show as row totals, so the numbers are
-            // guaranteed to match regardless of entity-key ordering or train_id aliasing.
+            // Canonical date list: production pivot dates (same fromStr→toStr as cons pivot).
+            const allDates = activeProdPivot.dates;
+
+            // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
+            // Do NOT use pivotDayTotal (which sums raw map values including any orphan
+            // train_ids not present in entities). Instead mirror the rowTotals formula:
+            //   entities.reduce((s, e) => s + (pivot.get(date)?.get(e.id) ?? 0), 0)
+            // This guarantees "Prod. vs Consum." totals == "Production" / "Consumption"
+            // row totals for every date.
+            const prodEntities = activeProdPivot.entities;
+            const consEntities = consPivot.entities;
             const rows = [...allDates].reverse().map((date) => {
-              const prod = pivotDayTotal(activeProdPivot.pivot, date);
-              const cons = pivotDayTotal(consPivot.pivot, date);
+              const prod = prodEntities.reduce((s: number, e: any) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              const cons = consEntities.reduce((s: number, e: any) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
@@ -669,7 +695,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </span>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${new Set([...(useRoProd ? roProdPivot : prodPivot).dates, ...consPivot.dates]).size} days in range`}
+            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.length} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
