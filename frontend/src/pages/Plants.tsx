@@ -1025,7 +1025,16 @@ function ProductMetersCard({ plant }: { plant: any }) {
       user_id: user?.id ?? null, timestamp: new Date().toISOString(),
     });
     toast.success(`"${deleteTarget.name}" deleted`);
-    setDeleteTarget(null); setDeleteReason(''); invalidate();
+    setDeleteTarget(null); setDeleteReason('');
+    invalidate();
+    // Deleting a meter must also clear it from the Dashboard stat cards,
+    // TrendChart production series, and the DataSummaryModal Production tab.
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+    qc.invalidateQueries({ queryKey: ['dsm-product-meters'] });
+    qc.invalidateQueries();
   };
 
   // ── Toggle Active / Inactive ──────────────────────────────────────────────
@@ -1521,6 +1530,17 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
     qc.setQueryData(['plant-meter-config', plantId], next);
     qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
+    // Propagate config change to Dashboard, TrendChart, and DataSummaryModal immediately.
+    // permeate_is_production toggling changes which source powers the Production stat card
+    // and the DataSummaryModal Production tab — all three must re-read the updated config.
+    qc.invalidateQueries({ queryKey: ['dash-plant-meter-configs'] });
+    qc.invalidateQueries({ queryKey: ['plant-meter-config-permeate'] });
+    qc.invalidateQueries({ queryKey: ['dsm-meter-configs'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+    qc.invalidateQueries();
     return savedToDb;
   };
 
@@ -5492,10 +5512,15 @@ function TrainOperatorLogModal({
     );
     qc.invalidateQueries({ queryKey });
     // Invalidate Dashboard / TrendChart so the corrected production totals appear immediately
+    qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
     qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
     qc.invalidateQueries({ queryKey: ['trend-product'] });
+    // DataSummaryModal Production tab reads dsm-ro-readings directly
+    qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+    qc.invalidateQueries();
   };
 
   const totalPages = Math.ceil(logs.length / PAGE_SIZE);

@@ -34,7 +34,7 @@ import {
 
 // ─── DataSummaryModal ─────────────────────────────────────────────────────────
 // Full-screen pivot-table popup. Rows = dates, columns = individual
-// locators (consumption) or RO trains (production). Non-retractable —
+// locators (consumption) or product meters (production). Non-retractable —
 // closes only via the ✕ button or clicking outside the dialog.
 
 type SummaryTab = 'both' | 'production' | 'consumption';
@@ -117,102 +117,6 @@ function computePivotFromReadings(
   return pivot;
 }
 
-/**
- * RO-train production pivot — computes deltas IN-MEMORY from consecutive
- * `permeate_meter` readings (same approach as Plants.tsx `_computed_delta`),
- * then groups by `permeate_production_date` (cut-off-adjusted day).
- *
- * Why in-memory delta computation?
- *   The stored `permeate_meter_delta` column can contain stale / incorrect
- *   values — for example, when the very first row in a session had no prior
- *   reading in the DB the full cumulative meter value was saved as the delta
- *   (the "millions spike", e.g. May 12 RO8 = 1,191,299 m³).  Re-deriving the
- *   delta from consecutive `permeate_meter` values always produces the correct
- *   single-interval figure regardless of what is stored in the column.
- *
- * fromStr / toStr (yyyy-MM-dd) restrict the OUTPUT dates.  Rows fetched slightly
- * before `fromStr` are used only as the "previous meter" baseline for the first
- * in-range reading; they are NOT included in the pivot output.
- *
- * Returns Map<dateKey yyyy-MM-dd, Map<trainId, summed m³>>.
- */
-function computeROProdPivot(
-  roReadings: any[],   // rows from ro_train_readings; must include permeate_meter,
-                       // reading_datetime, permeate_production_date, is_meter_replacement
-  fromStr?: string,    // yyyy-MM-dd — only output dates >= this
-  toStr?:   string,    // yyyy-MM-dd — only output dates <= this
-): Map<string, Map<string, number>> {
-  // ── 1. Group by trainId ─────────────────────────────────────────────────────
-  const byTrain = new Map<string, any[]>();
-  roReadings.forEach((r) => {
-    const k = String(r.train_id ?? '__');
-    if (!byTrain.has(k)) byTrain.set(k, []);
-    byTrain.get(k)!.push(r);
-  });
-
-  const pivot = new Map<string, Map<string, number>>();
-
-  byTrain.forEach((rows, trainId) => {
-    // ── 2. Sort chronologically (ascending reading_datetime) ─────────────────
-    const sorted = [...rows].sort(
-      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-    );
-
-    let lastMeter: number | null = null;
-    let afterRepl = false;
-
-    sorted.forEach((r) => {
-      const isMR = !!r.is_meter_replacement;
-
-      // ── 3. Compute delta from consecutive meter readings ───────────────────
-      let delta: number | null = null;
-
-      if (r.permeate_meter != null) {
-        if (isMR) {
-          // Meter replacement row — zero the delta and flag next row
-          delta = 0;
-          afterRepl = true;
-        } else if (afterRepl) {
-          // First reading after a replacement — also zero (new baseline)
-          delta = 0;
-          afterRepl = false;
-        } else if (lastMeter !== null) {
-          // Normal row: interval = current − previous (clamped ≥ 0)
-          delta = Math.max(0, +r.permeate_meter - lastMeter);
-        }
-        // else: very first row in the fetched window with no predecessor → delta null (skip)
-        lastMeter = +r.permeate_meter;
-      } else if (!isMR && r.permeate_meter_delta != null) {
-        // Fallback: no permeate_meter column → use stored delta with sanity cap.
-        // Cap at 10,000 m³/day; anything larger is almost certainly a cumulative
-        // meter value that leaked in as the delta.
-        const stored = +r.permeate_meter_delta;
-        delta = stored > 0 && stored < 10_000 ? stored : null;
-      }
-
-      if (delta == null || delta <= 0) return;
-
-      // ── 4. Resolve the production date for this reading ───────────────────
-      // Prefer permeate_production_date (cut-off-adjusted calendar day);
-      // fall back to the calendar date of reading_datetime.
-      const dateKey: string = r.permeate_production_date
-        ? String(r.permeate_production_date)
-        : format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-
-      // ── 5. Restrict to the requested output window ────────────────────────
-      if (fromStr && dateKey < fromStr) return;
-      if (toStr   && dateKey > toStr)   return;
-
-      // ── 6. Accumulate ─────────────────────────────────────────────────────
-      if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
-      const prev = pivot.get(dateKey)!.get(trainId) ?? 0;
-      pivot.get(dateKey)!.set(trainId, prev + delta);
-    });
-  });
-
-  return pivot;
-}
-
 /** Sum all entity values in a pivot for one date key. */
 function pivotDayTotal(pivot: Map<string, Map<string, number>>, dateKey: string): number {
   let total = 0;
@@ -285,47 +189,33 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     enabled: open && locatorIds.length > 0,
   });
 
-  // ── RO trains (meta) — production source ───────────────────────────────────
-  const { data: roTrains } = useQuery({
-    queryKey: ['dsm-ro-trains', plantIds],
+  // ── Product meters (meta) ──────────────────────────────────────────────────
+  const { data: productMeters } = useQuery({
+    queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
-      const { data } = await supabase
-        .from('ro_trains')
-        .select('id,name,train_number,plant_id')
-        .in('plant_id', plantIds)
-        .order('train_number');
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id,name,plant_id').in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
   });
 
-  const roTrainIds = useMemo(() => (roTrains ?? []).map((t: any) => t.id), [roTrains]);
+  const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
-  // ── RO train permeate production readings ──────────────────────────────────
-  // Fetch by reading_datetime with a 3-day lookback before fromStr so the
-  // first in-range row always has a predecessor for in-memory delta computation.
-  // computeROProdPivot then:
-  //   • derives deltas from consecutive permeate_meter values (not stored permeate_meter_delta)
-  //   • groups by permeate_production_date (cut-off-adjusted day)
-  //   • restricts output to [fromStr, toStr]
-  // This eliminates the "millions spike" caused by stale / incorrect stored
-  // permeate_meter_delta values (e.g. May 12 RO8 = 1,191,299 m³).
-  const lookbackISO = format(subDays(new Date(fromStr + 'T00:00:00'), 3), "yyyy-MM-dd'T'HH:mm:ss");
   const { data: prodReadings, isLoading: prodLoading } = useQuery({
-    queryKey: ['dsm-prod-readings', roTrainIds, fromStr, toStr],
+    queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
     queryFn: async () => {
-      if (!roTrainIds.length) return [];
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
-        .select('train_id,permeate_meter,permeate_meter_delta,permeate_production_date,reading_datetime,is_meter_replacement')
-        .in('train_id', roTrainIds)
-        // Use reading_datetime for the fetch window (with lookback for correct first-row delta)
-        .gte('reading_datetime', lookbackISO)
+      if (!meterIds.length) return [];
+      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
+        .in('meter_id', meterIds)
+        .gte('reading_datetime', startISO)
         .lte('reading_datetime', endISO)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
-    enabled: open && roTrainIds.length > 0,
+    enabled: open && meterIds.length > 0,
   });
 
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
@@ -361,24 +251,21 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
   }, [locators, consReadings, plantCodeById, fromStr, toStr]);
 
-  // ── Production pivot — RO train permeate, keyed by permeate_production_date ──
-  // computeROProdPivot re-derives deltas in-memory from consecutive permeate_meter
-  // values (same approach as Plants.tsx _computed_delta) then groups by
-  // permeate_production_date. This is reliable regardless of what is stored in
-  // the permeate_meter_delta column (fixes the "millions spike" bug).
   const prodPivot = useMemo(() => {
-    const sortedTrains = [...(roTrains ?? [])].sort((a, b) => {
+    const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
       const pb = plantCodeById.get(b.plant_id) ?? '';
-      return pa.localeCompare(pb) || (+a.train_number) - (+b.train_number);
+      return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-    // Enrich each train entity with a display label: "RO{train_number}"
-    const entitiesWithLabel = sortedTrains.map((t: any) => ({
-      ...t,
-      name: t.name ?? `RO${t.train_number}`,
-    }));
+    const pivot = computePivotFromReadings(prodReadings ?? [], 'meter_id', 'daily_volume');
 
-    const pivot = computeROProdPivot(prodReadings ?? [], fromStr, toStr);
+    const estimatedKeys = new Set<string>();
+    (prodReadings ?? []).forEach((r: any) => {
+      if (r.is_estimated) {
+        const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+        estimatedKeys.add(`${dk}__${r.meter_id}`);
+      }
+    });
 
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
@@ -388,13 +275,117 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       allDates2.push(format(cur2, 'yyyy-MM-dd'));
       cur2.setDate(cur2.getDate() + 1);
     }
-    return { dates: allDates2, entities: entitiesWithLabel, pivot, estimatedKeys: new Set<string>() };
-  }, [roTrains, prodReadings, plantCodeById, fromStr, toStr]);
+    return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
+  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
 
-  const isLoading = (tab === 'consumption') ? consLoading : prodLoading;
-  const { dates, entities, pivot, estimatedKeys } =
-    tab === 'consumption' ? consPivot : prodPivot;
-  // entityIdField kept for future per-tab specialization
+  // ── RO permeate production (plants with permeate_is_production = true) ─────
+  // This is the path that respects recalculateTrainDeltas.
+  // We read permeate_meter_delta + permeate_production_date DIRECTLY from the DB
+  // instead of re-deriving deltas from permeate_meter (cumulative), which caused
+  // the "millions delta" spike seen when the first row in the date range had no
+  // prior reading and its cumulative value was treated as a single-day delta.
+  const { data: modalMeterConfigs } = useQuery({
+    queryKey: ['dsm-meter-configs', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+        .select('plant_id,permeate_is_production')
+        .in('plant_id', plantIds);
+      return (data ?? []) as any[];
+    },
+    enabled: open && plantIds.length > 0,
+  });
+
+  const permeateIsProductionPlantIds = useMemo(
+    () => (modalMeterConfigs ?? [])
+      .filter((c: any) => c.permeate_is_production)
+      .map((c: any) => c.plant_id as string),
+    [modalMeterConfigs],
+  );
+
+  // RO train meta — for column headers (train_number, plant_id)
+  const { data: roTrainsMeta } = useQuery({
+    queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
+    queryFn: async () => {
+      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      const { data } = await supabase
+        .from('ro_trains')
+        .select('id,train_number,plant_id')
+        .in('plant_id', permeateIsProductionPlantIds)
+        .order('train_number');
+      return (data ?? []) as any[];
+    },
+    enabled: open && permeateIsProductionPlantIds.length > 0,
+  });
+
+  // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
+  // and permeate_production_date (cutoff-aware day label). Never use permeate_meter (cumulative).
+  const { data: roMeterReadings, isLoading: roLoading } = useQuery({
+    queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, toStr],
+    queryFn: async () => {
+      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id,permeate_meter_delta,permeate_production_date')
+        .in('plant_id', permeateIsProductionPlantIds)
+        .not('permeate_meter_delta', 'is', null)
+        .gt('permeate_meter_delta', 0)
+        .gte('permeate_production_date', fromStr)
+        .lte('permeate_production_date', toStr);
+      return (data ?? []) as any[];
+    },
+    enabled: open && permeateIsProductionPlantIds.length > 0,
+  });
+
+  // RO production pivot — simple SUM of permeate_meter_delta per permeate_production_date per train.
+  // NO cumulative-delta recomputation: the stored delta is already correct (maintained by
+  // recalculateTrainDeltas), so we just group and sum.
+  const roProdPivot = useMemo(() => {
+    const sortedTrains = [...(roTrainsMeta ?? [])].sort((a, b) => {
+      const pa = plantCodeById.get(a.plant_id) ?? '';
+      const pb = plantCodeById.get(b.plant_id) ?? '';
+      return pa.localeCompare(pb) || (a.train_number ?? 0) - (b.train_number ?? 0);
+    });
+
+    const pivot = new Map<string, Map<string, number>>();
+
+    // Enumerate every date in the selected range so empty days show as "—"
+    const allDates: string[] = [];
+    const cur = new Date(fromStr + 'T00:00:00');
+    const end = new Date(toStr   + 'T00:00:00');
+    while (cur <= end) {
+      const dk = format(cur, 'yyyy-MM-dd');
+      allDates.push(dk);
+      pivot.set(dk, new Map());
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // Accumulate deltas — each hourly reading contributes its pre-stored delta
+    (roMeterReadings ?? []).forEach((r: any) => {
+      const dateKey  = r.permeate_production_date as string;
+      const trainKey = r.train_id as string;
+      const delta    = +(r.permeate_meter_delta ?? 0);
+      if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+      pivot.get(dateKey)!.set(trainKey, (pivot.get(dateKey)!.get(trainKey) ?? 0) + delta);
+    });
+
+    return { dates: allDates, entities: sortedTrains, pivot };
+  }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
+
+  // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
+  const useRoProd = permeateIsProductionPlantIds.length > 0;
+
+  const isLoading = tab === 'consumption' ? consLoading
+    : tab === 'production' ? (useRoProd ? roLoading : prodLoading)
+    : (consLoading || (useRoProd ? roLoading : prodLoading));
+
+  // Active pivot data for the detail tabs
+  const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
+    ? consPivot
+    : useRoProd
+      ? { ...roProdPivot, estimatedKeys: new Set<string>() }
+      : prodPivot;
+
   const entityIdField = 'id';
 
   // Column totals (sum per entity across all dates)
@@ -424,7 +415,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
-              Data Summary — Production vs Consumption
+              Data Summary
             </DialogTitle>
 
             {/* Date range picker */}
@@ -454,14 +445,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         <div className="flex border-b shrink-0 px-5 bg-muted/20">
           {([
             { key: 'both',        label: 'Prod. vs Consum.', icon: <Activity className="h-3 w-3" /> },
-            { key: 'production',  label: 'Production',        icon: <Droplet  className="h-3 w-3" /> },
-            { key: 'consumption', label: 'Consumption',       icon: <Receipt  className="h-3 w-3" /> },
+            { key: 'production',  label: 'Production',       icon: <Droplet  className="h-3 w-3" /> },
+            { key: 'consumption', label: 'Consumption',      icon: <Receipt  className="h-3 w-3" /> },
           ] as { key: SummaryTab; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
               className={[
-                'px-5 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors',
+                'px-4 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors',
                 tab === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground',
@@ -472,58 +463,60 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
           ))}
         </div>
 
-        {/* ── Body: horizontal pivot table ── */}
+        {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
         <div className="flex-1 overflow-auto">
-          {/* ── "Prod. vs Consum." combined summary tab ── */}
-          {tab === 'both' && (() => {
-            const { dates: pDates, pivot: pPivot } = prodPivot;
-            const { dates: cDates, pivot: cPivot } = consPivot;
-            // Union of all dates in range
-            const allDatesSet = new Set([...pDates, ...cDates]);
-            const allDates = [...allDatesSet].sort();
-            const bothLoading = prodLoading || consLoading;
-            if (bothLoading) return (
-              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
-            );
-            if (!allDates.length) return (
-              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">No readings in this date range.</div>
-            );
+          {isLoading && (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
+          )}
+
+          {/* ── "Prod. vs Consum." combined comparison tab ── */}
+          {!isLoading && tab === 'both' && (() => {
+            // Build daily totals from both sides using the dates in the range
+            const allDates: string[] = [];
+            const cur = new Date(fromStr + 'T00:00:00');
+            const end = new Date(toStr   + 'T00:00:00');
+            while (cur <= end) { allDates.push(format(cur, 'yyyy-MM-dd')); cur.setDate(cur.getDate() + 1); }
+            const rows = [...allDates].reverse().map((date) => {
+              const prod = useRoProd
+                ? Array.from(roProdPivot.entities).reduce((s, e) => s + (roProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0)
+                : Array.from(prodPivot.entities).reduce((s, e) => s + (prodPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              const cons = Array.from(consPivot.entities).reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              const bal  = prod - cons;
+              const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
+              return { date, prod, cons, bal, nrw };
+            });
+            const totProd = rows.reduce((s, r) => s + r.prod, 0);
+            const totCons = rows.reduce((s, r) => s + r.cons, 0);
+            const totBal  = totProd - totCons;
+            const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
             return (
-              <table className="w-full text-[11px] border-collapse" data-testid="dsm-pivot-both">
+              <table className="w-full text-[11px] border-collapse" data-testid="dsm-both-table">
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-muted/95 backdrop-blur-sm">
                     <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">Date</th>
-                    <th className="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">
-                      Production<div className="text-[9px] font-normal">(m³)</div>
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[110px]">
-                      Consumption<div className="text-[9px] font-normal">(m³)</div>
-                    </th>
-                    <th className="sticky right-0 z-30 bg-muted/95 px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-l border-border min-w-[80px]">
-                      NRW %
-                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">Production (m³)</th>
+                    <th className="px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[120px]">Consumption (m³)</th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[100px]">Balance (m³)</th>
+                    <th className="sticky right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
+                  </tr>
+                  <tr className="bg-teal-50/60 dark:bg-teal-950/20">
+                    <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">TOTAL</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd > 0 ? totProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons > 0 ? totCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...allDates].reverse().map((date, di) => {
-                    const prod = Array.from(pPivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
-                    const cons = Array.from(cPivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
-                    const nrw  = prod > 0 ? (((prod - cons) / prod) * 100) : null;
+                  {rows.map(({ date, prod, cons, bal, nrw }, di) => {
                     const isEven = di % 2 === 0;
                     return (
                       <tr key={date} className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}>
-                        <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>
-                          {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">
-                          {prod > 0 ? prod.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">
-                          {cons > 0 ? cons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
-                        </td>
-                        <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw == null ? '' : nrw > 20 ? 'text-red-500' : nrw > 10 ? 'text-amber-500' : 'text-emerald-600'].join(' ')}>
-                          {nrw != null ? `${nrw.toFixed(1)}%` : <span className="text-muted-foreground/40">—</span>}
-                        </td>
+                        <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod > 0 ? prod.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons > 0 ? cons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
+                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-emerald-600 dark:text-emerald-400' : bal < 0 ? 'text-rose-600' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                        <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 20 ? 'text-rose-600' : nrw != null ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
                       </tr>
                     );
                   })}
@@ -532,46 +525,47 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             );
           })()}
 
-          {/* ── Production / Consumption single-entity pivot tables ── */}
-          {tab !== 'both' && isLoading && (
-            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
-          )}
-          {tab !== 'both' && !isLoading && entities.length === 0 && (
+          {/* ── Production / Consumption detail tabs ── */}
+          {!isLoading && tab !== 'both' && entities.length === 0 && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-              No {tab === 'consumption' ? 'locators' : 'RO trains'} found.
+              No {tab === 'consumption' ? 'locators' : useRoProd ? 'RO trains' : 'product meters'} found.
             </div>
           )}
-          {tab !== 'both' && !isLoading && entities.length > 0 && dates.length === 0 && (
+          {!isLoading && tab !== 'both' && entities.length > 0 && dates.length === 0 && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
               No readings in this date range.
             </div>
           )}
-          {tab !== 'both' && !isLoading && entities.length > 0 && dates.length > 0 && (
+          {!isLoading && tab !== 'both' && entities.length > 0 && dates.length > 0 && (
             <table className="w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
               <thead className="sticky top-0 z-20">
                 {/* Entity name header row */}
                 <tr className="bg-muted/95 backdrop-blur-sm">
-                  {/* Sticky Date column */}
                   <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
                     Date
                   </th>
-                  {entities.map((e, i) => (
-                    <th
-                      key={e.id}
-                      className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
-                      title={`${plantCodeById.get(e.plant_id) ?? ''} · ${e.name ?? e.code ?? e.id}`}
-                    >
-                      <div className="truncate max-w-[110px] mx-auto">
-                        {e.name ?? e.code ?? `#${i + 1}`}
-                      </div>
-                      <div className="text-[9px] font-normal text-muted-foreground/60">
-                        m³
-                      </div>
-                    </th>
-                  ))}
+                  {entities.map((e, i) => {
+                    // RO train columns: "RO{train_number}" header; product meter / locator: name/code
+                    const isRoTrain = tab === 'production' && useRoProd;
+                    const label = isRoTrain
+                      ? `RO${e.train_number ?? i + 1}`
+                      : (e.name ?? e.code ?? `#${i + 1}`);
+                    const sublabel = plantCodeById.get(e.plant_id) ?? '';
+                    return (
+                      <th
+                        key={e.id}
+                        className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
+                        title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
+                      >
+                        <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
+                        {sublabel && (
+                          <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="sticky right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[90px]">
-                    {tab === 'consumption' ? 'Total Cons.' : 'Total Prod.'}
-                    <div className="text-[9px] font-normal">(m³)</div>
+                    {tab === 'production' ? 'Total Prod. (m³)' : 'Total (m³)'}
                   </th>
                 </tr>
 
@@ -649,23 +643,30 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </div>
 
         {/* ── Footer legend ── */}
-        {!isLoading && entities.length > 0 && (
-          <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-[10px] text-muted-foreground bg-muted/20">
-            {tab === 'consumption'
-              ? <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator per day</>
-              : <><Droplet className="h-3 w-3 text-primary" /> Production — permeate volume (m³) per RO train per day (keyed by production date)</>
-            }
-            {estimatedKeys.size > 0 && (
-              <span className="flex items-center gap-1 ml-3 text-amber-600 dark:text-amber-400">
-                <span className="font-bold text-[10px]">~</span>
-                Auto-estimated (Poly. Regression deg. 3) — hover cell for details
-              </span>
-            )}
-            <span className="ml-auto">
-              {dates.length} days in range · {entities.length} {tab === 'consumption' ? 'locators' : 'RO trains'}
+        <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-[10px] text-muted-foreground bg-muted/20">
+          {tab === 'both' && <><Activity className="h-3 w-3 text-primary" /> Production vs Consumption — daily totals (m³) · NRW % = (Prod − Cons) ÷ Prod</>}
+          {tab === 'consumption' && <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator per day</>}
+          {tab === 'production' && (
+            useRoProd
+              ? <><Droplet className="h-3 w-3 text-primary" /> Production — summed permeate_meter_delta (m³) per RO train per production day</>
+              : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter per day</>
+          )}
+          {tab !== 'both' && estimatedKeys.size > 0 && (
+            <span className="flex items-center gap-1 ml-3 text-amber-600 dark:text-amber-400">
+              <span className="font-bold text-[10px]">~</span>
+              Auto-estimated (Poly. Regression deg. 3) — hover cell for details
             </span>
-          </div>
-        )}
+          )}
+          <span className="ml-auto">
+            {tab === 'both' && `${dates.length} days in range`}
+            {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
+            {tab === 'production' && (
+              useRoProd
+                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.length} days`
+                : `${entities.length} meters · ${dates.length} days`
+            )}
+          </span>
+        </div>
       </DialogContent>
     </Dialog>
   );

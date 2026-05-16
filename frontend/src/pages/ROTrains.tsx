@@ -1497,11 +1497,6 @@ function PretreatmentAndROLog() {
     });
     if (pretreatError) { toast.error(`Pre-treatment error: ${pretreatError.message}`); return; }
 
-    // Recalculate permeate_meter_delta for all rows on this train so that
-    // back-dated inserts (new reading slotted between two existing ones) don't
-    // leave the next row with a stale delta computed against the old predecessor.
-    await recalculateTrainDeltas(trainId);
-
     toast.success('Pre-treatment & RO reading saved');
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
@@ -1546,6 +1541,9 @@ function PretreatmentAndROLog() {
     qc.invalidateQueries({ queryKey: ['trend-product'] });
     qc.invalidateQueries({ queryKey: ['trend-power'] });
     qc.invalidateQueries({ queryKey: ['trend-cost'] });
+    // DataSummaryModal — explicit so the open modal refreshes immediately
+    qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+    qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
     // Broad catch-all — safety net for any other mounted queries
     qc.invalidateQueries();
   };
@@ -1583,18 +1581,28 @@ function PretreatmentAndROLog() {
               qc.invalidateQueries({ queryKey: ['ro-overview'] });
               qc.invalidateQueries({ queryKey: ['ro-last-all'] });
               qc.invalidateQueries({ queryKey: ['ro-spark'] });
+              qc.invalidateQueries({ queryKey: ['ro-prev'] });
+              // Dashboard stat-cards
               qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
               qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
               qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
               qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
               qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
               qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
               qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+              qc.invalidateQueries({ queryKey: ['dash-chem'] });
               qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+              // TrendChart series
               qc.invalidateQueries({ queryKey: ['trend-ro'] });
               qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
               qc.invalidateQueries({ queryKey: ['trend-product'] });
               qc.invalidateQueries({ queryKey: ['trend-power'] });
+              qc.invalidateQueries({ queryKey: ['trend-cost'] });
+              // DataSummaryModal
+              qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+              qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
               qc.invalidateQueries();
             }}
           />

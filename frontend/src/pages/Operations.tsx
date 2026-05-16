@@ -78,11 +78,22 @@ function invalidateDashboard(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['alerts-feed'] });
   // TrendChart series
   qc.invalidateQueries({ queryKey: ['trend-loc'] });
+  qc.invalidateQueries({ queryKey: ['trend-loc-ids'] });
   qc.invalidateQueries({ queryKey: ['trend-product'] });
   qc.invalidateQueries({ queryKey: ['trend-well'] });
   qc.invalidateQueries({ queryKey: ['trend-power'] });
   qc.invalidateQueries({ queryKey: ['trend-cost'] });
   qc.invalidateQueries({ queryKey: ['trend-ro'] });
+  qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+  // DataSummaryModal — invalidated explicitly so the modal refreshes immediately
+  // when open, without waiting for the broad catch-all below.
+  qc.invalidateQueries({ queryKey: ['dsm-cons-readings'] });
+  qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+  qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+  qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
+  qc.invalidateQueries({ queryKey: ['dsm-locators'] });
+  qc.invalidateQueries({ queryKey: ['dsm-product-meters'] });
+  qc.invalidateQueries({ queryKey: ['dsm-meter-configs'] });
   // Broad safety-net — catches any other mounted queries
   qc.invalidateQueries();
 }
