@@ -23,7 +23,7 @@
  * Backend: 100% Supabase — no Python backend required.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -50,7 +50,7 @@ import { format, parseISO } from 'date-fns';
 import {
   FlaskConical, Play, CheckCircle2, Undo2, Pencil, ShieldAlert,
   TrendingUp, Database, AlertTriangle, RefreshCw, Clock, Eye,
-  ChevronDown, ChevronUp, Info,
+  ChevronDown, ChevronUp, Info, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -174,24 +174,47 @@ interface RegressionResult {
 interface Plant { id: string; name: string; }
 interface EntityOption { id: string; label: string; }
 
-// ── OLS Regression (client-side) ───────────────────────────────────────────────
+// ── Anomaly Detection + OLS Regression (client-side) ──────────────────────────
+//
+// Strategy (two-pass):
+//   Pass 1 — Meter Reset / Mis-entry Detection
+//     Scans consecutive delta changes.  If |delta| > RESET_THRESHOLD the reading
+//     is flagged as a "reset anomaly".  The corrected value is interpolated from
+//     the median of up to STABLE_WINDOW stable deltas on both sides of the spike.
+//
+//   Pass 2 — OLS Residual Outlier Detection
+//     Runs OLS on the cleaned (non-reset) values.  Readings whose residual
+//     Z-score exceeds Z_THRESHOLD are flagged as statistical outliers and
+//     corrected to the regression projection.
+//
+// Both passes produce CorrectionRow entries; reset anomalies take priority.
 
-const Z_THRESHOLD = 2.5;
-const MIN_ROWS = 5;
+const RESET_THRESHOLD  = 1_000_000; // |delta| above this → reset anomaly
+const STABLE_WINDOW    = 5;          // look ±N stable rows for median delta
+const Z_THRESHOLD      = 2.5;        // residual Z-score cutoff for OLS pass
+const MIN_ROWS         = 5;          // minimum rows required for OLS
 
 interface OLSResult {
   corrections: CorrectionRow[];
   stats: { r_squared: number | null; slope: number | null; intercept: number | null };
+  resetCount: number;
+}
+
+/** Median of a numeric array. */
+function median(arr: number[]): number {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 function runOLS(readings: RawReading[], column: string): OLSResult {
-  // Collect valid (index, value) pairs
-  const pairs: Array<{ idx: number; val: number }> = [];
+  // ── Collect numeric pairs (index, value) ──────────────────────────────────
+  type Pair = { idx: number; val: number };
+  const pairs: Pair[] = [];
   readings.forEach((row, i) => {
     const raw = row[column];
-    if (raw != null && !isNaN(Number(raw))) {
-      pairs.push({ idx: i, val: Number(raw) });
-    }
+    if (raw != null && !isNaN(Number(raw))) pairs.push({ idx: i, val: Number(raw) });
   });
 
   if (pairs.length < MIN_ROWS) {
@@ -203,76 +226,169 @@ function runOLS(readings: RawReading[], column: string): OLSResult {
         corrected_value:  null,
         z_score:          null,
         is_outlier:       false,
-        note:             'Insufficient data for regression',
+        note:             'Insufficient data for analysis',
       })),
       stats: { r_squared: null, slope: null, intercept: null },
+      resetCount: 0,
     };
   }
 
-  const n   = pairs.length;
-  const xs  = pairs.map(p => p.idx);
-  const ys  = pairs.map(p => p.val);
+  // ── Pass 1: Meter Reset / Mis-entry Detection ─────────────────────────────
+  // Compute raw deltas between consecutive valid readings
+  const deltas: number[] = pairs.map((p, i) =>
+    i === 0 ? 0 : p.val - pairs[i - 1].val,
+  );
 
-  // Least-squares
-  const sumX  = xs.reduce((a, b) => a + b, 0);
-  const sumY  = ys.reduce((a, b) => a + b, 0);
-  const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
-  const sumX2 = xs.reduce((acc, x) => acc + x * x, 0);
-  const denom = n * sumX2 - sumX * sumX;
-  const slope     = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-  const intercept = (sumY - slope * sumX) / n;
+  // Mark each pair as "stable" if its delta is within the reset threshold
+  const isStable: boolean[] = deltas.map((d, i) =>
+    i === 0 ? true : Math.abs(d) <= RESET_THRESHOLD,
+  );
 
-  // Predictions and residuals
-  const yPred    = xs.map(x => slope * x + intercept);
-  const residuals = ys.map((y, i) => y - yPred[i]);
+  // For each reset anomaly, compute corrected value using median of nearby stable deltas
+  const resetCorrections = new Map<number, number>(); // pairs index → corrected value
 
-  // R²
-  const meanY  = sumY / n;
-  const ssTot  = ys.reduce((acc, y) => acc + (y - meanY) ** 2, 0);
-  const ssRes  = residuals.reduce((acc, r) => acc + r * r, 0);
-  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : null;
+  pairs.forEach((p, i) => {
+    if (i === 0 || isStable[i]) return; // skip first and stable readings
 
-  // Z-scores on residuals
-  const meanRes = residuals.reduce((a, b) => a + b, 0) / n;
-  const stdRes  = Math.sqrt(residuals.reduce((acc, r) => acc + (r - meanRes) ** 2, 0) / n) || 0;
-  const zScores = residuals.map(r => (stdRes > 0 ? r / stdRes : 0));
+    // Collect stable deltas from a window around this anomaly
+    const stableDeltas: number[] = [];
+    // look back
+    for (let k = i - 1; k >= Math.max(0, i - STABLE_WINDOW); k--) {
+      if (isStable[k] && k > 0) stableDeltas.push(deltas[k]);
+    }
+    // look forward
+    for (let k = i + 1; k <= Math.min(pairs.length - 1, i + STABLE_WINDOW); k++) {
+      if (isStable[k]) stableDeltas.push(deltas[k]);
+    }
 
-  // Build lookup: row-index → {val, z, pred}
-  const pairMap = new Map<number, { val: number; z: number; pred: number }>();
-  pairs.forEach((p, i) => pairMap.set(p.idx, { val: p.val, z: zScores[i], pred: yPred[i] }));
+    const normalDelta  = stableDeltas.length > 0 ? median(stableDeltas) : 0;
+    const prevVal      = pairs[i - 1].val;
+    const corrected    = prevVal + normalDelta;
+    resetCorrections.set(i, parseFloat(corrected.toFixed(4)));
+  });
+
+  const resetCount = resetCorrections.size;
+
+  // ── Pass 2: OLS on cleaned (non-reset) values ─────────────────────────────
+  const cleanPairs = pairs.filter((_, i) => !resetCorrections.has(i));
+  const n   = cleanPairs.length;
+  const xs  = cleanPairs.map(p => p.idx);
+  const ys  = cleanPairs.map(p => p.val);
+
+  let slope = 0, intercept = 0, rSquared: number | null = null;
+
+  if (n >= MIN_ROWS) {
+    const sumX  = xs.reduce((a, b) => a + b, 0);
+    const sumY  = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+    const sumX2 = xs.reduce((acc, x) => acc + x * x, 0);
+    const denom = n * sumX2 - sumX * sumX;
+    slope     = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+    intercept = (sumY - slope * sumX) / n;
+
+    const yPred     = xs.map(x => slope * x + intercept);
+    const residuals = ys.map((y, i) => y - yPred[i]);
+    const meanY     = sumY / n;
+    const ssTot     = ys.reduce((acc, y) => acc + (y - meanY) ** 2, 0);
+    const ssRes     = residuals.reduce((acc, r) => acc + r * r, 0);
+    rSquared        = ssTot > 0 ? 1 - ssRes / ssTot : null;
+
+    const meanRes = residuals.reduce((a, b) => a + b, 0) / n;
+    const stdRes  = Math.sqrt(residuals.reduce((acc, r) => acc + (r - meanRes) ** 2, 0) / n) || 0;
+    const zScores = residuals.map(r => (stdRes > 0 ? (r / stdRes) : 0));
+
+    // Map OLS z-score back by cleanPair index
+    cleanPairs.forEach((p, ci) => {
+      const pairsIdx = pairs.indexOf(p);
+      if (pairsIdx < 0) return;
+      const z      = zScores[ci];
+      const pred   = yPred[ci];
+      const isOlsOutlier = Math.abs(z) > Z_THRESHOLD;
+      if (isOlsOutlier) {
+        // Only mark as OLS outlier if not already a reset anomaly
+        if (!resetCorrections.has(pairsIdx)) {
+          resetCorrections.set(pairsIdx, parseFloat(pred.toFixed(4)));
+          // Store z-score tagged with negative sign to distinguish from reset
+          resetCorrections.set(-(pairsIdx + 1), parseFloat(z.toFixed(4)));
+        }
+      }
+    });
+  }
+
+  // ── Build final CorrectionRow array ──────────────────────────────────────
+  // We need z-scores for OLS-only outliers; store them separately
+  const olsZScores = new Map<number, number>(); // pairsIdx → z
+  const olsPreds   = new Map<number, number>(); // pairsIdx → pred value
+
+  if (n >= MIN_ROWS) {
+    const sumX  = xs.reduce((a, b) => a + b, 0);
+    const sumY  = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+    const sumX2 = xs.reduce((acc, x) => acc + x * x, 0);
+    const denom2 = n * sumX2 - sumX * sumX;
+    const s2 = denom2 !== 0 ? (n * sumXY - sumX * sumY) / denom2 : 0;
+    const i2 = (sumY - s2 * sumX) / n;
+    const yPred2     = xs.map(x => s2 * x + i2);
+    const residuals2 = ys.map((y, i) => y - yPred2[i]);
+    const meanRes2   = residuals2.reduce((a, b) => a + b, 0) / n;
+    const stdRes2    = Math.sqrt(residuals2.reduce((acc, r) => acc + (r - meanRes2) ** 2, 0) / n) || 0;
+    cleanPairs.forEach((p, ci) => {
+      const pairsIdx = pairs.indexOf(p);
+      olsZScores.set(pairsIdx, stdRes2 > 0 ? (residuals2[ci] / stdRes2) : 0);
+      olsPreds.set(pairsIdx, yPred2[ci]);
+    });
+  }
+
+  const pairsIdxMap = new Map<number, number>(); // readings index → pairs index
+  pairs.forEach((p, pi) => pairsIdxMap.set(p.idx, pi));
 
   const corrections: CorrectionRow[] = readings.map((row, i) => {
-    const rid = String(row.id);
-    const rdt = String(row.reading_datetime);
-    const entry = pairMap.get(i);
+    const rid  = String(row.id);
+    const rdt  = String(row.reading_datetime);
+    const pi   = pairsIdxMap.get(i); // index into pairs[]
+    const orig = row[column] != null ? Number(row[column]) : null;
 
-    if (!entry) {
+    if (pi === undefined || orig === null) {
       return {
-        reading_id:       rid,
-        reading_datetime: rdt,
-        original_value:   null,
-        corrected_value:  null,
-        z_score:          null,
-        is_outlier:       false,
-        note:             'Missing value — skipped',
+        reading_id: rid, reading_datetime: rdt,
+        original_value: orig, corrected_value: null,
+        z_score: null, is_outlier: false,
+        note: 'Missing value — skipped',
       };
     }
 
-    const { val, z, pred } = entry;
-    const isOutlier = Math.abs(z) > Z_THRESHOLD;
-    const direction  = z > 0 ? 'high' : 'low';
-    const note = isOutlier
-      ? `out of range (z=${z.toFixed(2)}, ${direction}); regression-corrected`
-      : 'within normal range';
+    // Reset anomaly takes priority
+    if (resetCorrections.has(pi) && !olsZScores.has(pi)) {
+      // pure reset anomaly (not OLS-tagged)
+      const corrected = resetCorrections.get(pi)!;
+      return {
+        reading_id: rid, reading_datetime: rdt,
+        original_value: orig, corrected_value: corrected,
+        z_score: null, is_outlier: true,
+        note: `reset anomaly correction (spike Δ=${(orig - (pairs[pi - 1]?.val ?? orig)).toFixed(0)}, corrected to stable-delta median)`,
+      };
+    }
+
+    const z    = olsZScores.get(pi) ?? null;
+    const pred = olsPreds.get(pi)   ?? null;
+    const isOlsOutlier = z != null && Math.abs(z) > Z_THRESHOLD;
+
+    if (isOlsOutlier && pred != null) {
+      const direction = z! > 0 ? 'high' : 'low';
+      return {
+        reading_id: rid, reading_datetime: rdt,
+        original_value: orig, corrected_value: parseFloat(pred.toFixed(4)),
+        z_score: parseFloat(z!.toFixed(4)), is_outlier: true,
+        note: `statistical outlier (z=${z!.toFixed(2)}, ${direction}); regression-corrected`,
+      };
+    }
 
     return {
-      reading_id:       rid,
-      reading_datetime: rdt,
-      original_value:   val,
-      corrected_value:  isOutlier ? parseFloat(pred.toFixed(4)) : null,
-      z_score:          parseFloat(z.toFixed(4)),
-      is_outlier:       isOutlier,
-      note,
+      reading_id: rid, reading_datetime: rdt,
+      original_value: orig, corrected_value: null,
+      z_score: z != null ? parseFloat(z.toFixed(4)) : null,
+      is_outlier: false,
+      note: 'within normal range',
     };
   });
 
@@ -283,6 +399,9 @@ function runOLS(readings: RawReading[], column: string): OLSResult {
       slope:     parseFloat(slope.toFixed(6)),
       intercept: parseFloat(intercept.toFixed(6)),
     },
+    resetCount,
+  };
+}
   };
 }
 
@@ -571,16 +690,21 @@ function RegressionDetail({
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 divide-x text-center px-0 py-2 border-b">
-        {[
-          { label: 'Rows',     value: result.row_count },
-          { label: 'Outliers', value: outliers.length },
-          { label: 'R²',       value: result.r_squared != null ? result.r_squared.toFixed(4) : '—' },
-          { label: 'Run at',   value: result.created_at ? format(parseISO(result.created_at), 'MMM d HH:mm') : '—' },
-        ].map(s => (
+      <div className="grid grid-cols-5 divide-x text-center px-0 py-2 border-b">
+        {(() => {
+          const resetCount = outliers.filter(c => c.note?.includes('reset anomaly')).length;
+          const olsCount   = outliers.length - resetCount;
+          return [
+            { label: 'Rows',    value: result.row_count },
+            { label: 'Resets',  value: resetCount,  color: resetCount  > 0 ? 'text-orange-600' : '' },
+            { label: 'OLS',     value: olsCount,    color: olsCount    > 0 ? 'text-amber-600'  : '' },
+            { label: 'R²',      value: result.r_squared != null ? result.r_squared.toFixed(4) : '—', color: '' },
+            { label: 'Run at',  value: result.created_at ? format(parseISO(result.created_at), 'MMM d HH:mm') : '—', color: '' },
+          ];
+        })().map(s => (
           <div key={s.label} className="px-3 py-1">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</div>
-            <div className="font-mono text-sm font-semibold">{s.value}</div>
+            <div className={cn('font-mono text-sm font-semibold', s.color)}>{s.value}</div>
           </div>
         ))}
       </div>
@@ -595,33 +719,48 @@ function RegressionDetail({
                 <TableHead className="text-right">Original</TableHead>
                 <TableHead className="text-right">Corrected</TableHead>
                 <TableHead className="text-right">Z-score</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Note</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {outliers.map(c => (
-                <TableRow key={c.reading_id} className="text-xs">
-                  <TableCell className="font-mono">{c.reading_datetime?.slice(0, 10)}</TableCell>
-                  <TableCell className="text-right font-mono text-danger">
-                    {c.original_value?.toFixed(2) ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-teal-600">
-                    {c.corrected_value?.toFixed(2) ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {c.z_score != null ? (
-                      <span className={Math.abs(c.z_score) > 3 ? 'text-danger font-bold' : ''}>
-                        {c.z_score.toFixed(2)}
-                      </span>
-                    ) : '—'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-[200px] truncate">{c.note}</TableCell>
-                </TableRow>
-              ))}
+              {outliers.map(c => {
+                const isReset = c.note?.includes('reset anomaly');
+                return (
+                  <TableRow key={c.reading_id} className={cn('text-xs', isReset && 'bg-orange-50/60 dark:bg-orange-950/20')}>
+                    <TableCell className="font-mono">{c.reading_datetime?.slice(0, 16).replace('T', ' ')}</TableCell>
+                    <TableCell className="text-right font-mono text-danger">
+                      {c.original_value?.toFixed(2) ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-teal-600">
+                      {c.corrected_value?.toFixed(2) ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {c.z_score != null ? (
+                        <span className={Math.abs(c.z_score) > 3 ? 'text-danger font-bold' : ''}>
+                          {c.z_score.toFixed(2)}
+                        </span>
+                      ) : <span className="text-muted-foreground text-[10px]">n/a</span>}
+                    </TableCell>
+                    <TableCell>
+                      {isReset ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300">
+                          <Zap className="h-2.5 w-2.5" /> Reset
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-amber-100 text-amber-800 border-amber-300">
+                          OLS
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-w-[220px] truncate" title={c.note}>{c.note}</TableCell>
+                  </TableRow>
+                );
+              })}
               {outliers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
-                    No outliers detected in this run.
+                  <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">
+                    No anomalies detected in this run.
                   </TableCell>
                 </TableRow>
               )}
@@ -936,20 +1075,52 @@ export default function DataAnalysis() {
   const selectedPlantId    = useAppStore(s => s.selectedPlantId);
   const setSelectedPlantId = useAppStore(s => s.setSelectedPlantId);
 
-  // Filter state — plant defaults to the app-wide plant selection
-  const [sourceTable, setSourceTable] = useState('well_readings');
-  const [column, setColumn]           = useState('daily_volume');
-  // Convert null (all plants) to 'all' for Select component
-  const [plantId, setPlantId]         = useState<string>(selectedPlantId ?? 'all');
-  const [entityId, setEntityId]       = useState('all');
-  const [powerSource, setPowerSource] = useState('all'); // only used when sourceTable === 'power_readings'
-  const [dateFrom, setDateFrom]       = useState('');
-  const [dateTo, setDateTo]           = useState('');
+  // ── Persisted filter state — survives navigation away and back ───────────
+  // Each filter value is read from sessionStorage on mount and written on change.
+  const SS_KEY = 'da:filters';
+  const loadFilters = () => {
+    try {
+      const raw = sessionStorage.getItem(SS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  };
+  const saveFilters = useCallback((patch: Record<string, string>) => {
+    try {
+      const prev = loadFilters();
+      sessionStorage.setItem(SS_KEY, JSON.stringify({ ...prev, ...patch }));
+    } catch { /* quota */ }
+  }, []);
 
-  // Keep local plantId in sync whenever the global store changes
+  const saved = useRef(loadFilters());
+
+  const [sourceTable, _setSourceTable] = useState<string>(saved.current.sourceTable ?? 'well_readings');
+  const [column, _setColumn]           = useState<string>(saved.current.column       ?? 'daily_volume');
+  const [plantId, _setPlantId]         = useState<string>(saved.current.plantId      ?? (selectedPlantId ?? 'all'));
+  const [entityId, _setEntityId]       = useState<string>(saved.current.entityId     ?? 'all');
+  const [powerSource, _setPowerSource] = useState<string>(saved.current.powerSource  ?? 'all');
+  const [dateFrom, _setDateFrom]       = useState<string>(saved.current.dateFrom     ?? '');
+  const [dateTo, _setDateTo]           = useState<string>(saved.current.dateTo       ?? '');
+
+  const setSourceTable = (v: string) => { _setSourceTable(v); saveFilters({ sourceTable: v }); };
+  const setColumn      = (v: string) => { _setColumn(v);      saveFilters({ column: v });      };
+  const setPlantId     = (v: string) => { _setPlantId(v);     saveFilters({ plantId: v });     };
+  const setEntityId    = (v: string) => { _setEntityId(v);    saveFilters({ entityId: v });    };
+  const setPowerSource = (v: string) => { _setPowerSource(v); saveFilters({ powerSource: v }); };
+  const setDateFrom    = (v: string) => { _setDateFrom(v);    saveFilters({ dateFrom: v });    };
+  const setDateTo      = (v: string) => { _setDateTo(v);      saveFilters({ dateTo: v });      };
+
+  // Keep local plantId in sync ONLY when user changes plant in the top bar
+  // and has NOT already chosen a plant on this page (avoid overwriting their selection)
+  const lastGlobalPlant = useRef(selectedPlantId);
   useEffect(() => {
-    setPlantId(selectedPlantId ?? 'all');
-    setEntityId('all');
+    if (selectedPlantId !== lastGlobalPlant.current) {
+      lastGlobalPlant.current = selectedPlantId;
+      // Only sync if the page's plantId still matches the old global value
+      // i.e. the user hasn't independently changed it here
+      setPlantId(selectedPlantId ?? 'all');
+      setEntityId('all');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlantId]);
 
   // Edit dialog
@@ -1082,7 +1253,7 @@ export default function DataAnalysis() {
       const { data: readings, error: readErr } = await q;
       if (readErr) throw new Error(readErr.message);
 
-      const { corrections, stats } = runOLS((readings || []) as RawReading[], column);
+      const { corrections, stats, resetCount } = runOLS((readings || []) as RawReading[], column);
       const resultId    = crypto.randomUUID();
       const outlierCount = corrections.filter(c => c.is_outlier).length;
       const userRole    = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
@@ -1109,7 +1280,9 @@ export default function DataAnalysis() {
         .insert(doc);
       if (insertErr) throw new Error(insertErr.message);
 
-      toast.success(`Regression complete — ${outlierCount} outlier(s) detected`);
+      const resetMsg = resetCount > 0 ? `, ${resetCount} reset anomaly fix(es)` : '';
+      const olsMsg   = (outlierCount - resetCount) > 0 ? `, ${outlierCount - resetCount} statistical outlier(s)` : '';
+      toast.success(`Analysis complete — ${outlierCount} anomaly(s) found${resetMsg}${olsMsg}`);
       refetchResults();
       qc.invalidateQueries({ queryKey: ['raw-readings'] });
     } catch (e: unknown) {
