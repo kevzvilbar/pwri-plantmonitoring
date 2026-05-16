@@ -160,24 +160,34 @@ function validateROTrainRow(r: Record<string, string>, i: number): string[] {
 //   May 3 00:20 → "2026-05-03"
 //   May 3 00:21 → "2026-05-04"  (crosses into next day)
 //   May 4 00:20 → "2026-05-04"  (exactly at cutoff → belongs to May 4)
+//
+// ⚠️  All comparisons and date arithmetic must use LOCAL time exclusively.
+//     getHours()/getMinutes() already return local time, so toISOString()
+//     (which returns UTC) must never be used here — it drifts by UTC+8 for PH.
+function localYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function getPermeateDayLabel(isoDatetime: string, cutoffHHmm: string): string {
   const dt = new Date(isoDatetime);
   const [chStr, cmStr] = cutoffHHmm.split(':');
   const cutH = parseInt(chStr ?? '0', 10);
   const cutM = parseInt(cmStr ?? '20', 10);
-  const readingH = dt.getHours();
-  const readingM = dt.getMinutes();
-  const readingTotalMin = readingH * 60 + readingM;
+  // getHours / getMinutes already read LOCAL time — keep everything local
+  const readingTotalMin = dt.getHours() * 60 + dt.getMinutes();
   const cutoffTotalMin  = cutH * 60 + cutM;
 
   if (readingTotalMin <= cutoffTotalMin) {
-    // Within or at the cutoff → belongs to today's date
-    return dt.toISOString().slice(0, 10);
+    // Within or at the cutoff → belongs to the LOCAL calendar date of the reading
+    return localYMD(dt);
   } else {
-    // Past cutoff → belongs to tomorrow's date
+    // Past cutoff → belongs to the NEXT LOCAL calendar date
     const next = new Date(dt);
-    next.setDate(next.getDate() + 1);
-    return next.toISOString().slice(0, 10);
+    next.setDate(next.getDate() + 1); // setDate operates on local date — correct
+    return localYMD(next);            // localYMD reads local date — correct
   }
 }
 
