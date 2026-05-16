@@ -2,17 +2,17 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
   Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
-  // ── NEW ──
-  GitBranch, FlaskConical,
+  GitBranch, FlaskConical, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 type SidebarItem = {
   to: string;
@@ -37,7 +37,6 @@ const groups: SidebarGroup[] = [
       { to: '/plants', label: 'Plants', icon: Building2 },
       { to: '/operations', label: 'Wells & Locators', icon: Activity },
       { to: '/ro-trains', label: 'RO Trains', icon: Cog },
-      // ── NEW ── sits after RO Trains, before Maintenance ──────────────────
       { to: '/topology', label: 'Network Topology', icon: GitBranch },
     ],
   },
@@ -64,7 +63,6 @@ const adminOnlyGroup: SidebarGroup = {
   ],
 };
 
-// Data Analysis — Admin and Data Analyst (full access) or Manager (read-only)
 const dataAnalysisGroup: SidebarGroup = {
   label: 'Analysis',
   items: [
@@ -72,7 +70,6 @@ const dataAnalysisGroup: SidebarGroup = {
   ],
 };
 
-// Data import/export — visible to Admins AND Managers
 const dataGroup: SidebarGroup = {
   label: 'Data',
   items: [
@@ -81,7 +78,6 @@ const dataGroup: SidebarGroup = {
   ],
 };
 
-// Visible to every authenticated user (not just admins)
 const sharedGroup: SidebarGroup = {
   label: 'Team',
   items: [
@@ -89,8 +85,6 @@ const sharedGroup: SidebarGroup = {
   ],
 };
 
-// Filter a group's items to only those whose path is in OPERATOR_ALLOWED_PATHS,
-// then drop the group entirely if it ends up empty.
 function filterGroupForOperator(group: SidebarGroup): SidebarGroup | null {
   const items = group.items.filter((item) => {
     const path = item.to.split('?')[0];
@@ -102,7 +96,7 @@ function filterGroupForOperator(group: SidebarGroup): SidebarGroup | null {
 }
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const collapsed = state === 'collapsed';
   const { pathname } = useLocation();
   const { isAdmin, isManager, isDataAnalyst, profile, roles } = useAuth();
@@ -113,14 +107,12 @@ export function AppSidebar() {
 
   let visibleGroups: SidebarGroup[];
   if (isOperator) {
-    // Only show nav items whose routes Operators are allowed to visit
     visibleGroups = [...groups, sharedGroup]
       .map(filterGroupForOperator)
       .filter((g): g is SidebarGroup => g !== null);
   } else if (isAdmin) {
     visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
   } else if (isDataAnalyst) {
-    // Data Analysts see all operational pages + data analysis + admin console
     visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup, adminOnlyGroup];
   } else if (isManager) {
     visibleGroups = [...groups, sharedGroup, dataGroup, dataAnalysisGroup];
@@ -130,29 +122,103 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent>
-        {visibleGroups.map((g) => (
-          <SidebarGroup key={g.label}>
-            {!collapsed && <SidebarGroupLabel>{g.label}</SidebarGroupLabel>}
+      <SidebarContent className="py-2 gap-0 overflow-x-hidden">
+        {visibleGroups.map((g, groupIdx) => (
+          <SidebarGroup
+            key={g.label}
+            className="px-2 py-0"
+          >
+            {/* Collapsed: dot-divider between groups */}
+            {collapsed && groupIdx > 0 && (
+              <div className="my-1.5 mx-auto w-4 h-px bg-sidebar-border/50 rounded-full" />
+            )}
+
+            {/* Group label — visible only when expanded */}
+            {!collapsed && (
+              <SidebarGroupLabel
+                className={cn(
+                  'h-5 px-1.5 mb-0.5',
+                  'text-[9.5px] font-bold tracking-[0.12em] uppercase select-none',
+                  'text-sidebar-foreground/35',
+                  groupIdx > 0 && 'border-t border-sidebar-border/30 pt-2.5 mt-2',
+                )}
+              >
+                {g.label}
+              </SidebarGroupLabel>
+            )}
+
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-px">
                 {g.items.map((item) => {
-                  const isActive = item.end ? pathname === item.to : pathname.startsWith(item.to.split('?')[0]);
+                  const isActive = item.end
+                    ? pathname === item.to
+                    : pathname.startsWith(item.to.split('?')[0]);
+
                   return (
                     <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton asChild>
-                        <NavLink
-                          to={item.to}
-                          end={item.end}
-                          className={cn(
-                            'flex items-center gap-2',
-                            isActive && 'bg-accent-soft text-accent font-medium',
-                          )}
+                      {collapsed ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              asChild
+                              size="sm"
+                              className={cn(
+                                'h-8 w-8 p-0 flex items-center justify-center rounded-md mx-auto',
+                                'hover:bg-sidebar-accent/70 transition-colors duration-150',
+                                isActive && [
+                                  'bg-sidebar-accent',
+                                  'shadow-[inset_2px_0_0_0_hsl(var(--sidebar-primary))]',
+                                ],
+                              )}
+                            >
+                              <NavLink to={item.to} end={item.end}>
+                                <item.icon
+                                  className={cn(
+                                    'h-[15px] w-[15px] shrink-0 transition-colors duration-150',
+                                    isActive
+                                      ? 'text-sidebar-primary'
+                                      : 'text-sidebar-foreground/55',
+                                  )}
+                                />
+                              </NavLink>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="text-xs font-medium">
+                            {item.label}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <SidebarMenuButton
+                          asChild
+                          size="sm"
+                          className="h-auto p-0 hover:bg-transparent active:bg-transparent focus-visible:ring-0"
                         >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          {!collapsed && <span>{item.label}</span>}
-                        </NavLink>
-                      </SidebarMenuButton>
+                          <NavLink
+                            to={item.to}
+                            end={item.end}
+                            className={cn(
+                              'flex items-center gap-2.5 w-full px-2 py-[5px] rounded-md',
+                              'text-[12.5px] leading-tight transition-all duration-150 group',
+                              isActive
+                                ? [
+                                    'bg-sidebar-accent/80 text-sidebar-foreground font-semibold',
+                                    'shadow-[inset_2px_0_0_0_hsl(var(--sidebar-primary))]',
+                                  ]
+                                : 'text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent/50',
+                            )}
+                          >
+                            <item.icon
+                              className={cn(
+                                'h-[14px] w-[14px] shrink-0 transition-colors duration-150',
+                                isActive
+                                  ? 'text-sidebar-primary'
+                                  : 'text-sidebar-foreground/45 group-hover:text-sidebar-foreground/70',
+                              )}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      )}
                     </SidebarMenuItem>
                   );
                 })}
@@ -162,10 +228,38 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-        {/* Toggle button — pinned to the sidebar footer, always visible */}
-        <SidebarFooter className="p-2 border-t border-sidebar-border">
-          <SidebarTrigger className="w-full" />
-        </SidebarFooter>
+      {/* Collapse toggle — minimal, pinned footer */}
+      <SidebarFooter className="p-2 border-t border-sidebar-border/30">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={toggleSidebar}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className={cn(
+                'flex items-center rounded-md transition-all duration-150',
+                'text-sidebar-foreground/40 hover:text-sidebar-foreground/70 hover:bg-sidebar-accent/50',
+                collapsed
+                  ? 'w-8 h-7 mx-auto justify-center'
+                  : 'w-full h-7 gap-1.5 px-2 justify-start',
+              )}
+            >
+              {collapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <>
+                  <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                  <span className="text-[11px] font-medium">Collapse</span>
+                </>
+              )}
+            </button>
+          </TooltipTrigger>
+          {collapsed && (
+            <TooltipContent side="right" className="text-xs">
+              Expand sidebar
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </SidebarFooter>
     </Sidebar>
   );
 }
