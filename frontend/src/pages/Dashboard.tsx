@@ -155,8 +155,11 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const [fromStr, setFromStr] = useState<string>(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
   const [toStr,   setToStr]   = useState<string>(todayStr);
 
-  const startISO = new Date(fromStr + 'T00:00:00').toISOString();
-  const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
+  // Hard-clamp toStr to today — prevents stale future state from leaking into queries.
+  const clampedToStr = toStr > todayStr ? todayStr : toStr;
+
+  const startISO = new Date(fromStr      + 'T00:00:00').toISOString();
+  const endISO   = new Date(clampedToStr + 'T23:59:59').toISOString();
 
   // ── Locators (meta) ────────────────────────────────────────────────────────
   const { data: locators, isLoading: locatorsLoading } = useQuery({
@@ -176,7 +179,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
 
   const { data: consReadings, isLoading: consLoading } = useQuery({
-    queryKey: ['dsm-cons-readings', locatorIds, fromStr, toStr],
+    queryKey: ['dsm-cons-readings', locatorIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!locatorIds.length) return [];
       const { data } = await supabase
@@ -210,7 +213,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
   const { data: prodReadings, isLoading: prodLoading } = useQuery({
-    queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
+    queryKey: ['dsm-prod-readings', meterIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!meterIds.length) return [];
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
@@ -251,13 +254,13 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Fill every date in the selected range — not just dates that have readings.
     const allDates: string[] = [];
     const cur = new Date(fromStr + 'T00:00:00');
-    const end = new Date(toStr   + 'T00:00:00');
+    const end = new Date(clampedToStr + 'T00:00:00');
     while (cur <= end) {
       allDates.push(format(cur, 'yyyy-MM-dd'));
       cur.setDate(cur.getDate() + 1);
     }
     return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
-  }, [locators, consReadings, plantCodeById, fromStr, toStr]);
+  }, [locators, consReadings, plantCodeById, fromStr, clampedToStr]);
 
   const prodPivot = useMemo(() => {
     const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
@@ -278,13 +281,13 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
     const cur2 = new Date(fromStr + 'T00:00:00');
-    const end2 = new Date(toStr   + 'T00:00:00');
+    const end2 = new Date(clampedToStr + 'T00:00:00');
     while (cur2 <= end2) {
       allDates2.push(format(cur2, 'yyyy-MM-dd'));
       cur2.setDate(cur2.getDate() + 1);
     }
     return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
-  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
+  }, [productMeters, prodReadings, plantCodeById, fromStr, clampedToStr]);
 
   // ── RO permeate production (plants with permeate_is_production = true) ─────
   // This is the path that respects recalculateTrainDeltas.
@@ -333,7 +336,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
   // and permeate_production_date (cutoff-aware day label). Never use permeate_meter (cumulative).
   const { data: roMeterReadings, isLoading: roLoading } = useQuery({
-    queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, toStr],
+    queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
       const { data } = await supabase
@@ -343,7 +346,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0)
         .gte('permeate_production_date', fromStr)
-        .lte('permeate_production_date', toStr);
+        .lte('permeate_production_date', clampedToStr);
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
@@ -366,7 +369,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Enumerate every date in the selected range so empty days show as "—"
     const allDates: string[] = [];
     const cur = new Date(fromStr + 'T00:00:00');
-    const end = new Date(toStr   + 'T00:00:00');
+    const end = new Date(clampedToStr + 'T00:00:00');
     while (cur <= end) {
       const dk = format(cur, 'yyyy-MM-dd');
       allDates.push(dk);
@@ -384,7 +387,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     });
 
     return { dates: allDates, entities: sortedTrains, pivot };
-  }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
+  }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, clampedToStr]);
 
   // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
   //
@@ -504,19 +507,23 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // Use the production pivot as the single canonical date list (fromStr→toStr).
-            // Avoid a union that can gain phantom dates if the two pivot memos recompute
-            // at slightly different times or have readings outside the selected range.
-            const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
-            // Canonical date list: production pivot dates (same fromStr→toStr as cons pivot).
+            // ── ALWAYS use roProdPivot for the production column ─────────────────────
+            // This is the only source that:
+            //   1. Uses permeate_production_date (cutoff-adjusted, capped at toStr)
+            //      so no phantom future dates ever appear (May 18/19 when today = May 17)
+            //   2. Produces values that EXACTLY match the "Production" detail tab's
+            //      "Total Prod." column for every date.
+            // prodPivot (product meter readings) is NEVER used here — it uses raw
+            // reading_datetime which has a natural 1-day shift versus permeate_production_date
+            // and can bleed into future dates from early-morning readings.
+            const activeProdPivot = roProdPivot.entities.length > 0 ? roProdPivot : prodPivot;
+            // Date spine comes from the same pivot — identical to what Production tab shows.
             const allDates = activeProdPivot.dates;
 
             // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
-            // Do NOT use pivotDayTotal (which sums raw map values including any orphan
-            // train_ids not present in entities). Instead mirror the rowTotals formula:
+            // Mirror the rowTotals formula:
             //   entities.reduce((s, e) => s + (pivot.get(date)?.get(e.id) ?? 0), 0)
-            // This guarantees "Prod. vs Consum." totals == "Production" / "Consumption"
-            // row totals for every date.
+            // so "Prod. vs Consum." totals == "Production" / "Consumption" row totals.
             const prodEntities = activeProdPivot.entities;
             const consEntities = consPivot.entities;
             const rows = [...allDates].reverse().map((date) => {
@@ -699,7 +706,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </span>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.length} days in range`}
+            {tab === 'both' && `${(roProdPivot.entities.length > 0 ? roProdPivot : prodPivot).dates.length} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
