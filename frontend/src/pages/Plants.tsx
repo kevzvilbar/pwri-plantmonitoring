@@ -5244,6 +5244,61 @@ function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabe
   );
 }
 
+// ─── recalculateTrainDeltas ──────────────────────────────────────────────────
+//
+// Recomputes permeate_meter_delta for EVERY reading of an RO train in strict
+// chronological order.  Call this whenever the permeate_meter baseline changes:
+//
+//   • is_meter_replacement toggled on or off  (toggleMeterReplacement below)
+//   • DataAnalysis applies a permeate_meter correction  (DataAnalysis.tsx)
+//   • A new reading is inserted between existing rows
+//       → HOOK POINT in ROTrains.tsx: call recalculateTrainDeltas(trainId) at
+//         the end of the submit() handler after every successful insert.
+//
+// Rules:
+//   is_meter_replacement = true  → delta = 0; baseline still advances
+//   Normal row, prev available   → delta = max(0, current − prev)
+//   First row / meter is null    → delta = null
+async function recalculateTrainDeltas(trainId: string): Promise<void> {
+  try {
+    const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
+      .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: true });
+
+    if (!rows?.length) return;
+
+    let prevMeter: number | null = null;
+
+    for (const row of rows as any[]) {
+      const isRepl   = !!row.is_meter_replacement;
+      const curMeter = row.permeate_meter != null ? +row.permeate_meter : null;
+      const stored   = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
+
+      let newDelta: number | null;
+      if (isRepl) {
+        newDelta = 0;
+      } else if (prevMeter != null && curMeter != null) {
+        newDelta = Math.max(0, curMeter - prevMeter);
+      } else {
+        newDelta = null;
+      }
+
+      // Always advance baseline — replacement rows still set the new meter floor
+      if (curMeter != null) prevMeter = curMeter;
+
+      // Only write when the value has actually changed
+      if (newDelta !== stored) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ permeate_meter_delta: newDelta })
+          .eq('id', row.id);
+      }
+    }
+  } catch {
+    // Non-critical — log and continue
+  }
+}
+
 // ─── Train Operator Log Modal ─────────────────────────────────────────────────
 // Full paginated operator log with all columns + meter-replacement toggle,
 // matching the Operations reading-history pattern.
@@ -5351,14 +5406,28 @@ function TrainOperatorLogModal({
         }
         if (!readings?.length) return [];
 
-        // Compute permeate_meter_delta in-memory when column not in DB yet.
-        // Rows are sorted descending; we need ascending order for prev-curr diff.
-        // Build a per-train map of the previous meter reading as we iterate ascending.
+        // Compute permeate_meter_delta in-memory from consecutive permeate_meter values.
+        // Rows are sorted descending; reverse to ascending so prev-curr diff is correct.
+        //
+        // FIX: previously lastMeter was only updated inside the
+        //   `if (permeate_meter_delta == null)` branch, so any row that already had a
+        //   stored delta (even a wrong one written before DataAnalysis correction) would
+        //   freeze the baseline.  Every subsequent null-delta row then computed against
+        //   a stale previous reading, inflating or deflating its computed delta.
+        //
+        // Now:
+        //   • lastMeter ALWAYS advances to the current row's permeate_meter.
+        //   • _computed_delta is set for EVERY row that has a permeate_meter — it
+        //     uses the corrected meter value, so DataAnalysis corrections to
+        //     permeate_meter are reflected immediately without waiting for the stored
+        //     permeate_meter_delta to be back-filled.
         const ascReadings = [...(readings as any[])].reverse();
         const lastMeter = new Map<string, number>(); // trainId → last seen permeate_meter
         ascReadings.forEach((r: any) => {
-          if (r.permeate_meter_delta == null && r.permeate_meter != null) {
+          if (r.permeate_meter != null) {
             const prev = lastMeter.get(r.train_id ?? trainId);
+            // Always compute from meter readings — overrides stored delta which may
+            // have been derived from a permeate_meter value that was later corrected.
             r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
             lastMeter.set(r.train_id ?? trainId, +r.permeate_meter);
           }
@@ -5395,7 +5464,11 @@ function TrainOperatorLogModal({
     gcTime: 60_000,
   });
 
-  // Toggle is_meter_replacement on a row (manager-only) — zeroes the delta in TrendChart
+  // Toggle is_meter_replacement on a row (manager-only).
+  // Toggling ON  → this row's delta becomes 0 in TrendChart / Dashboard.
+  // Toggling OFF → this row's delta must be recalculated from actual meter readings.
+  // Either way, a full cascade recalculation runs for the entire train so every
+  // downstream row's delta stays consistent with the updated baseline.
   const toggleMeterReplacement = async (r: any) => {
     if (!isManager) return;
     setTogglingId(r.id);
@@ -5404,12 +5477,25 @@ function TrainOperatorLogModal({
       .update({ is_meter_replacement: next }).eq('id', r.id);
     setTogglingId(null);
     if (error) {
-      // Column may not exist yet — add it via migration
       toast.error('is_meter_replacement column missing — run: ALTER TABLE ro_train_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN DEFAULT FALSE');
       return;
     }
-    toast.success(next ? 'Marked as meter replacement — Δ zeroed in chart' : 'Meter replacement flag removed');
+
+    // Full cascade: recompute permeate_meter_delta for every row in this train
+    // so the changed flag propagates correctly through the entire meter sequence.
+    await recalculateTrainDeltas(r.train_id ?? trainId);
+
+    toast.success(
+      next
+        ? 'Marked as meter replacement — Δ zeroed and downstream deltas recalculated'
+        : 'Replacement flag removed — Δ recalculated from actual meter readings',
+    );
     qc.invalidateQueries({ queryKey });
+    // Invalidate Dashboard / TrendChart so the corrected production totals appear immediately
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
   };
 
   const totalPages = Math.ceil(logs.length / PAGE_SIZE);
@@ -5599,10 +5685,15 @@ function TrainOperatorLogModal({
                       </td>
                       {/* Permeate meter */}
                       <td className="px-2 py-2 text-right font-mono text-[11px]">{fmtVal(r.permeate_meter, 'm³')}</td>
-                      {/* Δ m³ — use saved delta if available, else in-memory computed delta */}
+                      {/* Δ m³ — prefer in-memory delta (computed from corrected permeate_meter)
+                           over the stored permeate_meter_delta, which may have been written
+                           before DataAnalysis corrected the underlying meter reading. */}
                       <td className="px-2 py-2 text-right font-mono text-[11px]">
                         {(() => {
-                          const d = r.permeate_meter_delta != null ? +r.permeate_meter_delta : r._computed_delta;
+                          // _computed_delta is always available when permeate_meter exists and
+                          // there is a predecessor row.  Fall back to stored delta only when
+                          // _computed_delta is null (e.g. first-ever reading for this train).
+                          const d = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
                           if (d == null) return <span className="text-muted-foreground/30">—</span>;
                           if (isRepl) return <span className="text-orange-500 font-medium">0</span>;
                           return d > 0

@@ -403,6 +403,67 @@ function runOLS(readings: RawReading[], column: string): OLSResult {
   };
 }
 
+// ── recalculateTrainDeltas ────────────────────────────────────────────────────
+//
+// Recomputes permeate_meter_delta for EVERY reading of a given RO train in
+// strict chronological order.  Must be called any time the permeate_meter
+// baseline changes:
+//
+//   • DataAnalysis applies a permeate_meter correction (handleApply below)
+//   • is_meter_replacement is toggled on/off  (TrainOperatorLogModal, Plants.tsx)
+//   • A new reading is inserted between existing ones  (ROTrains.tsx submit —
+//     add a call there too; hook point is clearly marked in that file)
+//
+// Rules applied in sequence per row:
+//   is_meter_replacement = true  → delta = 0; baseline STILL advances so the
+//                                   next row computes correctly from the new meter
+//   Normal row, prev available   → delta = max(0, current − prev)
+//   First row / meter is null    → delta = null  (no predecessor yet)
+//
+// Only rows whose computed delta differs from the stored value are written to DB,
+// keeping network traffic minimal.
+async function recalculateTrainDeltas(trainId: string): Promise<void> {
+  try {
+    const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
+      .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: true });
+
+    if (!rows?.length) return;
+
+    let prevMeter: number | null = null;
+
+    for (const row of rows as any[]) {
+      const isRepl   = !!row.is_meter_replacement;
+      const curMeter = row.permeate_meter != null ? +row.permeate_meter : null;
+      const stored   = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
+
+      let newDelta: number | null;
+      if (isRepl) {
+        newDelta = 0;                                            // replacement: zero contribution
+      } else if (prevMeter != null && curMeter != null) {
+        newDelta = Math.max(0, curMeter - prevMeter);
+      } else {
+        newDelta = null;                                         // no predecessor
+      }
+
+      // Advance baseline regardless of replacement flag so the next normal row
+      // computes its delta correctly from the replacement meter value.
+      if (curMeter != null) prevMeter = curMeter;
+
+      // Skip DB write when value hasn't changed
+      const needsUpdate = newDelta !== stored;
+      if (needsUpdate) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ permeate_meter_delta: newDelta })
+          .eq('id', row.id);
+      }
+    }
+  } catch {
+    // Non-critical — proceed without full cascade
+  }
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function NormBadge({ status }: { status?: NormStatus }) {
@@ -567,11 +628,42 @@ function RegressionDetail({
         (c: CorrectionRow) => c.is_outlier && c.corrected_value != null,
       );
 
-      // Update norm_status on each source row
+      // Update norm_status AND write the corrected column value to the source row.
+      // Previously only norm_status was set, leaving the raw (bad) value in place so
+      // Dashboard / TrendChart continued to read it and show spikes.
+      const hasNormStatus = !TABLES_WITHOUT_NORM_STATUS.has(row.source_table);
+
+      // For ro_train_readings.permeate_meter corrections: collect all affected train IDs
+      // so we can run a full cascade recalculation once all writes are done.
+      const trainsToRecalculate = new Set<string>();
+
       for (const c of toApply) {
+        const updatePayload: Record<string, unknown> = {
+          [row.column_name]: c.corrected_value,
+        };
+        if (hasNormStatus) updatePayload.norm_status = 'normalized';
+
         await (supabase.from(row.source_table as never) as any)
-          .update({ norm_status: 'normalized' })
+          .update(updatePayload)
           .eq('id', c.reading_id);
+
+        // Queue affected train for full delta cascade after all values are written
+        if (row.source_table === 'ro_train_readings' && row.column_name === 'permeate_meter') {
+          try {
+            const { data: thisRow } = await (supabase.from('ro_train_readings' as any) as any)
+              .select('train_id')
+              .eq('id', c.reading_id)
+              .maybeSingle();
+            if (thisRow?.train_id) trainsToRecalculate.add(String(thisRow.train_id));
+          } catch { /* non-critical */ }
+        }
+      }
+
+      // Full cascade delta recalculation for every affected train.
+      // This handles is_meter_replacement rows (delta=0), insertions in the middle,
+      // and any chain of rows whose baseline shifted due to the correction.
+      for (const tid of trainsToRecalculate) {
+        await recalculateTrainDeltas(tid);
       }
 
       // Insert reading_normalizations rows
@@ -1236,6 +1328,9 @@ export default function DataAnalysis() {
         hasNorm ? 'norm_status' : null,
         'plant_id',
         entityCfg ? entityCfg.fkColumn : null,
+        // Fetch is_meter_replacement for ro_train_readings so regression can warn when
+        // it encounters rows whose delta is overridden to 0 by that flag.
+        (sourceTable === 'ro_train_readings') ? 'is_meter_replacement' : null,
       ].filter(Boolean).join(',');
 
       let q = supabase
@@ -1252,6 +1347,33 @@ export default function DataAnalysis() {
       if (readErr) throw new Error(readErr.message);
 
       const { corrections, stats, resetCount } = runOLS((readings || []) as RawReading[], column);
+
+      // ── Meter-replacement warning ─────────────────────────────────────────
+      // For ro_train_readings.permeate_meter: rows with is_meter_replacement=true
+      // have their permeate_meter_delta forced to 0 by an override rule in the
+      // operator log.  Correcting permeate_meter via regression fixes the
+      // cumulative reading but the delta will STAY at 0 until the replacement
+      // flag is unchecked — at which point a full cascade recalculation runs.
+      // Surface this as a visible warning in each correction note so the analyst
+      // knows the override is active before applying.
+      if (sourceTable === 'ro_train_readings') {
+        const replIds = new Set(
+          ((readings || []) as any[])
+            .filter((r: any) => r.is_meter_replacement)
+            .map((r: any) => String(r.id)),
+        );
+        if (replIds.size > 0) {
+          corrections.forEach(c => {
+            if (replIds.has(c.reading_id)) {
+              const warning =
+                '⚠️ Meter replacement flag is active on this row — ' +
+                'permeate_meter_delta will remain 0 even after correcting the meter value. ' +
+                'Uncheck the replacement flag in the Operator Log to trigger a full delta recalculation.';
+              c.note = c.note ? `${warning} | ${c.note}` : warning;
+            }
+          });
+        }
+      }
       const resultId    = crypto.randomUUID();
       const outlierCount = corrections.filter(c => c.is_outlier).length;
       const userRole    = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
