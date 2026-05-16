@@ -85,7 +85,9 @@ const TABLE_LABELS: Record<string, string> = {
   power_readings:         'Grid & Solar Readings',
 };
 
-/** For each source table: which Supabase lookup table + FK column on the readings row. */
+/** For each source table: which Supabase lookup table + FK column on the readings row.
+ *  power_readings is plant-level only (no sub-entity FK); it is intentionally absent here.
+ *  Instead, a "Source" filter (Solar / Grid) is provided via POWER_SOURCE_FILTER. */
 const ENTITY_CONFIG: Record<string, {
   lookupTable: string;
   fkColumn: string;
@@ -122,6 +124,15 @@ const ENTITY_CONFIG: Record<string, {
     filterLabel: 'Meter',
   },
 };
+
+/** power_readings has no sub-entity FK — it is plant-level.
+ *  We provide a "Source" pseudo-filter so users can isolate Solar vs Grid columns. */
+const POWER_SOURCE_OPTIONS = [
+  { value: 'all',   label: 'All Sources' },
+  { value: 'solar', label: 'Solar',       columns: ['daily_solar_kwh'] },
+  { value: 'grid',  label: 'Grid',        columns: ['daily_grid_kwh'] },
+  { value: 'total', label: 'Total / Meter', columns: ['daily_consumption_kwh', 'meter_reading_kwh'] },
+];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -339,7 +350,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
 
       // 2. Log to audit table
       const userRole = isAdmin ? 'Admin' : (roles.find(r => r === 'Data Analyst') ?? 'Data Analyst');
-      await (supabase.from('raw_edit_log' as never) as any).insert({
+      await supabase.from('raw_edit_log').insert({
         source_table: reading._sourceTable,
         source_id:    reading.id,
         column_name:  column,
@@ -427,8 +438,8 @@ function RegressionDetail({
     setApplying(true);
     try {
       // Fetch full row (corrections may be truncated in list view)
-      const { data: row, error: fetchErr } = await (supabase
-        .from('regression_results' as never) as any)
+      const { data: row, error: fetchErr } = await supabase
+        .from('regression_results')
         .select('*')
         .eq('id', result.result_id)
         .maybeSingle();
@@ -463,7 +474,7 @@ function RegressionDetail({
       }
 
       // Mark result applied
-      await (supabase.from('regression_results' as never) as any)
+      await supabase.from('regression_results')
         .update({ status: 'applied' })
         .eq('id', result.result_id);
 
@@ -479,8 +490,8 @@ function RegressionDetail({
   const handleRetract = async () => {
     setRetracting(true);
     try {
-      const { data: row, error: fetchErr } = await (supabase
-        .from('regression_results' as never) as any)
+      const { data: row, error: fetchErr } = await supabase
+        .from('regression_results')
         .select('*')
         .eq('id', result.result_id)
         .maybeSingle();
@@ -512,7 +523,7 @@ function RegressionDetail({
         await (supabase.from('reading_normalizations' as never) as any).insert(normRows);
       }
 
-      await (supabase.from('regression_results' as never) as any)
+      await supabase.from('regression_results')
         .update({ status: 'retracted' })
         .eq('id', result.result_id);
 
@@ -790,8 +801,8 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['raw-edit-log', sourceTable],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from('raw_edit_log' as never) as any)
+      const { data, error } = await supabase
+        .from('raw_edit_log')
         .select('*')
         .eq('source_table', sourceTable)
         .order('edited_at', { ascending: false })
@@ -807,7 +818,12 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
   const rows = data?.log ?? [];
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</div>;
-  if (isError)   return <div className="py-8 text-center text-sm text-muted-foreground">Audit log unavailable.</div>;
+  if (isError)   return (
+    <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      Audit log unavailable — run the <code className="font-mono">20260515_supabase_only_and_data_analysis.sql</code> migration in Supabase to create the <code className="font-mono">raw_edit_log</code> table.
+    </div>
+  );
   if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No edits recorded yet.</div>;
 
   return (
@@ -926,6 +942,7 @@ export default function DataAnalysis() {
   // Convert null (all plants) to 'all' for Select component
   const [plantId, setPlantId]         = useState<string>(selectedPlantId ?? 'all');
   const [entityId, setEntityId]       = useState('all');
+  const [powerSource, setPowerSource] = useState('all'); // only used when sourceTable === 'power_readings'
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
 
@@ -988,7 +1005,7 @@ export default function DataAnalysis() {
   const { data: resultsData, refetch: refetchResults, isError: resultsError } = useQuery({
     queryKey: ['regression-results', sourceTable, plantId, entityId],
     queryFn: async () => {
-      let q = (supabase.from('regression_results' as never) as any)
+      let q = supabase.from('regression_results')
         .select('*')
         .eq('source_table', sourceTable)
         .order('created_at', { ascending: false })
@@ -1028,6 +1045,7 @@ export default function DataAnalysis() {
     setSourceTable(t);
     setColumn(SOURCE_TABLES[t]?.[0] ?? '');
     setEntityId('all');
+    setPowerSource('all');
   };
 
   // When plant changes here, also update the global store so other pages stay in sync
@@ -1086,8 +1104,8 @@ export default function DataAnalysis() {
         status:       'pending',
       };
 
-      const { error: insertErr } = await (supabase
-        .from('regression_results' as never) as any)
+      const { error: insertErr } = await supabase
+        .from('regression_results')
         .insert(doc);
       if (insertErr) throw new Error(insertErr.message);
 
@@ -1185,7 +1203,7 @@ export default function DataAnalysis() {
               </Select>
             </div>
 
-            {/* Entity drill-down */}
+            {/* Entity drill-down — for tables with sub-entities (wells, locators, trains, meters) */}
             {entityCfgMain && (
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
@@ -1225,6 +1243,34 @@ export default function DataAnalysis() {
                     )}
                     {entityOptions.map(opt => (
                       <SelectItem key={opt.id} value={opt.id} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Power Source filter — only for Grid & Solar Readings (plant-level, no sub-entity FK) */}
+            {sourceTable === 'power_readings' && (
+              <div className="space-y-1">
+                <Label className="text-xs">Source</Label>
+                <Select value={powerSource} onValueChange={v => {
+                  setPowerSource(v);
+                  // Auto-select the first matching column when filtering by source
+                  const opt = POWER_SOURCE_OPTIONS.find(o => o.value === v);
+                  if (opt && 'columns' in opt && opt.columns.length > 0) {
+                    setColumn(opt.columns[0]);
+                  } else if (v === 'all') {
+                    setColumn(SOURCE_TABLES['power_readings'][0]);
+                  }
+                }}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POWER_SOURCE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
                         {opt.label}
                       </SelectItem>
                     ))}
@@ -1305,9 +1351,22 @@ export default function DataAnalysis() {
           </CardHeader>
           <CardContent className="px-3 pb-4 space-y-3">
             {resultsError && (
-              <div className="flex items-center gap-2 rounded bg-muted/60 border px-3 py-2 text-[11px] text-muted-foreground">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                Could not load regression results.
+              <div className="flex flex-col gap-1.5 rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2.5 text-[11px]">
+                <div className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  Regression results table not found
+                </div>
+                <p className="text-amber-700 dark:text-amber-400 leading-relaxed">
+                  The <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">regression_results</code> and{' '}
+                  <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">raw_edit_log</code> tables
+                  have not been created in Supabase yet. Run the migration to fix this:
+                </p>
+                <p className="text-amber-700 dark:text-amber-400 font-mono text-[10px] bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded">
+                  supabase/migrations/20260515_supabase_only_and_data_analysis.sql
+                </p>
+                <p className="text-amber-600 dark:text-amber-500">
+                  Go to <strong>Supabase Dashboard → SQL Editor</strong> and run the migration file above.
+                </p>
               </div>
             )}
             {!resultsError && regressionResults.length === 0 && (
