@@ -481,16 +481,17 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // Build daily totals from both sides using the dates in the range
-            const allDates: string[] = [];
-            const cur = new Date(fromStr + 'T00:00:00');
-            const end = new Date(toStr   + 'T00:00:00');
-            while (cur <= end) { allDates.push(format(cur, 'yyyy-MM-dd')); cur.setDate(cur.getDate() + 1); }
+            // Use the canonical date lists from each pivot (already cover the full selected range).
+            // Taking the union ensures no date is missing if the two pivots differ by one edge day.
+            const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
+            const allDateSet = new Set([...activeProdPivot.dates, ...consPivot.dates]);
+            const allDates = [...allDateSet].sort();
+            // pivotDayTotal sums ALL entity values stored under a date key — identical to what
+            // the Production / Consumption detail tabs show as row totals, so the numbers are
+            // guaranteed to match regardless of entity-key ordering or train_id aliasing.
             const rows = [...allDates].reverse().map((date) => {
-              const prod = useRoProd
-                ? Array.from(roProdPivot.entities).reduce((s, e) => s + (roProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0)
-                : Array.from(prodPivot.entities).reduce((s, e) => s + (prodPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const cons = Array.from(consPivot.entities).reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              const prod = pivotDayTotal(activeProdPivot.pivot, date);
+              const cons = pivotDayTotal(consPivot.pivot, date);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
@@ -668,7 +669,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </span>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${dates.length} days in range`}
+            {tab === 'both' && `${new Set([...(useRoProd ? roProdPivot : prodPivot).dates, ...consPivot.dates]).size} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
