@@ -118,29 +118,98 @@ function computePivotFromReadings(
 }
 
 /**
- * RO-train production pivot — groups by `permeate_production_date` and sums
- * `permeate_meter_delta` per train. Does NOT attempt to derive deltas from
- * cumulative meter readings, which is the root cause of the "millions delta"
- * spike (e.g. May 12 RO8 = 1,191,299) that appeared when readings were
- * mistakenly keyed by `reading_datetime` and the cumulative permeate_meter
- * value leaked in as the interval delta.
+ * RO-train production pivot — computes deltas IN-MEMORY from consecutive
+ * `permeate_meter` readings (same approach as Plants.tsx `_computed_delta`),
+ * then groups by `permeate_production_date` (cut-off-adjusted day).
+ *
+ * Why in-memory delta computation?
+ *   The stored `permeate_meter_delta` column can contain stale / incorrect
+ *   values — for example, when the very first row in a session had no prior
+ *   reading in the DB the full cumulative meter value was saved as the delta
+ *   (the "millions spike", e.g. May 12 RO8 = 1,191,299 m³).  Re-deriving the
+ *   delta from consecutive `permeate_meter` values always produces the correct
+ *   single-interval figure regardless of what is stored in the column.
+ *
+ * fromStr / toStr (yyyy-MM-dd) restrict the OUTPUT dates.  Rows fetched slightly
+ * before `fromStr` are used only as the "previous meter" baseline for the first
+ * in-range reading; they are NOT included in the pivot output.
  *
  * Returns Map<dateKey yyyy-MM-dd, Map<trainId, summed m³>>.
  */
 function computeROProdPivot(
-  roReadings: any[], // rows from ro_train_readings with permeate_production_date + permeate_meter_delta
+  roReadings: any[],   // rows from ro_train_readings; must include permeate_meter,
+                       // reading_datetime, permeate_production_date, is_meter_replacement
+  fromStr?: string,    // yyyy-MM-dd — only output dates >= this
+  toStr?:   string,    // yyyy-MM-dd — only output dates <= this
 ): Map<string, Map<string, number>> {
-  const pivot = new Map<string, Map<string, number>>();
+  // ── 1. Group by trainId ─────────────────────────────────────────────────────
+  const byTrain = new Map<string, any[]>();
   roReadings.forEach((r) => {
-    const dateKey = r.permeate_production_date as string | null;
-    if (!dateKey) return; // reading has no production date label — skip
-    const delta = +(r.permeate_meter_delta ?? 0);
-    if (delta <= 0) return; // guard against negative or zero deltas
-    if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
-    const trainId = r.train_id as string;
-    const prev = pivot.get(dateKey)!.get(trainId) ?? 0;
-    pivot.get(dateKey)!.set(trainId, prev + delta);
+    const k = String(r.train_id ?? '__');
+    if (!byTrain.has(k)) byTrain.set(k, []);
+    byTrain.get(k)!.push(r);
   });
+
+  const pivot = new Map<string, Map<string, number>>();
+
+  byTrain.forEach((rows, trainId) => {
+    // ── 2. Sort chronologically (ascending reading_datetime) ─────────────────
+    const sorted = [...rows].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+
+    let lastMeter: number | null = null;
+    let afterRepl = false;
+
+    sorted.forEach((r) => {
+      const isMR = !!r.is_meter_replacement;
+
+      // ── 3. Compute delta from consecutive meter readings ───────────────────
+      let delta: number | null = null;
+
+      if (r.permeate_meter != null) {
+        if (isMR) {
+          // Meter replacement row — zero the delta and flag next row
+          delta = 0;
+          afterRepl = true;
+        } else if (afterRepl) {
+          // First reading after a replacement — also zero (new baseline)
+          delta = 0;
+          afterRepl = false;
+        } else if (lastMeter !== null) {
+          // Normal row: interval = current − previous (clamped ≥ 0)
+          delta = Math.max(0, +r.permeate_meter - lastMeter);
+        }
+        // else: very first row in the fetched window with no predecessor → delta null (skip)
+        lastMeter = +r.permeate_meter;
+      } else if (!isMR && r.permeate_meter_delta != null) {
+        // Fallback: no permeate_meter column → use stored delta with sanity cap.
+        // Cap at 10,000 m³/day; anything larger is almost certainly a cumulative
+        // meter value that leaked in as the delta.
+        const stored = +r.permeate_meter_delta;
+        delta = stored > 0 && stored < 10_000 ? stored : null;
+      }
+
+      if (delta == null || delta <= 0) return;
+
+      // ── 4. Resolve the production date for this reading ───────────────────
+      // Prefer permeate_production_date (cut-off-adjusted calendar day);
+      // fall back to the calendar date of reading_datetime.
+      const dateKey: string = r.permeate_production_date
+        ? String(r.permeate_production_date)
+        : format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+
+      // ── 5. Restrict to the requested output window ────────────────────────
+      if (fromStr && dateKey < fromStr) return;
+      if (toStr   && dateKey > toStr)   return;
+
+      // ── 6. Accumulate ─────────────────────────────────────────────────────
+      if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+      const prev = pivot.get(dateKey)!.get(trainId) ?? 0;
+      pivot.get(dateKey)!.set(trainId, prev + delta);
+    });
+  });
+
   return pivot;
 }
 
@@ -234,22 +303,26 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const roTrainIds = useMemo(() => (roTrains ?? []).map((t: any) => t.id), [roTrains]);
 
   // ── RO train permeate production readings ──────────────────────────────────
-  // Query by permeate_production_date (the day the reading counts toward, after
-  // cut-off adjustment) — NOT by reading_datetime. This is the key fix that
-  // prevents readings made just after midnight from being attributed to the
-  // wrong calendar day and inflating one day's total (the "millions delta" bug).
+  // Fetch by reading_datetime with a 3-day lookback before fromStr so the
+  // first in-range row always has a predecessor for in-memory delta computation.
+  // computeROProdPivot then:
+  //   • derives deltas from consecutive permeate_meter values (not stored permeate_meter_delta)
+  //   • groups by permeate_production_date (cut-off-adjusted day)
+  //   • restricts output to [fromStr, toStr]
+  // This eliminates the "millions spike" caused by stale / incorrect stored
+  // permeate_meter_delta values (e.g. May 12 RO8 = 1,191,299 m³).
+  const lookbackISO = format(subDays(new Date(fromStr + 'T00:00:00'), 3), "yyyy-MM-dd'T'HH:mm:ss");
   const { data: prodReadings, isLoading: prodLoading } = useQuery({
     queryKey: ['dsm-prod-readings', roTrainIds, fromStr, toStr],
     queryFn: async () => {
       if (!roTrainIds.length) return [];
       const { data } = await (supabase.from('ro_train_readings' as any) as any)
-        .select('train_id,permeate_meter_delta,permeate_production_date')
+        .select('train_id,permeate_meter,permeate_meter_delta,permeate_production_date,reading_datetime,is_meter_replacement')
         .in('train_id', roTrainIds)
-        // Filter on the production date column — not reading_datetime
-        .gte('permeate_production_date', fromStr)
-        .lte('permeate_production_date', toStr)
-        .not('permeate_meter_delta', 'is', null)
-        .gt('permeate_meter_delta', 0);
+        // Use reading_datetime for the fetch window (with lookback for correct first-row delta)
+        .gte('reading_datetime', lookbackISO)
+        .lte('reading_datetime', endISO)
+        .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
     enabled: open && roTrainIds.length > 0,
@@ -289,10 +362,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   }, [locators, consReadings, plantCodeById, fromStr, toStr]);
 
   // ── Production pivot — RO train permeate, keyed by permeate_production_date ──
-  // Using computeROProdPivot (not computePivotFromReadings) so we:
-  //   1. Group by permeate_production_date (cut-off-adjusted day), not reading_datetime
-  //   2. Sum permeate_meter_delta directly (pre-computed interval, never cumulative)
-  // This is the fix for the "millions delta" bug (e.g. May 12 RO8 = 1,191,299).
+  // computeROProdPivot re-derives deltas in-memory from consecutive permeate_meter
+  // values (same approach as Plants.tsx _computed_delta) then groups by
+  // permeate_production_date. This is reliable regardless of what is stored in
+  // the permeate_meter_delta column (fixes the "millions spike" bug).
   const prodPivot = useMemo(() => {
     const sortedTrains = [...(roTrains ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
@@ -305,7 +378,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       name: t.name ?? `RO${t.train_number}`,
     }));
 
-    const pivot = computeROProdPivot(prodReadings ?? []);
+    const pivot = computeROProdPivot(prodReadings ?? [], fromStr, toStr);
 
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
