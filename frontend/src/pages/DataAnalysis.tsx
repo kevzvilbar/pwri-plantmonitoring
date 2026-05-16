@@ -402,8 +402,6 @@ function runOLS(readings: RawReading[], column: string): OLSResult {
     resetCount,
   };
 }
-  };
-}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
