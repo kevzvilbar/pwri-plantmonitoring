@@ -327,23 +327,19 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   });
 
   // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
-  // and reading_datetime for date bucketing. We intentionally do NOT use
-  // permeate_production_date here because that column applies the 00:20 cutoff rule
-  // which shifts readings past midnight to the next calendar day, causing a 1-day
-  // misalignment vs consumption (which always uses the plain reading_datetime date).
-  // Using reading_datetime directly keeps production dates consistent with consumption.
+  // and permeate_production_date (cutoff-aware day label). Never use permeate_meter (cumulative).
   const { data: roMeterReadings, isLoading: roLoading } = useQuery({
     queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, toStr],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
       const { data } = await supabase
         .from('ro_train_readings')
-        .select('train_id,permeate_meter_delta,reading_datetime')
+        .select('train_id,permeate_meter_delta,permeate_production_date')
         .in('plant_id', permeateIsProductionPlantIds)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0)
-        .gte('reading_datetime', startISO)
-        .lte('reading_datetime', endISO);
+        .gte('permeate_production_date', fromStr)
+        .lte('permeate_production_date', toStr);
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
@@ -351,9 +347,9 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     refetchInterval: open ? 30_000 : false,
   });
 
-  // RO production pivot — simple SUM of permeate_meter_delta per calendar date per train.
-  // Date key comes from reading_datetime (local calendar date, no cutoff shift) so
-  // production dates align 1-to-1 with consumption dates in the Prod vs Consum. tab.
+  // RO production pivot — simple SUM of permeate_meter_delta per permeate_production_date per train.
+  // NO cumulative-delta recomputation: the stored delta is already correct (maintained by
+  // recalculateTrainDeltas), so we just group and sum.
   const roProdPivot = useMemo(() => {
     const sortedTrains = [...(roTrainsMeta ?? [])].sort((a, b) => {
       const pa = plantCodeById.get(a.plant_id) ?? '';
@@ -374,10 +370,9 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Accumulate deltas — use the plain local calendar date of each reading (no cutoff).
-    // format() uses local time, matching how consumption date keys are computed.
+    // Accumulate deltas — each hourly reading contributes its pre-stored delta
     (roMeterReadings ?? []).forEach((r: any) => {
-      const dateKey  = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
+      const dateKey  = r.permeate_production_date as string;
       const trainKey = r.train_id as string;
       const delta    = +(r.permeate_meter_delta ?? 0);
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
