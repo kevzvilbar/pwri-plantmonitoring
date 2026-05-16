@@ -1497,6 +1497,11 @@ function PretreatmentAndROLog() {
     });
     if (pretreatError) { toast.error(`Pre-treatment error: ${pretreatError.message}`); return; }
 
+    // Recalculate permeate_meter_delta for all rows on this train so that
+    // back-dated inserts (new reading slotted between two existing ones) don't
+    // leave the next row with a stale delta computed against the old predecessor.
+    await recalculateTrainDeltas(trainId);
+
     toast.success('Pre-treatment & RO reading saved');
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
