@@ -1,4 +1,5 @@
 import { Bell, AlertTriangle, Info, Droplets } from 'lucide-react';
+
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -111,8 +112,23 @@ export function TopBar() {
 
         {/* ── Brand mark ─────────────────────────────────────────── */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 shrink-0">
-            <Droplets className="h-4 w-4 text-white/90" />
+          <div className="flex items-center justify-center h-7 w-7 rounded-lg overflow-hidden shrink-0">
+            <img
+              src="/pwri-plantmonitoring/og-image.png"
+              alt="PWRI Logo"
+              className="h-7 w-7 object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                if (fb) fb.style.display = 'flex';
+              }}
+            />
+            <div
+              style={{ display: 'none' }}
+              className="h-7 w-7 rounded-lg bg-white/10 items-center justify-center"
+            >
+              <Droplets className="h-4 w-4 text-white/90" />
+            </div>
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-[13px] font-semibold tracking-tight text-topbar-foreground">PWRI</span>
