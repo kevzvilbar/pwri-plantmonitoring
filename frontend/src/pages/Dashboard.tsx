@@ -914,12 +914,10 @@ export default function Dashboard() {
   // IS the production figure; those rows must be included in the Dashboard production
   // total and the NRW / PV-ratio calculations that depend on it.
   //
-  // ROOT-CAUSE FIX: The DataSummaryModal queries `permeate_is_production` as a
-  // TOP-LEVEL column on plant_meter_config (and correctly shows production values).
-  // The original dashboard query only selected `config` (JSONB blob) and then
-  // checked `row.config?.permeate_is_production` — which is always undefined when
-  // permeate_is_production is stored as a real column, causing production to be 0.
-  // Solution: select both the direct column AND the config blob, then check all paths.
+  // FIX: Select permeate_is_production as a direct column (mirrors DataSummaryModal)
+  // in addition to the config JSONB blob. The original query only read the blob and
+  // checked row.config?.permeate_is_production which was undefined when the flag is
+  // stored as a real column, causing permeateProductionPlantIds to always be empty.
   const { data: plantMeterConfigs } = useQuery({
     queryKey: ['dash-plant-meter-configs', plantIds],
     queryFn: async () => {
@@ -948,57 +946,80 @@ export default function Dashboard() {
       .map((row: any) => row.plant_id as string);
   }, [plantMeterConfigs]);
 
-  // Today's production from RO permeate meter deltas
-  // Fetches a 49-hour window (yesterday 00:00 → today 23:59) so that readings
-  // attributed to "today" via the cut-off rule (recorded yesterday after cut-off)
-  // are included. Client-side bucketing via permeateProductionDate() then assigns
-  // each reading to the correct production day.
-  const { data: todayRoPermeate } = useQuery({
-    queryKey: ['dash-ro-permeate-today', permeateProductionPlantIds, _localDateStr],
+  // ── Step 1: Resolve RO train IDs for permeate-production plants ─────────────
+  // CRITICAL FIX (mirrors TrendChart.tsx line 1070):
+  // ro_train_readings does NOT have a plant_id column. Querying it with
+  // .in('plant_id', ...) always returns 0 rows — the root cause of Production
+  // Volume showing 0 despite permeate data existing. Must first resolve train IDs
+  // from ro_trains, then filter ro_train_readings by train_id.
+  const { data: _permeateTrainMeta } = useQuery({
+    queryKey: ['dash-permeate-train-ids', permeateProductionPlantIds],
     queryFn: async () => {
-      if (!permeateProductionPlantIds.length) return [] as any[];
-      // Simple window: today only. Cutoff/displacement logic removed system-wide —
-      // readings are attributed to the calendar day they were recorded.
+      if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
+      const { data } = await supabase
+        .from('ro_trains')
+        .select('id, plant_id')
+        .in('plant_id', permeateProductionPlantIds);
+      const rows = data ?? [];
+      const trainPlantMap = new Map<string, string>();
+      rows.forEach((t: any) => trainPlantMap.set(t.id as string, t.plant_id as string));
+      return { ids: rows.map((t: any) => t.id as string), trainPlantMap };
+    },
+    enabled: permeateProductionPlantIds.length > 0,
+    staleTime: 60_000,
+  });
+  const _permeateTrainIds      = _permeateTrainMeta?.ids ?? [];
+  const _permeateTrainPlantMap = _permeateTrainMeta?.trainPlantMap ?? new Map<string, string>();
+
+  // ── Step 2: Fetch today's permeate readings filtered by train_id ─────────────
+  const { data: todayRoPermeate } = useQuery({
+    queryKey: ['dash-ro-permeate-today', _permeateTrainIds, _localDateStr],
+    queryFn: async () => {
+      if (!_permeateTrainIds.length) return [] as any[];
       const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await supabase
-        .from('ro_train_readings')
-        .select('plant_id,train_number,permeate_meter_delta,reading_datetime')
-        .in('plant_id', permeateProductionPlantIds)
+      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+        .select('train_id,permeate_meter_delta,reading_datetime')
+        .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
         .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
-      return (data ?? []) as any[];
+      // Attach plant_id via the trainPlantMap so downstream code can group by plant if needed
+      return (data ?? []).map((r: any) => ({
+        ...r,
+        plant_id: _permeateTrainPlantMap.get(r.train_id) ?? null,
+      }));
     },
-    enabled: permeateProductionPlantIds.length > 0,
+    enabled: _permeateTrainIds.length > 0,
     staleTime: 0,
     refetchInterval: 60_000,
   });
 
-  // Yesterday's RO permeate production (for trend delta on the Production stat card).
-  // Same wide-window approach: fetch day-before-yesterday + yesterday.
+  // Yesterday's RO permeate — same two-step pattern.
   const _dayBeforeYesterdayKey = useMemo(
     () => format(subDays(new Date(_yesterdayKey), 1), 'yyyy-MM-dd'),
     [_yesterdayKey],
   );
   const { data: yRoPermeate } = useQuery({
-    queryKey: ['dash-ro-permeate-yest', permeateProductionPlantIds, _yesterdayKey],
+    queryKey: ['dash-ro-permeate-yest', _permeateTrainIds, _yesterdayKey],
     queryFn: async () => {
-      if (!permeateProductionPlantIds.length) return [] as any[];
+      if (!_permeateTrainIds.length) return [] as any[];
       const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_yesterdayKey + 'T23:59:59').toISOString();
-      const { data } = await supabase
-        .from('ro_train_readings')
-        .select('plant_id,permeate_meter_delta,reading_datetime')
-        .in('plant_id', permeateProductionPlantIds)
+      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+        .select('train_id,permeate_meter_delta,reading_datetime')
+        .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
         .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
-      return (data ?? []) as any[];
+      return (data ?? []).map((r: any) => ({
+        ...r,
+        plant_id: _permeateTrainPlantMap.get(r.train_id) ?? null,
+      }));
     },
-    enabled: permeateProductionPlantIds.length > 0,
+    enabled: _permeateTrainIds.length > 0,
     staleTime: 0,
     refetchInterval: 60_000,
   });
