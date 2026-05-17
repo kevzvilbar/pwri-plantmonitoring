@@ -1046,9 +1046,10 @@ export default function Dashboard() {
     queryKey: ['dash-ro-permeate-today', permeateProductionPlantIds, _localDateStr],
     queryFn: async () => {
       if (!permeateProductionPlantIds.length) return [] as any[];
-      // Wide window: from start of yesterday to end of today covers all cut-off scenarios.
-      const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
-      const windowEnd   = new Date(_localDateStr  + 'T23:59:59').toISOString();
+      // Simple window: today only. Cutoff/displacement logic removed system-wide —
+      // readings are attributed to the calendar day they were recorded.
+      const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
+      const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('ro_train_readings')
         .select('plant_id,train_number,permeate_meter_delta,reading_datetime')
@@ -1074,8 +1075,8 @@ export default function Dashboard() {
     queryKey: ['dash-ro-permeate-yest', permeateProductionPlantIds, _yesterdayKey],
     queryFn: async () => {
       if (!permeateProductionPlantIds.length) return [] as any[];
-      const windowStart = new Date(_dayBeforeYesterdayKey + 'T00:00:00').toISOString();
-      const windowEnd   = new Date(_yesterdayKey           + 'T23:59:59').toISOString();
+      const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
+      const windowEnd   = new Date(_yesterdayKey + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('ro_train_readings')
         .select('plant_id,permeate_meter_delta,reading_datetime')
@@ -1258,34 +1259,25 @@ export default function Dashboard() {
   // RO permeate contribution to production — applies cut-off bucketing and date-range
   // guard per plant before summing. Only readings whose attributed production date
   // equals the target day (today / yesterday) are included.
-  const roPermeateProduction = useMemo(() => {
-    return (todayRoPermeate ?? []).reduce((s: number, r: any) => {
-      const plantCfg = permeateConfigMap.get(r.plant_id);
-      if (!plantCfg) return s;
-      const rawDate = permeateProductionDate(
-        r.reading_datetime, plantCfg.cutoffEnabled, plantCfg.cutoffTime,
-      );
-      // Displace boundary readings then check period membership
-      const prodDate = displaceToNearestBoundary(rawDate, plantCfg.productionPeriods);
-      if (prodDate !== _localDateStr) return s;
-      if (!isInAnyProductionPeriod(prodDate, plantCfg.productionPeriods)) return s;
-      return s + (r.permeate_meter_delta ?? 0);
-    }, 0);
-  }, [todayRoPermeate, permeateConfigMap, _localDateStr]);
+  // RO permeate production — uses simple local-date bucketing (same as Data Summary modal).
+  // The old cutoff / displaceToNearestBoundary logic has been removed system-wide:
+  // every reading is attributed to the calendar day it was actually recorded.
+  // This matches the values shown in the Data Summary table exactly.
+  const roPermeateProduction = useMemo(() =>
+    (todayRoPermeate ?? []).reduce((s: number, r: any) => {
+      const dateKey = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
+      if (dateKey !== _localDateStr) return s;
+      return s + (+(r.permeate_meter_delta ?? 0));
+    }, 0),
+  [todayRoPermeate, _localDateStr]);
 
-  const yRoPermeateProduction = useMemo(() => {
-    return (yRoPermeate ?? []).reduce((s: number, r: any) => {
-      const plantCfg = permeateConfigMap.get(r.plant_id);
-      if (!plantCfg) return s;
-      const rawDate = permeateProductionDate(
-        r.reading_datetime, plantCfg.cutoffEnabled, plantCfg.cutoffTime,
-      );
-      const prodDate = displaceToNearestBoundary(rawDate, plantCfg.productionPeriods);
-      if (prodDate !== _yesterdayKey) return s;
-      if (!isInAnyProductionPeriod(prodDate, plantCfg.productionPeriods)) return s;
-      return s + (r.permeate_meter_delta ?? 0);
-    }, 0);
-  }, [yRoPermeate, permeateConfigMap, _yesterdayKey]);
+  const yRoPermeateProduction = useMemo(() =>
+    (yRoPermeate ?? []).reduce((s: number, r: any) => {
+      const dateKey = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
+      if (dateKey !== _yesterdayKey) return s;
+      return s + (+(r.permeate_meter_delta ?? 0));
+    }, 0),
+  [yRoPermeate, _yesterdayKey]);
 
   // Production = product meter readings delta + RO permeate delta (if permeate_is_production)
   const production = useMemo(() =>
@@ -1390,6 +1382,8 @@ export default function Dashboard() {
   }, [dailySummary]);
   const blending = latestPerPlant.reduce((s, r: any) => s + (+r.blending_m3 || 0), 0);
   const rawWater = latestPerPlant.reduce((s, r: any) => s + (+r.raw_water_consumption_m3 || 0), 0);
+
+
 
   const { data: chemInv } = useQuery({
     queryKey: ['dash-chem', plantIds],
