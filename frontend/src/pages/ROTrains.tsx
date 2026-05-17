@@ -1138,6 +1138,10 @@ function PretreatmentAndROLog() {
   const [housings, setHousings] = useState<Record<number, { inP: string; outP: string }>>({});
 
   useEffect(() => {
+    // Reset datetime to NOW each time the operator picks a different train.
+    // Without this, dt stays frozen at page-load time, making the auto-computed
+    // duration (now - lastReading) wrong when the page has been open a long time.
+    setDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     setAfmmf({}); setBoosters({}); setHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
     setSyncMeterStart(''); setSyncMeterEnd('');
