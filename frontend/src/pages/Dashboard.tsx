@@ -598,8 +598,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const prodEntities = activeProdPivot.entities;
             const consEntities = consPivot.entities;
             const rows = [...allDates].reverse().map((date) => {
-              const prod = prodEntities.reduce((s: number, e: any) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const cons = consEntities.reduce((s: number, e: any) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              // Sum ALL values in the pivot for this date (not just filtered entities)
+              // This ensures "Prod. vs Consum." matches the Production tab's total exactly
+              const prod = Array.from(activeProdPivot.pivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
+              const cons = Array.from(consPivot.pivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
