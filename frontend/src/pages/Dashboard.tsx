@@ -933,9 +933,19 @@ export default function Dashboard() {
   // The cutoff / production-period concept has been removed system-wide —
   // every plant with permeate_is_production = true is always included so the
   // query never gets gated out by a stale or misconfigured period boundary.
+  //
+  // FIX: Also include plants where ro_production_source === 'permeate' even
+  // if the secondary permeate_is_production checkbox was not explicitly ticked.
+  // In Plants.tsx, selecting 'permeate' as ro_production_source IS the declaration
+  // that permeate = production — the checkbox is a sub-option that defaults false,
+  // which caused Production Volume to show 0 despite the plant being correctly
+  // configured. Both flags are treated as sufficient to enable permeate production.
   const permeateProductionPlantIds = useMemo(() => {
     return (plantMeterConfigs ?? [])
-      .filter((row: any) => row.config?.permeate_is_production)
+      .filter((row: any) =>
+        row.config?.permeate_is_production === true ||
+        row.config?.ro_production_source === 'permeate'
+      )
       .map((row: any) => row.plant_id as string);
   }, [plantMeterConfigs]);
 
@@ -1411,7 +1421,6 @@ export default function Dashboard() {
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Droplet} accent="text-primary" label="Production Volume"
-          size="lg"
           value={fmtNum(production)} unit="m³" trend={dProduction}
           onClick={handleMetricClick('production', 'Production vs Consumption')} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
@@ -1484,7 +1493,7 @@ export default function Dashboard() {
       />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
-          size="lg" calc
+          calc
           calcTooltip={
             costIsStale && costDataDate
               ? `Production Cost = Power + Chem (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
