@@ -149,46 +149,21 @@ function validateROTrainRow(r: Record<string, string>, i: number): string[] {
   return e;
 }
 
-// ─── Permeate cut-off day label helper ───────────────────────────────────────
-// Given a reading ISO datetime string and a cut-off HH:mm string,
-// returns the YYYY-MM-DD string that this reading "belongs to" as production.
+// ─── Permeate date attribution ───────────────────────────────────────────────
+// The 00:20 cutoff rule that previously shifted readings past midnight to the
+// NEXT calendar day has been removed.  All readings are now attributed to the
+// calendar day of their reading_datetime, exactly as entered.
+// A reading recorded at any time on May 1 counts as May 1 production.
 //
-// Rule: if the reading time is <= cutoff on a given date, it belongs to that date.
-//       if the reading time is > cutoff, it belongs to the NEXT calendar date.
-//
-// Example: cutoff "00:20"
-//   May 3 00:20 → "2026-05-03"
-//   May 3 00:21 → "2026-05-04"  (crosses into next day)
-//   May 4 00:20 → "2026-05-04"  (exactly at cutoff → belongs to May 4)
-//
-// ⚠️  All comparisons and date arithmetic must use LOCAL time exclusively.
-//     getHours()/getMinutes() already return local time, so toISOString()
-//     (which returns UTC) must never be used here — it drifts by UTC+8 for PH.
-function localYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-export function getPermeateDayLabel(isoDatetime: string, cutoffHHmm: string): string {
+// getPermeateDayLabel is kept as a no-op identity export so any import sites
+// that still reference it compile without changes.
+export function getPermeateDayLabel(isoDatetime: string, _cutoffHHmm?: string): string {
+  // Always return the plain local calendar date of the reading — no shift.
   const dt = new Date(isoDatetime);
-  const [chStr, cmStr] = cutoffHHmm.split(':');
-  const cutH = parseInt(chStr ?? '0', 10);
-  const cutM = parseInt(cmStr ?? '20', 10);
-  // getHours / getMinutes already read LOCAL time — keep everything local
-  const readingTotalMin = dt.getHours() * 60 + dt.getMinutes();
-  const cutoffTotalMin  = cutH * 60 + cutM;
-
-  if (readingTotalMin <= cutoffTotalMin) {
-    // Within or at the cutoff → belongs to the LOCAL calendar date of the reading
-    return localYMD(dt);
-  } else {
-    // Past cutoff → belongs to the NEXT LOCAL calendar date
-    const next = new Date(dt);
-    next.setDate(next.getDate() + 1); // setDate operates on local date — correct
-    return localYMD(next);            // localYMD reads local date — correct
-  }
+  const y  = dt.getFullYear();
+  const m  = String(dt.getMonth() + 1).padStart(2, '0');
+  const d  = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // conflictMode controls what happens when a reading already exists for this train+hour:
@@ -202,7 +177,8 @@ async function insertROTrainReadings(
   userId: string | null,
   options?: {
     permeateIsProduction?: boolean;
-    permeateCutoffTime?: string; // HH:mm
+    // permeateCutoffTime removed — cutoff rule no longer used; readings attributed
+    // to the calendar day of reading_datetime with no shift.
     conflictMode?: ConflictMode;
   },
 ): Promise<{ count: number; skipped: number; errors: string[] }> {
@@ -244,11 +220,10 @@ async function insertROTrainReadings(
     const permPrev = r.permeate_meter_prev?.trim() ? +r.permeate_meter_prev : null;
     const permDelta = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
 
-    // When permeate is production, compute the day this reading belongs to
-    const cutoff = options?.permeateCutoffTime ?? '00:20';
-    const permeateDayLabel = options?.permeateIsProduction
-      ? getPermeateDayLabel(dt, cutoff)
-      : null;
+    // permeate_production_date is no longer computed — all readings are attributed
+    // to the calendar day of reading_datetime with no cutoff-time shift.
+    // The column is kept in the DB for historical reference but is not written
+    // by new inserts and is not used for date bucketing anywhere in the UI.
 
     // ── Core payload — columns confirmed present in the original schema ──────
     const corePayload: Record<string, any> = {
@@ -285,14 +260,13 @@ async function insertROTrainReadings(
     // Also persist prev + delta so the table is self-contained (no join needed).
     if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
     if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
-    if (permeateDayLabel)   optionalPayload.permeate_production_date = permeateDayLabel;
 
     // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
     // Mirrors insertPowerReadings' doInsert / fallback pattern so un-migrated
     // DBs degrade gracefully instead of failing every row.
     const OPTIONAL_KEYS = [
       'remarks', 'recorded_by',
-      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date',
+      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
     ];
     const isOptionalColError = (msg: string) =>
       OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
@@ -341,7 +315,7 @@ function ImportROReadingsDialog({
 }: {
   plantId: string;
   userId: string | null;
-  meterConfig?: { permeateIsProduction: boolean; permeateCutoffTime: string };
+  meterConfig?: { permeateIsProduction: boolean };
   onClose: () => void;
   onImported: () => void;
 }) {
@@ -364,10 +338,8 @@ function ImportROReadingsDialog({
   // Rows that were skipped due to duplicates — kept for targeted overwrite
   const [conflictRows, setConflictRows] = useState<Record<string, string>[]>([]);
 
-  // Local editable cut-off time — seeded from meterConfig (manager can change before import)
-  const [localCutoff, setLocalCutoff] = useState(
-    meterConfig?.permeateCutoffTime ?? '00:20'
-  );
+  // cutoff time state removed — the 00:20 rule no longer exists; readings are
+  // attributed to the calendar day of reading_datetime with no shift.
   const permeateIsProduction = meterConfig?.permeateIsProduction ?? false;
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,7 +365,7 @@ function ImportROReadingsDialog({
     setBusy(true);
     const { count, skipped, errors: insertErrs } = await insertROTrainReadings(
       targetRows, plantId, userId,
-      { permeateIsProduction, permeateCutoffTime: localCutoff, conflictMode: mode },
+      { permeateIsProduction, conflictMode: mode },
     );
     setBusy(false);
     setImported(prev => prev + count);
@@ -440,11 +412,11 @@ function ImportROReadingsDialog({
 
         <div className="space-y-4 py-1">
 
-          {/* ── Permeate = Production cut-off panel (shown when configured) ── */}
+          {/* ── Permeate = Production info panel (shown when configured) ── */}
           {permeateIsProduction && (
             <div className="rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-950/20 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm">⏱</span>
+                <span className="text-sm">💧</span>
                 <p className="text-xs font-semibold text-teal-800 dark:text-teal-200">
                   Permeate meter = Production
                 </p>
@@ -453,48 +425,11 @@ function ImportROReadingsDialog({
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Permeate readings are <strong>hourly</strong>. Each row's{' '}
-                <code className="text-[10px] bg-muted px-1 rounded">reading_datetime</code> is
-                mapped to a production day using the cut-off time below.
-                Readings at or before the cut-off belong to <em>that</em> calendar date;
-                readings after the cut-off roll forward to the <em>next</em> day.
+                Each row's{' '}
+                <code className="text-[10px] bg-muted px-1 rounded">reading_datetime</code>{' '}
+                is used as-is — a reading recorded on May 1 at any time counts as May 1
+                production. No cutoff-time shift is applied.
               </p>
-              <div className="flex items-center gap-3 flex-wrap pt-0.5">
-                <div className="flex items-center gap-2">
-                  <Label className="text-[11px] text-muted-foreground whitespace-nowrap">
-                    Cut-off time
-                  </Label>
-                  {isManager ? (
-                    <Input
-                      type="time"
-                      value={localCutoff}
-                      onChange={e => setLocalCutoff(e.target.value)}
-                      className="h-7 w-28 text-xs font-mono"
-                      title="Manager can adjust cut-off before importing"
-                    />
-                  ) : (
-                    <span className="font-mono text-sm bg-muted px-2 py-0.5 rounded border border-border">
-                      {localCutoff}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] text-teal-700 dark:text-teal-300 bg-teal-100/60 dark:bg-teal-900/30 rounded px-2 py-1 font-mono leading-tight">
-                  {(() => {
-                    const [hh, mm] = localCutoff.split(':');
-                    const cutH = parseInt(hh ?? '0', 10);
-                    const cutM = parseInt(mm ?? '20', 10);
-                    const pad = (n: number) => String(n).padStart(2, '0');
-                    const nextM = (cutM + 1) % 60;
-                    const nextH = cutM === 59 ? (cutH + 1) % 24 : cutH;
-                    return `May 3 ${pad(nextH)}:${pad(nextM)} … May 4 ${localCutoff} → "May 4"`;
-                  })()}
-                </div>
-              </div>
-              {!isManager && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                  Only managers can change the cut-off time for this import.
-                </p>
-              )}
             </div>
           )}
           <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
@@ -1411,15 +1346,8 @@ function PretreatmentAndROLog() {
       // Persist prev snapshot + delta so the table shows full meter history without joins.
       permeate_meter_prev: prevPermMeter ?? null,
       permeate_meter_delta: permDelta ?? null,
-      // When this plant's permeate meter IS the production source, tag each reading with
-      // the calendar day it counts toward — respecting the plant-level cutoff time.
-      // getPermeateDayLabel handles the midnight-crossover case (e.g. 00:20 cutoff).
-      // This field is what Dashboard.tsx reads to sum today's RO-sourced production.
-      ...(
-        (meterCfg?.permeate_is_production ?? false) && permDelta && permDelta > 0
-          ? { permeate_production_date: getPermeateDayLabel(new Date(dt).toISOString(), meterCfg?.permeate_cutoff_time ?? '00:20') }
-          : {}
-      ),
+      // permeate_production_date is no longer written — the 00:20 cutoff rule has
+      // been removed. Date attribution uses reading_datetime directly everywhere.
       // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
       power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
       // Delta & derived — null when prevPowerMeter not yet established (first reading)
@@ -1581,7 +1509,7 @@ function PretreatmentAndROLog() {
             userId={activeOperator?.id ?? null}
             meterConfig={{
               permeateIsProduction: meterCfg.permeate_is_production ?? false,
-              permeateCutoffTime: meterCfg.permeate_cutoff_time ?? '00:20',
+              // permeateCutoffTime removed — no longer used
             }}
             onClose={() => setShowImport(false)}
             onImported={() => {
