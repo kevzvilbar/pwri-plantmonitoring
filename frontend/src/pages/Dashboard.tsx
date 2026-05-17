@@ -161,7 +161,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const startISO = new Date(fromStr      + 'T00:00:00').toISOString();
   const endISO   = new Date(clampedToStr + 'T23:59:59').toISOString();
 
-  // ── Locators (meta) ────────────────────────────────────────────────────────
+  // ── Locators (meta) ───────────────────────────────────────���────────────────
   const { data: locators, isLoading: locatorsLoading, isFetching: locatorsFetching } = useQuery({
     queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
@@ -598,10 +598,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const prodEntities = activeProdPivot.entities;
             const consEntities = consPivot.entities;
             const rows = [...allDates].reverse().map((date) => {
-              // Sum ALL values in the pivot for this date (not just filtered entities)
-              // This ensures "Prod. vs Consum." matches the Production tab's total exactly
-              const prod = Array.from(activeProdPivot.pivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
-              const cons = Array.from(consPivot.pivot.get(date)?.values() ?? []).reduce((s, v) => s + v, 0);
+              // Sum ONLY filtered entities to match Production/Consumption tab rowTotals exactly
+              // Uses the same formula as line 483: entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0)
+              const prod = prodEntities.reduce((s, e) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              const cons = consEntities.reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
