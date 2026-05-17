@@ -1507,23 +1507,17 @@ export default function Dashboard() {
       )}
 
       {/* ─── Cluster 1: Overview ─── */}
-      {/* Order matches the spec (2026-07): Production Cost · Locators
-          Consumption · NRW · Raw Water · Blending. Raw Water and
-          Blending are now two separate tiles (previously combined in a
-          single card) per user request. Production volume (m³) is
-          surfaced in the page subheader so the underlying NRW math
-          stays visible without spending a card on it. */}
+      {/* Order (updated): Production Volume · Locators Consumption · NRW
+          · Raw Water · Blending. Production Cost has been moved to the
+          Production Cost (Power + Chemical) cluster where it sits alongside
+          Power Cost, Chemical Cost, and PV Ratio. Production Volume is now
+          surfaced here so operators can see today's output at a glance. */}
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <StatCard icon={Banknote} accent="text-accent" label="Production Cost"
-          size="lg" calc
-          calcTooltip={
-            costIsStale && costDataDate
-              ? `Production Cost = Power + Chem (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
-              : 'Production Cost = Power Cost + Chemical Cost (today)'
-          }
-          value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
-          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
+        <StatCard icon={Droplet} accent="text-primary" label="Production Volume"
+          size="lg"
+          value={fmtNum(production)} unit="m³" trend={dProduction}
+          onClick={handleMetricClick('production', 'Production vs Consumption')} />
         <StatCard icon={Receipt} accent="text-highlight" label="Locators Consumption" value={fmtNum(consumption)} unit="m³"
           trend={dConsumption}
           onClick={handleMetricClick('production', 'Production vs Consumption')} />
@@ -1593,6 +1587,15 @@ export default function Dashboard() {
         }
       />
       <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
+          size="lg" calc
+          calcTooltip={
+            costIsStale && costDataDate
+              ? `Production Cost = Power + Chem (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
+              : 'Production Cost = Power Cost + Chemical Cost (today)'
+          }
+          value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
+          onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
           value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
