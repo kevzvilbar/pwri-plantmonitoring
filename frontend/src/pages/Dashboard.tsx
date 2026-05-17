@@ -592,16 +592,15 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const allDates = activeProdPivot.dates.filter((d) => d <= todayStr);
 
             // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
-            // Mirror the rowTotals formula:
-            //   entities.reduce((s, e) => s + (pivot.get(date)?.get(e.id) ?? 0), 0)
-            // so "Prod. vs Consum." totals == "Production" / "Consumption" row totals.
-            const prodEntities = activeProdPivot.entities;
-            const consEntities = consPivot.entities;
+            // The key issue: when tab='both', the outer entities variable is set from consPivot,
+            // but we need production rowTotals calculated from activeProdPivot.entities.
+            // Calculate both separately using their correct entity sets.
+            
             const rows = [...allDates].reverse().map((date) => {
-              // Sum ONLY filtered entities to match Production/Consumption tab rowTotals exactly
-              // Uses the same formula as line 483: entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0)
-              const prod = prodEntities.reduce((s, e) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const cons = consEntities.reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              // Production sum: use activeProdPivot entities (this matches Production tab)
+              const prod = activeProdPivot.entities.reduce((s, e) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              // Consumption sum: use consPivot entities (this matches Consumption tab)
+              const cons = consPivot.entities.reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
