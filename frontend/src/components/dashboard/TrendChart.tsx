@@ -1564,8 +1564,16 @@ export function TrendChart({
           // For the hourly cross-midnight case, substitute the date part from
           // permeate_production_date but keep the time from reading_datetime so
           // the local timezone parsing is consistent with all other chart keys.
+          //
+          // Guard: the RO query filters by reading_datetime, not permeate_production_date.
+          // A reading at 00:10 on May 17 has reading_datetime within the chart range but
+          // permeate_production_date='2026-05-18' (next day, per getPermeateDayLabel).
+          // Without this check it plots as a phantom May 18 bar even when endKey='2026-05-17'.
+          // Skipping any row whose label falls beyond endKey prevents future-date leakage
+          // on the chart regardless of stale-cache state.
           let dt: Date;
           if (r.permeate_production_date) {
+            if (r.permeate_production_date > endKey) return; // skip future-labeled readings
             const timePart = (r.reading_datetime as string).slice(11) || '00:00:00';
             dt = new Date(`${r.permeate_production_date}T${timePart}`);
           } else {
