@@ -19,7 +19,6 @@ import {
   ChartMetric, DashboardViewMode, RANGE_DAYS, RangeKey, TREND_Y_LABEL,
 } from './types';
 import { useAppStore } from '@/store/appStore';
-import type { PermeateProductionPeriod } from '@/pages/Plants';
 
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 type DrillMode = 'default' | 'drilldown' | 'drillup';
@@ -1162,95 +1161,15 @@ export function TrendChart({
         .select('plant_id, config')
         .in('plant_id', plantIds);
       const set = new Set<string>();
-      const map = new Map<string, {
-        cutoffEnabled: boolean;
-        cutoffTime: string;
-        productionPeriods: PermeateProductionPeriod[];
-      }>();
       (data ?? []).forEach((row: any) => {
-        const cfg = row.config ?? {};
-        if (cfg.permeate_is_production) {
-          set.add(row.plant_id);
-          // Migration shim: lift legacy scalar fields into periods array if needed
-          const periods: PermeateProductionPeriod[] = Array.isArray(cfg.permeate_production_periods)
-            ? cfg.permeate_production_periods
-            : (() => {
-                const s = (cfg.permeate_production_start as string | null) ?? null;
-                const e = (cfg.permeate_production_end   as string | null) ?? null;
-                return (s !== null || e !== null)
-                  ? [{ id: 'legacy', start: s, end: e }]
-                  : [];
-              })();
-          map.set(row.plant_id, {
-            cutoffEnabled:    cfg.permeate_cutoff_enabled ?? true,
-            cutoffTime:       cfg.permeate_cutoff_time    ?? '00:20',
-            productionPeriods: periods,
-          });
-        }
+        if (row.config?.permeate_is_production) set.add(row.plant_id);
       });
-      // Attach the map on the set object for downstream consumers
-      (set as any)._cfgMap = map;
       return set;
     },
     enabled: plantIds.length > 0 && needsPermeateProduction,
   });
 
-  // Convenience accessor for the per-plant cut-off config attached to the Set.
-  const _permeateConfigMap: Map<string, {
-    cutoffEnabled: boolean; cutoffTime: string;
-    productionPeriods: PermeateProductionPeriod[];
-  }> = useMemo(
-    () => (permeateIsProductionPlants as any)?._cfgMap ?? new Map(),
-    [permeateIsProductionPlants],
-  );
 
-  // Shared helpers (mirrors Dashboard.tsx)
-  const _permeateProductionDate = (readingDatetime: string, plantId: string): string => {
-    const cfg = _permeateConfigMap.get(plantId);
-    const dt = new Date(readingDatetime);
-    if (!cfg || !cfg.cutoffEnabled || !cfg.cutoffTime) return format(dt, 'yyyy-MM-dd');
-    const [hh, mm] = cfg.cutoffTime.split(':').map(Number);
-    const cutoffMinutes = (hh ?? 0) * 60 + (mm ?? 20);
-    const readingMinutes = dt.getHours() * 60 + dt.getMinutes();
-    return readingMinutes > cutoffMinutes
-      ? format(addDays(dt, 1), 'yyyy-MM-dd')
-      : format(dt, 'yyyy-MM-dd');
-  };
-  const _isInAnyProductionPeriod = (dateStr: string, plantId: string): boolean => {
-    const cfg = _permeateConfigMap.get(plantId);
-    if (!cfg) return true;
-    const { productionPeriods: periods } = cfg;
-    if (periods.length === 0) return true; // no periods → always active (backwards-compat)
-    return periods.some(p => {
-      if (p.start && dateStr < p.start) return false;
-      if (p.end   && dateStr > p.end)   return false;
-      return true;
-    });
-  };
-  const _displaceToNearestBoundary = (dateStr: string, plantId: string): string => {
-    const cfg = _permeateConfigMap.get(plantId);
-    if (!cfg || _isInAnyProductionPeriod(dateStr, plantId)) return dateStr;
-    const periods = cfg.productionPeriods;
-    const sorted = [...periods].sort((a, b) =>
-      (a.start ?? '0000-01-01') < (b.start ?? '0000-01-01') ? -1 : 1,
-    );
-    const earliestStart = sorted[0]?.start;
-    if (earliestStart && dateStr < earliestStart) {
-      const d = new Date(earliestStart);
-      d.setDate(d.getDate() - 1);
-      return format(d, 'yyyy-MM-dd');
-    }
-    const ended = sorted.filter(p => p.end && dateStr > p.end);
-    const closest = ended.reduce<PermeateProductionPeriod | null>((best, p) =>
-      !best || (p.end! > best.end!) ? p : best, null,
-    );
-    if (closest?.end) {
-      const d = new Date(closest.end);
-      d.setDate(d.getDate() + 1);
-      return format(d, 'yyyy-MM-dd');
-    }
-    return dateStr;
-  };
   // Power readings — fetches the full ordered history for each plant so
   // computeEntityDeltas can diff consecutive meter_reading_kwh values correctly.
   // We also grab one row BEFORE startISO (per plant) to seed the delta for
@@ -1655,14 +1574,10 @@ export function TrendChart({
           // Use === null so a legitimate delta of 0 is still plotted (don't skip it).
           if (delta === null) return;
 
-          // Determine the production date by applying the optional cut-off rule.
-          // When cut-off is enabled, readings taken just after midnight are
-          // attributed to the next production day (e.g. May 4 00:05 with
-          // cut-off 00:20 → still May 4; May 4 00:21 → May 5).
-          const rawDateStr = _permeateProductionDate(r.reading_datetime as string, plantId);
-          const prodDateStr = _displaceToNearestBoundary(rawDateStr, plantId);
-          // Skip readings outside the plant's configured active production periods.
-          if (!_isInAnyProductionPeriod(prodDateStr, plantId)) return;
+          // Date bucketing: attribute each reading to the local calendar day it
+          // was recorded. The old cut-off / production-period logic has been
+          // removed system-wide — consistent with DataSummaryModal.
+          const prodDateStr = format(new Date(r.reading_datetime as string), 'yyyy-MM-dd');
           const prodDt = new Date(prodDateStr + 'T12:00:00'); // noon for stable sorting
           const key = format(prodDt, 'MMM d');
           const row = ensure(key, prodDt.getTime());
