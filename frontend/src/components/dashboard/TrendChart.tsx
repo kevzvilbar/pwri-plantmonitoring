@@ -1090,13 +1090,16 @@ export function TrendChart({
       if (!trainIds.length) return [];
 
       // Attempt full select including the new columns added in the permeate-delta
-      // migration (permeate_meter_prev, permeate_meter_delta, permeate_production_date).
+      // migration (permeate_meter_prev, permeate_meter_delta).
+      // permeate_production_date is intentionally excluded — date bucketing always
+      // uses reading_datetime directly so every reading is attributed to the calendar
+      // day it was actually recorded, with no cutoff-time shift.
       // If the DB hasn't been migrated yet those columns don't exist and Supabase
       // returns a schema-cache error — fall back to the legacy select so the chart
       // never breaks on un-migrated deployments.
-      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,permeate_production_date,reading_datetime,is_meter_replacement';
+      const FULL_SELECT   = 'train_id,recovery_pct,permeate_tds,permeate_meter,permeate_meter_prev,permeate_meter_delta,reading_datetime,is_meter_replacement';
       const LEGACY_SELECT = 'train_id,recovery_pct,permeate_tds,permeate_meter,reading_datetime,is_meter_replacement';
-      const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta', 'permeate_production_date'];
+      const NEW_COLS = ['permeate_meter_prev', 'permeate_meter_delta'];
       const isNewColError = (msg: string) => NEW_COLS.some(c => msg.includes(c));
 
       const { data, error } = await (supabase.from('ro_train_readings' as never) as any)
@@ -1532,8 +1535,10 @@ export function TrendChart({
 
     // Step 2: accumulate permeate meter deltas for plants where permeate_is_production = true.
     //
-    // Uses permeate_meter_delta (pre-saved curr−prev) + permeate_production_date
-    // (cutoff-adjusted day label) written at import time.
+    // Uses permeate_meter_delta (pre-saved curr−prev) and reading_datetime for
+    // date bucketing. The permeate_production_date / 00:20 cutoff rule has been
+    // removed — a reading recorded on May 1 at any time counts as May 1 production,
+    // consistent with the DataSummaryModal's Production and Prod vs Consum tabs.
     // Falls back to computeEntityDeltas when columns not yet populated (NULL).
     if (permeateIsProductionPlants && permeateIsProductionPlants.size > 0) {
       const hasSavedDelta = (roReadings ?? []).some(
@@ -1559,26 +1564,10 @@ export function TrendChart({
           // Use === null so a legitimate delta of 0 is still plotted (don't skip it).
           if (delta === null) return;
 
-          // Build chart key EXACTLY like every other source:
-          //   format(new Date(reading_datetime), 'MMM d')
-          // For the hourly cross-midnight case, substitute the date part from
-          // permeate_production_date but keep the time from reading_datetime so
-          // the local timezone parsing is consistent with all other chart keys.
-          //
-          // Guard: the RO query filters by reading_datetime, not permeate_production_date.
-          // A reading at 00:10 on May 17 has reading_datetime within the chart range but
-          // permeate_production_date='2026-05-18' (next day, per getPermeateDayLabel).
-          // Without this check it plots as a phantom May 18 bar even when endKey='2026-05-17'.
-          // Skipping any row whose label falls beyond endKey prevents future-date leakage
-          // on the chart regardless of stale-cache state.
-          let dt: Date;
-          if (r.permeate_production_date) {
-            if (r.permeate_production_date > endKey) return; // skip future-labeled readings
-            const timePart = (r.reading_datetime as string).slice(11) || '00:00:00';
-            dt = new Date(`${r.permeate_production_date}T${timePart}`);
-          } else {
-            dt = new Date(r.reading_datetime);
-          }
+          // Build chart key using reading_datetime directly — same as every other
+          // data source (locators, wells, product meters). A reading recorded on
+          // May 1 at any time is attributed to May 1, matching the DataSummaryModal.
+          const dt  = new Date(r.reading_datetime as string);
           const key = format(dt, 'MMM d');
           const row = ensure(key, dt.getTime());
           row.production += delta;
