@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from 'react';
 import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare, X, Send, Loader2, Clock,
   Building2, User, ShieldCheck, MapPin, ChevronRight,
   Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
-  GitBranch, ClipboardList, Check, CheckCheck, ChevronsDownUp, ChevronsUpDown,
+  GitBranch, ClipboardList, Check, CheckCheck,
+  Search, BarChart2, ChevronLeft, Info,
+  Crown, Briefcase, Settings, UserCircle,
+  RefreshCw, ZoomIn,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,6 +45,20 @@ type StaffMember = {
   status: string;
   updated_at: string;
   immediate_head_id: string | null;
+};
+
+// Reading record (for KPI)
+type ReadingRecord = {
+  plant_id: string;
+  reading_datetime: string;
+  recorded_by: string | null;
+};
+
+// Checklist execution (for KPI)
+type ChecklistExecution = {
+  template_id: string;
+  execution_date: string;
+  completed: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -81,7 +98,6 @@ const AVATAR_COLORS = [
   'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-pink-500',
 ];
 
-// Per-plant column accents — sky/teal theme palette, cycling through tonal variants
 const PLANT_COLUMN_ACCENTS = [
   { header: 'from-sky-600 to-sky-500',      border: 'border-sky-200',   bg: 'bg-sky-50',    text: 'text-sky-700',    line: '#0ea5e9' },
   { header: 'from-teal-600 to-teal-500',    border: 'border-teal-200',  bg: 'bg-teal-50',   text: 'text-teal-700',   line: '#14b8a6' },
@@ -91,7 +107,6 @@ const PLANT_COLUMN_ACCENTS = [
   { header: 'from-cyan-700 to-sky-600',     border: 'border-cyan-300',  bg: 'bg-cyan-100',  text: 'text-cyan-800',   line: '#0e7490' },
 ];
 
-// Depth-based bg shading within a column (sky/teal tonal scale, depth 0–5+)
 const DEPTH_SHADES = [
   'bg-white',
   'bg-sky-50/80',
@@ -100,6 +115,8 @@ const DEPTH_SHADES = [
   'bg-teal-100/70',
   'bg-cyan-50/80',
 ];
+
+const CONNECTOR_COLORS = ['#0ea5e9', '#14b8a6', '#06b6d4', '#0369a1', '#0f766e', '#0e7490'];
 
 function hashId(id: string) {
   return id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -120,6 +137,22 @@ function fullName(s: StaffMember) {
 }
 
 // ---------------------------------------------------------------------------
+// Role hierarchy config
+// ---------------------------------------------------------------------------
+
+const ROLE_HIERARCHY: { role: string; level: number; icon: ReactNode; color: string; bg: string }[] = [
+  { role: 'Admin',         level: 0, icon: <Crown className="h-3 w-3" />,        color: 'text-rose-700',    bg: 'bg-rose-50 border-rose-200' },
+  { role: 'Manager',       level: 1, icon: <Briefcase className="h-3 w-3" />,    color: 'text-sky-700',     bg: 'bg-sky-50 border-sky-200' },
+  { role: 'Data Analyst',  level: 2, icon: <BarChart2 className="h-3 w-3" />,    color: 'text-violet-700',  bg: 'bg-violet-50 border-violet-200' },
+  { role: 'Technician',    level: 3, icon: <Settings className="h-3 w-3" />,     color: 'text-teal-700',    bg: 'bg-teal-50 border-teal-200' },
+  { role: 'Operator',      level: 4, icon: <UserCircle className="h-3 w-3" />,   color: 'text-zinc-700',    bg: 'bg-zinc-50 border-zinc-200' },
+];
+
+function getRoleConfig(role: string) {
+  return ROLE_HIERARCHY.find((r) => r.role === role) ?? ROLE_HIERARCHY[4];
+}
+
+// ---------------------------------------------------------------------------
 // Chat helpers
 // ---------------------------------------------------------------------------
 
@@ -136,7 +169,6 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Animated typing indicator — three bouncing dots
 function TypingIndicator() {
   return (
     <div className="flex items-center gap-0.5 px-3 py-2 bg-muted rounded-lg rounded-bl-sm w-fit">
@@ -151,10 +183,8 @@ function TypingIndicator() {
   );
 }
 
-// Message status tick (sent = single check, delivered/read = double check)
 function MsgStatus({ isMine, msgId, messages }: { isMine: boolean; msgId: string; messages: ChatMsg[] }) {
   if (!isMine) return null;
-  // If a later message exists it means DB confirmed — show delivered (double tick)
   const idx = messages.findIndex((m) => m.id === msgId);
   const delivered = idx !== -1;
   return delivered
@@ -163,7 +193,7 @@ function MsgStatus({ isMine, msgId, messages }: { isMine: boolean; msgId: string
 }
 
 // ---------------------------------------------------------------------------
-// Chat Window — improved with typing indicator, message status, mobile-safe
+// Chat Window
 // ---------------------------------------------------------------------------
 
 function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
@@ -171,14 +201,11 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
 }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  // peerTyping: whether the peer is currently typing (via broadcast)
   const [peerTyping, setPeerTyping] = useState(false);
   const peerTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track locally-inserted optimistic IDs so we can show a sending state
   const [optimisticIds] = useState(() => new Set<string>());
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  // Track whether we've typed since last broadcast to debounce
   const typingBroadcastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchMessages = useCallback(async (): Promise<ChatMsg[]> => {
@@ -202,10 +229,8 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
       .channel(channelName)
       .on('broadcast', { event: 'new_message' }, () => refetch())
       .on('broadcast', { event: 'typing' }, ({ payload }: any) => {
-        // Only show indicator if the peer is the one typing
         if (payload?.sender_id && payload.sender_id !== currentUserId) {
           setPeerTyping(true);
-          // Auto-clear if no further typing event within 3 s
           if (peerTypingTimer.current) clearTimeout(peerTypingTimer.current);
           peerTypingTimer.current = setTimeout(() => setPeerTyping(false), 3000);
         }
@@ -220,12 +245,10 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
     };
   }, [currentUserId, peer.id, refetch]);
 
-  // Scroll on new messages or typing indicator toggle
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length, peerTyping]);
 
-  // Broadcast a typing event (debounced, max once per 1.5 s)
   const broadcastTyping = useCallback(() => {
-    if (typingBroadcastTimer.current) return; // already debouncing
+    if (typingBroadcastTimer.current) return;
     if (channelRef.current) {
       channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { sender_id: currentUserId } });
     }
@@ -252,19 +275,15 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
   const presence = getPresence(peer.updated_at, peer.status, onlineIds.has(peer.id));
   const pc = presenceConfig[presence];
 
-  // Mobile-safe positioning: bottom-right on desktop, bottom-0 full-width on very small screens
   return (
     <div
       className={cn(
         'fixed z-50 bg-background border border-border shadow-2xl flex flex-col overflow-hidden',
-        // Mobile: full-width at bottom
         'bottom-0 left-0 right-0 rounded-t-xl',
-        // md+: floating window bottom-right
         'md:bottom-4 md:left-auto md:right-4 md:rounded-xl md:w-80',
       )}
       style={{ height: 'min(460px, 80dvh)' }}
     >
-      {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white shrink-0">
         <div className="relative shrink-0">
           <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold', avatarColor(peer.id))}>
@@ -287,13 +306,11 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
         </Button>
       </div>
 
-      {/* Ephemeral notice */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100 text-amber-700 text-[10px] shrink-0">
         <Clock className="h-3 w-3 shrink-0" />
         Messages auto-delete after 8 hours. No content is retained.
       </div>
 
-      {/* Message list */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
         {messages.length === 0 && !peerTyping ? (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground text-center px-6">
@@ -323,8 +340,6 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
                 </div>
               );
             })}
-
-            {/* Typing indicator bubble */}
             {peerTyping && (
               <div className="flex items-start">
                 <div className="flex flex-col gap-0.5 items-start">
@@ -338,7 +353,6 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar */}
       <div className="border-t p-2 flex gap-1.5 shrink-0 bg-background">
         <Input
           value={input}
@@ -446,7 +460,7 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
 }
 
 // ---------------------------------------------------------------------------
-// Staff Tile
+// Staff Tile — compact circular design
 // ---------------------------------------------------------------------------
 
 function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
@@ -455,42 +469,44 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
   const presence = getPresence(member.updated_at, member.status, onlineIds.has(member.id));
   const pc = presenceConfig[presence];
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
+  const rc = getRoleConfig(memberRole);
 
   return (
     <div
-      className={cn(
-        'relative bg-card rounded-lg border border-l-4 p-3 flex flex-col gap-2',
-        'hover:shadow-md transition-shadow cursor-pointer group',
-        accentForId(member.id),
-      )}
+      className="relative bg-card rounded-xl border p-3 flex flex-col items-center gap-1.5 hover:shadow-md transition-all cursor-pointer group hover:border-sky-300"
       onClick={onDetail}
     >
-      <div className="flex items-start gap-2.5">
-        <div className="relative shrink-0">
-          <div className={cn('h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white', avatarColor(member.id))}>
-            {initials(member)}
-          </div>
-          <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background', pc.dot)} />
+      {/* Avatar circle */}
+      <div className="relative">
+        <div className={cn('h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold text-white', avatarColor(member.id))}>
+          {initials(member)}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm leading-tight truncate">
-            {fullName(member)}
-            {isSelf && <span className="ml-1 text-[10px] text-muted-foreground">(you)</span>}
-          </div>
-          <div className="text-[11px] text-muted-foreground truncate">{member.designation ?? '—'}</div>
-        </div>
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
+        <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background', pc.dot)} />
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-medium">{memberRole}</span>
-        <span className={cn('text-[10px] px-1.5 py-0.5 rounded border font-medium', pc.badge)}>{pc.label}</span>
-        <div className="flex-1" />
+      {/* Name */}
+      <div className="text-center min-w-0 w-full">
+        <div className="font-medium text-xs leading-tight truncate text-center">
+          {fullName(member)}
+          {isSelf && <span className="ml-1 text-[9px] text-muted-foreground">(you)</span>}
+        </div>
+        <div className={cn('inline-flex items-center gap-0.5 mt-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full border', rc.bg, rc.color)}>
+          {rc.icon}
+          <span>{memberRole}</span>
+        </div>
+      </div>
+
+      {/* Status + Chat */}
+      <div className="flex items-center gap-1.5 w-full justify-center">
+        <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-medium', pc.badge)}>{pc.label}</span>
         {!isSelf && (
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] gap-1 hover:bg-sky-50 hover:text-sky-700"
-            onClick={(e) => { e.stopPropagation(); onChat(); }}>
-            <MessageSquare className="h-3 w-3" /> Chat
-          </Button>
+          <button
+            className="h-5 w-5 flex items-center justify-center rounded-full bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors shrink-0"
+            onClick={(e) => { e.stopPropagation(); onChat(); }}
+            title="Chat"
+          >
+            <MessageSquare className="h-3 w-3" />
+          </button>
         )}
       </div>
     </div>
@@ -508,6 +524,8 @@ function Staff() {
 
   const [chatPeer, setChatPeer] = useState<StaffMember | null>(null);
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
+  const [search, setSearch] = useState('');
+  const [filterPlant, setFilterPlant] = useState<string>('all');
 
   useEffect(() => {
     const operatorId = activeOperator?.id ?? user?.id;
@@ -576,10 +594,52 @@ function Staff() {
     },
   });
 
+  // Filter staff
+  const filteredStaff = useMemo(() => {
+    const q = search.toLowerCase();
+    return staff.filter((s) => {
+      const nameMatch = !q || fullName(s).toLowerCase().includes(q) || (s.username ?? '').toLowerCase().includes(q);
+      const plantMatch = filterPlant === 'all' || s.plant_assignments?.includes(filterPlant);
+      return nameMatch && plantMatch;
+    });
+  }, [staff, search, filterPlant]);
+
+  const plantsWithStaff = (plants ?? []).filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
+  const onlineCount = staff.filter((s) => onlineIds.has(s.id) || getPresence(s.updated_at, s.status, onlineIds.has(s.id)) === 'active').length;
+
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {staff.map((s) => (
+      {/* Search + Filter bar */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search staff…"
+            className="pl-8 h-8 text-xs"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={filterPlant}
+            onChange={(e) => setFilterPlant(e.target.value)}
+            className="h-8 text-xs border rounded-md px-2 bg-background text-foreground"
+          >
+            <option value="all">All plants</option>
+            {plantsWithStaff.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+            <span className="text-emerald-600 font-semibold">{onlineCount}</span> active · {filteredStaff.length} shown
+          </span>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+        {filteredStaff.map((s) => (
           <StaffTile key={s.id} member={s} roles={roles as any[]}
             isSelf={s.id === (activeOperator?.id ?? user?.id)}
             onlineIds={onlineIds}
@@ -587,9 +647,11 @@ function Staff() {
             onDetail={() => setDetailMember(s)}
           />
         ))}
-        {staff.length === 0 && (
+        {filteredStaff.length === 0 && (
           <div className="col-span-full">
-            <Card className="p-6 text-xs text-center text-muted-foreground">No staff found</Card>
+            <Card className="p-6 text-xs text-center text-muted-foreground">
+              {search || filterPlant !== 'all' ? 'No staff match your filters.' : 'No staff found.'}
+            </Card>
           </div>
         )}
       </div>
@@ -617,107 +679,89 @@ function Staff() {
 }
 
 // ---------------------------------------------------------------------------
-// Org Chart Node (recursive) — connector lines + depth color shading
+// Org Chart — always-expanded nodes with hierarchy lines
 // ---------------------------------------------------------------------------
 
-// Depth-tinted connector line colors (sky→teal→cyan gradient per level)
-const CONNECTOR_COLORS = ['#0ea5e9', '#14b8a6', '#06b6d4', '#0369a1', '#0f766e', '#0e7490'];
-
-function OrgNode({ member, allStaff, roles, plants, depth = 0, isLast = false }: {
-  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[];
-  depth?: number; isLast?: boolean;
+function OrgNodeFixed({ member, allStaff, roles, depth = 0, accentLine }: {
+  member: StaffMember; allStaff: StaffMember[]; roles: any[];
+  depth?: number; accentLine?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const children = allStaff.filter((s) => s.immediate_head_id === member.id);
   const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
   const hasChildren = children.length > 0;
   const depthShade = DEPTH_SHADES[Math.min(depth, DEPTH_SHADES.length - 1)];
-  const connectorColor = CONNECTOR_COLORS[Math.min(depth - 1, CONNECTOR_COLORS.length - 1)];
-
-  const memberPlants = (plants ?? [])
-    .filter((p) => member.plant_assignments?.includes(p.id))
-    .map((p) => p.name as string);
+  const lineColor = accentLine ?? CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)];
+  const childLineColor = CONNECTOR_COLORS[Math.min(depth + 1, CONNECTOR_COLORS.length - 1)];
+  const rc = getRoleConfig(memberRole);
 
   return (
     <div className="flex flex-col">
-      {/* Connector row: horizontal elbow line at depth > 0 */}
+      {/* Elbow connector at depth > 0 */}
       {depth > 0 && (
-        <div className="flex items-center" style={{ paddingLeft: (depth - 1) * 20 }}>
-          {/* Vertical segment + horizontal arm */}
-          <div className="flex items-center shrink-0" style={{ width: 20 }}>
-            <div style={{ width: 2, height: 12, background: connectorColor, opacity: 0.5 }} />
-            <div style={{ width: 10, height: 2, background: connectorColor, opacity: 0.5 }} />
+        <div className="flex items-center" style={{ paddingLeft: (depth - 1) * 16 }}>
+          <div className="flex items-center shrink-0" style={{ width: 16 }}>
+            <div style={{ width: 2, height: 10, background: lineColor, opacity: 0.5 }} />
+            <div style={{ width: 8, height: 2, background: lineColor, opacity: 0.5 }} />
           </div>
         </div>
       )}
 
       <div
-        style={{ paddingLeft: depth * 20 }}
+        style={{ paddingLeft: depth * 16 }}
         className={cn(
-          'flex items-center gap-2 py-1.5 pr-2 rounded-lg group transition-colors relative',
-          hasChildren && 'cursor-pointer hover:bg-sky-100/60',
-          !hasChildren && 'cursor-default',
+          'flex items-center gap-1.5 py-1.5 pr-2 rounded-lg relative',
           depthShade,
         )}
-        onClick={() => hasChildren && setExpanded((p) => !p)}
       >
-        {/* Left depth accent bar */}
         {depth > 0 && (
           <div
-            className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full opacity-40"
-            style={{ background: connectorColor, left: depth * 20 - 8 }}
+            className="absolute top-1 bottom-1 w-0.5 rounded-full"
+            style={{ background: lineColor, opacity: 0.35, left: depth * 16 - 4 }}
           />
         )}
 
         {/* Avatar */}
-        <div className={cn('h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(member.id))}>
+        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0', avatarColor(member.id))}>
           {initials(member)}
         </div>
 
-        {/* Name + info */}
+        {/* Name + role */}
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold leading-snug truncate">{fullName(member)}</div>
-          <div className="flex items-center gap-1 flex-wrap mt-0.5">
-            <span className="text-[10px] text-sky-700 bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{memberRole}</span>
+          <div className="text-[11px] font-semibold leading-snug truncate">{fullName(member)}</div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span
+              className={cn('inline-flex items-center gap-0.5 text-[9px] font-medium px-1 py-0.5 rounded border', rc.bg, rc.color)}
+            >
+              {rc.icon}
+              <span>{memberRole}</span>
+            </span>
             {member.designation && (
-              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{member.designation}</span>
+              <span className="text-[9px] text-muted-foreground truncate max-w-[72px]">{member.designation}</span>
             )}
           </div>
-          {memberPlants.length > 0 && (
-            <div className="flex items-center gap-1 flex-wrap mt-1">
-              {memberPlants.slice(0, 2).map((name) => (
-                <span key={name} className="inline-flex items-center gap-0.5 text-[9px] bg-teal-50 text-teal-600 border border-teal-200 rounded px-1.5 py-0.5 font-medium">
-                  <Building2 className="h-2 w-2 shrink-0" />{name}
-                </span>
-              ))}
-              {memberPlants.length > 2 && (
-                <span className="text-[9px] text-muted-foreground">+{memberPlants.length - 2}</span>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Expand chevron + child count */}
         {hasChildren && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <span className="text-[9px] text-sky-400 font-medium bg-sky-100 px-1 rounded">{children.length}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 text-sky-400 transition-transform duration-200', expanded && 'rotate-180')} />
-          </div>
+          <span
+            className="text-[8px] font-bold px-1 rounded shrink-0"
+            style={{ color: lineColor, background: `${lineColor}20` }}
+          >
+            {children.length}
+          </span>
         )}
       </div>
 
-      {/* Vertical trunk line alongside children */}
-      {expanded && hasChildren && (
+      {/* Always-expanded children with vertical trunk line */}
+      {hasChildren && (
         <div className="flex">
-          {/* Trunk line */}
-          <div style={{ width: depth * 20 + 10, paddingLeft: depth * 20, flexShrink: 0 }}>
-            <div style={{ width: 2, height: '100%', background: CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)], opacity: 0.3, marginLeft: 10 }} />
+          <div style={{ width: depth * 16 + 9, flexShrink: 0, paddingLeft: depth * 16 }}>
+            <div style={{ width: 2, height: '100%', background: childLineColor, opacity: 0.25, marginLeft: 9 }} />
           </div>
           <div className="flex-1 min-w-0">
-            {children.map((child, i) => (
-              <OrgNode
-                key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants}
-                depth={depth + 1} isLast={i === children.length - 1}
+            {children.map((child) => (
+              <OrgNodeFixed
+                key={child.id} member={child} allStaff={allStaff} roles={roles}
+                depth={depth + 1} accentLine={childLineColor}
               />
             ))}
           </div>
@@ -728,52 +772,57 @@ function OrgNode({ member, allStaff, roles, plants, depth = 0, isLast = false }:
 }
 
 // ---------------------------------------------------------------------------
-// Org Chart — 4-column layout, one column per plant
+// Hierarchy Legend
+// ---------------------------------------------------------------------------
+
+function HierarchyLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mb-3 px-1">
+      {ROLE_HIERARCHY.map((r, i) => (
+        <div key={r.role} className="flex items-center gap-1">
+          <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border', r.bg, r.color)}>
+            {r.icon} {r.role}
+          </span>
+          {i < ROLE_HIERARCHY.length - 1 && (
+            <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Org Chart — fixed, always visible, always expanded
 // ---------------------------------------------------------------------------
 
 function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
-  // Track expand-all per-plant column: plantId -> boolean
-  const [expandedPlants, setExpandedPlants] = useState<Record<string, boolean>>({});
-
   const plantsWithStaff = plants.filter((p) => staff.some((s) => s.plant_assignments?.includes(p.id)));
 
-  const toggleAll = (plantId: string, force?: boolean) => {
-    setExpandedPlants((prev) => ({
-      ...prev,
-      [plantId]: force !== undefined ? force : !prev[plantId],
-    }));
-  };
-
   if (plantsWithStaff.length === 0) {
-    // Fallback: flat tree with no plant data
     const staffIds = new Set(staff.map((s) => s.id));
     const roots = staff.filter((s) => !s.immediate_head_id || !staffIds.has(s.immediate_head_id));
-    if (roots.length === 0)
-      return <p className="text-xs text-muted-foreground text-center py-4">No reporting relationships configured.</p>;
     return (
       <div className="space-y-1">
-        {roots.map((r) => <OrgNode key={r.id} member={r} allStaff={staff} roles={roles} plants={plants} depth={0} />)}
+        {roots.map((r) => <OrgNodeFixed key={r.id} member={r} allStaff={staff} roles={roles} depth={0} />)}
       </div>
     );
   }
 
-  // Responsive: on small screens stack columns; on md+ show up to 4 columns
   return (
     <div>
-      {/* Legend / summary strip */}
+      <HierarchyLegend />
+
+      {/* Summary strip */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {plantsWithStaff.map((plant, idx) => {
           const accent = PLANT_COLUMN_ACCENTS[idx % PLANT_COLUMN_ACCENTS.length];
           const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
           return (
-            <div
-              key={plant.id}
+            <div key={plant.id}
               className={cn('flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full border', accent.bg, accent.border, accent.text)}
             >
-              <span
-                className="h-2 w-2 rounded-full shrink-0"
-                style={{ background: accent.line }}
-              />
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent.line }} />
               {plant.name}
               <span className="opacity-50 mx-0.5">·</span>
               <span className="font-bold">{count} staff</span>
@@ -782,7 +831,7 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
         })}
       </div>
 
-      {/* 4-column grid */}
+      {/* Plant columns — always expanded */}
       <div className={cn(
         'grid gap-3',
         plantsWithStaff.length === 1 && 'grid-cols-1',
@@ -798,45 +847,28 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
             (s) => !s.immediate_head_id || !plantStaffIds.has(s.immediate_head_id)
           );
 
-          const isExpanded = !!expandedPlants[plant.id];
-
           return (
             <div key={plant.id} className={cn('rounded-xl border overflow-hidden flex flex-col', accent.border)}>
-              {/* Plant column header */}
-              <div className={cn('px-3 py-2.5 bg-gradient-to-r text-white', accent.header)}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Building2 className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                    <span className="text-[12px] font-bold uppercase tracking-wide truncate">{plant.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full">
-                      {plantStaff.length}
-                    </span>
-                    {/* Expand-all / Collapse-all toggle */}
-                    <button
-                      className="h-5 w-5 flex items-center justify-center rounded hover:bg-white/20 transition-colors"
-                      onClick={() => toggleAll(plant.id)}
-                      title={isExpanded ? 'Collapse all' : 'Expand all'}
-                    >
-                      {isExpanded
-                        ? <ChevronsDownUp className="h-3 w-3 opacity-80" />
-                        : <ChevronsUpDown className="h-3 w-3 opacity-80" />
-                      }
-                    </button>
-                  </div>
+              {/* Column header */}
+              <div className={cn('px-3 py-2 bg-gradient-to-r text-white', accent.header)}>
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                  <span className="text-[12px] font-bold uppercase tracking-wide truncate flex-1">{plant.name}</span>
+                  <span className="text-[10px] font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full">
+                    {plantStaff.length}
+                  </span>
                 </div>
               </div>
 
-              {/* Tree nodes */}
-              <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 340 }}>
+              {/* Tree nodes — fully expanded */}
+              <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 380 }}>
                 {roots.length === 0 ? (
                   <p className="text-[11px] text-muted-foreground py-3 text-center">No hierarchy configured.</p>
                 ) : (
                   roots.map((r) => (
-                    <OrgNodeControlled
-                      key={r.id} member={r} allStaff={plantStaff} roles={roles} plants={plants}
-                      depth={0} forceExpand={isExpanded} accentLine={accent.line}
+                    <OrgNodeFixed
+                      key={r.id} member={r} allStaff={plantStaff} roles={roles}
+                      depth={0} accentLine={accent.line}
                     />
                   ))
                 )}
@@ -849,116 +881,414 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
   );
 }
 
-// Controlled org node that respects forceExpand from the column header toggle
-// Uses connector lines + depth-based background shading (sky/teal theme)
-function OrgNodeControlled({ member, allStaff, roles, plants, depth = 0, forceExpand, accentLine }: {
-  member: StaffMember; allStaff: StaffMember[]; roles: any[]; plants: any[];
-  depth?: number; forceExpand: boolean; accentLine?: string;
-}) {
-  const [localExpanded, setLocalExpanded] = useState(false);
-  const expanded = forceExpand || localExpanded;
+// ---------------------------------------------------------------------------
+// KPI Tab — Employee field-update heatmap
+// ---------------------------------------------------------------------------
 
-  useEffect(() => {
-    if (!forceExpand) setLocalExpanded(false);
-  }, [forceExpand]);
+type KpiRange = 7 | 14 | 30;
+type KpiView = 'plant' | 'employee';
 
-  const children = allStaff.filter((s) => s.immediate_head_id === member.id);
-  const memberRole = (roles as any[]).find((r) => r.user_id === member.id)?.role ?? '—';
-  const hasChildren = children.length > 0;
+// Completeness score 0–3 (one point per reading type: well, locator, ro_train)
+type DayScore = { count: number; total: number };
+type PlantDayMap = Record<string, Record<string, DayScore>>; // plantId → dateStr → score
+type EmployeeDayMap = Record<string, Record<string, number>>; // userId → dateStr → count
 
-  // Depth shading: root = white, deeper = progressively tinted sky/teal
-  const depthShade = DEPTH_SHADES[Math.min(depth, DEPTH_SHADES.length - 1)];
-  // Connector line color cycles through sky→teal→cyan per level
-  const lineColor = accentLine ?? CONNECTOR_COLORS[Math.min(depth, CONNECTOR_COLORS.length - 1)];
-  const childLineColor = CONNECTOR_COLORS[Math.min(depth + 1, CONNECTOR_COLORS.length - 1)];
+const KPI_COLORS = {
+  full:    { bg: '#22c55e', label: 'Complete',  desc: 'All reading types logged' },
+  partial: { bg: '#eab308', label: 'Partial',   desc: 'Some readings missing' },
+  few:     { bg: '#f97316', label: 'Minimal',   desc: 'Very few readings' },
+  none:    { bg: '#ef4444', label: 'Missed',    desc: 'No readings logged' },
+  na:      { bg: '#d1d5db', label: 'No data',   desc: 'Not applicable' },
+};
 
-  const toggle = () => setLocalExpanded((p) => !p);
+function kpiColor(score: number, total: number): string {
+  if (total === 0) return KPI_COLORS.na.bg;
+  const pct = score / total;
+  if (pct >= 0.9) return KPI_COLORS.full.bg;
+  if (pct >= 0.5) return KPI_COLORS.partial.bg;
+  if (pct > 0)    return KPI_COLORS.few.bg;
+  return KPI_COLORS.none.bg;
+}
+
+function kpiEmployeeColor(count: number): string {
+  if (count >= 10) return KPI_COLORS.full.bg;
+  if (count >= 4)  return KPI_COLORS.partial.bg;
+  if (count >= 1)  return KPI_COLORS.few.bg;
+  return KPI_COLORS.none.bg;
+}
+
+function generateDays(range: KpiRange): string[] {
+  const days: string[] = [];
+  for (let i = range - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function formatDayLabel(dateStr: string, range: KpiRange): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (range <= 7) return d.toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+  if (range <= 14) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  // 30-day: show only every 5th
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
+  const [range, setRange] = useState<KpiRange>(14);
+  const [view, setView] = useState<KpiView>('plant');
+  const [drillPlantId, setDrillPlantId] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const since = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - range);
+    return d.toISOString();
+  }, [range, refreshKey]);
+
+  // Fetch all reading types for the date range
+  const { data: wellData = [], isLoading: wellLoading } = useQuery<ReadingRecord[]>({
+    queryKey: ['kpi-well', since, refreshKey],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('well_readings')
+        .select('plant_id, reading_datetime, recorded_by')
+        .gte('reading_datetime', since);
+      if (error) return [];
+      return data as ReadingRecord[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: locatorData = [], isLoading: locLoading } = useQuery<ReadingRecord[]>({
+    queryKey: ['kpi-locator', since, refreshKey],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('locator_readings')
+        .select('plant_id, reading_datetime, recorded_by')
+        .gte('reading_datetime', since);
+      if (error) return [];
+      return data as ReadingRecord[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: roData = [], isLoading: roLoading } = useQuery<ReadingRecord[]>({
+    queryKey: ['kpi-ro', since, refreshKey],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('ro_train_readings')
+        .select('plant_id, reading_datetime, recorded_by')
+        .gte('reading_datetime', since);
+      if (error) return [];
+      return data as ReadingRecord[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const isLoading = wellLoading || locLoading || roLoading;
+  const days = useMemo(() => generateDays(range), [range, refreshKey]);
+
+  // Build plant-level completeness map
+  const plantDayMap = useMemo((): PlantDayMap => {
+    const map: PlantDayMap = {};
+    const allPlantsInData = new Set([
+      ...wellData.map((r) => r.plant_id),
+      ...locatorData.map((r) => r.plant_id),
+      ...roData.map((r) => r.plant_id),
+    ]);
+
+    allPlantsInData.forEach((pid) => {
+      map[pid] = {};
+      days.forEach((day) => {
+        const hasWell = wellData.some((r) => r.plant_id === pid && r.reading_datetime.slice(0, 10) === day);
+        const hasLocator = locatorData.some((r) => r.plant_id === pid && r.reading_datetime.slice(0, 10) === day);
+        const hasRo = roData.some((r) => r.plant_id === pid && r.reading_datetime.slice(0, 10) === day);
+        map[pid][day] = { count: (hasWell ? 1 : 0) + (hasLocator ? 1 : 0) + (hasRo ? 1 : 0), total: 3 };
+      });
+    });
+    return map;
+  }, [wellData, locatorData, roData, days]);
+
+  // Build employee-level submission count map
+  const employeeDayMap = useMemo((): EmployeeDayMap => {
+    const map: EmployeeDayMap = {};
+    const allRecords = [...wellData, ...locatorData, ...roData].filter((r) => {
+      if (!r.recorded_by) return false;
+      if (!drillPlantId) return true;
+      return r.plant_id === drillPlantId;
+    });
+
+    allRecords.forEach((r) => {
+      const uid = r.recorded_by!;
+      const day = r.reading_datetime.slice(0, 10);
+      if (!map[uid]) map[uid] = {};
+      map[uid][day] = (map[uid][day] ?? 0) + 1;
+    });
+    return map;
+  }, [wellData, locatorData, roData, drillPlantId]);
+
+  const plantsWithData = useMemo(() => {
+    return plants.filter((p) => plantDayMap[p.id] !== undefined || staff.some((s) => s.plant_assignments?.includes(p.id)));
+  }, [plants, plantDayMap, staff]);
+
+  const drillPlant = drillPlantId ? plants.find((p) => p.id === drillPlantId) : null;
+
+  // Employees to show in drill-down
+  const drillEmployees = useMemo(() => {
+    if (!drillPlantId) return staff;
+    return staff.filter((s) => s.plant_assignments?.includes(drillPlantId));
+  }, [staff, drillPlantId]);
+
+  // Show only every Nth day label to avoid clutter
+  const shouldShowLabel = (idx: number) => {
+    if (range <= 7) return true;
+    if (range <= 14) return idx % 2 === 0;
+    return idx % 5 === 0 || idx === days.length - 1;
+  };
+
+  const CELL_SIZE = range <= 7 ? 26 : range <= 14 ? 20 : 14;
 
   return (
-    <div className="flex flex-col">
-      {/* Elbow connector at depth > 0 */}
-      {depth > 0 && (
-        <div className="flex items-center" style={{ paddingLeft: (depth - 1) * 16 }}>
-          <div className="flex items-center shrink-0" style={{ width: 16 }}>
-            <div style={{ width: 2, height: 10, background: lineColor, opacity: 0.45 }} />
-            <div style={{ width: 8, height: 2, background: lineColor, opacity: 0.45 }} />
-          </div>
-        </div>
-      )}
-
-      <div
-        style={{ paddingLeft: depth * 16 }}
-        className={cn(
-          'flex items-center gap-1.5 py-1.5 pr-2 rounded-lg group transition-colors relative',
-          hasChildren && 'cursor-pointer hover:bg-sky-200/40',
-          !hasChildren && 'cursor-default',
-          depthShade,
-        )}
-        onClick={() => hasChildren && toggle()}
-      >
-        {/* Depth accent bar on left edge */}
-        {depth > 0 && (
-          <div
-            className="absolute top-1 bottom-1 w-0.5 rounded-full"
-            style={{ background: lineColor, opacity: 0.35, left: depth * 16 - 4 }}
-          />
-        )}
-
-        {/* Avatar — smaller inside columns */}
-        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0', avatarColor(member.id))}>
-          {initials(member)}
+    <div className="space-y-3">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* View toggle */}
+        <div className="flex rounded-lg border overflow-hidden">
+          <button
+            className={cn('px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5',
+              view === 'plant' ? 'bg-sky-600 text-white' : 'hover:bg-muted')}
+            onClick={() => { setView('plant'); setDrillPlantId(null); }}
+          >
+            <Building2 className="h-3 w-3" /> By Plant
+          </button>
+          <button
+            className={cn('px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5',
+              view === 'employee' ? 'bg-sky-600 text-white' : 'hover:bg-muted')}
+            onClick={() => setView('employee')}
+          >
+            <Users className="h-3 w-3" /> By Employee
+          </button>
         </div>
 
-        {/* Name + role */}
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold leading-snug truncate">{fullName(member)}</div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span
-              className="text-[9px] font-medium px-1 py-0.5 rounded border"
-              style={{ color: lineColor, background: `${lineColor}15`, borderColor: `${lineColor}40` }}
+        {/* Range */}
+        <div className="flex rounded-lg border overflow-hidden">
+          {([7, 14, 30] as KpiRange[]).map((r) => (
+            <button
+              key={r}
+              className={cn('px-3 py-1.5 text-xs font-medium transition-colors',
+                range === r ? 'bg-sky-600 text-white' : 'hover:bg-muted')}
+              onClick={() => setRange(r)}
             >
-              {memberRole}
-            </span>
-            {member.designation && (
-              <span className="text-[9px] text-muted-foreground truncate max-w-[72px]">{member.designation}</span>
-            )}
-          </div>
+              {r}d
+            </button>
+          ))}
         </div>
 
-        {/* Chevron + count */}
-        {hasChildren && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <span
-              className="text-[8px] font-bold px-1 rounded"
-              style={{ color: lineColor, background: `${lineColor}20` }}
+        {/* Drill-down breadcrumb */}
+        {drillPlantId && drillPlant && (
+          <div className="flex items-center gap-1.5 text-xs">
+            <button
+              className="flex items-center gap-1 text-sky-600 hover:underline"
+              onClick={() => setDrillPlantId(null)}
             >
-              {children.length}
-            </span>
-            <ChevronDown
-              className={cn('h-3 w-3 transition-transform duration-200', expanded && 'rotate-180')}
-              style={{ color: lineColor }}
-            />
+              <ChevronLeft className="h-3 w-3" /> All Plants
+            </button>
+            <span className="text-muted-foreground">›</span>
+            <span className="font-medium">{drillPlant.name}</span>
           </div>
         )}
+
+        <div className="flex-1" />
+
+        <Button
+          size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+          onClick={() => setRefreshKey((k) => k + 1)}
+        >
+          <RefreshCw className="h-3 w-3" />
+          Refresh
+        </Button>
       </div>
 
-      {/* Children with vertical trunk line */}
-      {expanded && hasChildren && (
-        <div className="flex">
-          {/* Trunk line */}
-          <div style={{ width: depth * 16 + 9, flexShrink: 0, paddingLeft: depth * 16 }}>
-            <div style={{ width: 2, height: '100%', background: childLineColor, opacity: 0.25, marginLeft: 9 }} />
+      {/* Legend */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-[10px] text-muted-foreground font-medium">Legend:</span>
+        {Object.entries(KPI_COLORS).map(([key, cfg]) => (
+          <div key={key} className="flex items-center gap-1">
+            <div className="h-3 w-3 rounded-sm" style={{ background: cfg.bg }} />
+            <span className="text-[10px] text-muted-foreground">{cfg.label}</span>
           </div>
-          <div className="flex-1 min-w-0">
-            {children.map((child) => (
-              <OrgNodeControlled
-                key={child.id} member={child} allStaff={allStaff} roles={roles} plants={plants}
-                depth={depth + 1} forceExpand={forceExpand} accentLine={childLineColor}
-              />
-            ))}
+        ))}
+      </div>
+
+      {/* Info box */}
+      <div className="flex items-start gap-2 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 text-xs text-sky-700">
+        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <span>
+          Tracks daily submission of <strong>well readings</strong>, <strong>locator readings</strong>, and <strong>RO train readings</strong> per plant.
+          {view === 'plant'
+            ? ' Click any plant row to drill down by employee.'
+            : ' Columns show submission count per employee per day.'}
+        </span>
+      </div>
+
+      {/* Heatmap */}
+      <Card className="overflow-auto p-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10 gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading KPI data…
           </div>
+        ) : (
+          <div className="min-w-0">
+            {/* Day header */}
+            <div className="flex items-end gap-0.5 mb-1" style={{ paddingLeft: 140 }}>
+              {days.map((day, idx) => (
+                <div
+                  key={day}
+                  style={{ width: CELL_SIZE, flexShrink: 0 }}
+                  className="text-[8px] text-muted-foreground text-center leading-tight"
+                >
+                  {shouldShowLabel(idx) ? (
+                    <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'inline-block', height: 36 }}>
+                      {formatDayLabel(day, range)}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            {/* Rows */}
+            {view === 'plant' && !drillPlantId && (
+              <div className="space-y-0.5">
+                {plantsWithData.map((plant, pi) => {
+                  const accent = PLANT_COLUMN_ACCENTS[pi % PLANT_COLUMN_ACCENTS.length];
+                  const dayData = plantDayMap[plant.id] ?? {};
+                  return (
+                    <div
+                      key={plant.id}
+                      className="flex items-center gap-0.5 group cursor-pointer rounded hover:bg-muted/30"
+                      onClick={() => { setDrillPlantId(plant.id); setView('employee'); }}
+                    >
+                      {/* Row label */}
+                      <div className="flex items-center gap-1.5 shrink-0" style={{ width: 136 }}>
+                        <div
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ background: accent.line }}
+                        />
+                        <span className="text-[11px] font-semibold truncate" style={{ color: accent.line }}>{plant.name}</span>
+                        <ZoomIn className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-70 shrink-0" />
+                      </div>
+
+                      {/* Cells */}
+                      <div className="flex items-center gap-0.5">
+                        {days.map((day) => {
+                          const score = dayData[day];
+                          const color = score ? kpiColor(score.count, score.total) : KPI_COLORS.na.bg;
+                          const tip = score
+                            ? `${plant.name} · ${day}\n${score.count}/${score.total} reading types`
+                            : `${plant.name} · ${day}\nNo data`;
+                          return (
+                            <div
+                              key={day}
+                              style={{ width: CELL_SIZE, height: CELL_SIZE, background: color, flexShrink: 0, opacity: 0.9 }}
+                              className="rounded-sm cursor-default"
+                              onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, text: tip })}
+                              onMouseLeave={() => setTooltip(null)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Employee view (either global or drill-down) */}
+            {(view === 'employee') && (
+              <div className="space-y-0.5">
+                {drillEmployees.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">No employees for this plant.</p>
+                )}
+                {drillEmployees.map((emp) => {
+                  const dayData = employeeDayMap[emp.id] ?? {};
+                  const memberRole = (roles as any[]).find((r) => r.user_id === emp.id)?.role ?? '—';
+                  const rc = getRoleConfig(memberRole);
+                  return (
+                    <div key={emp.id} className="flex items-center gap-0.5 rounded hover:bg-muted/30">
+                      {/* Row label */}
+                      <div className="flex items-center gap-1.5 shrink-0" style={{ width: 136 }}>
+                        <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0', avatarColor(emp.id))}>
+                          {initials(emp)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold truncate leading-tight">{fullName(emp)}</div>
+                          <div className={cn('inline-flex items-center gap-0.5 text-[8px] font-medium', rc.color)}>
+                            {rc.icon} {memberRole}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Cells */}
+                      <div className="flex items-center gap-0.5">
+                        {days.map((day) => {
+                          const count = dayData[day] ?? 0;
+                          const color = kpiEmployeeColor(count);
+                          const tip = `${fullName(emp)} · ${day}\n${count} reading(s) logged`;
+                          return (
+                            <div
+                              key={day}
+                              style={{ width: CELL_SIZE, height: CELL_SIZE, background: color, flexShrink: 0, opacity: 0.9 }}
+                              className="rounded-sm cursor-default"
+                              onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, text: tip })}
+                              onMouseLeave={() => setTooltip(null)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="fixed z-50 bg-zinc-900 text-white text-[10px] rounded-lg px-2.5 py-2 shadow-lg pointer-events-none whitespace-pre leading-relaxed"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 12 }}
+        >
+          {tooltip.text}
         </div>
       )}
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-3 gap-2">
+        {(() => {
+          const allScores = plantsWithData.flatMap((p) =>
+            days.map((d) => plantDayMap[p.id]?.[d] ?? { count: 0, total: 0 })
+          ).filter((s) => s.total > 0);
+          const total = allScores.length;
+          const full = allScores.filter((s) => s.count === s.total).length;
+          const missed = allScores.filter((s) => s.count === 0).length;
+          const pct = total > 0 ? Math.round((full / total) * 100) : 0;
+          return [
+            { label: 'Compliance Rate', value: `${pct}%`, color: pct >= 80 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600' },
+            { label: 'Days Fully Logged', value: `${full}/${total}`, color: 'text-sky-600' },
+            { label: 'Days Missed', value: `${missed}`, color: missed === 0 ? 'text-emerald-600' : 'text-red-600' },
+          ];
+        })().map((s) => (
+          <div key={s.label} className="flex flex-col items-center bg-muted/40 rounded-lg py-3 px-2 text-center gap-0.5">
+            <span className={cn('text-xl font-bold leading-none', s.color)}>{s.value}</span>
+            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -971,21 +1301,17 @@ const ROLES = ['Admin', 'Manager', 'Technician', 'Operator'] as const;
 
 function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
   const activeCount = staff.filter((s) => s.status === 'Active').length;
-
   const roleCounts = ROLES.map((role) => ({
     role,
     count: (roles as any[]).filter((r) => r.role === role).length,
   }));
-
   const coveredPlantIds = new Set(staff.flatMap((s) => s.plant_assignments ?? []));
   const plantsCount = plants.filter((p) => coveredPlantIds.has(p.id)).length;
-
   const statItems = [
     { label: 'Total Staff', value: staff.length, icon: <Users className="h-4 w-4" />, color: 'text-sky-600' },
     { label: 'Active', value: activeCount, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600' },
     { label: 'Plants Covered', value: plantsCount, icon: <Building2 className="h-4 w-4" />, color: 'text-violet-600' },
   ];
-
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2">
@@ -998,12 +1324,18 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
         ))}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {roleCounts.map(({ role, count }) => (
-          <div key={role} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
-            <span className="text-xs text-muted-foreground">{role}</span>
-            <span className="text-sm font-semibold">{count}</span>
-          </div>
-        ))}
+        {roleCounts.map(({ role, count }) => {
+          const rc = getRoleConfig(role);
+          return (
+            <div key={role} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
+              <div className={cn('flex items-center gap-1.5 text-xs', rc.color)}>
+                {rc.icon}
+                <span className="text-muted-foreground">{role}</span>
+              </div>
+              <span className="text-sm font-semibold">{count}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1016,7 +1348,6 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
 function PendingApprovals({ staff }: { staff: StaffMember[] }) {
   const queryClient = useQueryClient();
   const [approving, setApproving] = useState<string | null>(null);
-
   const pending = staff.filter((s) => s.status === 'Pending');
 
   const approve = useCallback(async (id: string) => {
@@ -1088,17 +1419,23 @@ const MANUAL_SECTIONS: ManualSection[] = [
     icon: <ShieldCheck className="h-3.5 w-3.5" />,
     content: (
       <div className="space-y-1.5 text-xs">
-        {[
-          { role: 'Admin', desc: 'Full access — manage staff, approve accounts, configure plants, access all data and exports.' },
-          { role: 'Manager', desc: 'View and manage operations, maintenance, compliance, and incidents across assigned plants.' },
-          { role: 'Technician', desc: 'Log readings, submit maintenance records, and manage incidents for assigned plants.' },
-          { role: 'Operator', desc: 'View-only access to operations and dashboard. Can chat with colleagues.' },
-        ].map(({ role, desc }) => (
-          <div key={role} className="flex gap-2">
-            <span className="font-semibold text-foreground w-20 shrink-0">{role}</span>
-            <span className="text-muted-foreground">{desc}</span>
-          </div>
-        ))}
+        {ROLE_HIERARCHY.map(({ role, icon, color, bg }) => {
+          const descs: Record<string, string> = {
+            Admin: 'Full access — manage staff, approve accounts, configure plants, access all data and exports.',
+            Manager: 'View and manage operations, maintenance, compliance, and incidents across assigned plants.',
+            'Data Analyst': 'Access to data analysis, reports, and AI assistant. No write access to operational data.',
+            Technician: 'Log readings, submit maintenance records, and manage incidents for assigned plants.',
+            Operator: 'View-only access to operations and dashboard. Can chat with colleagues.',
+          };
+          return (
+            <div key={role} className="flex gap-2">
+              <span className={cn('inline-flex items-center gap-1 font-semibold text-foreground w-28 shrink-0 text-[10px]', color)}>
+                {icon} {role}
+              </span>
+              <span className="text-muted-foreground">{descs[role] ?? '—'}</span>
+            </div>
+          );
+        })}
       </div>
     ),
   },
@@ -1107,8 +1444,18 @@ const MANUAL_SECTIONS: ManualSection[] = [
     icon: <Users className="h-3.5 w-3.5" />,
     content: (
       <div className="space-y-2 text-xs text-muted-foreground">
-        <p>The <strong className="text-foreground">Staff</strong> tab lists all registered users. Click any tile to view their full profile — designation, role, plant assignments, and who they report to.</p>
-        <p>Use the <strong className="text-foreground">Chat</strong> button to send ephemeral messages (auto-deleted after 8 hours). Admins can suspend or delete accounts from the detail drawer.</p>
+        <p>The <strong className="text-foreground">Staff</strong> tab lists all registered users. Click any tile to view their full profile. Use the search and plant filter to narrow results.</p>
+        <p>Use the <strong className="text-foreground">Chat</strong> button to send ephemeral messages (auto-deleted after 8 hours).</p>
+      </div>
+    ),
+  },
+  {
+    title: 'Employee KPI',
+    icon: <BarChart2 className="h-3.5 w-3.5" />,
+    content: (
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>The <strong className="text-foreground">KPI</strong> tab shows a heatmap of daily field updates — well readings, locator readings, and RO train readings — per plant and employee.</p>
+        <p>Green = all reading types logged · Yellow = partial · Orange = minimal · Red = none logged. Click any plant row to drill down by individual employee.</p>
       </div>
     ),
   },
@@ -1117,7 +1464,7 @@ const MANUAL_SECTIONS: ManualSection[] = [
     icon: <GitBranch className="h-3.5 w-3.5" />,
     content: (
       <div className="text-xs text-muted-foreground">
-        <p>The reporting tree is grouped by plant into 4 columns. Each column shows the hierarchy for that plant based on the <strong className="text-foreground">immediate_head_id</strong> field. Use the expand/collapse button in each column header to toggle all nodes at once.</p>
+        <p>The <strong className="text-foreground">Reporting Tree</strong> is always visible in the Info tab, grouped by plant. The hierarchy follows Admin → Manager → Data Analyst → Technician → Operator levels based on the <strong className="text-foreground">immediate_head_id</strong> field.</p>
       </div>
     ),
   },
@@ -1180,7 +1527,6 @@ function AppManual() {
 
 function RegisterInfo() {
   const { data: plants = [] } = usePlants();
-  const [orgOpen, setOrgOpen] = useState(false);
 
   const { data: staff = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff'],
@@ -1206,25 +1552,45 @@ function RegisterInfo() {
     },
   });
 
+  const { isAdmin } = useAuth();
+
   return (
     <div className="space-y-3">
 
-      {/* Org Chart */}
+      {/* Directory Stats */}
       <Card className="overflow-hidden">
-        <button
-          className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
-          onClick={() => setOrgOpen((p) => !p)}
-        >
-          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="text-sm font-semibold flex-1">Reporting Tree</span>
-          <span className="text-[10px] text-muted-foreground mr-1">by plant</span>
-          <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', orgOpen && 'rotate-180')} />
-        </button>
-        {orgOpen && (
-          <div className="border-t px-4 py-3">
-            <OrgChart staff={staff} roles={roles} plants={plants} />
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b">
+          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold">Directory Overview</span>
+        </div>
+        <div className="p-3">
+          <DirectoryStats staff={staff} roles={roles} plants={plants} />
+        </div>
+      </Card>
+
+      {/* Pending Approvals — admin only */}
+      {isAdmin && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b">
+            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+            <span className="text-sm font-semibold">Pending Approvals</span>
           </div>
-        )}
+          <div className="p-3">
+            <PendingApprovals staff={staff} />
+          </div>
+        </Card>
+      )}
+
+      {/* Reporting Tree — always visible, not foldable */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b">
+          <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold">Reporting Tree</span>
+          <span className="text-[10px] text-muted-foreground ml-1">by plant</span>
+        </div>
+        <div className="px-4 py-3">
+          <OrgChart staff={staff} roles={roles} plants={plants} />
+        </div>
       </Card>
 
       {/* App Manual */}
@@ -1247,16 +1613,53 @@ function RegisterInfo() {
 // ---------------------------------------------------------------------------
 
 export default function Employees() {
-  const [tab, setTab] = useTabPersist<'staff' | 'info'>('tab:employees', 'staff');
+  const [tab, setTab] = useTabPersist<'staff' | 'kpi' | 'info'>('tab:employees', 'staff');
+
+  const { data: plants = [] } = usePlants();
+
+  const { data: staff = [] } = useQuery<StaffMember[]>({
+    queryKey: ['staff'],
+    queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_staff_profiles');
+      if (!rpcError && rpcData) return rpcData as StaffMember[];
+      const { data, error } = await supabase.from('user_profiles').select('*').order('last_name');
+      if (error) throw error;
+      return (data ?? []) as StaffMember[];
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: roles = [] } = useQuery({
+    queryKey: ['all-roles'],
+    queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
+      if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
+      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
+      return (data ?? []).flatMap((p: any) =>
+        (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
+      );
+    },
+  });
+
   return (
     <div className="space-y-3 animate-fade-in">
       <h1 className="text-xl font-semibold tracking-tight">Employees</h1>
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList className="grid grid-cols-2 w-full">
-          <TabsTrigger value="staff">Staff</TabsTrigger>
-          <TabsTrigger value="info">Info</TabsTrigger>
+        <TabsList className="grid grid-cols-3 w-full">
+          <TabsTrigger value="staff" className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" /> Staff
+          </TabsTrigger>
+          <TabsTrigger value="kpi" className="flex items-center gap-1.5">
+            <BarChart2 className="h-3.5 w-3.5" /> KPI
+          </TabsTrigger>
+          <TabsTrigger value="info" className="flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" /> Info
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="staff" className="mt-3"><Staff /></TabsContent>
+        <TabsContent value="kpi" className="mt-3">
+          <KpiTab staff={staff} roles={roles} plants={plants} />
+        </TabsContent>
         <TabsContent value="info" className="mt-3"><RegisterInfo /></TabsContent>
       </Tabs>
     </div>
