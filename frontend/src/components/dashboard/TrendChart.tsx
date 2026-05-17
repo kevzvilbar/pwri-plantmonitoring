@@ -879,13 +879,18 @@ export function TrendChart({
       };
     }
     const days = RANGE_DAYS[range];
-    const end = new Date();
-    const start = startOfDay(subDays(end, days));
+    const today = new Date();
+    // Cap preset ranges to 23:59:59.999 of today so that readings
+    // timestamped for tomorrow (timezone offsets, early-entered data, etc.)
+    // never appear in 7D / 14D / 30D / 60D / 90D views.
+    // Custom range bypasses this cap intentionally (handled in the branch above).
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    const start = startOfDay(subDays(today, days));
     return {
       startISO: start.toISOString(),
       endISO: end.toISOString(),
       startKey: format(start, 'yyyy-MM-dd'),
-      endKey: format(end, 'yyyy-MM-dd'),
+      endKey: format(today, 'yyyy-MM-dd'),
     };
   }, [range, from, to]);
 
