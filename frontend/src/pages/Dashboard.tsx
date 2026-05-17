@@ -28,7 +28,6 @@ import {
   DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
   OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS, ChartMetric,
 } from '@/components/dashboard/types';
-import type { PermeateProductionPeriod } from '@/pages/Plants';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -757,74 +756,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 //   May 4 00:21  → May 5  (after cut-off, first reading of next day's period)
 //   May 3 23:00  → May 4  wait — that's wrong. Let me re-read the rule.
 // Correct rule from UI: "May 4 = readings from May 3 00:21 to May 4 00:20"
-//   May 3 00:21 (> cutoff) → +1 day → May 4  ✓
-//   May 4 00:05 (<= cutoff) → May 4  ✓
-//   May 4 00:21 (> cutoff) → May 5  ✓
-function permeateProductionDate(
-  readingDatetime: string,
-  cutoffEnabled: boolean,
-  cutoffTime: string | null | undefined,
-): string {
-  const dt = new Date(readingDatetime);
-  if (!cutoffEnabled || !cutoffTime) {
-    return format(dt, 'yyyy-MM-dd');
-  }
-  const [hh, mm] = cutoffTime.split(':').map(Number);
-  const cutoffMinutes = (hh ?? 0) * 60 + (mm ?? 20);
-  const readingMinutes = dt.getHours() * 60 + dt.getMinutes();
-  if (readingMinutes > cutoffMinutes) {
-    return format(addDays(dt, 1), 'yyyy-MM-dd');
-  }
-  return format(dt, 'yyyy-MM-dd');
-}
 
-// Returns true if `dateStr` (YYYY-MM-DD) falls within ANY of the plant's
-// active permeate-production periods (inclusive on both ends).
-function isInAnyProductionPeriod(
-  dateStr: string,
-  periods: PermeateProductionPeriod[],
-): boolean {
-  if (periods.length === 0) return true; // no periods defined → backwards-compat: always active
-  return periods.some(p => {
-    if (p.start && dateStr < p.start) return false;
-    if (p.end   && dateStr > p.end)   return false;
-    return true;
-  });
-}
-
-// When a reading's attributed production date falls outside every active period,
-// displace it to the nearest period boundary day:
-//   - Before all periods → day before the earliest start
-//   - After the period whose end is closest → day after that end
-// This prevents boundary readings (e.g. at midnight cut-off) from being silently
-// dropped and ensures they land on an explicit non-production day.
-function displaceToNearestBoundary(
-  dateStr: string,
-  periods: PermeateProductionPeriod[],
-): string {
-  if (periods.length === 0 || isInAnyProductionPeriod(dateStr, periods)) return dateStr;
-  const sorted = [...periods].sort((a, b) =>
-    (a.start ?? '0000-01-01') < (b.start ?? '0000-01-01') ? -1 : 1,
-  );
-  const earliestStart = sorted[0]?.start;
-  if (earliestStart && dateStr < earliestStart) {
-    // Before all periods → day before earliest start
-    const d = new Date(earliestStart);
-    d.setDate(d.getDate() - 1);
-    return format(d, 'yyyy-MM-dd');
-  }
-  // After some period's end — find the period whose end is the largest date ≤ dateStr
-  const ended = sorted.filter(p => p.end && dateStr > p.end);
-  const closest = ended.reduce<PermeateProductionPeriod | null>((best, p) =>
-    !best || (p.end! > best.end!) ? p : best, null,
-  );
-  if (closest?.end) {
-    const d = new Date(closest.end);
-    d.setDate(d.getDate() + 1);
-    return format(d, 'yyyy-MM-dd');
-  }
-  return dateStr;
-}
 
 export default function Dashboard() {
   const { selectedPlantId } = useAppStore();
@@ -997,45 +929,15 @@ export default function Dashboard() {
     staleTime: 60_000, // config rarely changes — cache for 1 min
   });
 
-  // Per-plant permeate production config extracted from the JSONB blob.
-  const permeateConfigMap = useMemo(() => {
-    const map = new Map<string, {
-      cutoffEnabled: boolean;
-      cutoffTime: string;
-      productionPeriods: PermeateProductionPeriod[];
-    }>();
-    (plantMeterConfigs ?? []).forEach((row: any) => {
-      const cfg = row.config ?? {};
-      if (cfg.permeate_is_production) {
-        // Migration shim: lift legacy scalar fields into the periods array shape
-        // if the new array hasn't been written yet.
-        let periods: PermeateProductionPeriod[] = Array.isArray(cfg.permeate_production_periods)
-          ? cfg.permeate_production_periods
-          : (() => {
-              const s = (cfg.permeate_production_start as string | null) ?? null;
-              const e = (cfg.permeate_production_end   as string | null) ?? null;
-              return (s !== null || e !== null)
-                ? [{ id: 'legacy', start: s, end: e }]
-                : [];
-            })();
-        map.set(row.plant_id as string, {
-          cutoffEnabled:    cfg.permeate_cutoff_enabled ?? true,
-          cutoffTime:       cfg.permeate_cutoff_time    ?? '00:20',
-          productionPeriods: periods,
-        });
-      }
-    });
-    return map;
+  // Plant IDs that use the RO permeate meter as their production source.
+  // The cutoff / production-period concept has been removed system-wide —
+  // every plant with permeate_is_production = true is always included so the
+  // query never gets gated out by a stale or misconfigured period boundary.
+  const permeateProductionPlantIds = useMemo(() => {
+    return (plantMeterConfigs ?? [])
+      .filter((row: any) => row.config?.permeate_is_production)
+      .map((row: any) => row.plant_id as string);
   }, [plantMeterConfigs]);
-
-  // Plant IDs that use the RO permeate meter as their production source
-  // AND whose active production period covers today.
-  const permeateProductionPlantIds = useMemo(
-    () => Array.from(permeateConfigMap.entries())
-      .filter(([, c]) => isInAnyProductionPeriod(_localDateStr, c.productionPeriods))
-      .map(([id]) => id),
-    [permeateConfigMap, _localDateStr],
-  );
 
   // Today's production from RO permeate meter deltas
   // Fetches a 49-hour window (yesterday 00:00 → today 23:59) so that readings
