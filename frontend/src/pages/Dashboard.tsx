@@ -162,7 +162,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const endISO   = new Date(clampedToStr + 'T23:59:59').toISOString();
 
   // ── Locators (meta) ────────────────────────────────────────────────────────
-  const { data: locators, isLoading: locatorsLoading } = useQuery({
+  const { data: locators, isLoading: locatorsLoading, isFetching: locatorsFetching } = useQuery({
     queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -178,7 +178,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
 
-  const { data: consReadings, isLoading: consLoading } = useQuery({
+  const { data: consReadings, isLoading: consLoading, isFetching: consFetching } = useQuery({
     queryKey: ['dsm-cons-readings', locatorIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!locatorIds.length) return [];
@@ -197,7 +197,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   });
 
   // ── Product meters (meta) ──────────────────────────────────────────────────
-  const { data: productMeters, isLoading: metersLoading } = useQuery({
+  const { data: productMeters, isLoading: metersLoading, isFetching: metersFetching } = useQuery({
     queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -212,7 +212,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
-  const { data: prodReadings, isLoading: prodLoading } = useQuery({
+  const { data: prodReadings, isLoading: prodLoading, isFetching: prodFetching } = useQuery({
     queryKey: ['dsm-prod-readings', meterIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!meterIds.length) return [];
@@ -295,7 +295,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // instead of re-deriving deltas from permeate_meter (cumulative), which caused
   // the "millions delta" spike seen when the first row in the date range had no
   // prior reading and its cumulative value was treated as a single-day delta.
-  const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
+  const { data: modalMeterConfigs, isLoading: configLoading, isFetching: configFetching } = useQuery({
     queryKey: ['dsm-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
@@ -317,7 +317,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   );
 
   // RO train meta — for column headers (train_number, plant_id)
-  const { data: roTrainsMeta, isLoading: trainsLoading } = useQuery({
+  const { data: roTrainsMeta, isLoading: trainsLoading, isFetching: trainsFetching } = useQuery({
     queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
@@ -335,7 +335,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
   // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
   // and permeate_production_date (cutoff-aware day label). Never use permeate_meter (cumulative).
-  const { data: roMeterReadings, isLoading: roLoading } = useQuery({
+  const { data: roMeterReadings, isLoading: roLoading, isFetching: roFetching } = useQuery({
     queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
@@ -414,9 +414,24 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   //
   // Fix: treat configs as "not yet ready" until the array is defined, and
   // block rendering (isLoading=true) until then.
-  const configsReady = !configLoading && modalMeterConfigs !== undefined;
+  // ── Two-tier loading gate ─────────────────────────────────────────────────
+  // isLoading  (TanStack `isLoading`) — true only on the VERY FIRST fetch when
+  //            there is no cached data at all.  Gates the full blocking spinner.
+  // isRefreshing (derived from `isFetching`) — true on EVERY active fetch,
+  //            including the 30-second background interval.  When any query in
+  //            the dependency chain is still in flight, the table is suspended
+  //            behind a non-blocking overlay so we never render with mixed-
+  //            generation data (e.g. fresh roMeterReadings + stale roTrainsMeta).
+  //
+  // configsReady intentionally uses configFetching so that `useRoProd` doesn't
+  // settle to its final value until the config query has fully resolved.  If we
+  // only checked configLoading (first-fetch only) the flag could flip from
+  // true→false→true as the background refetch completes, briefly switching
+  // which pivot is used and causing the tab mismatch.
+  const configsReady = !configLoading && !configFetching && modalMeterConfigs !== undefined;
   const useRoProd    = configsReady && permeateIsProductionPlantIds.length > 0;
 
+  // First-fetch blocking spinner (no cached data).
   const prodDataLoading = !configsReady
     || (useRoProd ? (roLoading || trainsLoading) : (metersLoading || prodLoading));
   const isLoading = tab === 'consumption'
@@ -424,6 +439,20 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     : tab === 'production'
       ? prodDataLoading
       : (locatorsLoading || consLoading || prodDataLoading);
+
+  // Background-refetch overlay (cached data exists but a newer fetch is running).
+  // Uses isFetching — true for EVERY active fetch, unlike isLoading.
+  // Mirror the per-tab dependency sets so we only show the overlay for queries
+  // that actually affect the currently visible tab.
+  const prodDataRefreshing = configFetching
+    || (useRoProd ? (roFetching || trainsFetching) : (metersFetching || prodFetching));
+  const isRefreshing = !isLoading && (
+    tab === 'consumption'
+      ? (locatorsFetching || consFetching)
+      : tab === 'production'
+        ? prodDataRefreshing
+        : (locatorsFetching || consFetching || prodDataRefreshing)
+  );
 
   // Active pivot data for the detail tabs.
   //
@@ -517,7 +546,23 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </div>
 
         {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
-        <div className="flex-1 overflow-auto">
+        {/* `relative` + the overlay div below suspend rendering during background
+            refetches without hiding the previous data entirely.  The table is
+            kept in the DOM (opacity-40, pointer-events-none) so the layout
+            doesn't jump; the spinner overlay communicates "updating". */}
+        <div className={["flex-1 overflow-auto relative", isRefreshing ? "pointer-events-none" : ""].join(" ")}>
+          {isRefreshing && (
+            <div className="absolute inset-0 z-40 flex items-start justify-end p-2 pointer-events-none">
+              <span className="flex items-center gap-1.5 rounded-full bg-muted/90 border border-border px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm">
+                <svg className="h-3 w-3 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                Refreshing…
+              </span>
+            </div>
+          )}
+          <div className={isRefreshing ? "opacity-40" : ""}>
           {isLoading && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
           )}
@@ -714,6 +759,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               </tbody>
             </table>
           )}
+          </div>{/* end opacity wrapper */}
         </div>
 
         {/* ── Footer legend ── */}
