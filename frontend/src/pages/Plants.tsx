@@ -1505,7 +1505,16 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     enabled: !!plantId,
     staleTime: 30_000,
     queryFn: async () => {
-      // Try DB first
+      // localStorage is checked FIRST — it is always written by saveConfig and is
+      // immediately consistent. The DB is tried as a fallback only (e.g. fresh device).
+      // Checking DB first caused a race: the broad qc.invalidateQueries() in saveConfig
+      // triggered a background refetch that read stale DB data and overwrote the correct
+      // setQueryData value, making toggled-off meters re-appear after ~1 sec.
+      try {
+        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
+        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
+      } catch { /* ignore */ }
+      // Fall back to DB (first-time load on a new device / localStorage cleared)
       try {
         const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
           .select('config')
@@ -1515,11 +1524,6 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
           return { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
         }
       } catch { /* table may not exist yet */ }
-      // Fall back to localStorage
-      try {
-        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
-        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
-      } catch { /* ignore */ }
       return DEFAULT_METER_CONFIG;
     },
   });
@@ -1532,8 +1536,6 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
       if (!error) savedToDb = true;
     } catch { /* table missing */ }
     try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
-    qc.setQueryData(['plant-meter-config', plantId], next);
-    qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
     // Propagate config change to Dashboard, TrendChart, and DataSummaryModal immediately.
     // permeate_is_production toggling changes which source powers the Production stat card
     // and the DataSummaryModal Production tab — all three must re-read the updated config.
@@ -1545,6 +1547,12 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
     qc.invalidateQueries();
+    // Cancel any in-flight refetch of the meter config that the broad invalidateQueries()
+    // above may have kicked off, then re-apply the new value as the final word.
+    // Without this, the background refetch could read stale DB data and overwrite the
+    // correct config — causing toggled-off meters to reappear in the ROTrains form.
+    await qc.cancelQueries({ queryKey: ['plant-meter-config', plantId] });
+    qc.setQueryData(['plant-meter-config', plantId], next);
     return savedToDb;
   };
 
