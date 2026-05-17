@@ -913,15 +913,19 @@ export default function Dashboard() {
   // When permeate_is_production=true the permeate meter delta in ro_train_readings
   // IS the production figure; those rows must be included in the Dashboard production
   // total and the NRW / PV-ratio calculations that depend on it.
+  //
+  // ROOT-CAUSE FIX: The DataSummaryModal queries `permeate_is_production` as a
+  // TOP-LEVEL column on plant_meter_config (and correctly shows production values).
+  // The original dashboard query only selected `config` (JSONB blob) and then
+  // checked `row.config?.permeate_is_production` — which is always undefined when
+  // permeate_is_production is stored as a real column, causing production to be 0.
+  // Solution: select both the direct column AND the config blob, then check all paths.
   const { data: plantMeterConfigs } = useQuery({
     queryKey: ['dash-plant-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
-      // Config is stored as a single JSONB blob in the `config` column — mirrors
-      // usePlantMeterConfig in Plants.tsx. Individual fields like permeate_is_production
-      // are NOT separate columns; they live inside config.
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id, config')
+        .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
@@ -930,19 +934,14 @@ export default function Dashboard() {
   });
 
   // Plant IDs that use the RO permeate meter as their production source.
-  // The cutoff / production-period concept has been removed system-wide —
-  // every plant with permeate_is_production = true is always included so the
-  // query never gets gated out by a stale or misconfigured period boundary.
-  //
-  // FIX: Also include plants where ro_production_source === 'permeate' even
-  // if the secondary permeate_is_production checkbox was not explicitly ticked.
-  // In Plants.tsx, selecting 'permeate' as ro_production_source IS the declaration
-  // that permeate = production — the checkbox is a sub-option that defaults false,
-  // which caused Production Volume to show 0 despite the plant being correctly
-  // configured. Both flags are treated as sufficient to enable permeate production.
+  // Checks all three possible locations where the flag can be stored:
+  //   1. Top-level column  permeate_is_production (primary — matches DataSummaryModal)
+  //   2. JSONB config blob config.permeate_is_production (legacy path)
+  //   3. JSONB config blob config.ro_production_source === 'permeate' (Plants.tsx radio)
   const permeateProductionPlantIds = useMemo(() => {
     return (plantMeterConfigs ?? [])
       .filter((row: any) =>
+        row.permeate_is_production === true ||
         row.config?.permeate_is_production === true ||
         row.config?.ro_production_source === 'permeate'
       )
