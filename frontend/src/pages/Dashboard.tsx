@@ -507,18 +507,27 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // ── ALWAYS use roProdPivot for the production column ─────────────────────
-            // This is the only source that:
-            //   1. Uses permeate_production_date (cutoff-adjusted, capped at toStr)
-            //      so no phantom future dates ever appear (May 18/19 when today = May 17)
-            //   2. Produces values that EXACTLY match the "Production" detail tab's
-            //      "Total Prod." column for every date.
-            // prodPivot (product meter readings) is NEVER used here — it uses raw
-            // reading_datetime which has a natural 1-day shift versus permeate_production_date
-            // and can bleed into future dates from early-morning readings.
-            const activeProdPivot = roProdPivot.entities.length > 0 ? roProdPivot : prodPivot;
-            // Date spine comes from the same pivot — identical to what Production tab shows.
-            const allDates = activeProdPivot.dates;
+            // ── Mirror the "Production" detail tab's source selection exactly ────────
+            // useRoProd (not roProdPivot.entities.length) is the authoritative flag —
+            // it is guarded by configsReady and gates isLoading, so by the time we
+            // render here both flags are stable.  Using entities.length instead caused
+            // a stale-cache divergence: roTrainsMeta could still hold entities from a
+            // prior render while modalMeterConfigs had just refreshed with an empty
+            // permeateIsProductionPlantIds, making useRoProd=false while entities.length>0.
+            // Result: "Production" tab used prodPivot (correct) but "both" tab used
+            // roProdPivot (stale/wrong) → May 1 production showed 0 in "both" tab even
+            // though the "Production" detail tab showed the real value.
+            const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
+
+            // ── Hard-cap allDates to today ────────────────────────────────────────
+            // getPermeateDayLabel assigns readings taken before the cutoff window
+            // (e.g. 00:10 local) to the NEXT calendar date.  If those readings are
+            // fetched while TanStack Query is serving a stale cache (background
+            // refetch in flight), future permeate_production_date values such as
+            // May 18 / May 19 can leak into the pivot even though today is May 17.
+            // Filtering allDates to ≤ todayStr eliminates all phantom future rows
+            // regardless of DB contents or cache staleness.
+            const allDates = activeProdPivot.dates.filter((d) => d <= todayStr);
 
             // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
             // Mirror the rowTotals formula:
@@ -706,7 +715,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </span>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${(roProdPivot.entities.length > 0 ? roProdPivot : prodPivot).dates.length} days in range`}
+            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.filter((d) => d <= todayStr).length} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
