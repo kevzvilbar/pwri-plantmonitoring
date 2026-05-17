@@ -1093,7 +1093,7 @@ function PretreatmentAndROLog() {
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => (await supabase.from('ro_train_readings')
-      .select('reading_datetime, power_meter_reading_kwh, permeate_meter')
+      .select('reading_datetime, power_meter_reading_kwh, permeate_meter, permeate_meter_delta')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
@@ -1194,6 +1194,15 @@ function PretreatmentAndROLog() {
   const feedDelta  = !isNaN(feedCurr) && prevFeedMeter != null ? feedCurr - prevFeedMeter : null;
   const permDelta  = !isNaN(permCurr) && prevPermMeter != null ? permCurr - prevPermMeter : null;
   const rejDelta   = !isNaN(rejCurr)  && prevRejMeter  != null ? rejCurr  - prevRejMeter  : null;
+
+  // ── Water meter reading warnings ─────────────────────────────────────────
+  const prevPermDeltaDB: number | null = (prevRO as any)?.permeate_meter_delta ?? null;
+  // Negative: current reading is below the previous odometer snapshot → rollback or typo.
+  const permNegWarn  = prevPermMeter != null && !isNaN(permCurr) && permCurr < prevPermMeter;
+  // High: new delta is more than 3× the last delta and > 1 m³ (ignore noise).
+  const permHighWarn = !permNegWarn
+    && prevPermDeltaDB != null && prevPermDeltaDB > 0
+    && permDelta != null && permDelta > prevPermDeltaDB * 3 && permDelta > 1;
 
   // Dynamic filling: any one missing = sum/diff of the other two (requires at least two streams entered)
   const feedVol  = feedDelta  ?? (permDelta !== null && rejDelta  !== null ? +(permDelta  + rejDelta ).toFixed(3) : null);
@@ -2059,7 +2068,12 @@ function PretreatmentAndROLog() {
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevFeedMeter != null ? String(prevFeedMeter) : ''} className="text-foreground font-medium" />
+                    {prevFeedMeter != null
+                      ? <ComputedInput value={String(prevFeedMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Feed Meter Reading</Label>
@@ -2082,11 +2096,32 @@ function PretreatmentAndROLog() {
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevPermMeter != null ? String(prevPermMeter) : ''} className="text-foreground font-medium" />
+                    {prevPermMeter != null
+                      ? <ComputedInput value={String(prevPermMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Permeate Meter Reading</Label>
-                    <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                    <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className={cn(
+                      "placeholder:text-[10px] placeholder:text-muted-foreground/50",
+                      permNegWarn && "border-red-500 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 focus-visible:ring-red-400",
+                      permHighWarn && "border-amber-400 bg-amber-50 dark:bg-amber-950/20 focus-visible:ring-amber-400"
+                    )} />
+                    {permNegWarn && (
+                      <p className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Reading ({permCurr}) is below previous ({prevPermMeter}) — meter rollback or typo.
+                      </p>
+                    )}
+                    {permHighWarn && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Delta of {permDelta?.toFixed(1)} m³ is unusually high (last period was {prevPermDeltaDB?.toFixed(1)} m³). Verify before saving.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
@@ -2105,7 +2140,12 @@ function PretreatmentAndROLog() {
                 <div className="space-y-1">
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Prev reading (auto)</Label>
-                    <ComputedInput value={prevRejMeter != null ? String(prevRejMeter) : ''} className="text-foreground font-medium" />
+                    {prevRejMeter != null
+                      ? <ComputedInput value={String(prevRejMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
                   </div>
                   <div>
                     <Label className="text-[11px] text-muted-foreground">Reject Meter Reading</Label>
