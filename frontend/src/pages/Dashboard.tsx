@@ -377,9 +377,19 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Accumulate deltas — each hourly reading contributes its pre-stored delta
+    // Accumulate deltas — each hourly reading contributes its pre-stored delta.
+    //
+    // Guard: getPermeateDayLabel can assign a reading taken at e.g. 00:10 on
+    // May 17 to permeate_production_date='2026-05-18' (next calendar day).
+    // The DB query already filters .lte('permeate_production_date', clampedToStr),
+    // but TanStack Query with staleTime:0 serves the cached result instantly on
+    // re-render while a background refetch is in flight.  That stale cache can
+    // contain rows from a prior fetch whose clampedToStr was ≥ May 18, leaking
+    // future dates into the pivot.  Skipping any dateKey > clampedToStr here
+    // ensures the pivot (and therefore every tab that reads it) is always clean.
     (roMeterReadings ?? []).forEach((r: any) => {
       const dateKey  = r.permeate_production_date as string;
+      if (!dateKey || dateKey > clampedToStr) return;        // ← skip future-labeled readings
       const trainKey = r.train_id as string;
       const delta    = +(r.permeate_meter_delta ?? 0);
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
@@ -415,12 +425,19 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       ? prodDataLoading
       : (locatorsLoading || consLoading || prodDataLoading);
 
-  // Active pivot data for the detail tabs
-  const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
+  // Active pivot data for the detail tabs.
+  //
+  // Defensive todayStr cap on dates: mirrors the "both"-tab allDates filter so
+  // no stale-cache future date (e.g. May 18 labeled by getPermeateDayLabel for a
+  // 00:10 reading) ever leaks into the pivot table rows.  Under normal operation
+  // roProdPivot.dates is already bounded by clampedToStr (= todayStr), so this
+  // filter is a no-op — but it eliminates an entire class of edge-case bugs.
+  const { dates: _detailDatesRaw, entities, pivot, estimatedKeys } = tab === 'consumption'
     ? consPivot
     : useRoProd
       ? { ...roProdPivot, estimatedKeys: new Set<string>() }
       : prodPivot;
+  const dates = _detailDatesRaw.filter((d) => d <= todayStr);
 
   const entityIdField = 'id';
 
@@ -719,7 +736,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
-                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.length} days`
+                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.filter(d => d <= todayStr).length} days`
                 : `${entities.length} meters · ${dates.length} days`
             )}
           </span>
