@@ -155,11 +155,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   const [fromStr, setFromStr] = useState<string>(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
   const [toStr,   setToStr]   = useState<string>(todayStr);
 
-  const startISO = new Date(fromStr + 'T00:00:00').toISOString();
-  const endISO   = new Date(toStr   + 'T23:59:59').toISOString();
+  // Hard-clamp toStr to today — prevents stale future state from leaking into queries.
+  const clampedToStr = toStr > todayStr ? todayStr : toStr;
 
-  // ── Locators (meta) ────────────────────────────────────────────────────────
-  const { data: locators, isLoading: locatorsLoading } = useQuery({
+  const startISO = new Date(fromStr      + 'T00:00:00').toISOString();
+  const endISO   = new Date(clampedToStr + 'T23:59:59').toISOString();
+
+  // ── Locators (meta) ───────────────────────────────────────���────────────────
+  const { data: locators, isLoading: locatorsLoading, isFetching: locatorsFetching } = useQuery({
     queryKey: ['dsm-locators', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -169,13 +172,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
 
-  const { data: consReadings, isLoading: consLoading } = useQuery({
-    queryKey: ['dsm-cons-readings', locatorIds, fromStr, toStr],
+  const { data: consReadings, isLoading: consLoading, isFetching: consFetching } = useQuery({
+    queryKey: ['dsm-cons-readings', locatorIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!locatorIds.length) return [];
       const { data } = await supabase
@@ -188,11 +192,12 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && locatorIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
   // ── Product meters (meta) ──────────────────────────────────────────────────
-  const { data: productMeters, isLoading: metersLoading } = useQuery({
+  const { data: productMeters, isLoading: metersLoading, isFetching: metersFetching } = useQuery({
     queryKey: ['dsm-product-meters', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
@@ -201,13 +206,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
-  const { data: prodReadings, isLoading: prodLoading } = useQuery({
-    queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
+  const { data: prodReadings, isLoading: prodLoading, isFetching: prodFetching } = useQuery({
+    queryKey: ['dsm-prod-readings', meterIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!meterIds.length) return [];
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
@@ -219,6 +225,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && meterIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -247,13 +254,13 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Fill every date in the selected range — not just dates that have readings.
     const allDates: string[] = [];
     const cur = new Date(fromStr + 'T00:00:00');
-    const end = new Date(toStr   + 'T00:00:00');
+    const end = new Date(clampedToStr + 'T00:00:00');
     while (cur <= end) {
       allDates.push(format(cur, 'yyyy-MM-dd'));
       cur.setDate(cur.getDate() + 1);
     }
     return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
-  }, [locators, consReadings, plantCodeById, fromStr, toStr]);
+  }, [locators, consReadings, plantCodeById, fromStr, clampedToStr]);
 
   const prodPivot = useMemo(() => {
     const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
@@ -274,13 +281,13 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Fill every date in the selected range — not just dates with readings.
     const allDates2: string[] = [];
     const cur2 = new Date(fromStr + 'T00:00:00');
-    const end2 = new Date(toStr   + 'T00:00:00');
+    const end2 = new Date(clampedToStr + 'T00:00:00');
     while (cur2 <= end2) {
       allDates2.push(format(cur2, 'yyyy-MM-dd'));
       cur2.setDate(cur2.getDate() + 1);
     }
     return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
-  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
+  }, [productMeters, prodReadings, plantCodeById, fromStr, clampedToStr]);
 
   // ── RO permeate production (plants with permeate_is_production = true) ─────
   // This is the path that respects recalculateTrainDeltas.
@@ -288,7 +295,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   // instead of re-deriving deltas from permeate_meter (cumulative), which caused
   // the "millions delta" spike seen when the first row in the date range had no
   // prior reading and its cumulative value was treated as a single-day delta.
-  const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
+  const { data: modalMeterConfigs, isLoading: configLoading, isFetching: configFetching } = useQuery({
     queryKey: ['dsm-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
@@ -298,6 +305,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -309,7 +317,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
   );
 
   // RO train meta — for column headers (train_number, plant_id)
-  const { data: roTrainsMeta, isLoading: trainsLoading } = useQuery({
+  const { data: roTrainsMeta, isLoading: trainsLoading, isFetching: trainsFetching } = useQuery({
     queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
@@ -321,13 +329,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
   // RO readings — use permeate_meter_delta (pre-validated, corrected by recalculateTrainDeltas)
   // and permeate_production_date (cutoff-aware day label). Never use permeate_meter (cumulative).
-  const { data: roMeterReadings, isLoading: roLoading } = useQuery({
-    queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, toStr],
+  const { data: roMeterReadings, isLoading: roLoading, isFetching: roFetching } = useQuery({
+    queryKey: ['dsm-ro-readings', permeateIsProductionPlantIds, fromStr, clampedToStr],
     queryFn: async () => {
       if (!permeateIsProductionPlantIds.length) return [] as any[];
       const { data } = await supabase
@@ -337,10 +346,11 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0)
         .gte('permeate_production_date', fromStr)
-        .lte('permeate_production_date', toStr);
+        .lte('permeate_production_date', clampedToStr);
       return (data ?? []) as any[];
     },
     enabled: open && permeateIsProductionPlantIds.length > 0,
+    staleTime: 0,
     refetchInterval: open ? 30_000 : false,
   });
 
@@ -359,7 +369,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     // Enumerate every date in the selected range so empty days show as "—"
     const allDates: string[] = [];
     const cur = new Date(fromStr + 'T00:00:00');
-    const end = new Date(toStr   + 'T00:00:00');
+    const end = new Date(clampedToStr + 'T00:00:00');
     while (cur <= end) {
       const dk = format(cur, 'yyyy-MM-dd');
       allDates.push(dk);
@@ -367,9 +377,19 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Accumulate deltas — each hourly reading contributes its pre-stored delta
+    // Accumulate deltas — each hourly reading contributes its pre-stored delta.
+    //
+    // Guard: getPermeateDayLabel can assign a reading taken at e.g. 00:10 on
+    // May 17 to permeate_production_date='2026-05-18' (next calendar day).
+    // The DB query already filters .lte('permeate_production_date', clampedToStr),
+    // but TanStack Query with staleTime:0 serves the cached result instantly on
+    // re-render while a background refetch is in flight.  That stale cache can
+    // contain rows from a prior fetch whose clampedToStr was ≥ May 18, leaking
+    // future dates into the pivot.  Skipping any dateKey > clampedToStr here
+    // ensures the pivot (and therefore every tab that reads it) is always clean.
     (roMeterReadings ?? []).forEach((r: any) => {
       const dateKey  = r.permeate_production_date as string;
+      if (!dateKey || dateKey > clampedToStr) return;        // ← skip future-labeled readings
       const trainKey = r.train_id as string;
       const delta    = +(r.permeate_meter_delta ?? 0);
       if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
@@ -377,18 +397,42 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     });
 
     return { dates: allDates, entities: sortedTrains, pivot };
-  }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
+  }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, clampedToStr]);
 
   // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
-  const useRoProd = permeateIsProductionPlantIds.length > 0;
+  //
+  // BUG FIX — race condition:
+  // modalMeterConfigs can be `undefined` on the very first render after the modal
+  // opens, even though `configLoading` is already `false` (TanStack Query sets
+  // isPending=true only after the query key resolves to "loading" state, but
+  // there is a 1-tick gap where the query hasn't been scheduled yet).
+  // If we evaluate `useRoProd` while configs are undefined we get an empty
+  // permeateIsProductionPlantIds array → useRoProd = false → the "Prod. vs
+  // Consum." tab renders using prodPivot (product meters) while the
+  // "Production" detail tab correctly uses roProdPivot (RO trains) once data
+  // arrives.  This caused the two tabs to show different production numbers.
+  //
+  // Fix: treat configs as "not yet ready" until the array is defined, and
+  // block rendering (isLoading=true) until then.
+  // ── Two-tier loading gate ─────────────────────────────────────────────────
+  // isLoading  (TanStack `isLoading`) — true only on the VERY FIRST fetch when
+  //            there is no cached data at all.  Gates the full blocking spinner.
+  // isRefreshing (derived from `isFetching`) — true on EVERY active fetch,
+  //            including the 30-second background interval.  When any query in
+  //            the dependency chain is still in flight, the table is suspended
+  //            behind a non-blocking overlay so we never render with mixed-
+  //            generation data (e.g. fresh roMeterReadings + stale roTrainsMeta).
+  //
+  // configsReady intentionally uses configFetching so that `useRoProd` doesn't
+  // settle to its final value until the config query has fully resolved.  If we
+  // only checked configLoading (first-fetch only) the flag could flip from
+  // true→false→true as the background refetch completes, briefly switching
+  // which pivot is used and causing the tab mismatch.
+  const configsReady = !configLoading && !configFetching && modalMeterConfigs !== undefined;
+  const useRoProd    = configsReady && permeateIsProductionPlantIds.length > 0;
 
-  // isLoading must cover ALL queries in the chain, including meta-queries
-  // (locators, productMeters, modalMeterConfigs, roTrainsMeta) whose loading
-  // states were previously untracked. Without this, the "Prod. vs Consum." tab
-  // could render while roTrainsMeta was still pending, causing roProdPivot.entities
-  // to be [] and every production total to compute as 0 — mismatching the
-  // "Production" tab which showed correct values once all data had settled.
-  const prodDataLoading = configLoading
+  // First-fetch blocking spinner (no cached data).
+  const prodDataLoading = !configsReady
     || (useRoProd ? (roLoading || trainsLoading) : (metersLoading || prodLoading));
   const isLoading = tab === 'consumption'
     ? (locatorsLoading || consLoading)
@@ -396,12 +440,33 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       ? prodDataLoading
       : (locatorsLoading || consLoading || prodDataLoading);
 
-  // Active pivot data for the detail tabs
-  const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
+  // Background-refetch overlay (cached data exists but a newer fetch is running).
+  // Uses isFetching — true for EVERY active fetch, unlike isLoading.
+  // Mirror the per-tab dependency sets so we only show the overlay for queries
+  // that actually affect the currently visible tab.
+  const prodDataRefreshing = configFetching
+    || (useRoProd ? (roFetching || trainsFetching) : (metersFetching || prodFetching));
+  const isRefreshing = !isLoading && (
+    tab === 'consumption'
+      ? (locatorsFetching || consFetching)
+      : tab === 'production'
+        ? prodDataRefreshing
+        : (locatorsFetching || consFetching || prodDataRefreshing)
+  );
+
+  // Active pivot data for the detail tabs.
+  //
+  // Defensive todayStr cap on dates: mirrors the "both"-tab allDates filter so
+  // no stale-cache future date (e.g. May 18 labeled by getPermeateDayLabel for a
+  // 00:10 reading) ever leaks into the pivot table rows.  Under normal operation
+  // roProdPivot.dates is already bounded by clampedToStr (= todayStr), so this
+  // filter is a no-op — but it eliminates an entire class of edge-case bugs.
+  const { dates: _detailDatesRaw, entities, pivot, estimatedKeys } = tab === 'consumption'
     ? consPivot
     : useRoProd
       ? { ...roProdPivot, estimatedKeys: new Set<string>() }
       : prodPivot;
+  const dates = _detailDatesRaw.filter((d) => d <= todayStr);
 
   const entityIdField = 'id';
 
@@ -481,31 +546,61 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </div>
 
         {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
-        <div className="flex-1 overflow-auto">
+        {/* `relative` + the overlay div below suspend rendering during background
+            refetches without hiding the previous data entirely.  The table is
+            kept in the DOM (opacity-40, pointer-events-none) so the layout
+            doesn't jump; the spinner overlay communicates "updating". */}
+        <div className={["flex-1 overflow-auto relative", isRefreshing ? "pointer-events-none" : ""].join(" ")}>
+          {isRefreshing && (
+            <div className="absolute inset-0 z-40 flex items-start justify-end p-2 pointer-events-none">
+              <span className="flex items-center gap-1.5 rounded-full bg-muted/90 border border-border px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm">
+                <svg className="h-3 w-3 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                Refreshing…
+              </span>
+            </div>
+          )}
+          <div className={isRefreshing ? "opacity-40" : ""}>
           {isLoading && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
           )}
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // Use the production pivot as the single canonical date list (fromStr→toStr).
-            // Avoid a union that can gain phantom dates if the two pivot memos recompute
-            // at slightly different times or have readings outside the selected range.
+            // ── Mirror the "Production" detail tab's source selection exactly ────────
+            // useRoProd (not roProdPivot.entities.length) is the authoritative flag —
+            // it is guarded by configsReady and gates isLoading, so by the time we
+            // render here both flags are stable.  Using entities.length instead caused
+            // a stale-cache divergence: roTrainsMeta could still hold entities from a
+            // prior render while modalMeterConfigs had just refreshed with an empty
+            // permeateIsProductionPlantIds, making useRoProd=false while entities.length>0.
+            // Result: "Production" tab used prodPivot (correct) but "both" tab used
+            // roProdPivot (stale/wrong) → May 1 production showed 0 in "both" tab even
+            // though the "Production" detail tab showed the real value.
             const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
-            // Canonical date list: production pivot dates (same fromStr→toStr as cons pivot).
-            const allDates = activeProdPivot.dates;
+
+            // ── Hard-cap allDates to today ────────────────────────────────────────
+            // getPermeateDayLabel assigns readings taken before the cutoff window
+            // (e.g. 00:10 local) to the NEXT calendar date.  If those readings are
+            // fetched while TanStack Query is serving a stale cache (background
+            // refetch in flight), future permeate_production_date values such as
+            // May 18 / May 19 can leak into the pivot even though today is May 17.
+            // Filtering allDates to ≤ todayStr eliminates all phantom future rows
+            // regardless of DB contents or cache staleness.
+            const allDates = activeProdPivot.dates.filter((d) => d <= todayStr);
 
             // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
-            // Do NOT use pivotDayTotal (which sums raw map values including any orphan
-            // train_ids not present in entities). Instead mirror the rowTotals formula:
-            //   entities.reduce((s, e) => s + (pivot.get(date)?.get(e.id) ?? 0), 0)
-            // This guarantees "Prod. vs Consum." totals == "Production" / "Consumption"
-            // row totals for every date.
-            const prodEntities = activeProdPivot.entities;
-            const consEntities = consPivot.entities;
+            // The key issue: when tab='both', the outer entities variable is set from consPivot,
+            // but we need production rowTotals calculated from activeProdPivot.entities.
+            // Calculate both separately using their correct entity sets.
+            
             const rows = [...allDates].reverse().map((date) => {
-              const prod = prodEntities.reduce((s: number, e: any) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const cons = consEntities.reduce((s: number, e: any) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              // Production sum: use activeProdPivot entities (this matches Production tab)
+              const prod = activeProdPivot.entities.reduce((s, e) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
+              // Consumption sum: use consPivot entities (this matches Consumption tab)
+              const cons = consPivot.entities.reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
               const bal  = prod - cons;
               const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
@@ -665,6 +760,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               </tbody>
             </table>
           )}
+          </div>{/* end opacity wrapper */}
         </div>
 
         {/* ── Footer legend ── */}
@@ -683,11 +779,11 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </span>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.length} days in range`}
+            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.filter((d) => d <= todayStr).length} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
               useRoProd
-                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.length} days`
+                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.filter(d => d <= todayStr).length} days`
                 : `${entities.length} meters · ${dates.length} days`
             )}
           </span>
