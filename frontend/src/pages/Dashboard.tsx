@@ -7,7 +7,7 @@ import { fmtNum, nrwColor } from '@/lib/calculations';
 import { StatusPill } from '@/components/StatusPill';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { format, subDays, startOfDay } from 'date-fns';
+import { format, subDays, startOfDay, parseISO, addDays } from 'date-fns';
 import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
@@ -28,6 +28,7 @@ import {
   DashboardViewMode, VIEW_MODE_KEY, readSavedViewMode, pctDelta,
   OVERVIEW_CHART_METRICS, QUALITY_CHART_METRICS, COST_CHART_METRICS, ChartMetric,
 } from '@/components/dashboard/types';
+import type { PermeateProductionPeriod } from '@/pages/Plants';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -743,6 +744,88 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
+// ── Permeate production helpers ──────────────────────────────────────────────
+// Returns the ISO date string (YYYY-MM-DD, local) that a permeate reading
+// should be attributed to, honouring the optional daily cut-off time.
+//
+// Rule: readings at or before the cut-off time on date D belong to day D.
+// Readings AFTER the cut-off on date D belong to day D+1.
+// When cutoff is disabled (or null) the natural calendar date is used.
+//
+// Example (cutoff 00:20):
+//   May 4 00:05  → May 4  (before cut-off, still "today")
+//   May 4 00:21  → May 5  (after cut-off, first reading of next day's period)
+//   May 3 23:00  → May 4  wait — that's wrong. Let me re-read the rule.
+// Correct rule from UI: "May 4 = readings from May 3 00:21 to May 4 00:20"
+//   May 3 00:21 (> cutoff) → +1 day → May 4  ✓
+//   May 4 00:05 (<= cutoff) → May 4  ✓
+//   May 4 00:21 (> cutoff) → May 5  ✓
+function permeateProductionDate(
+  readingDatetime: string,
+  cutoffEnabled: boolean,
+  cutoffTime: string | null | undefined,
+): string {
+  const dt = new Date(readingDatetime);
+  if (!cutoffEnabled || !cutoffTime) {
+    return format(dt, 'yyyy-MM-dd');
+  }
+  const [hh, mm] = cutoffTime.split(':').map(Number);
+  const cutoffMinutes = (hh ?? 0) * 60 + (mm ?? 20);
+  const readingMinutes = dt.getHours() * 60 + dt.getMinutes();
+  if (readingMinutes > cutoffMinutes) {
+    return format(addDays(dt, 1), 'yyyy-MM-dd');
+  }
+  return format(dt, 'yyyy-MM-dd');
+}
+
+// Returns true if `dateStr` (YYYY-MM-DD) falls within ANY of the plant's
+// active permeate-production periods (inclusive on both ends).
+function isInAnyProductionPeriod(
+  dateStr: string,
+  periods: PermeateProductionPeriod[],
+): boolean {
+  if (periods.length === 0) return true; // no periods defined → backwards-compat: always active
+  return periods.some(p => {
+    if (p.start && dateStr < p.start) return false;
+    if (p.end   && dateStr > p.end)   return false;
+    return true;
+  });
+}
+
+// When a reading's attributed production date falls outside every active period,
+// displace it to the nearest period boundary day:
+//   - Before all periods → day before the earliest start
+//   - After the period whose end is closest → day after that end
+// This prevents boundary readings (e.g. at midnight cut-off) from being silently
+// dropped and ensures they land on an explicit non-production day.
+function displaceToNearestBoundary(
+  dateStr: string,
+  periods: PermeateProductionPeriod[],
+): string {
+  if (periods.length === 0 || isInAnyProductionPeriod(dateStr, periods)) return dateStr;
+  const sorted = [...periods].sort((a, b) =>
+    (a.start ?? '0000-01-01') < (b.start ?? '0000-01-01') ? -1 : 1,
+  );
+  const earliestStart = sorted[0]?.start;
+  if (earliestStart && dateStr < earliestStart) {
+    // Before all periods → day before earliest start
+    const d = new Date(earliestStart);
+    d.setDate(d.getDate() - 1);
+    return format(d, 'yyyy-MM-dd');
+  }
+  // After some period's end — find the period whose end is the largest date ≤ dateStr
+  const ended = sorted.filter(p => p.end && dateStr > p.end);
+  const closest = ended.reduce<PermeateProductionPeriod | null>((best, p) =>
+    !best || (p.end! > best.end!) ? p : best, null,
+  );
+  if (closest?.end) {
+    const d = new Date(closest.end);
+    d.setDate(d.getDate() + 1);
+    return format(d, 'yyyy-MM-dd');
+  }
+  return dateStr;
+}
+
 export default function Dashboard() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
@@ -902,8 +985,11 @@ export default function Dashboard() {
     queryKey: ['dash-plant-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
+      // Config is stored as a single JSONB blob in the `config` column — mirrors
+      // usePlantMeterConfig in Plants.tsx. Individual fields like permeate_is_production
+      // are NOT separate columns; they live inside config.
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id,permeate_is_production,permeate_cutoff_time')
+        .select('plant_id, config')
         .in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
@@ -911,31 +997,64 @@ export default function Dashboard() {
     staleTime: 60_000, // config rarely changes — cache for 1 min
   });
 
+  // Per-plant permeate production config extracted from the JSONB blob.
+  const permeateConfigMap = useMemo(() => {
+    const map = new Map<string, {
+      cutoffEnabled: boolean;
+      cutoffTime: string;
+      productionPeriods: PermeateProductionPeriod[];
+    }>();
+    (plantMeterConfigs ?? []).forEach((row: any) => {
+      const cfg = row.config ?? {};
+      if (cfg.permeate_is_production) {
+        // Migration shim: lift legacy scalar fields into the periods array shape
+        // if the new array hasn't been written yet.
+        let periods: PermeateProductionPeriod[] = Array.isArray(cfg.permeate_production_periods)
+          ? cfg.permeate_production_periods
+          : (() => {
+              const s = (cfg.permeate_production_start as string | null) ?? null;
+              const e = (cfg.permeate_production_end   as string | null) ?? null;
+              return (s !== null || e !== null)
+                ? [{ id: 'legacy', start: s, end: e }]
+                : [];
+            })();
+        map.set(row.plant_id as string, {
+          cutoffEnabled:    cfg.permeate_cutoff_enabled ?? true,
+          cutoffTime:       cfg.permeate_cutoff_time    ?? '00:20',
+          productionPeriods: periods,
+        });
+      }
+    });
+    return map;
+  }, [plantMeterConfigs]);
+
   // Plant IDs that use the RO permeate meter as their production source
+  // AND whose active production period covers today.
   const permeateProductionPlantIds = useMemo(
-    () => (plantMeterConfigs ?? [])
-      .filter((c: any) => c.permeate_is_production)
-      .map((c: any) => c.plant_id as string),
-    [plantMeterConfigs],
+    () => Array.from(permeateConfigMap.entries())
+      .filter(([, c]) => isInAnyProductionPeriod(_localDateStr, c.productionPeriods))
+      .map(([id]) => id),
+    [permeateConfigMap, _localDateStr],
   );
 
   // Today's production from RO permeate meter deltas
-  // (only for plants where permeate_is_production = true)
-  // Filters by reading_datetime local calendar date — the 00:20 cutoff rule and
-  // permeate_production_date column have been removed; all readings belong to the
-  // day they were actually recorded.
+  // Fetches a 49-hour window (yesterday 00:00 → today 23:59) so that readings
+  // attributed to "today" via the cut-off rule (recorded yesterday after cut-off)
+  // are included. Client-side bucketing via permeateProductionDate() then assigns
+  // each reading to the correct production day.
   const { data: todayRoPermeate } = useQuery({
     queryKey: ['dash-ro-permeate-today', permeateProductionPlantIds, _localDateStr],
     queryFn: async () => {
       if (!permeateProductionPlantIds.length) return [] as any[];
-      const todayStart = new Date(_localDateStr + 'T00:00:00').toISOString();
-      const todayEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
+      // Wide window: from start of yesterday to end of today covers all cut-off scenarios.
+      const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
+      const windowEnd   = new Date(_localDateStr  + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('ro_train_readings')
-        .select('plant_id,train_number,permeate_meter_delta')
+        .select('plant_id,train_number,permeate_meter_delta,reading_datetime')
         .in('plant_id', permeateProductionPlantIds)
-        .gte('reading_datetime', todayStart)
-        .lte('reading_datetime', todayEnd)
+        .gte('reading_datetime', windowStart)
+        .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
       return (data ?? []) as any[];
@@ -945,19 +1064,24 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
-  // Yesterday's RO permeate production (for trend delta on the Production stat card)
+  // Yesterday's RO permeate production (for trend delta on the Production stat card).
+  // Same wide-window approach: fetch day-before-yesterday + yesterday.
+  const _dayBeforeYesterdayKey = useMemo(
+    () => format(subDays(new Date(_yesterdayKey), 1), 'yyyy-MM-dd'),
+    [_yesterdayKey],
+  );
   const { data: yRoPermeate } = useQuery({
     queryKey: ['dash-ro-permeate-yest', permeateProductionPlantIds, _yesterdayKey],
     queryFn: async () => {
       if (!permeateProductionPlantIds.length) return [] as any[];
-      const yesterdayStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
-      const yesterdayEnd   = new Date(_yesterdayKey + 'T23:59:59').toISOString();
+      const windowStart = new Date(_dayBeforeYesterdayKey + 'T00:00:00').toISOString();
+      const windowEnd   = new Date(_yesterdayKey           + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('ro_train_readings')
-        .select('plant_id,permeate_meter_delta')
+        .select('plant_id,permeate_meter_delta,reading_datetime')
         .in('plant_id', permeateProductionPlantIds)
-        .gte('reading_datetime', yesterdayStart)
-        .lte('reading_datetime', yesterdayEnd)
+        .gte('reading_datetime', windowStart)
+        .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
       return (data ?? []) as any[];
@@ -1131,17 +1255,37 @@ export default function Dashboard() {
     computePivotFromReadings(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
   ), [todayWells, _todayKey]);
 
-  // RO permeate contribution to production (plants with permeate_is_production = true).
-  // Summed separately and added to the product-meter total so NRW and PV ratio
-  // stay accurate even when the plant has no separate product_meter_readings rows.
-  const roPermeateProduction = useMemo(
-    () => (todayRoPermeate ?? []).reduce((s: number, r: any) => s + (r.permeate_meter_delta ?? 0), 0),
-    [todayRoPermeate],
-  );
-  const yRoPermeateProduction = useMemo(
-    () => (yRoPermeate ?? []).reduce((s: number, r: any) => s + (r.permeate_meter_delta ?? 0), 0),
-    [yRoPermeate],
-  );
+  // RO permeate contribution to production — applies cut-off bucketing and date-range
+  // guard per plant before summing. Only readings whose attributed production date
+  // equals the target day (today / yesterday) are included.
+  const roPermeateProduction = useMemo(() => {
+    return (todayRoPermeate ?? []).reduce((s: number, r: any) => {
+      const plantCfg = permeateConfigMap.get(r.plant_id);
+      if (!plantCfg) return s;
+      const rawDate = permeateProductionDate(
+        r.reading_datetime, plantCfg.cutoffEnabled, plantCfg.cutoffTime,
+      );
+      // Displace boundary readings then check period membership
+      const prodDate = displaceToNearestBoundary(rawDate, plantCfg.productionPeriods);
+      if (prodDate !== _localDateStr) return s;
+      if (!isInAnyProductionPeriod(prodDate, plantCfg.productionPeriods)) return s;
+      return s + (r.permeate_meter_delta ?? 0);
+    }, 0);
+  }, [todayRoPermeate, permeateConfigMap, _localDateStr]);
+
+  const yRoPermeateProduction = useMemo(() => {
+    return (yRoPermeate ?? []).reduce((s: number, r: any) => {
+      const plantCfg = permeateConfigMap.get(r.plant_id);
+      if (!plantCfg) return s;
+      const rawDate = permeateProductionDate(
+        r.reading_datetime, plantCfg.cutoffEnabled, plantCfg.cutoffTime,
+      );
+      const prodDate = displaceToNearestBoundary(rawDate, plantCfg.productionPeriods);
+      if (prodDate !== _yesterdayKey) return s;
+      if (!isInAnyProductionPeriod(prodDate, plantCfg.productionPeriods)) return s;
+      return s + (r.permeate_meter_delta ?? 0);
+    }, 0);
+  }, [yRoPermeate, permeateConfigMap, _yesterdayKey]);
 
   // Production = product meter readings delta + RO permeate delta (if permeate_is_production)
   const production = useMemo(() =>

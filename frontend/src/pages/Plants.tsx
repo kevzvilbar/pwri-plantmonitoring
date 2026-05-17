@@ -1419,6 +1419,16 @@ const ProductMeterNameInline = Object.assign(_ProductMeterNameInline, {
 // Stored in `plant_meter_config` table (plant_id PK, config jsonb, updated_at).
 // Falls back to sensible defaults so existing data keeps working unchanged.
 
+/** A single continuous window in which the permeate meter counts as production. */
+export interface PermeateProductionPeriod {
+  /** Client-only stable key for React lists — never persisted. */
+  id: string;
+  /** YYYY-MM-DD inclusive start; null = unbounded past. */
+  start: string | null;
+  /** YYYY-MM-DD inclusive end; null = ongoing / no end yet. */
+  end: string | null;
+}
+
 export interface PlantMeterConfig {
   // RO Train flow meters
   ro_has_feed_meter: boolean;
@@ -1452,12 +1462,23 @@ export interface PlantMeterConfig {
   nrw_enabled: boolean;
   has_billed_volume_meter: boolean;
   // Permeate meter = daily production (no bulk/mother meter)
-  // When true, permeate readings are hourly but grouped into days using cut-off time
+  // When true, permeate readings are hourly but grouped into days using cut-off time.
+  // Multiple non-overlapping periods are supported — e.g. permeate used → product meter
+  // installed → product meter removed → permeate used again.
   permeate_is_production: boolean;
   // HH:mm cut-off time (24-hr). Day N runs from cutoff on day N-1 (exclusive)
   // to cutoff on day N (inclusive). Stored reading is labelled as day N.
   // Example: cutoff "00:20" → May 3 00:21 … May 4 00:20 = "May 4" production.
   permeate_cutoff_time: string; // e.g. "00:20"
+  // When false, new entries are NOT shifted by the cut-off (natural calendar date used).
+  // Historical data still groups using the saved cut-off time for consistency.
+  permeate_cutoff_enabled: boolean;
+  // List of non-overlapping date ranges during which permeate meter counts as production.
+  // start/end are YYYY-MM-DD; null start = unbounded past; null end = ongoing.
+  // Readings outside ALL active periods are pushed to the nearest day boundary:
+  //   before the earliest period start → attributed to the day before that start
+  //   after a period's end → attributed to the day after that end
+  permeate_production_periods: PermeateProductionPeriod[];
   // Chemicals enabled for this plant — only these appear in RO Trains → Chemical Dosing.
   // Default: all chemicals enabled (empty array = all shown for backwards compat).
   enabled_chemicals: string[]; // chemical names from KNOWN_CHEMICALS
@@ -1491,11 +1512,33 @@ const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   has_billed_volume_meter: false,
   permeate_is_production: false,
   permeate_cutoff_time: '00:20',
+  permeate_cutoff_enabled: true,
+  permeate_production_periods: [],
   enabled_chemicals: [], // empty = all chemicals visible (backwards compat)
   locator_readings_per_day: 3,
 };
 
 const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
+
+/**
+ * One-time forward migration: if a stored config still has the old scalar
+ * `permeate_production_start` / `permeate_production_end` fields but is missing
+ * the new `permeate_production_periods` array, lift them into the array shape.
+ * Safe to run on already-migrated configs (no-op when periods array already present).
+ */
+function migrateMeterConfig(cfg: Record<string, unknown>): PlantMeterConfig {
+  if (!Array.isArray(cfg.permeate_production_periods)) {
+    const start = (cfg.permeate_production_start as string | null) ?? null;
+    const end   = (cfg.permeate_production_end   as string | null) ?? null;
+    cfg = {
+      ...cfg,
+      permeate_production_periods: (start !== null || end !== null)
+        ? [{ id: crypto.randomUUID(), start, end }]
+        : [],
+    };
+  }
+  return cfg as unknown as PlantMeterConfig;
+}
 
 export function usePlantMeterConfig(plantId: string | null | undefined) {
   const qc = useQueryClient();
@@ -1505,25 +1548,21 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     enabled: !!plantId,
     staleTime: 30_000,
     queryFn: async () => {
-      // localStorage is checked FIRST — it is always written by saveConfig and is
-      // immediately consistent. The DB is tried as a fallback only (e.g. fresh device).
-      // Checking DB first caused a race: the broad qc.invalidateQueries() in saveConfig
-      // triggered a background refetch that read stale DB data and overwrote the correct
-      // setQueryData value, making toggled-off meters re-appear after ~1 sec.
-      try {
-        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
-        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
-      } catch { /* ignore */ }
-      // Fall back to DB (first-time load on a new device / localStorage cleared)
+      // Try DB first
       try {
         const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
           .select('config')
           .eq('plant_id', plantId)
           .maybeSingle();
         if (!error && data?.config) {
-          return { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
+          return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...data.config }) as PlantMeterConfig;
         }
       } catch { /* table may not exist yet */ }
+      // Fall back to localStorage
+      try {
+        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
+        if (raw) return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) }) as PlantMeterConfig;
+      } catch { /* ignore */ }
       return DEFAULT_METER_CONFIG;
     },
   });
@@ -1536,6 +1575,8 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
       if (!error) savedToDb = true;
     } catch { /* table missing */ }
     try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
+    qc.setQueryData(['plant-meter-config', plantId], next);
+    qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
     // Propagate config change to Dashboard, TrendChart, and DataSummaryModal immediately.
     // permeate_is_production toggling changes which source powers the Production stat card
     // and the DataSummaryModal Production tab — all three must re-read the updated config.
@@ -1547,12 +1588,6 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
     qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
     qc.invalidateQueries();
-    // Cancel any in-flight refetch of the meter config that the broad invalidateQueries()
-    // above may have kicked off, then re-apply the new value as the final word.
-    // Without this, the background refetch could read stale DB data and overwrite the
-    // correct config — causing toggled-off meters to reappear in the ROTrains form.
-    await qc.cancelQueries({ queryKey: ['plant-meter-config', plantId] });
-    qc.setQueryData(['plant-meter-config', plantId], next);
     return savedToDb;
   };
 
@@ -1745,7 +1780,11 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
             {!open && (
               <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>RO: {roFlags}</span>
-                <span>Prod: {cfg.ro_production_source === 'permeate' ? `Permeate${cfg.permeate_is_production ? ` (cut-off ${cfg.permeate_cutoff_time || '00:20'})` : ''}` : 'Product meter'}</span>
+                <span>Prod: {cfg.ro_production_source === 'permeate'
+                  ? `Permeate${cfg.permeate_is_production
+                      ? ` (${cfg.permeate_production_periods?.length ?? 0} period${(cfg.permeate_production_periods?.length ?? 0) !== 1 ? 's' : ''}${cfg.permeate_cutoff_enabled ? `, cut-off ${cfg.permeate_cutoff_time || '00:20'}` : ', no cut-off'})`
+                      : ''}`
+                  : 'Product meter'}</span>
                 {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
                 <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
                 <span>Loc: {cfg.locator_readings_per_day ?? 3}×/day</span>
@@ -1836,70 +1875,269 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
             </div>
           </div>
 
-          {/* ── Permeate = Production: daily cut-off time (manager only) ── */}
-          {cfg.ro_production_source === 'permeate' && (
-            <div className="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium flex items-center gap-1.5">
-                    <span>⏱</span> Permeate readings are production
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Readings are collected hourly. A daily "cut-off" groups them into calendar days.
-                    The day label is the date <em>after</em> the cut-off crosses midnight.
-                  </div>
-                </div>
-                <Switch
-                  checked={cfg.permeate_is_production}
-                  onCheckedChange={canEdit ? (v) => update({ permeate_is_production: v }) : undefined}
-                  disabled={!canEdit}
-                  className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
-                />
-              </div>
+          {/* ── Permeate = Production: periods + cut-off (manager only) ── */}
+          {cfg.ro_production_source === 'permeate' && (() => {
+            // ── helpers (scoped inside the IIFE so they're co-located with the UI) ──
 
-              {cfg.permeate_is_production && (
-                <div className="space-y-1.5">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Daily cut-off time (24-hr)</p>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {canEdit ? (
-                      <Input
-                        type="time"
-                        value={cfg.permeate_cutoff_time}
-                        onChange={e => update({ permeate_cutoff_time: e.target.value })}
-                        className="h-8 w-32 text-sm font-mono"
-                      />
-                    ) : (
-                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded border border-border">
-                        {cfg.permeate_cutoff_time || '00:20'}
-                      </span>
-                    )}
-                    <div className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">
-                      {(() => {
-                        const t = cfg.permeate_cutoff_time || '00:20';
-                        const [hh, mm] = t.split(':');
-                        const cutH = parseInt(hh ?? '0');
-                        const cutM = parseInt(mm ?? '20');
-                        const pad = (n: number) => String(n).padStart(2, '0');
-                        // next minute after cutoff
-                        const nextM = (cutM + 1) % 60;
-                        const nextH = cutM === 59 ? (cutH + 1) % 24 : cutH;
-                        return (
-                          <span>
-                            Day recorded as <strong>May 4</strong> = readings from{' '}
-                            <span className="font-mono">May 3 {pad(nextH)}:{pad(nextM)}</span> to{' '}
-                            <span className="font-mono">May 4 {t}</span>
-                          </span>
-                        );
-                      })()}
+            const periods: PermeateProductionPeriod[] = cfg.permeate_production_periods ?? [];
+
+            /** Returns true if any two periods overlap (sorted by start, comparing adjacent). */
+            function hasOverlap(ps: PermeateProductionPeriod[]): boolean {
+              const sorted = [...ps].sort((a, b) => {
+                const aStart = a.start ?? '0000-01-01';
+                const bStart = b.start ?? '0000-01-01';
+                return aStart < bStart ? -1 : aStart > bStart ? 1 : 0;
+              });
+              for (let i = 0; i < sorted.length - 1; i++) {
+                const curr = sorted[i];
+                const next = sorted[i + 1];
+                // curr ends after (or at same day as) next starts → overlap
+                const currEnd = curr.end ?? '9999-12-31';
+                const nextStart = next.start ?? '0000-01-01';
+                if (currEnd >= nextStart) return true;
+              }
+              return false;
+            }
+
+            const overlap = hasOverlap(periods);
+
+            function updatePeriod(id: string, patch: Partial<Omit<PermeateProductionPeriod, 'id'>>) {
+              update({
+                permeate_production_periods: periods.map(p =>
+                  p.id === id ? { ...p, ...patch } : p
+                ),
+              });
+            }
+
+            function deletePeriod(id: string) {
+              update({ permeate_production_periods: periods.filter(p => p.id !== id) });
+            }
+
+            function addPeriod() {
+              // Default: start after last period's end if one exists; otherwise today
+              const last = [...periods].sort((a, b) =>
+                (b.end ?? '9999-12-31') > (a.end ?? '9999-12-31') ? 1 : -1
+              )[0];
+              const today = new Date().toISOString().slice(0, 10);
+              const newStart = last?.end
+                ? (() => {
+                    const d = new Date(last.end);
+                    d.setDate(d.getDate() + 1);
+                    return d.toISOString().slice(0, 10);
+                  })()
+                : today;
+              update({
+                permeate_production_periods: [
+                  ...periods,
+                  { id: crypto.randomUUID(), start: newStart, end: null },
+                ],
+              });
+            }
+
+            return (
+              <div className="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
+                {/* Header row with master toggle */}
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      <span>⏱</span> Permeate readings are production
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Readings are collected hourly. A daily "cut-off" groups them into calendar days.
+                      The day label is the date <em>after</em> the cut-off crosses midnight.
                     </div>
                   </div>
-                  {!canEdit && (
-                    <p className="text-[10px] text-muted-foreground">Only managers and admins can change the cut-off time.</p>
-                  )}
+                  <Switch
+                    checked={cfg.permeate_is_production}
+                    onCheckedChange={canEdit ? (v) => update({ permeate_is_production: v }) : undefined}
+                    disabled={!canEdit}
+                    className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                  />
                 </div>
-              )}
-            </div>
-          )}
+
+                {cfg.permeate_is_production && (
+                  <div className="space-y-4 pt-1 border-t border-teal-200 dark:border-teal-800/40">
+
+                    {/* ── Active periods list ── */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          Active periods{periods.length > 0 && ` (${periods.length})`}
+                        </p>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={addPeriod}
+                            className="flex items-center gap-1 text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-200 transition-colors"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add period
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Column headers */}
+                      {periods.length > 0 && (
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 px-1">
+                          <Label className="text-[10px] text-muted-foreground">From (inclusive)</Label>
+                          <Label className="text-[10px] text-muted-foreground">Until (inclusive)</Label>
+                          {canEdit && <span />}
+                        </div>
+                      )}
+
+                      {/* Period rows */}
+                      {periods.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground/70 italic px-1">
+                          No periods defined — {canEdit ? 'click "Add period" to define when permeate counts as production.' : 'contact a manager to configure periods.'}
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {periods.map((p, idx) => (
+                            <div key={p.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                              {/* Start date */}
+                              {canEdit ? (
+                                <Input
+                                  type="date"
+                                  value={p.start ?? ''}
+                                  onChange={e => updatePeriod(p.id, { start: e.target.value || null })}
+                                  placeholder="Unbounded"
+                                  className="h-8 text-sm"
+                                />
+                              ) : (
+                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
+                                  {p.start ?? '—'}
+                                </span>
+                              )}
+
+                              {/* End date */}
+                              {canEdit ? (
+                                <div className="flex gap-1">
+                                  <Input
+                                    type="date"
+                                    value={p.end ?? ''}
+                                    onChange={e => updatePeriod(p.id, { end: e.target.value || null })}
+                                    placeholder="Ongoing"
+                                    className="h-8 text-sm flex-1"
+                                  />
+                                  {p.end && (
+                                    <button
+                                      type="button"
+                                      className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-muted/70 transition-colors"
+                                      onClick={() => updatePeriod(p.id, { end: null })}
+                                      title="Clear end date (set as ongoing)"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
+                                  {p.end ?? 'Ongoing'}
+                                </span>
+                              )}
+
+                              {/* Delete */}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => deletePeriod(p.id)}
+                                  className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 hover:text-red-600 transition-colors"
+                                  title={`Remove period ${idx + 1}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Overlap warning */}
+                      {overlap && (
+                        <p className="text-[11px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+                          ⚠ Two or more periods overlap — fix date ranges so they don't conflict.
+                        </p>
+                      )}
+
+                      {/* Outside-range behaviour note */}
+                      {periods.length > 0 && !overlap && (
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Readings outside all defined periods are displaced to the nearest boundary day —
+                          readings before a period start shift to the day <em>before</em> that start;
+                          readings after a period end shift to the day <em>after</em> that end.
+                          {periods.some(p => p.end === null) && (
+                            <> One period has no end date and is treated as ongoing.</>
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* ── Daily cut-off time ── */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Daily cut-off time</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {(cfg.permeate_cutoff_enabled ?? true)
+                              ? 'Readings taken just after midnight are attributed to the previous production day.'
+                              : 'Cut-off is optional — new entries use the natural calendar date. Historical data still groups by the saved time below.'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={cfg.permeate_cutoff_enabled ?? true}
+                          onCheckedChange={canEdit ? (v) => update({ permeate_cutoff_enabled: v }) : undefined}
+                          disabled={!canEdit}
+                          className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                        />
+                      </div>
+
+                      {/* Always show the time input — it's used for historical grouping even when toggle is off */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {canEdit ? (
+                          <Input
+                            type="time"
+                            value={cfg.permeate_cutoff_time}
+                            onChange={e => update({ permeate_cutoff_time: e.target.value })}
+                            className="h-8 w-32 text-sm font-mono"
+                          />
+                        ) : (
+                          <span className="font-mono text-sm bg-muted px-2 py-1 rounded border border-border">
+                            {cfg.permeate_cutoff_time || '00:20'}
+                          </span>
+                        )}
+                        <div className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">
+                          {(() => {
+                            const t = cfg.permeate_cutoff_time || '00:20';
+                            const [hh, mm] = t.split(':');
+                            const cutH = parseInt(hh ?? '0');
+                            const cutM = parseInt(mm ?? '20');
+                            const pad = (n: number) => String(n).padStart(2, '0');
+                            const nextM = (cutM + 1) % 60;
+                            const nextH = cutM === 59 ? (cutH + 1) % 24 : cutH;
+                            return (cfg.permeate_cutoff_enabled ?? true) ? (
+                              <span>
+                                Day recorded as <strong>May 4</strong> = readings from{' '}
+                                <span className="font-mono">May 3 {pad(nextH)}:{pad(nextM)}</span> to{' '}
+                                <span className="font-mono">May 4 {t}</span>
+                              </span>
+                            ) : (
+                              <span className="italic text-muted-foreground/70">
+                                Saved for historical grouping. New entries use <strong>midnight</strong> as the day boundary.
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {!canEdit && (
+                        <p className="text-[10px] text-muted-foreground">Only managers and admins can change these settings.</p>
+                      )}
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Per-train utility meters ── */}
           <div>
