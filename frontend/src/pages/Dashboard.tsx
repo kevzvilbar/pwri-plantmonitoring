@@ -569,46 +569,51 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
           {/* ── "Prod. vs Consum." combined comparison tab ── */}
           {!isLoading && tab === 'both' && (() => {
-            // ── Mirror the "Production" detail tab's source selection exactly ────────
-            // useRoProd (not roProdPivot.entities.length) is the authoritative flag —
-            // it is guarded by configsReady and gates isLoading, so by the time we
-            // render here both flags are stable.  Using entities.length instead caused
-            // a stale-cache divergence: roTrainsMeta could still hold entities from a
-            // prior render while modalMeterConfigs had just refreshed with an empty
-            // permeateIsProductionPlantIds, making useRoProd=false while entities.length>0.
-            // Result: "Production" tab used prodPivot (correct) but "both" tab used
-            // roProdPivot (stale/wrong) → May 1 production showed 0 in "both" tab even
-            // though the "Production" detail tab showed the real value.
-            const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
+            // ──────────────────────────────────────────────────────────────────────
+            // CRITICAL FIX: The "Prod. vs Consum." tab must show:
+            //   - Production column: RO train data (from roProdPivot)
+            //   - Consumption column: consumer meter data (from consPivot)
+            //
+            // The previous code destructured from a single pivot (line 464),
+            // which meant 'both' tab couldn't simultaneously show both data sources.
+            // Solution: directly use roProdPivot and consPivot here, independently.
+            // ──────────────────────────────────────────────────────────────────────
 
-            // ── Hard-cap allDates to today ────────────────────────────────────────
-            // getPermeateDayLabel assigns readings taken before the cutoff window
-            // (e.g. 00:10 local) to the NEXT calendar date.  If those readings are
-            // fetched while TanStack Query is serving a stale cache (background
-            // refetch in flight), future permeate_production_date values such as
-            // May 18 / May 19 can leak into the pivot even though today is May 17.
-            // Filtering allDates to ≤ todayStr eliminates all phantom future rows
-            // regardless of DB contents or cache staleness.
-            const allDates = activeProdPivot.dates.filter((d) => d <= todayStr);
+            // Always use roProdPivot for production in the "both" tab
+            // (this is the same source as the "Production" detail tab when useRoProd=true)
+            const prodPivotForBoth = roProdPivot;
+            const consumPivotForBoth = consPivot;
 
-            // ── Entity-filtered sums — MUST match detail-tab rowTotals exactly ──────────
-            // The key issue: when tab='both', the outer entities variable is set from consPivot,
-            // but we need production rowTotals calculated from activeProdPivot.entities.
-            // Calculate both separately using their correct entity sets.
-            
-            const rows = [...allDates].reverse().map((date) => {
-              // Production sum: use activeProdPivot entities (this matches Production tab)
-              const prod = activeProdPivot.entities.reduce((s, e) => s + (activeProdPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              // Consumption sum: use consPivot entities (this matches Consumption tab)
-              const cons = consPivot.entities.reduce((s, e) => s + (consPivot.pivot.get(date)?.get(e.id) ?? 0), 0);
-              const bal  = prod - cons;
-              const nrw  = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
+            // Merge date ranges from both pivots, hard-capped to today
+            const bothTabDates = Array.from(
+              new Set([
+                ...prodPivotForBoth.dates.filter((d) => d <= todayStr),
+                ...consumPivotForBoth.dates.filter((d) => d <= todayStr),
+              ])
+            ).sort();
+
+            // Build rows: for each date, sum production from RO entities + consumption from consumer entities
+            const rows = [...bothTabDates].reverse().map((date) => {
+              // Production: sum ONLY roProdPivot entities (matches Production tab exactly)
+              const prod = prodPivotForBoth.entities.reduce(
+                (s, e) => s + (prodPivotForBoth.pivot.get(date)?.get(e.id) ?? 0),
+                0
+              );
+              // Consumption: sum ONLY consPivot entities (matches Consumption tab exactly)
+              const cons = consumPivotForBoth.entities.reduce(
+                (s, e) => s + (consumPivotForBoth.pivot.get(date)?.get(e.id) ?? 0),
+                0
+              );
+              const bal = prod - cons;
+              const nrw = prod > 0 ? +((bal / prod) * 100).toFixed(1) : null;
               return { date, prod, cons, bal, nrw };
             });
+
             const totProd = rows.reduce((s, r) => s + r.prod, 0);
             const totCons = rows.reduce((s, r) => s + r.cons, 0);
-            const totBal  = totProd - totCons;
-            const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
+            const totBal = totProd - totCons;
+            const totNRW = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
+
             return (
               <table className="w-full text-[11px] border-collapse" data-testid="dsm-both-table">
                 <thead className="sticky top-0 z-20">
