@@ -880,9 +880,10 @@ export function TrendChart({
     }
     const days = RANGE_DAYS[range];
     const today = new Date();
-    // Cap preset ranges to 23:59:59.999 of today so that readings
-    // timestamped for tomorrow (timezone offsets, early-entered data, etc.)
-    // never appear in 7D / 14D / 30D / 60D / 90D views.
+    // Cap preset ranges to 23:59:59.999 of TODAY (local time) so that readings
+    // whose UTC timestamp falls in the next calendar day — a common occurrence in
+    // UTC+8 (Philippines) where midnight local = 16:00 UTC the previous day —
+    // are excluded from the Supabase query entirely.
     // Custom range bypasses this cap intentionally (handled in the branch above).
     const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     const start = startOfDay(subDays(today, days));
@@ -1876,12 +1877,22 @@ export function TrendChart({
     // Without this, the chart line jumps across the gap and the Overview table
     // omits entire months.  We only fill when the window is ≤ 366 days to
     // avoid generating thousands of stubs for very long ranges.
-    if (sparseRows.length < 2) return sparseRows;
-    const firstDk = format(new Date(sparseRows[0].isoDate), 'yyyy-MM-dd');
-    const lastDk  = format(new Date(sparseRows[sparseRows.length - 1].isoDate), 'yyyy-MM-dd');
+
+    // ── Timezone safety: drop any row whose local date exceeds endKey.
+    // When the user is in UTC+8 (Philippines), a reading stored at e.g.
+    // 2026-05-17T16:00:00Z renders as May 18 00:00 local time, so it can
+    // slip through the Supabase filter (which also uses endKey) and appear
+    // as a future date in the chart. Capping here is the final safeguard.
+    const boundedSparseRows = sparseRows.filter(
+      (r) => format(new Date(r.isoDate), 'yyyy-MM-dd') <= endKey,
+    );
+
+    if (boundedSparseRows.length < 2) return boundedSparseRows;
+    const firstDk = format(new Date(boundedSparseRows[0].isoDate), 'yyyy-MM-dd');
+    const lastDk  = format(new Date(boundedSparseRows[boundedSparseRows.length - 1].isoDate), 'yyyy-MM-dd');
     const spanDays = (new Date(lastDk).getTime() - new Date(firstDk).getTime()) / 86_400_000;
-    if (spanDays > 366) return sparseRows;
-    const sparseByDate = new Map(sparseRows.map((r) => [format(new Date(r.isoDate), 'yyyy-MM-dd'), r]));
+    if (spanDays > 366) return boundedSparseRows;
+    const sparseByDate = new Map(boundedSparseRows.map((r) => [format(new Date(r.isoDate), 'yyyy-MM-dd'), r]));
     const allCalDays = fillDateRange(firstDk, lastDk);
     return allCalDays.map((dk) => {
       if (sparseByDate.has(dk)) return sparseByDate.get(dk)!;
@@ -1898,7 +1909,7 @@ export function TrendChart({
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
-      permeateIsProductionPlants, _trainPlantMap]);
+      permeateIsProductionPlants, _trainPlantMap, endKey]);
 
   // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
   // chartRows useMemo: maps source filter into solarKwh/gridKwh so bars with
