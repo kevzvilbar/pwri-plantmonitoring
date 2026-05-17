@@ -48,7 +48,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 
-const MAX_READINGS_PER_DAY = 3;
+// Wells keep a fixed default limit; locators use per-plant configurable limit from Plant Configuration.
+const WELL_MAX_READINGS_PER_DAY = 3;
 const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // ─── Shared Dashboard invalidator ────────────────────────────────────────────
@@ -1214,6 +1215,31 @@ function LocatorReadingForm() {
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
 
+  // Fetch per-plant locator reading limit from Plant Configuration (manager-configurable)
+  const { data: locatorReadingLimit } = useQuery({
+    queryKey: ['plant-locator-limit', plantId],
+    enabled: !!plantId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      try {
+        const { data } = await (supabase.from('plant_meter_config' as any) as any)
+          .select('config')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        if (data?.config?.locator_readings_per_day != null) return data.config.locator_readings_per_day as number;
+      } catch { /* table may not exist yet */ }
+      try {
+        const raw = localStorage.getItem(`plant_meter_config_${plantId}`);
+        if (raw) {
+          const cfg = JSON.parse(raw);
+          if (cfg.locator_readings_per_day != null) return cfg.locator_readings_per_day as number;
+        }
+      } catch { /* ignore */ }
+      return 3; // default
+    },
+  });
+  const maxLocatorReadings = locatorReadingLimit ?? 3;
+
   const { data: locators } = useQuery({
     queryKey: ['op-locators', plantId],
     queryFn: async () => plantId
@@ -1308,6 +1334,7 @@ function LocatorReadingForm() {
                     userId={user?.id}
                     onSaved={() => invalidateDashboard(qc)}
                     isManagerOrAdmin={isAdmin || isManager}
+                    maxReadingsPerDay={maxLocatorReadings}
                   />
                 </li>
               ))}
@@ -1338,12 +1365,13 @@ function LocatorReadingForm() {
 }
 
 function LocatorRow({
-  locator, plantId, previous, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin,
+  locator, plantId, previous, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, maxReadingsPerDay = 3,
 }: {
   locator: any; plantId: string; previous: number | null;
   todayReadings: any[]; avgVol: number | null;
   userId: string | undefined; onSaved: () => void;
   isManagerOrAdmin: boolean;
+  maxReadingsPerDay?: number;
 }) {
   const [reading, setReading]     = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1363,11 +1391,11 @@ function LocatorRow({
   const highVol   = locInputMode === 'raw' && avgVol != null && dailyVol != null && dailyVol > avgVol * ALERTS.avg_multiplier_warn;
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
-  const atLimit    = !editingId && todayCount >= MAX_READINGS_PER_DAY;
+  const atLimit    = !editingId && todayCount >= maxReadingsPerDay;
 
   const save = async () => {
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
-    if (atLimit) { toast.error(`${locator.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
+    if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
     // Fix #8 — window.confirm is blocked in iframes. The below-prev and high-vol
     // warnings are already shown as inline alert banners in the UI (the yellow strip
@@ -1455,14 +1483,14 @@ function LocatorRow({
             prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>
             {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
             <span className="mx-1">·</span>
-            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
+            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{maxReadingsPerDay} today</span>
           </>
         ) : (
           <>
             <span className="text-teal-600 dark:text-teal-400 font-medium">Direct m³ mode</span>
             {dailyVol != null && <> · <span className="font-mono-num text-teal-600">{fmtNum(dailyVol)} m³</span> will be saved</>}
             <span className="mx-1">·</span>
-            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
+            <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{maxReadingsPerDay} today</span>
           </>
         )}
       </div>
@@ -1653,11 +1681,11 @@ function WellRow({
   const belowPrev  = previousMeter != null && cur > 0 && cur < previousMeter;
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
-  const atLimit    = !editingId && todayCount >= MAX_READINGS_PER_DAY;
+  const atLimit    = !editingId && todayCount >= WELL_MAX_READINGS_PER_DAY;
 
   const save = async () => {
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
-    if (atLimit) { toast.error(`${well.name}: max ${MAX_READINGS_PER_DAY} readings/day reached`); return; }
+    if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
     if (belowPrev) toast.warning(`${well.name}: meter below previous — saved anyway`);
 
     setSaving(true);
@@ -1719,7 +1747,7 @@ function WellRow({
         prev: <span className="font-mono-num">{previousMeter == null ? '—' : fmtNum(previousMeter)}</span>
         {dailyVol != null && <> · Δ <span className="font-mono-num">{fmtNum(dailyVol)} m³</span></>}
         <span className="mx-1">·</span>
-        <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{MAX_READINGS_PER_DAY} today</span>
+        <span className={atLimit ? 'text-warn-foreground' : ''}>{todayCount}/{WELL_MAX_READINGS_PER_DAY} today</span>
       </div>
 
       {/* Row 2: Water | Power | Save | History */}

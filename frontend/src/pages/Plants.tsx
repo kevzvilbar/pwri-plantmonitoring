@@ -1461,6 +1461,9 @@ export interface PlantMeterConfig {
   // Chemicals enabled for this plant — only these appear in RO Trains → Chemical Dosing.
   // Default: all chemicals enabled (empty array = all shown for backwards compat).
   enabled_chemicals: string[]; // chemical names from KNOWN_CHEMICALS
+  // Locator meter readings allowed per day (manager-configurable, default 3).
+  // Operators can submit up to this many readings per locator per calendar day.
+  locator_readings_per_day: number;
 }
 
 const DEFAULT_METER_CONFIG: PlantMeterConfig = {
@@ -1489,6 +1492,7 @@ const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   permeate_is_production: false,
   permeate_cutoff_time: '00:20',
   enabled_chemicals: [], // empty = all chemicals visible (backwards compat)
+  locator_readings_per_day: 3,
 };
 
 const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
@@ -1736,6 +1740,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                 <span>Prod: {cfg.ro_production_source === 'permeate' ? `Permeate${cfg.permeate_is_production ? ` (cut-off ${cfg.permeate_cutoff_time || '00:20'})` : ''}` : 'Product meter'}</span>
                 {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
                 <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
+                <span>Loc: {cfg.locator_readings_per_day ?? 3}×/day</span>
               </div>
             )}
           </div>
@@ -2167,6 +2172,75 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                 )}
               </div>
             )}
+
+            {/* ── Locator readings frequency ── */}
+            <div className="mt-3 rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <div className="text-sm font-medium">Locator readings per day</div>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                How many times per day operators can submit a reading per locator. Only managers and admins can change this.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Preset buttons */}
+                {([3, 8, 24] as const).map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => canEdit && update({ locator_readings_per_day: preset })}
+                    disabled={!canEdit}
+                    className={[
+                      'px-3 py-1 text-xs font-medium rounded-md border transition-colors',
+                      (cfg.locator_readings_per_day ?? 3) === preset
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-transparent text-muted-foreground border-border hover:bg-muted dark:hover:bg-muted/50',
+                      !canEdit ? 'opacity-50 cursor-default' : 'cursor-pointer',
+                    ].join(' ')}
+                    title={preset === 24 ? 'Hourly (every hour)' : `${preset} times per day`}
+                  >
+                    {preset === 24 ? 'Hourly (24)' : `${preset}×/day`}
+                  </button>
+                ))}
+                {/* Custom stepper */}
+                {canEdit ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Custom:</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => update({ locator_readings_per_day: Math.max(1, (cfg.locator_readings_per_day ?? 3) - 1) })}
+                        disabled={(cfg.locator_readings_per_day ?? 3) <= 1}
+                        className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                      >−</button>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={48}
+                        value={cfg.locator_readings_per_day ?? 3}
+                        onChange={e => {
+                          const v = parseInt(e.target.value);
+                          if (!isNaN(v) && v >= 1 && v <= 48) update({ locator_readings_per_day: v });
+                        }}
+                        className="h-7 w-14 text-xs text-center font-mono font-semibold"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => update({ locator_readings_per_day: Math.min(48, (cfg.locator_readings_per_day ?? 3) + 1) })}
+                        disabled={(cfg.locator_readings_per_day ?? 3) >= 48}
+                        className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                      >+</button>
+                    </div>
+                    <span className="text-xs text-muted-foreground">per day</span>
+                  </div>
+                ) : (
+                  <span className="text-sm font-mono font-semibold">{cfg.locator_readings_per_day ?? 3}×/day</span>
+                )}
+              </div>
+              {!canEdit && (
+                <p className="text-[10px] text-muted-foreground">Only managers and admins can change the reading frequency.</p>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-border/50" />
@@ -4172,9 +4246,16 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
       payload.electric_meter_serial = form.electric_meter_serial || null;
       payload.electric_meter_installed_date = form.electric_meter_installed_date || null;
     }
-    const { error } = await supabase.from('wells').insert(payload as never);
+    let { error } = await supabase.from('wells').insert(payload as never);
+    // Graceful fallback: if optional columns (gps_lat, gps_lng, electric_meter_*) are missing
+    // from the schema cache, retry without them rather than failing the entire insert.
+    if (error && (error.message.includes('gps_lat') || error.message.includes('gps_lng') || error.message.includes('column') || error.message.includes('schema cache'))) {
+      const { gps_lat: _lat, gps_lng: _lng, electric_meter_brand: _emb, electric_meter_size: _ems, electric_meter_serial: _emse, electric_meter_installed_date: _emid, ...fallbackPayload } = payload as any;
+      const { error: e2 } = await supabase.from('wells').insert(fallbackPayload as never);
+      error = e2 ?? null;
+    }
     if (error) { toast.error(error.message); return; }
-    toast.success('Well Added');
+    toast.success(`${form.name.trim()} added`);
     onClose();
   };
 
