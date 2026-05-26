@@ -1,0 +1,9783 @@
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+// ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
+// Plants.tsx owns recomputePermeateDeltas — the authoritative DB write for
+// permeate_meter_delta.  After each successful UPDATE we also call
+// deltaCache.set() so the Dashboard and TrendChart immediately use the
+// recomputed value without waiting for a refetch (Tier-1 shortcut path).
+// When is_meter_replacement is toggled we call deltaCache.invalidate(trainId)
+// to force a Tier-2 raw recompute on the next render.
+import { deltaCache } from '@/lib/deltaCache';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+import { useAppStore } from '@/store/appStore';
+import { usePlants } from '@/hooks/usePlants';
+import { useAuth } from '@/hooks/useAuth';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatusPill } from '@/components/StatusPill';
+import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
+import { fmtNum } from '@/lib/calculations';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+
+const BASE = (import.meta.env.REACT_APP_BACKEND_URL as string) || '';
+
+// ─── Chemical master list (mirrors ROTrains.tsx KNOWN_CHEMICALS) ─────────────
+// Managers configure which chemicals are applicable per plant in Plant Configuration.
+// ROTrains → Chemical Dosing hides chemicals not in the enabled list.
+// CIP-only chemicals (HCl, SLS, Caustic Soda) are intentionally excluded —
+// they are consistent across all plants and managed exclusively in the CIP tab.
+const PLANT_CHEMICALS = [
+  { name: 'Chlorine',     defaultUnit: 'kg' },
+  { name: 'SMBS',         defaultUnit: 'kg' },
+  { name: 'Anti Scalant', defaultUnit: 'L'  },
+  { name: 'Soda Ash',     defaultUnit: 'kg' },
+];
+
+// ─── SummaryCount pill ───────────────────────────────────────────────────────
+// Renders "active/total" — active count in primary color, total in muted.
+// If all active: green accent. If any inactive: amber warning.
+
+// ─── Grid Pylon Icon ─────────────────────────────────────────────────────────
+// High-voltage transmission tower — used everywhere "Grid" energy source appears.
+function GridPylonIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      {/* Base platform */}
+      <line x1="4" y1="22" x2="20" y2="22" />
+      {/* Left & right legs */}
+      <line x1="8" y1="22" x2="10" y2="14" />
+      <line x1="16" y1="22" x2="14" y2="14" />
+      {/* Lower cross-brace */}
+      <line x1="8" y1="22" x2="14" y2="14" />
+      <line x1="16" y1="22" x2="10" y2="14" />
+      {/* Tower body */}
+      <line x1="10" y1="14" x2="11" y2="8" />
+      <line x1="14" y1="14" x2="13" y2="8" />
+      {/* Mid cross-brace */}
+      <line x1="10" y1="14" x2="13" y2="8" />
+      <line x1="14" y1="14" x2="11" y2="8" />
+      {/* Upper narrowing */}
+      <line x1="11" y1="8" x2="11.8" y2="4" />
+      <line x1="13" y1="8" x2="12.2" y2="4" />
+      {/* Top cross-brace */}
+      <line x1="11" y1="8" x2="12.2" y2="4" />
+      <line x1="13" y1="8" x2="11.8" y2="4" />
+      {/* Top arm (crossbar) */}
+      <line x1="7" y1="6" x2="17" y2="6" />
+      <line x1="12" y1="4" x2="12" y2="6" />
+      {/* Insulator drop lines */}
+      <line x1="7" y1="6" x2="7" y2="8" />
+      <line x1="17" y1="6" x2="17" y2="8" />
+    </svg>
+  );
+}
+
+function SummaryCount({ label }: { label: string }) {
+  const [active, total] = label.split('/').map(Number);
+  const allActive = active === total && total > 0;
+  const noneActive = active === 0;
+  const color = allActive
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : noneActive && total > 0
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-foreground';
+  return (
+    <div className={`font-mono-num text-sm font-medium ${color}`}>
+      {active}
+      <span className="text-muted-foreground font-normal">/{total}</span>
+    </div>
+  );
+}
+
+// ─── Entity status change audit logger ───────────────────────────────────────
+// Called whenever a Well, Locator, or RO Train flips Active ↔ Inactive.
+
+async function logStatusChange(entry: {
+  user_id: string | null;
+  plant_id: string;
+  entity_type: 'Well' | 'Locator' | 'RO Train';
+  entity_id: string;
+  entity_label: string;
+  from_status: string;
+  to_status: string;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('entity_status_audit_log' as any) as any).insert([entry]);
+  } catch {
+    // Table may not exist yet — silently ignore.
+  }
+}
+
+// ─── Plant field-level audit logger ──────────────────────────────────────────
+// Logs name / address / capacity edits to plant_edit_audit_log.
+// Best-effort: silently ignored if table doesn't exist yet.
+async function logPlantEdit(entry: {
+  plant_id: string;
+  user_id: string | null;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('plant_edit_audit_log' as any) as any).insert([entry]);
+  } catch {
+    // Table may not exist yet — silently ignore.
+  }
+}
+
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-1 py-2 hover:bg-muted/30 rounded-md transition-colors text-left group"
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground group-hover:text-foreground">{title}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && <div className="space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+export default function Plants() {
+  const { id } = useParams();
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+  const { isManager, profile } = useAuth();
+
+  // Non-managers only see plants they are assigned to.
+  // Managers/Admins see all plants. Sign-up uses its own direct query, unaffected.
+  const visiblePlants = isManager
+    ? plants
+    : plants?.filter(p => profile?.plant_assignments?.includes(p.id));
+
+  const list = selectedPlantId
+    ? visiblePlants?.filter(p => p.id === selectedPlantId)
+    : visiblePlants;
+  const navigate = useNavigate();
+
+  // Summary counts: active/total per plant for Wells, Locators, RO Trains
+  const { data: summaryCounts } = useQuery({
+    queryKey: ['plants-summary-counts'],
+    queryFn: async () => {
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+
+      const [wellsRes, locatorsRes, trainsRes, recentReadingsRes] = await Promise.all([
+        supabase.from('wells').select('plant_id, status'),
+        supabase.from('locators').select('plant_id, status'),
+        supabase.from('ro_trains').select('id, plant_id, status'),
+        // Only fetch train_ids that have had a reading in the last 2 hours
+        supabase.from('ro_train_readings')
+          .select('train_id')
+          .gte('reading_datetime', twoHoursAgo),
+      ]);
+
+      // Set of train IDs with a recent (<=2h) reading
+      const recentSet = new Set((recentReadingsRes.data ?? []).map((r: any) => r.train_id));
+
+      type Summary = Record<string, { active: number; total: number }>;
+      const tally = (
+        rows: { plant_id: string; status: string }[],
+        activeFn: (s: string) => boolean,
+      ): Summary => {
+        const out: Summary = {};
+        rows.forEach((r) => {
+          if (!out[r.plant_id]) out[r.plant_id] = { active: 0, total: 0 };
+          out[r.plant_id].total++;
+          if (activeFn(r.status)) out[r.plant_id].active++;
+        });
+        return out;
+      };
+
+      // Trains use the same 2-hour data rule as ROTrains.tsx deriveTrainStatus:
+      //   Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
+      const trainTally: Summary = {};
+      for (const t of (trainsRes.data ?? []) as any[]) {
+        if (!trainTally[t.plant_id]) trainTally[t.plant_id] = { active: 0, total: 0 };
+        trainTally[t.plant_id].total++;
+        const isRunning = t.status !== 'Maintenance' && recentSet.has(t.id);
+        if (isRunning) trainTally[t.plant_id].active++;
+      }
+
+      return {
+        wells:    tally(wellsRes.data    ?? [], (s) => s === 'Active'),
+        locators: tally(locatorsRes.data ?? [], (s) => s === 'Active'),
+        trains:   trainTally,
+      };
+    },
+    // Re-check every minute so the 2-hr window flips automatically
+  });
+
+  // ── Search / filter state ─────────────────────────────────────────────────
+  // IMPORTANT: These useState calls MUST stay above the `if (id) return` early
+  // return below. Moving them after it caused React error #300 ("rendered fewer
+  // hooks than expected") because navigating list → detail changed the hook count
+  // within the same component instance. All hooks must be called unconditionally.
+  const [search,       setSearch]       = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Inactive'>('all');
+
+  if (id) return <PlantDetail plantId={id} />;
+
+  // ── Derived header stats ──────────────────────────────────────────────────
+  const totalCapacity = list?.reduce((s, p) => s + (p.design_capacity_m3 ?? 0), 0) ?? 0;
+  const activePlants  = list?.filter(p => p.status === 'Active').length ?? 0;
+
+  // RO train utilisation across all visible plants
+  const allTrainCounts = Object.values(summaryCounts?.trains ?? {});
+  const totalTrainsActive = allTrainCounts.reduce((s, c) => s + c.active, 0);
+  const totalTrainsTotal  = allTrainCounts.reduce((s, c) => s + c.total,  0);
+  const roUtilPct = totalTrainsTotal > 0
+    ? Math.round((totalTrainsActive / totalTrainsTotal) * 100)
+    : 0;
+
+  // ── Per-plant health score (average of wells/locators/trains utilisation) ─
+  function plantHealthScore(wells: { active: number; total: number }, locators: { active: number; total: number }, trains: { active: number; total: number }) {
+    const scores = [
+      wells.total    > 0 ? Math.round((wells.active    / wells.total)    * 100) : 0,
+      locators.total > 0 ? Math.round((locators.active / locators.total) * 100) : 0,
+      trains.total   > 0 ? Math.round((trains.active   / trains.total)   * 100) : 0,
+    ];
+    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  }
+
+  // Average health across all listed plants
+  const avgHealth = list?.length
+    ? Math.round(
+        list.reduce((sum, p) => {
+          const w = summaryCounts?.wells?.[p.id]    ?? { active: 0, total: 0 };
+          const l = summaryCounts?.locators?.[p.id] ?? { active: 0, total: 0 };
+          const t = summaryCounts?.trains?.[p.id]   ?? { active: 0, total: 0 };
+          return sum + plantHealthScore(w, l, t);
+        }, 0) / list.length,
+      )
+    : 0;
+
+  // ── Per-plant identity colours (teal-cyan palette) ───────────────────────
+  // Each plant gets a unique colour that drives: left accent strip, capacity
+  // block tint, capacity number, and health ring — all from one value.
+  // Falls back to a round-robin palette for plants not in the map.
+  const PLANT_COLOR_MAP: Record<string, string> = {
+    'Guizo':     '#0EA5E9', // sky-500
+    'Mambaling': '#0D9488', // teal-600
+    'SRP':       '#06B6D4', // cyan-500
+    'Umapad':    '#0F766E', // teal-700
+  };
+  const PLANT_COLOR_PALETTE = ['#0EA5E9', '#0D9488', '#06B6D4', '#0F766E', '#0891B2', '#0E7490'];
+
+  function getPlantColor(plant: any, index: number): string {
+    if ((plant as any).color) return (plant as any).color;
+    return PLANT_COLOR_MAP[plant.name] ?? PLANT_COLOR_PALETTE[index % PLANT_COLOR_PALETTE.length];
+  }
+
+  // ── Colour helpers ────────────────────────────────────────────────────────
+  // Metric chip semantics: ≥75% teal (good), 40–74% sky (mid), <40% red (danger)
+  function statBarColor(active: number, total: number): { bar: string; textColor: string; bg: string; border: string; dot: string } {
+    if (total === 0) return { bar: 'bg-muted', textColor: 'text-muted-foreground', bg: 'bg-muted/40', border: 'border-border/40', dot: '#94a3b8' };
+    const r = active / total;
+    if (r >= 0.75) return { bar: 'bg-teal-500',  textColor: 'text-teal-700 dark:text-teal-400',  bg: 'bg-teal-50 dark:bg-teal-950/30',  border: 'border-teal-200 dark:border-teal-800/50',  dot: '#0D9488' };
+    if (r >= 0.4)  return { bar: 'bg-sky-400',   textColor: 'text-sky-700 dark:text-sky-400',    bg: 'bg-sky-50 dark:bg-sky-950/30',    border: 'border-sky-200 dark:border-sky-800/50',    dot: '#0EA5E9' };
+    return                { bar: 'bg-red-500',   textColor: 'text-red-700 dark:text-red-400',    bg: 'bg-red-50 dark:bg-red-950/30',    border: 'border-red-200 dark:border-red-800/50',    dot: '#ef4444' };
+  }
+
+  function roUtilColors(pct: number) {
+    if (pct >= 75) return { text: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-950/30', border: 'border-teal-200 dark:border-teal-800/50' };
+    if (pct >= 40) return { text: 'text-sky-700 dark:text-sky-400',   bg: 'bg-sky-50 dark:bg-sky-950/30',   border: 'border-sky-200 dark:border-sky-800/50'   };
+    return               { text: 'text-red-700 dark:text-red-400',   bg: 'bg-red-50 dark:bg-red-950/30',   border: 'border-red-200 dark:border-red-800/50'   };
+  }
+
+  // ── Sub-components (defined inside Plants so they share scope) ────────────
+
+  function PlantStatRow({ icon, label, active, total }: { icon: ReactNode; label: string; active: number; total: number }) {
+    const p      = total > 0 ? Math.round((active / total) * 100) : 0;
+    const colors = statBarColor(active, total);
+    return (
+      <div className="flex flex-col gap-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+            {icon}{label}
+          </span>
+          <span className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs font-medium text-foreground">
+              {active}<span className="text-muted-foreground font-normal">/{total}</span>
+            </span>
+            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${colors.textColor} ${colors.bg} border ${colors.border}`}>
+              {p}%
+            </span>
+          </span>
+        </div>
+        <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${colors.bar}`}
+            style={{ width: total > 0 ? `${p}%` : '0%' }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function HealthRing({ score, plantColor, size = 40 }: { score: number; plantColor?: string; size?: number }) {
+    const strokeW = 3.5;
+    const r = (size / 2) - strokeW - 1;          // dynamic radius from size
+    const cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    const dash  = (score / 100) * circ;
+    const color = plantColor ?? (
+      score >= 80 ? '#0D9488' :
+      score >= 40 ? '#0EA5E9' :
+                    '#ef4444'
+    );
+    const fontSize = size >= 60 ? '12px' : size >= 48 ? '10px' : '9px';
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" aria-hidden>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={strokeW}
+          className="text-muted/50" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={strokeW}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeDashoffset={circ / 4}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+        <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize, fontWeight: 700, fill: color }}>
+          {score}%
+        </text>
+      </svg>
+    );
+  }
+
+  const filteredList = list?.filter(p => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q);
+    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const roColors = roUtilColors(roUtilPct);
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Plants</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {list?.length ?? 0} plant{(list?.length ?? 0) !== 1 ? 's' : ''} · {activePlants} active
+          </p>
+        </div>
+
+        {/* Summary pills */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Total capacity */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-background text-xs">
+            <Droplet className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span className="text-muted-foreground">Total capacity</span>
+            <span className="font-semibold text-foreground">{fmtNum(totalCapacity)} MLD</span>
+          </div>
+
+          {/* RO util — colour-coded */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${roColors.bg} ${roColors.border}`}>
+            <Wrench className={`h-3.5 w-3.5 shrink-0 ${roColors.text}`} />
+            <span className={roColors.text}>RO train util.</span>
+            <span className={`font-semibold ${roColors.text}`}>{roUtilPct}%</span>
+          </div>
+
+          {/* Avg plant health */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${
+            avgHealth >= 75
+              ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800/50'
+              : avgHealth >= 40
+                ? 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/50'
+                : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50'
+          }`}>
+            <TrendingUp className={`h-3.5 w-3.5 shrink-0 ${
+              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
+              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
+              : 'text-red-700 dark:text-red-400'
+            }`} />
+            <span className={
+              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
+              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
+              : 'text-red-700 dark:text-red-400'
+            }>
+              Avg. health
+            </span>
+            <span className={`font-semibold ${
+              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
+              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
+              : 'text-red-700 dark:text-red-400'
+            }`}>
+              {avgHealth}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search + filter bar ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[160px]">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </span>
+          <input
+            type="text"
+            placeholder="Search plants…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+        {(['all', 'Active', 'Inactive'] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setStatusFilter(f)}
+            className={`h-8 px-3 rounded-md text-xs font-medium transition-colors border ${
+              statusFilter === f
+                ? 'bg-teal-700 text-white border-teal-700 dark:bg-teal-600 dark:border-teal-600'
+                : 'bg-background text-muted-foreground border-border/60 hover:bg-muted/60'
+            }`}
+          >
+            {f === 'all' ? `All (${list?.length ?? 0})` : f}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Plant list ── */}
+      <div className="space-y-2.5">
+        {filteredList?.map((p, idx) => {
+          const wells    = summaryCounts?.wells?.[p.id]    ?? { active: 0, total: 0 };
+          const locators = summaryCounts?.locators?.[p.id] ?? { active: 0, total: 0 };
+          const trains   = summaryCounts?.trains?.[p.id]   ?? { active: 0, total: 0 };
+          const health   = plantHealthScore(wells, locators, trains);
+          const isActive = p.status === 'Active';
+          const plantColor = getPlantColor(p, idx);
+
+          // ── Metric chip — no box background, semantic colour on text+dot only ──
+          function MetricChip({ icon, label, active, total }: { icon: ReactNode; label: string; active: number; total: number }) {
+            const colors = statBarColor(active, total);
+            const pct = total > 0 ? Math.round((active / total) * 100) : 0;
+            return (
+              <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-3 min-w-[90px] flex-1">
+                <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {icon}
+                  {label}
+                </div>
+                <div className="font-mono text-base font-bold leading-none" style={{ color: plantColor }}>
+                  {active}
+                  <span className="text-muted-foreground font-normal text-sm">/{total}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] font-semibold">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colors.dot }} />
+                  <span className={colors.textColor}>{pct}%</span>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={p.id}
+              className="group relative flex overflow-hidden rounded-xl border border-border/60 bg-card hover:shadow-md transition-all duration-200 cursor-pointer"
+              style={{ ['--plant-color' as any]: plantColor }}
+              onClick={() => navigate(`/plants/${p.id}`)}
+              data-testid={`plant-card-${p.id}`}
+            >
+              {/* Left accent stripe — plant identity colour */}
+              <div className="w-1 shrink-0 transition-all duration-200 group-hover:w-[5px]" style={{ backgroundColor: plantColor }} />
+
+              {/* ── DESKTOP layout (md+) ── */}
+              <div className="hidden md:flex flex-1 min-w-0">
+
+                {/* Capacity block — no box background, just the coloured text */}
+                <div className="flex flex-col justify-center items-center m-3 shrink-0 w-[100px]">
+                  <div
+                    className="text-5xl font-bold leading-none tracking-tight"
+                    style={{ color: plantColor }}
+                  >
+                    {fmtNum(p.design_capacity_m3 ?? 0)}
+                  </div>
+                  <div className="text-xs font-semibold mt-1 uppercase tracking-wider" style={{ color: plantColor }}>
+                    MLD
+                  </div>
+                  <div className="text-[10px] font-medium text-muted-foreground mt-0.5 uppercase tracking-widest">
+                    CAPACITY
+                  </div>
+                </div>
+
+                {/* Right section: name/address top → chips + Active + health bottom */}
+                <div className="flex-1 min-w-0 flex flex-col py-3 pr-4 pl-1">
+
+                  {/* Name + address — top of right section */}
+                  <div className="mb-auto min-w-0">
+                    <h2 className="font-bold text-lg leading-tight truncate">{p.name}</h2>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{p.address}</span>
+                    </p>
+                  </div>
+
+                  {/* Bottom row: chips + Active/dots + health ring — all vertically aligned */}
+                  <div className="flex items-stretch gap-2 mt-3">
+                    <MetricChip icon={<Gauge  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
+                    <MetricChip icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
+                    <MetricChip icon={<Wrench  className="h-3 w-3" />} label="RO Trains" active={trains.active}   total={trains.total}   />
+
+                    {/* Active status + menu — inline with chips, no box */}
+                    <div
+                      className="flex flex-col items-center justify-center gap-1 px-1 shrink-0"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground'}`}>
+                        {p.status}
+                      </span>
+                      {isManager && (
+                        <DeleteEntityMenu
+                          kind="plant"
+                          id={p.id}
+                          label={p.name}
+                          canSoftDelete={isActive}
+                          canHardDelete
+                          invalidateKeys={[['plants']]}
+                          compact
+                        />
+                      )}
+                    </div>
+
+                    {/* Health ring — enlarged */}
+                    <div className="flex flex-col items-center justify-center gap-1 pl-1 shrink-0">
+                      <HealthRing score={health} plantColor={plantColor} size={80} />
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Health</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── MOBILE layout (< md): original compact stat-bar design ── */}
+              <div className="md:hidden flex-1 min-w-0 p-4">
+                {/* Top row: name + address + status + menu */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-base leading-tight">{p.name}</h2>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{p.address}</span>
+                    </p>
+                  </div>
+                  <div
+                    className="flex items-center gap-2 shrink-0"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                      isActive
+                        ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800/50'
+                        : 'bg-muted text-muted-foreground border-border/60'
+                    }`}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? plantColor : undefined, opacity: isActive ? 1 : 0.4 }} />
+                      {p.status}
+                    </span>
+                    {isManager && (
+                      <DeleteEntityMenu
+                        kind="plant"
+                        id={p.id}
+                        label={p.name}
+                        canSoftDelete={isActive}
+                        canHardDelete
+                        invalidateKeys={[['plants']]}
+                        compact
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Body: capacity | stat bars | health ring */}
+                <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
+                  <div className="border-r border-border/50 pr-3 flex flex-col justify-center min-w-[72px]">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Capacity</div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-semibold leading-none" style={{ color: plantColor }}>
+                        {fmtNum(p.design_capacity_m3 ?? 0)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">MLD</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <PlantStatRow icon={<Gauge  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
+                    <PlantStatRow icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
+                    <PlantStatRow icon={<Wrench  className="h-3 w-3" />} label="RO trains" active={trains.active}   total={trains.total}   />
+                  </div>
+                  <div className="hidden sm:flex flex-col items-center gap-1 pl-2">
+                    <HealthRing score={health} plantColor={plantColor} />
+                    <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Health</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Empty state: no plants visible at all */}
+        {!list?.length && (
+          <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground text-sm rounded-xl border border-dashed border-border/60">
+            <Droplet className="h-8 w-8 opacity-30" />
+            <span>No plants visible</span>
+          </div>
+        )}
+
+        {/* Empty state: search/filter returned nothing */}
+        {!!list?.length && !filteredList?.length && (
+          <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground text-sm rounded-xl border border-dashed border-border/60">
+            <svg className="h-8 w-8 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>No plants match your search</span>
+            <button
+              className="text-xs text-teal-600 dark:text-teal-400 underline underline-offset-2 hover:no-underline"
+              onClick={() => { setSearch(''); setStatusFilter('all'); }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlantDetail({ plantId }: { plantId: string }) {
+  const navigate = useNavigate();
+  const { data: plants } = usePlants();
+  const { isManager, user } = useAuth();
+  const qc = useQueryClient();
+  const plant = plants?.find(p => p.id === plantId);
+
+  const [tab, setTab] = useState<'locators' | 'wells' | 'product' | 'trains' | 'power'>('locators');
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [infoSaving, setInfoSaving] = useState(false);
+  const [infoForm, setInfoForm] = useState({ name: '', address: '', capacity: '' });
+
+  // RO Train active/total count for this plant — uses the same 2-hr data rule as the Overview tab
+  const { data: trainCounts } = useQuery({
+    queryKey: ['ro-trains-count', plantId],
+    queryFn: async () => {
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const { data: trains } = await supabase
+        .from('ro_trains').select('id, status').eq('plant_id', plantId);
+      const total = trains?.length ?? 0;
+      if (!total) return { active: 0, total: 0 };
+      const trainIds = trains!.map((t: any) => t.id);
+      const { data: recentReadings } = await supabase
+        .from('ro_train_readings')
+        .select('train_id')
+        .in('train_id', trainIds)
+        .gte('reading_datetime', twoHoursAgo);
+      const recentSet = new Set((recentReadings ?? []).map((r: any) => r.train_id));
+      const active = trains!.filter((t: any) =>
+        t.status !== 'Maintenance' && recentSet.has(t.id)
+      ).length;
+      return { active, total };
+    },
+  });
+
+  if (!plant) return <div>Plant not found.</div>;
+
+  const openInfoEdit = () => {
+    setInfoForm({
+      name: plant.name ?? '',
+      address: plant.address ?? '',
+      capacity: plant.design_capacity_m3 != null ? String(plant.design_capacity_m3) : '',
+    });
+    setEditingInfo(true);
+  };
+
+  const saveInfo = async () => {
+    setInfoSaving(true);
+    const payload: Record<string, any> = {};
+    const changes: { field: string; old: string | null; next: string | null }[] = [];
+
+    if (infoForm.name.trim() !== (plant.name ?? '')) {
+      changes.push({ field: 'name', old: plant.name ?? null, next: infoForm.name.trim() || null });
+      payload.name = infoForm.name.trim() || null;
+    }
+    if (infoForm.address.trim() !== (plant.address ?? '')) {
+      changes.push({ field: 'address', old: plant.address ?? null, next: infoForm.address.trim() || null });
+      payload.address = infoForm.address.trim() || null;
+    }
+    const newCap = infoForm.capacity ? parseFloat(infoForm.capacity) : null;
+    if (newCap !== (plant.design_capacity_m3 ?? null)) {
+      changes.push({ field: 'design_capacity_m3', old: plant.design_capacity_m3 != null ? String(plant.design_capacity_m3) : null, next: newCap != null ? String(newCap) : null });
+      payload.design_capacity_m3 = newCap;
+    }
+
+    if (!Object.keys(payload).length) { setEditingInfo(false); setInfoSaving(false); return; }
+
+    const { error } = await supabase.from('plants').update(payload).eq('id', plant.id);
+    setInfoSaving(false);
+    if (error) { toast.error(error.message); return; }
+
+    // Audit each changed field
+    const now = new Date().toISOString();
+    await Promise.all(
+      changes.map((c) =>
+        logPlantEdit({
+          plant_id: plant.id,
+          user_id: user?.id ?? null,
+          field_changed: c.field,
+          old_value: c.old,
+          new_value: c.next,
+          timestamp: now,
+        }),
+      ),
+    );
+
+    toast.success('Plant details updated');
+    setEditingInfo(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+    qc.invalidateQueries({ queryKey: ['ro-trains-count', plantId] });
+  };
+
+  return (
+    <div className="space-y-3 animate-fade-in">
+      {/* Back nav */}
+      <button onClick={() => navigate('/plants')}
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
+        <ChevronLeft className="h-4 w-4" /> All plants
+      </button>
+
+      {/* Hero card */}
+      <Card className="p-4 bg-gradient-stat text-topbar-foreground overflow-hidden">
+
+        {/* Top row: Name/address (left) + Status pill + Edit + Delete (right) */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          {/* Name + address */}
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold leading-tight">{plant.name}</h1>
+            <p className="text-xs opacity-60 flex items-center gap-1 mt-0.5">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{plant.address}</span>
+            </p>
+          </div>
+
+          {/* Status pill + Edit + Delete — now in normal flow, never overlaps */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <span className={[
+              'text-xs font-semibold px-3 py-1 rounded-full border',
+              plant.status === 'Active'
+                ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
+                : 'bg-amber-400/20 text-amber-200 border-amber-400/30',
+            ].join(' ')}>
+              Status: <span className="font-bold">{plant.status}</span>
+            </span>
+            {isManager && (
+              <Button size="sm" variant="ghost"
+                onClick={openInfoEdit}
+                data-testid="edit-plant-info-btn"
+                className="h-8 gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-xs font-medium">
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
+            {isManager && (
+              <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
+                <DeleteEntityMenu
+                  kind="plant" id={plant.id} label={plant.name}
+                  canSoftDelete={plant.status === 'Active'} canHardDelete
+                  invalidateKeys={[['plants']]} onDeleted={() => navigate('/plants')}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stats: Capacity / RO Trains / Product Meters */}
+        <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
+          <div>
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Capacity</div>
+            <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} MLD</div>
+          </div>
+          <div>
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">RO Trains</div>
+            <div className="font-mono-num text-lg font-bold">
+              {trainCounts ? (
+                <>
+                  <span className={
+                    trainCounts.active === trainCounts.total && trainCounts.total > 0
+                      ? 'text-emerald-300'
+                      : trainCounts.active === 0 && trainCounts.total > 0
+                        ? 'text-amber-300' : ''
+                  }>{trainCounts.active}</span>
+                  <span className="opacity-40 font-normal text-base">/{trainCounts.total}</span>
+                </>
+              ) : (plant.num_ro_trains ?? '—')}
+            </div>
+            <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+          </div>
+          <div>
+            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Product Meters</div>
+            <ProductMetersStat plantId={plant.id} />
+          </div>
+        </div>
+
+        {/* Energy Sources */}
+        <div className="mt-4 pt-3 border-t border-white/10">
+          <EnergySourceInline plant={plant} />
+        </div>
+      </Card>
+
+      {/* Plant Configuration — outside all tabs, always visible below hero */}
+      <PlantMeterConfigCard plant={plant} />
+
+      {/* Edit Plant Info Dialog */}
+      {editingInfo && (
+        <Dialog open onOpenChange={(o) => { if (!o && !infoSaving) setEditingInfo(false); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Plant Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <Label className="text-xs">Plant Name</Label>
+                <Input
+                  value={infoForm.name}
+                  onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
+                  placeholder="e.g. SRP"
+                  data-testid="edit-plant-name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Address</Label>
+                <Input
+                  value={infoForm.address}
+                  onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
+                  placeholder="e.g. South Road Properties, Cebu City"
+                  data-testid="edit-plant-address"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Capacity (MLD)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={infoForm.capacity}
+                  onChange={(e) => setInfoForm({ ...infoForm, capacity: e.target.value })}
+                  placeholder="e.g. 4200"
+                  data-testid="edit-plant-capacity"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingInfo(false)} disabled={infoSaving}>Cancel</Button>
+              <Button onClick={saveInfo} disabled={infoSaving} data-testid="save-plant-info-btn">
+                {infoSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <div className="grid grid-cols-5 gap-0.5 p-1 bg-muted rounded-lg w-full">
+        {([
+          { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
+          { id: 'wells', label: 'Wells', short: 'WELL', icon: <Droplet className="h-3.5 w-3.5" /> },
+          { id: 'product', label: 'Product', short: 'PROD', icon: <Gauge className="h-3.5 w-3.5" /> },
+          { id: 'trains', label: 'Trains', short: 'RO', icon: <Wrench className="h-3.5 w-3.5" /> },
+          { id: 'power', label: 'Power', short: 'PWR', icon: <Zap className="h-3.5 w-3.5" /> },
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={[
+              'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none min-w-0',
+              tab === t.id
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            ].join(' ')}
+          >
+            {t.icon}
+            <span className="hidden sm:inline truncate">{t.label}</span>
+            <span className="sm:hidden text-[9px] font-semibold tracking-wide">{t.short}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} /></div>
+      <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
+      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
+      <div className={tab === 'trains'   ? undefined : 'hidden'}>
+        <TrainsList plantId={plantId} />
+      </div>
+      <div className={tab === 'power'    ? undefined : 'hidden'}><PowerMetersCard plant={plant} /></div>
+    </div>
+  );
+}
+
+// ─── ProductMetersStat — compact active/total shown in hero stats ────────────
+function ProductMetersStat({ plantId }: { plantId: string }) {
+  const { data: meters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      // Fetch status so we can count Active vs total correctly
+      let { data, error } = await supabase
+        .from('product_meters' as any).select('id, status').eq('plant_id', plantId);
+      // status column may not exist yet — fall back to id only
+      if (error?.message?.includes('status')) {
+        const { data: fallback } = await supabase
+          .from('product_meters' as any).select('id').eq('plant_id', plantId);
+        return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
+      }
+      return (data ?? []) as any[];
+    },
+  });
+  const total = meters?.length ?? 0;
+  const active = (meters ?? []).filter((m: any) => (m.status ?? 'Active') === 'Active').length;
+  return (
+    <div>
+      <div className="font-mono-num text-lg font-bold">
+        <span className={active === total && total > 0 ? 'text-emerald-300' : active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className="opacity-40 font-normal text-base">/{total}</span>
+      </div>
+      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+    </div>
+  );
+}
+
+// ─── Product Meters Card ─────────────────────────────────────────────────────
+// Matches the Locator / Well list pattern exactly:
+//   - One Card per meter row
+//   - Active / Inactive status pill (clickable for Manager+)
+//   - Always-visible pencil (edit name) + red trash (delete with reason dialog)
+//   - Header: "Product Meters (N)" + Add button + Import CSV button (Admin only)
+//   - Inline add-name form below header
+//   - Single-delete AlertDialog with required reason field
+
+async function logProductMeterAudit(entry: {
+  plant_id: string;
+  meter_id: string;
+  meter_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  user_id: string | null;
+  timestamp: string;
+}) {
+  try {
+    await (supabase.from('product_meter_audit_log' as any) as any).insert([entry]);
+  } catch { /* silently ignore */ }
+}
+
+// ── Assign Locators Dialog ────────────────────────────────────────────────────
+// Lets managers pick which locators a product meter supplies.
+// Stores the link as `product_meter_id` on the locators row (nullable FK).
+// All DB writes are best-effort: silently falls back if the column doesn't exist yet.
+
+function AssignLocatorsDialog({
+  meter, plantId, onClose, onSaved,
+}: {
+  meter: any;
+  plantId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { data: locators, isLoading } = useQuery({
+    queryKey: ['locators', plantId],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plantId).order('name');
+      return (data ?? []) as any[];
+    },
+  });
+
+  // Pre-select locators currently assigned to this meter
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!locators) return;
+    setSelected(new Set(locators.filter((l: any) => l.product_meter_id === meter.id).map((l: any) => l.id)));
+  }, [locators, meter.id]);
+
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const save = async () => {
+    if (!locators) return;
+    setBusy(true);
+    const toAssign   = locators.filter((l: any) => selected.has(l.id) && l.product_meter_id !== meter.id);
+    const toUnassign = locators.filter((l: any) => !selected.has(l.id) && l.product_meter_id === meter.id);
+
+    try {
+      // Assign selected locators to this meter
+      if (toAssign.length) {
+        const { error } = await supabase
+          .from('locators')
+          .update({ product_meter_id: meter.id } as any)
+          .in('id', toAssign.map((l: any) => l.id));
+        if (error && !error.message.includes('column')) throw error;
+      }
+      // Clear product_meter_id from deselected locators previously linked here
+      if (toUnassign.length) {
+        const { error } = await supabase
+          .from('locators')
+          .update({ product_meter_id: null } as any)
+          .in('id', toUnassign.map((l: any) => l.id));
+        if (error && !error.message.includes('column')) throw error;
+      }
+      toast.success('Locator assignments saved');
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-teal-600" />
+            Assign Locators
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Select which locators are supplied by <span className="font-medium text-foreground">{meter.name ?? 'this meter'}</span>.
+        </p>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading locators…
+          </div>
+        ) : !locators?.length ? (
+          <p className="text-xs text-muted-foreground py-4 text-center">No locators in this plant yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {locators.map((l: any) => {
+              const checked = selected.has(l.id);
+              const takenByOther = l.product_meter_id && l.product_meter_id !== meter.id;
+              return (
+                <label
+                  key={l.id}
+                  className={`flex items-center gap-2.5 p-2 rounded-md border cursor-pointer transition-colors ${
+                    checked
+                      ? 'border-teal-300 bg-teal-50/60 dark:border-teal-700 dark:bg-teal-950/20'
+                      : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggle(l.id)}
+                    className="shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{l.name}</div>
+                    {takenByOther && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                        Currently assigned to another meter
+                      </div>
+                    )}
+                  </div>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={save} disabled={busy || isLoading}>
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save ({selected.size})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Add Product Meter Dialog ──────────────────────────────────────────────────
+// Mirrors the AddWellDialog / AddLocatorDialog pattern: name + meter specs +
+// GPS coordinates with "Use My Location". Extra columns are inserted best-effort
+// (graceful retry without them if the DB hasn't been migrated yet).
+
+function AddProductMeterDialog({
+  plantId, meterCount, userId, onClose, onCreated,
+}: {
+  plantId: string;
+  meterCount: number;
+  userId: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
+    gps_lat: '', gps_lng: '',
+  });
+  const [busy, setBusy]         = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  const field = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    setBusy(true);
+
+    // Build full payload with all optional columns
+    const fullPayload: any = {
+      plant_id: plantId,
+      name: form.name.trim(),
+      status: 'Active',
+      sort_order: meterCount,
+      meter_brand:          form.meter_brand          || null,
+      meter_size:           form.meter_size           || null,
+      meter_serial:         form.meter_serial         || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat:  form.gps_lat  ? +form.gps_lat  : null,
+      gps_lng:  form.gps_lng  ? +form.gps_lng  : null,
+    };
+
+    let { data, error } = await supabase
+      .from('product_meters' as any)
+      .insert(fullPayload)
+      .select('id')
+      .single();
+
+    // If extra columns don't exist yet, fall back to name-only insert
+    if (error && (error.message.includes('column') || error.message.includes('status') || error.message.includes('sort_order'))) {
+      ({ data, error } = await supabase
+        .from('product_meters' as any)
+        .insert({ plant_id: plantId, name: form.name.trim() } as any)
+        .select('id')
+        .single());
+    }
+
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: (data as any)?.id ?? '',
+      meter_name: form.name.trim(), old_value: null, new_value: form.name.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+
+    toast.success(`"${form.name.trim()}" added`);
+    onCreated();
+  };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl   = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Add Product Meter</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+
+          {/* Name */}
+          <div>
+            <Label>Name *</Label>
+            <Input
+              value={form.name}
+              onChange={field('name')}
+              placeholder="e.g. Main Line, Secondary Line…"
+              autoFocus
+              data-testid="product-meter-name-input"
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+            />
+          </div>
+
+          {/* Meter details */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-semibold inline-flex items-center gap-1">
+              <Gauge className="h-3 w-3" /> Meter Details
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Brand</Label>
+                <Input value={form.meter_brand} onChange={field('meter_brand')} />
+              </div>
+              <div>
+                <Label className="text-xs">Size</Label>
+                <div className="relative">
+                  <Input
+                    type="number" min="0" step="0.5"
+                    value={form.meter_size} onChange={field('meter_size')}
+                    className="pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Serial</Label>
+                <Input value={form.meter_serial} onChange={field('meter_serial')} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Installed Date</Label>
+              <Input type="date" value={form.meter_installed_date} onChange={field('meter_installed_date')} />
+            </div>
+          </div>
+
+          {/* GPS */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" /> View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use My Location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.295" value={form.gps_lat} onChange={field('gps_lat')} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.877" value={form.gps_lng} onChange={field('gps_lng')} />
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={submit} disabled={busy || !form.name.trim()} data-testid="save-product-meter-btn">
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProductMetersCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user } = useAuth();
+  const canEdit = isManager || isAdmin;
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const { data: meters, isLoading, isFetching } = useQuery({
+    queryKey: ['product-meters', plant.id],
+    // staleTime/gcTime: 0 — always fetch fresh from DB on mount; prevents
+    // stale null-name rows being served from the in-memory React Query cache
+    // after a DB fix. placeholderData removed for the same reason.
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async () => {
+      // Try full schema first (status + sort_order both present)
+      let { data, error } = await supabase
+        .from('product_meters' as any)
+        .select('id, name, status, sort_order, created_at')
+        .eq('plant_id', plant.id)
+        .order('sort_order', { ascending: true });
+
+      // sort_order column missing → retry without it
+      if (error?.message?.includes('sort_order')) {
+        ({ data, error } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, status, created_at')
+          .eq('plant_id', plant.id)
+          .order('created_at', { ascending: true }));
+      }
+
+      // status column missing (not yet migrated) → fetch without it, default to 'Active'
+      if (error?.message?.includes('status')) {
+        let fallback;
+        ({ data: fallback } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, created_at')
+          .eq('plant_id', plant.id)
+          .order('created_at', { ascending: true }));
+        return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
+      }
+
+      return (data ?? []) as any[];
+    },
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['product-meters', plant.id] });
+
+  // Locators for this plant — used to show which locators each meter supplies
+  const { data: plantLocators } = useQuery({
+    queryKey: ['locators', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as any[];
+    },
+  });
+
+  // ── Add meter ─────────────────────────────────────────────────────────────
+  const [addOpen, setAddOpen]           = useState(false);
+  const [assignTarget, setAssignTarget] = useState<any>(null);
+  const [selectedMeter, setSelectedMeter] = useState<string | null>(null);
+
+  // ── Delete meter (with reason dialog, matching Locator pattern) ───────────
+  const [deleteTarget, setDeleteTarget]   = useState<any | null>(null);
+  const [deleteReason, setDeleteReason]   = useState('');
+  const [deleteBusy, setDeleteBusy]       = useState(false);
+
+  const doDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setDeleteBusy(true);
+    await supabase.from('product_meter_readings' as any).delete().eq('meter_id', deleteTarget.id);
+    const { error } = await supabase.from('product_meters' as any).delete().eq('id', deleteTarget.id);
+    setDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id, meter_id: deleteTarget.id,
+      meter_name: deleteTarget.name, old_value: deleteTarget.name, new_value: null,
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
+    });
+    toast.success(`"${deleteTarget.name}" deleted`);
+    setDeleteTarget(null); setDeleteReason('');
+    invalidate();
+    // Deleting a meter must also clear it from the Dashboard stat cards,
+    // TrendChart production series, and the DataSummaryModal Production tab.
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+    qc.invalidateQueries({ queryKey: ['dsm-product-meters'] });
+    qc.invalidateQueries();
+  };
+
+  // ── Toggle Active / Inactive ──────────────────────────────────────────────
+  const toggleStatus = async (m: any) => {
+    if (!canEdit) return;
+    const next = (m.status ?? 'Active') === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase
+      .from('product_meters' as any).update({ status: next } as any).eq('id', m.id);
+    if (error?.message?.includes('status')) {
+      toast.error('Status column not yet available — run the migration SQL in Supabase first.');
+      return;
+    }
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plant.id, meter_id: m.id, meter_name: m.name,
+      old_value: m.status, new_value: next,
+      user_id: user?.id ?? null, timestamp: new Date().toISOString(),
+    });
+    toast.success(`Meter marked ${next}`);
+    invalidate();
+    qc.invalidateQueries({ queryKey: ['product-meters-active', plant.id] });
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* ── Header row ── */}
+      <div className="relative flex justify-between items-center gap-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Product Meters ({meters?.length ?? 0})
+        </h3>
+        <div className="flex items-center gap-1.5">
+          {canEdit && (
+            <Button
+              size="sm"
+              className="h-7 px-2 text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
+              onClick={() => setAddOpen(true)}
+              data-testid="add-product-meter-btn"
+            >
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── First-load spinner ── */}
+      {isLoading && !meters && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+        </div>
+      )}
+
+      {/* Subtle refetch dot — never displaces list items */}
+      {isFetching && !!meters && (
+        <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" aria-hidden />
+      )}
+
+      {/* ── Meter cards — clickable to view history ── */}
+      {meters?.map((m: any, idx: number) => (
+        <Card
+          key={m.id}
+          className={`p-3 hover:shadow-elev transition-shadow border-l-2 ${
+            (m.status ?? 'Active') === 'Active'
+              ? 'border-l-emerald-400 dark:border-l-emerald-600'
+              : 'border-l-muted-foreground/30'
+          }`}
+          data-testid={`product-meter-card-${m.id}`}
+        >
+          <div className="flex items-start gap-2">
+            <div
+              className="flex-1 min-w-0 cursor-pointer"
+              onClick={() => setSelectedMeter(selectedMeter === m.id ? null : m.id)}
+            >
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                  <ProductMeterNameInline
+                    meter={m} plantId={plant.id} userId={user?.id ?? null}
+                    canEdit={canEdit} onChanged={invalidate} fallbackIndex={idx + 1}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Product Meter · {(m.status ?? 'Active') === 'Active' ? 'Reading active' : 'Inactive'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); canEdit && toggleStatus(m); }}
+                    title={canEdit ? `Click to toggle (currently ${m.status ?? 'Active'})` : (m.status ?? 'Active')}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
+                      (m.status ?? 'Active') === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {m.status ?? 'Active'}
+                  </button>
+                  <TrendingUp className={`h-3.5 w-3.5 transition-colors ${selectedMeter === m.id ? 'text-teal-600' : 'text-muted-foreground/40'}`} />
+                </div>
+              </div>
+
+              {/* ── Supplied locators chips ── */}
+              {(() => {
+                const supplied = (plantLocators ?? []).filter((l: any) => l.product_meter_id === m.id);
+                if (!supplied.length) return (
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <Droplet className="h-3 w-3 text-muted-foreground/40" />
+                    <span className="text-[11px] text-muted-foreground/60 italic">No locators assigned</span>
+                  </div>
+                );
+                const visible  = supplied.slice(0, 3);
+                const overflow = supplied.length - 3;
+                return (
+                  <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                    <Droplet className="h-3 w-3 text-teal-500 shrink-0" />
+                    {visible.map((l: any) => (
+                      <span key={l.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                        {l.name}
+                      </span>
+                    ))}
+                    {overflow > 0 && (
+                      <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            {canEdit && (
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                {/* Assign locators */}
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-7 w-7 p-0 rounded-full text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                  title="Assign locators"
+                  onClick={() => setAssignTarget(m)}
+                  data-testid={`assign-locators-${m.id}`}
+                >
+                  <Droplet className="h-3.5 w-3.5" />
+                </Button>
+                <ProductMeterNameInline.EditTrigger meter={m} plantId={plant.id} userId={user?.id ?? null} canEdit={canEdit} onChanged={invalidate} />
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  title="Delete"
+                  onClick={() => { setDeleteTarget(m); setDeleteReason(''); }}
+                  data-testid={`delete-product-meter-${m.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+          {/* Expandable history chart */}
+          {selectedMeter === m.id && (
+            <div className="mt-3 pt-3 border-t">
+              <EntityHistoryChart entityId={m.id} entityType="product_meter" entityName={m.name ?? 'Meter'} />
+            </div>
+          )}
+        </Card>
+      ))}
+
+      {meters && meters.length === 0 && !isLoading && (
+        <Card className="p-4 text-center text-xs text-muted-foreground">
+          No product meters yet.{canEdit ? ' Click Add to create one.' : ''}
+        </Card>
+      )}
+
+      {/* ── Add meter dialog ── */}
+      {addOpen && (
+        <AddProductMeterDialog
+          plantId={plant.id}
+          meterCount={meters?.length ?? 0}
+          userId={user?.id ?? null}
+          onClose={() => setAddOpen(false)}
+          onCreated={() => { setAddOpen(false); invalidate(); }}
+        />
+      )}
+
+      {/* ── Assign locators dialog ── */}
+      {assignTarget && (
+        <AssignLocatorsDialog
+          meter={assignTarget}
+          plantId={plant.id}
+          onClose={() => setAssignTarget(null)}
+          onSaved={() => {
+            setAssignTarget(null);
+            qc.invalidateQueries({ queryKey: ['locators', plant.id] });
+          }}
+        />
+      )}
+
+      {/* ── Single delete confirm dialog ── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleteBusy && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Delete "{deleteTarget?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All readings for this product meter will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={deleteReason} onChange={setDeleteReason} testId="product-meter-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doDelete}
+              disabled={deleteBusy || deleteReason.trim().length < 5}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ── ProductMeterNameInline — inline rename field inside the card ──────────────
+// Matches the pencil-edit pattern used in EditLocatorDialog / EditWellDialog.
+// The edit pencil button is exposed as a static property so ProductMetersCard
+// can place it in the same icon-button row as the delete button.
+
+function _ProductMeterNameInline({
+  meter, plantId, userId, canEdit, onChanged, fallbackIndex,
+}: {
+  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void; fallbackIndex?: number;
+}) {
+  const [editing, setEditing]       = useState(false);
+  const [nameInput, setNameInput]   = useState(meter.name ?? '');
+  const [busy, setBusy]             = useState(false);
+
+  useEffect(() => {
+    if (!editing) setNameInput(meter.name ?? '');
+  }, [meter.name, editing]);
+
+  const saveName = async () => {
+    if (!nameInput.trim()) { toast.error('Name required'); return; }
+    setBusy(true);
+    const { error } = await supabase
+      .from('product_meters' as any).update({ name: nameInput.trim() } as any).eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: meter.id, meter_name: nameInput.trim(),
+      old_value: meter.name, new_value: nameInput.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+    toast.success('Meter renamed');
+    setEditing(false); onChanged();
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5 flex-1">
+        <Input
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          className="h-7 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveName();
+            if (e.key === 'Escape') { setEditing(false); setNameInput(meter.name ?? ''); }
+          }}
+          autoFocus
+        />
+        <Button size="sm" className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700 text-white" onClick={saveName} disabled={busy}>
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="font-medium text-sm truncate">
+      {meter.name?.trim()
+        ? meter.name
+        : canEdit
+          ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="italic text-amber-600 dark:text-amber-400 hover:underline focus:outline-none"
+              title="No name set — click to rename"
+            >
+              Product Meter {fallbackIndex ?? ''} (click to rename)
+            </button>
+          )
+          : <span className="text-muted-foreground">Product Meter {fallbackIndex ?? ''}</span>
+      }
+    </div>
+  );
+}
+
+// Attach the edit-trigger button as a static property so the card can
+// render it in the action-button group without prop-drilling editing state.
+// We use a separate tiny component for the trigger.
+function _PMEditTrigger({
+  meter, plantId, userId, canEdit, onChanged,
+}: {
+  meter: any; plantId: string; userId: string | null; canEdit: boolean; onChanged: () => void;
+}) {
+  // The actual editing state lives in ProductMetersCard via ProductMeterNameInline;
+  // here we just need a pencil button. Because inline editing is tricky to share
+  // without lifting state, we keep it simple: clicking pencil opens an AlertDialog
+  // rename prompt — consistent with how Edit works across the rest of the app.
+  const [open, setOpen]           = useState(false);
+  const [nameInput, setNameInput] = useState(meter.name ?? '');
+  const [busy, setBusy]           = useState(false);
+
+  useEffect(() => {
+    if (!open) setNameInput(meter.name ?? '');
+  }, [meter.name, open]);
+
+  const save = async () => {
+    if (!nameInput.trim()) { toast.error('Name required'); return; }
+    setBusy(true);
+    const { error } = await supabase
+      .from('product_meters' as any).update({ name: nameInput.trim() } as any).eq('id', meter.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    await logProductMeterAudit({
+      plant_id: plantId, meter_id: meter.id, meter_name: nameInput.trim(),
+      old_value: meter.name, new_value: nameInput.trim(),
+      user_id: userId, timestamp: new Date().toISOString(),
+    });
+    toast.success('Meter renamed');
+    // Call onChanged (invalidate) BEFORE closing the dialog.
+    // Calling it after setOpen(false) can race with React's Dialog unmount
+    // cleanup, causing the invalidation to be dropped mid-teardown.
+    onChanged();
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Button
+        size="sm" variant="ghost"
+        className="h-7 w-7 p-0 rounded-full"
+        title="Rename"
+        onClick={() => setOpen(true)}
+        data-testid={`rename-product-meter-${meter.id}`}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => { if (!o) setOpen(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename Product Meter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label className="text-xs">Meter Name</Label>
+            <Input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="e.g. Main Line, Secondary Line…"
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button onClick={save} disabled={busy || !nameInput.trim()}>
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// Attach EditTrigger as static property on the display component
+const ProductMeterNameInline = Object.assign(_ProductMeterNameInline, {
+  EditTrigger: _PMEditTrigger,
+});
+
+// ─── Plant Meter Config — shared type & hook ─────────────────────────────────
+// Stored in `plant_meter_config` table (plant_id PK, config jsonb, updated_at).
+// Falls back to sensible defaults so existing data keeps working unchanged.
+
+/** A single continuous window in which the permeate meter counts as production. */
+export interface PermeateProductionPeriod {
+  /** Client-only stable key for React lists — never persisted. */
+  id: string;
+  /** YYYY-MM-DD inclusive start; null = unbounded past. */
+  start: string | null;
+  /** YYYY-MM-DD inclusive end; null = ongoing / no end yet. */
+  end: string | null;
+}
+
+export interface PlantMeterConfig {
+  // RO Train flow meters
+  ro_has_feed_meter: boolean;
+  ro_has_permeate_meter: boolean;
+  ro_has_reject_meter: boolean;
+  // RO production source
+  ro_production_source: 'permeate' | 'product';
+  // Per-train utility meters
+  ro_has_per_train_electricity: boolean;
+  ro_has_per_train_water: boolean;
+  // Wells — electricity metering
+  wells_shared_electric_groups: Array<{ id: string; name: string; members: string[] }>; // member = well id
+  wells_dedicated_electric_ids: string[];   // well ids with dedicated meter
+  wells_no_electric: boolean;
+  // Locators — bulk/product metering
+  locators_dedicated_bulk_ids: string[];    // locator ids with own bulk meter
+  locators_shared_bulk_groups: Array<{ id: string; name: string; members: string[] }>;
+  locators_no_bulk: boolean;
+  // Energy sources (moved here from plants table but mirrored for backwards compat)
+  has_solar: boolean;
+  has_grid: boolean;
+  solar_capacity_kw: number | null;
+  // Power meter names and per-meter CT multipliers (from plant_power_config)
+  solar_meter_count: number;
+  solar_meter_names: string[];
+  grid_meter_count: number;
+  grid_meter_names: string[];
+  /** Per-grid-meter CT multiplier. Index matches grid_meter_names. Defaults to 1 when absent. */
+  grid_meter_multipliers: number[];
+  // Default solar input mode for Operations entry form
+  default_solar_input_mode: 'raw' | 'direct';
+  // NRW / product distribution
+  nrw_enabled: boolean;
+  has_billed_volume_meter: boolean;
+  // Permeate meter = daily production (no bulk/mother meter)
+  // When true, permeate readings are hourly but grouped into days using cut-off time.
+  // Multiple non-overlapping periods are supported — e.g. permeate used → product meter
+  // installed → product meter removed → permeate used again.
+  permeate_is_production: boolean;
+  // HH:mm cut-off time (24-hr). Day N runs from cutoff on day N-1 (exclusive)
+  // to cutoff on day N (inclusive). Stored reading is labelled as day N.
+  // Example: cutoff "00:20" → May 3 00:21 … May 4 00:20 = "May 4" production.
+  permeate_cutoff_time: string; // e.g. "00:20"
+  // When false, new entries are NOT shifted by the cut-off (natural calendar date used).
+  // Historical data still groups using the saved cut-off time for consistency.
+  permeate_cutoff_enabled: boolean;
+  // List of non-overlapping date ranges during which permeate meter counts as production.
+  // start/end are YYYY-MM-DD; null start = unbounded past; null end = ongoing.
+  // Readings outside ALL active periods are pushed to the nearest day boundary:
+  //   before the earliest period start → attributed to the day before that start
+  //   after a period's end → attributed to the day after that end
+  permeate_production_periods: PermeateProductionPeriod[];
+  // Chemicals enabled for this plant — only these appear in RO Trains → Chemical Dosing.
+  // Default: all chemicals enabled (empty array = all shown for backwards compat).
+  enabled_chemicals: string[]; // chemical names from KNOWN_CHEMICALS
+  // Locator meter readings allowed per day (manager-configurable, default 3).
+  // Operators can submit up to this many readings per locator per calendar day.
+  locator_readings_per_day: number;
+}
+
+const DEFAULT_METER_CONFIG: PlantMeterConfig = {
+  ro_has_feed_meter: true,
+  ro_has_permeate_meter: true,
+  ro_has_reject_meter: true,
+  ro_production_source: 'product',
+  ro_has_per_train_electricity: false,
+  ro_has_per_train_water: false,
+  wells_shared_electric_groups: [],
+  wells_dedicated_electric_ids: [],
+  wells_no_electric: false,
+  locators_dedicated_bulk_ids: [],
+  locators_shared_bulk_groups: [],
+  locators_no_bulk: false,
+  has_solar: false,
+  has_grid: true,
+  solar_capacity_kw: null,
+  solar_meter_count: 1,
+  solar_meter_names: [],
+  grid_meter_count: 1,
+  grid_meter_names: [],
+  grid_meter_multipliers: [],
+  default_solar_input_mode: 'raw',
+  nrw_enabled: false,
+  has_billed_volume_meter: false,
+  permeate_is_production: false,
+  permeate_cutoff_time: '00:20',
+  permeate_cutoff_enabled: true,
+  permeate_production_periods: [],
+  enabled_chemicals: [], // empty = all chemicals visible (backwards compat)
+  locator_readings_per_day: 3,
+};
+
+const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
+
+/**
+ * One-time forward migration: if a stored config still has the old scalar
+ * `permeate_production_start` / `permeate_production_end` fields but is missing
+ * the new `permeate_production_periods` array, lift them into the array shape.
+ * Safe to run on already-migrated configs (no-op when periods array already present).
+ */
+function migrateMeterConfig(cfg: Record<string, unknown>): PlantMeterConfig {
+  if (!Array.isArray(cfg.permeate_production_periods)) {
+    const start = (cfg.permeate_production_start as string | null) ?? null;
+    const end   = (cfg.permeate_production_end   as string | null) ?? null;
+    cfg = {
+      ...cfg,
+      permeate_production_periods: (start !== null || end !== null)
+        ? [{ id: crypto.randomUUID(), start, end }]
+        : [],
+    };
+  }
+  return cfg as unknown as PlantMeterConfig;
+}
+
+export function usePlantMeterConfig(plantId: string | null | undefined) {
+  const qc = useQueryClient();
+
+  const { data: config, isLoading } = useQuery<PlantMeterConfig>({
+    queryKey: ['plant-meter-config', plantId],
+    enabled: !!plantId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      // Try DB first
+      try {
+        const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
+          .select('config')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        if (!error && data?.config) {
+          return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...data.config }) as PlantMeterConfig;
+        }
+      } catch { /* table may not exist yet */ }
+      // Fall back to localStorage
+      try {
+        const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
+        if (raw) return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) }) as PlantMeterConfig;
+      } catch { /* ignore */ }
+      return DEFAULT_METER_CONFIG;
+    },
+  });
+
+  const saveConfig = async (next: PlantMeterConfig) => {
+    let savedToDb = false;
+    try {
+      const { error } = await (supabase.from('plant_meter_config' as any) as any)
+        .upsert({ plant_id: plantId, config: next, updated_at: new Date().toISOString() }, { onConflict: 'plant_id' });
+      if (!error) savedToDb = true;
+    } catch { /* table missing */ }
+    try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
+    qc.setQueryData(['plant-meter-config', plantId], next);
+    qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
+    // Propagate config change to Dashboard, TrendChart, and DataSummaryModal immediately.
+    // permeate_is_production toggling changes which source powers the Production stat card
+    // and the DataSummaryModal Production tab — all three must re-read the updated config.
+    qc.invalidateQueries({ queryKey: ['dash-plant-meter-configs'] });
+    qc.invalidateQueries({ queryKey: ['plant-meter-config-permeate'] });
+    qc.invalidateQueries({ queryKey: ['dsm-meter-configs'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+    qc.invalidateQueries();
+    return savedToDb;
+  };
+
+  return { config: config ?? DEFAULT_METER_CONFIG, isLoading, saveConfig };
+}
+
+// ─── PlantMeterConfigCard ─────────────────────────────────────────────────────
+// Full meter configuration panel for managers. Lives at the top of the Trains tab.
+// Sections: RO Trains | Wells | Locators | Product/NRW | Power/Energy.
+// Uses 2-col tile layout on tablet+, single col on mobile.
+
+function MeterToggleTile({
+  icon, title, subtitle, checked, onToggle, canEdit,
+  accentColor = 'teal',
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  checked: boolean;
+  onToggle: (v: boolean) => void;
+  canEdit: boolean;
+  accentColor?: 'teal' | 'amber' | 'blue' | 'purple';
+}) {
+  const colors = {
+    teal:   { on: 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50', icon: 'bg-teal-100 dark:bg-teal-900/40', sw: 'data-[state=checked]:bg-teal-700' },
+    amber:  { on: 'border-amber-400/60 bg-amber-50/70 dark:bg-amber-950/20 dark:border-amber-700/50', icon: 'bg-amber-100 dark:bg-amber-900/40', sw: 'data-[state=checked]:bg-amber-600' },
+    blue:   { on: 'border-blue-400/60 bg-blue-50/70 dark:bg-blue-950/20 dark:border-blue-700/50', icon: 'bg-blue-100 dark:bg-blue-900/40', sw: 'data-[state=checked]:bg-blue-600' },
+    purple: { on: 'border-purple-400/60 bg-purple-50/70 dark:bg-purple-950/20 dark:border-purple-700/50', icon: 'bg-purple-100 dark:bg-purple-900/40', sw: 'data-[state=checked]:bg-purple-600' },
+  }[accentColor];
+
+  return (
+    <label className={[
+      'flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors',
+      checked ? colors.on : 'border-border bg-muted/30',
+      canEdit ? 'cursor-pointer' : 'cursor-default',
+    ].join(' ')}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`flex items-center justify-center h-8 w-8 rounded-full shrink-0 ${checked ? colors.icon : 'bg-muted'}`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate">{title}</div>
+          <div className="text-[11px] text-muted-foreground leading-tight">{subtitle}</div>
+        </div>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={canEdit ? onToggle : undefined}
+        disabled={!canEdit}
+        className={`h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 ${colors.sw}`}
+      />
+    </label>
+  );
+}
+
+function MeterGroupChips({
+  label,
+  groupName,
+  members,
+  allEntities,
+  entityLabel,
+  onMembersChange,
+  onGroupNameChange,
+  canEdit,
+}: {
+  label: string;
+  groupName: string;
+  members: string[];
+  allEntities: Array<{ id: string; name: string }>;
+  entityLabel: string;
+  onMembersChange: (ids: string[]) => void;
+  onGroupNameChange: (name: string) => void;
+  canEdit: boolean;
+}) {
+  const available = allEntities.filter(e => !members.includes(e.id));
+  return (
+    <div className="rounded-md border bg-muted/20 p-2.5 space-y-2">
+      {canEdit ? (
+        <Input
+          value={groupName}
+          onChange={e => onGroupNameChange(e.target.value)}
+          placeholder="Group name (e.g. Main Pump House)"
+          className="h-7 text-xs"
+        />
+      ) : (
+        <p className="text-xs font-medium text-foreground">{groupName || label}</p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {members.map(id => {
+          const e = allEntities.find(x => x.id === id);
+          return (
+            <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border border-teal-200 dark:border-teal-800">
+              {e?.name ?? id}
+              {canEdit && (
+                <button
+                  onClick={() => onMembersChange(members.filter(m => m !== id))}
+                  className="ml-0.5 opacity-60 hover:opacity-100"
+                  aria-label={`Remove ${e?.name}`}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </span>
+          );
+        })}
+        {canEdit && available.length > 0 && (
+          <Select onValueChange={id => onMembersChange([...members, id])}>
+            <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+              <Plus className="h-2.5 w-2.5 mr-1" />Add {entityLabel}
+            </SelectTrigger>
+            <SelectContent>
+              {available.map(e => (
+                <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlantMeterConfigCard({ plant }: { plant: any }) {
+  const { isManager, isAdmin } = useAuth();
+  const canEdit = isManager || isAdmin;
+  const { config: savedConfig, isLoading, saveConfig } = usePlantMeterConfig(plant.id);
+  const qc = useQueryClient();
+  const [cfg, setCfg] = useState<PlantMeterConfig>(DEFAULT_METER_CONFIG);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // Sync with DB data
+  useEffect(() => { setCfg(savedConfig); }, [savedConfig]);
+
+  // Pull wells and locators for group chip editors
+  const { data: wells = [] } = useQuery({
+    queryKey: ['wells-list', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('wells').select('id, name').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const { data: locators = [] } = useQuery({
+    queryKey: ['locators-list', plant.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('id, name').eq('plant_id', plant.id).order('name');
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+
+  const update = (patch: Partial<PlantMeterConfig>) => setCfg(c => ({ ...c, ...patch }));
+
+  const doSave = async () => {
+    setSaving(true);
+    // Mirror energy sources back to the plants table for backwards compat
+    await supabase.from('plants').update({
+      has_solar: cfg.has_solar,
+      has_grid: cfg.has_grid,
+      solar_capacity_kw: cfg.solar_capacity_kw,
+    }).eq('id', plant.id);
+
+    // ── Sync has_power_meter on all wells from meter config ─────────────────
+    // The meter config is the source of truth for WHICH wells have electricity
+    // metering. We derive has_power_meter (which gates the kWh input in
+    // Operations) from the config so both data stores stay consistent.
+    const electricWellIds = new Set<string>([
+      ...cfg.wells_dedicated_electric_ids,
+      ...cfg.wells_shared_electric_groups.flatMap(g => g.members),
+    ]);
+    if (wells.length > 0) {
+      const toEnable  = wells.filter(w => electricWellIds.has(w.id)).map(w => w.id);
+      const toDisable = wells.filter(w => !electricWellIds.has(w.id)).map(w => w.id);
+      await Promise.all([
+        toEnable.length  ? supabase.from('wells').update({ has_power_meter: true  }).in('id', toEnable)  : Promise.resolve(),
+        toDisable.length ? supabase.from('wells').update({ has_power_meter: false }).in('id', toDisable) : Promise.resolve(),
+      ]);
+      qc.invalidateQueries({ queryKey: ['wells', plant.id] });
+    }
+
+    const savedToDb = await saveConfig(cfg);
+    setSaving(false);
+    toast.success(savedToDb ? 'Meter configuration saved' : 'Meter configuration saved (local — run migration to persist to DB)');
+  };
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading meter config…
+    </div>
+  );
+
+  // Summary badge shown on the collapsed header
+  const roFlags = [
+    cfg.ro_has_feed_meter && 'Feed',
+    cfg.ro_has_permeate_meter && 'Perm',
+    cfg.ro_has_reject_meter && 'Reject',
+  ].filter(Boolean).join(' · ') || 'None';
+
+  return (
+    <Card className="p-0 overflow-hidden" data-testid="plant-meter-config-card">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <Gauge className="h-4 w-4 text-teal-600 shrink-0" />
+          <div>
+            <div className="text-sm font-semibold">Plant Configuration</div>
+            {!open && (
+              <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                <span>RO: {roFlags}</span>
+                <span>Prod: {cfg.ro_production_source === 'permeate'
+                  ? `Permeate${cfg.permeate_is_production
+                      ? ` (${cfg.permeate_production_periods?.length ?? 0} period${(cfg.permeate_production_periods?.length ?? 0) !== 1 ? 's' : ''}${cfg.permeate_cutoff_enabled ? `, cut-off ${cfg.permeate_cutoff_time || '00:20'}` : ', no cut-off'})`
+                      : ''}`
+                  : 'Product meter'}</span>
+                {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
+                <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
+                <span>Loc: {cfg.locator_readings_per_day ?? 3}×/day</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {!canEdit && <span className="text-[10px] bg-muted px-2 py-0.5 rounded font-medium text-muted-foreground">View only</span>}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+          {/* ══ SECTION: RO Trains ══ */}
+          <div className="pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">RO Trains — Flow meters</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-blue-500" />}
+                title="Feed meter"
+                subtitle="Raw input flow into RO train"
+                checked={cfg.ro_has_feed_meter}
+                onToggle={v => update({ ro_has_feed_meter: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-teal-600" />}
+                title="Permeate meter"
+                subtitle="Filtered / product-side output"
+                checked={cfg.ro_has_permeate_meter}
+                onToggle={v => update({ ro_has_permeate_meter: v })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Droplet className="h-4 w-4 text-amber-500" />}
+                title="Reject meter"
+                subtitle="Brine / concentrate output"
+                checked={cfg.ro_has_reject_meter}
+                onToggle={v => update({ ro_has_reject_meter: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+            </div>
+            {!cfg.ro_has_reject_meter && (
+              <p className="mt-2 text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md px-2.5 py-1.5">
+                No reject meter — reject flow auto-inferred as feed − permeate. Operators won't see a reject meter input.
+              </p>
+            )}
+            {!cfg.ro_has_feed_meter && cfg.ro_has_permeate_meter && cfg.ro_has_reject_meter && (
+              <p className="mt-2 text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md px-2.5 py-1.5">
+                No feed meter — feed flow auto-inferred as permeate + reject.
+              </p>
+            )}
+          </div>
+
+          {/* ── Production source ── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Production volume source</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                { val: 'product', label: 'Dedicated product meter', sub: 'Separate meter for finished product' },
+                { val: 'permeate', label: 'Permeate meter = production', sub: 'No product meter — permeate IS production' },
+              ] as const).map(opt => (
+                <label key={opt.val} className={[
+                  'flex items-center gap-3 p-3 rounded-lg border transition-colors',
+                  cfg.ro_production_source === opt.val ? 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50' : 'border-border bg-muted/30',
+                  canEdit ? 'cursor-pointer' : 'cursor-default',
+                ].join(' ')}>
+                  <div className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center ${cfg.ro_production_source === opt.val ? 'border-teal-600' : 'border-muted-foreground/40'}`}>
+                    {cfg.ro_production_source === opt.val && <div className="h-2 w-2 rounded-full bg-teal-600" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    <div className="text-[11px] text-muted-foreground">{opt.sub}</div>
+                  </div>
+                  {canEdit && (
+                    <input type="radio" className="sr-only" checked={cfg.ro_production_source === opt.val}
+                      onChange={() => update({ ro_production_source: opt.val })} />
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Permeate = Production: periods + cut-off (manager only) ── */}
+          {cfg.ro_production_source === 'permeate' && (() => {
+            // ── helpers (scoped inside the IIFE so they're co-located with the UI) ──
+
+            const periods: PermeateProductionPeriod[] = cfg.permeate_production_periods ?? [];
+
+            /** Returns true if any two periods overlap (sorted by start, comparing adjacent). */
+            function hasOverlap(ps: PermeateProductionPeriod[]): boolean {
+              const sorted = [...ps].sort((a, b) => {
+                const aStart = a.start ?? '0000-01-01';
+                const bStart = b.start ?? '0000-01-01';
+                return aStart < bStart ? -1 : aStart > bStart ? 1 : 0;
+              });
+              for (let i = 0; i < sorted.length - 1; i++) {
+                const curr = sorted[i];
+                const next = sorted[i + 1];
+                // curr ends after (or at same day as) next starts → overlap
+                const currEnd = curr.end ?? '9999-12-31';
+                const nextStart = next.start ?? '0000-01-01';
+                if (currEnd >= nextStart) return true;
+              }
+              return false;
+            }
+
+            const overlap = hasOverlap(periods);
+
+            function updatePeriod(id: string, patch: Partial<Omit<PermeateProductionPeriod, 'id'>>) {
+              update({
+                permeate_production_periods: periods.map(p =>
+                  p.id === id ? { ...p, ...patch } : p
+                ),
+              });
+            }
+
+            function deletePeriod(id: string) {
+              update({ permeate_production_periods: periods.filter(p => p.id !== id) });
+            }
+
+            function addPeriod() {
+              // Default: start after last period's end if one exists; otherwise today
+              const last = [...periods].sort((a, b) =>
+                (b.end ?? '9999-12-31') > (a.end ?? '9999-12-31') ? 1 : -1
+              )[0];
+              const today = new Date().toISOString().slice(0, 10);
+              const newStart = last?.end
+                ? (() => {
+                    const d = new Date(last.end);
+                    d.setDate(d.getDate() + 1);
+                    return d.toISOString().slice(0, 10);
+                  })()
+                : today;
+              update({
+                permeate_production_periods: [
+                  ...periods,
+                  { id: crypto.randomUUID(), start: newStart, end: null },
+                ],
+              });
+            }
+
+            return (
+              <div className="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
+                {/* Header row with master toggle */}
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      <span>⏱</span> Permeate readings are production
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Readings are collected hourly. A daily "cut-off" groups them into calendar days.
+                      The day label is the date <em>after</em> the cut-off crosses midnight.
+                    </div>
+                  </div>
+                  <Switch
+                    checked={cfg.permeate_is_production}
+                    onCheckedChange={canEdit ? (v) => update({ permeate_is_production: v }) : undefined}
+                    disabled={!canEdit}
+                    className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                  />
+                </div>
+
+                {cfg.permeate_is_production && (
+                  <div className="space-y-4 pt-1 border-t border-teal-200 dark:border-teal-800/40">
+
+                    {/* ── Active periods list ── */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          Active periods{periods.length > 0 && ` (${periods.length})`}
+                        </p>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={addPeriod}
+                            className="flex items-center gap-1 text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-200 transition-colors"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add period
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Column headers */}
+                      {periods.length > 0 && (
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 px-1">
+                          <Label className="text-[10px] text-muted-foreground">From (inclusive)</Label>
+                          <Label className="text-[10px] text-muted-foreground">Until (inclusive)</Label>
+                          {canEdit && <span />}
+                        </div>
+                      )}
+
+                      {/* Period rows */}
+                      {periods.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground/70 italic px-1">
+                          No periods defined — {canEdit ? 'click "Add period" to define when permeate counts as production.' : 'contact a manager to configure periods.'}
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {periods.map((p, idx) => (
+                            <div key={p.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                              {/* Start date */}
+                              {canEdit ? (
+                                <Input
+                                  type="date"
+                                  value={p.start ?? ''}
+                                  onChange={e => updatePeriod(p.id, { start: e.target.value || null })}
+                                  placeholder="Unbounded"
+                                  className="h-8 text-sm"
+                                />
+                              ) : (
+                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
+                                  {p.start ?? '—'}
+                                </span>
+                              )}
+
+                              {/* End date */}
+                              {canEdit ? (
+                                <div className="flex gap-1">
+                                  <Input
+                                    type="date"
+                                    value={p.end ?? ''}
+                                    onChange={e => updatePeriod(p.id, { end: e.target.value || null })}
+                                    placeholder="Ongoing"
+                                    className="h-8 text-sm flex-1"
+                                  />
+                                  {p.end && (
+                                    <button
+                                      type="button"
+                                      className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-muted/70 transition-colors"
+                                      onClick={() => updatePeriod(p.id, { end: null })}
+                                      title="Clear end date (set as ongoing)"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
+                                  {p.end ?? 'Ongoing'}
+                                </span>
+                              )}
+
+                              {/* Delete */}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => deletePeriod(p.id)}
+                                  className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 hover:text-red-600 transition-colors"
+                                  title={`Remove period ${idx + 1}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Overlap warning */}
+                      {overlap && (
+                        <p className="text-[11px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+                          ⚠ Two or more periods overlap — fix date ranges so they don't conflict.
+                        </p>
+                      )}
+
+                      {/* Outside-range behaviour note */}
+                      {periods.length > 0 && !overlap && (
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Readings outside all defined periods are displaced to the nearest boundary day —
+                          readings before a period start shift to the day <em>before</em> that start;
+                          readings after a period end shift to the day <em>after</em> that end.
+                          {periods.some(p => p.end === null) && (
+                            <> One period has no end date and is treated as ongoing.</>
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* ── Daily cut-off time ── */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Daily cut-off time</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {(cfg.permeate_cutoff_enabled ?? true)
+                              ? 'Readings taken just after midnight are attributed to the previous production day.'
+                              : 'Cut-off is optional — new entries use the natural calendar date. Historical data still groups by the saved time below.'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={cfg.permeate_cutoff_enabled ?? true}
+                          onCheckedChange={canEdit ? (v) => update({ permeate_cutoff_enabled: v }) : undefined}
+                          disabled={!canEdit}
+                          className="h-5 w-9 shrink-0 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                        />
+                      </div>
+
+                      {/* Always show the time input — it's used for historical grouping even when toggle is off */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {canEdit ? (
+                          <Input
+                            type="time"
+                            value={cfg.permeate_cutoff_time}
+                            onChange={e => update({ permeate_cutoff_time: e.target.value })}
+                            className="h-8 w-32 text-sm font-mono"
+                          />
+                        ) : (
+                          <span className="font-mono text-sm bg-muted px-2 py-1 rounded border border-border">
+                            {cfg.permeate_cutoff_time || '00:20'}
+                          </span>
+                        )}
+                        <div className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">
+                          {(() => {
+                            const t = cfg.permeate_cutoff_time || '00:20';
+                            const [hh, mm] = t.split(':');
+                            const cutH = parseInt(hh ?? '0');
+                            const cutM = parseInt(mm ?? '20');
+                            const pad = (n: number) => String(n).padStart(2, '0');
+                            const nextM = (cutM + 1) % 60;
+                            const nextH = cutM === 59 ? (cutH + 1) % 24 : cutH;
+                            return (cfg.permeate_cutoff_enabled ?? true) ? (
+                              <span>
+                                Day recorded as <strong>May 4</strong> = readings from{' '}
+                                <span className="font-mono">May 3 {pad(nextH)}:{pad(nextM)}</span> to{' '}
+                                <span className="font-mono">May 4 {t}</span>
+                              </span>
+                            ) : (
+                              <span className="italic text-muted-foreground/70">
+                                Saved for historical grouping. New entries use <strong>midnight</strong> as the day boundary.
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {!canEdit && (
+                        <p className="text-[10px] text-muted-foreground">Only managers and admins can change these settings.</p>
+                      )}
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Per-train utility meters ── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Per-train utility meters</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Electricity meter per train"
+                subtitle="Each train has its own kWh meter"
+                checked={cfg.ro_has_per_train_electricity}
+                onToggle={v => update({ ro_has_per_train_electricity: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                title="Water meter per train"
+                subtitle="Each train has its own flow meter"
+                checked={cfg.ro_has_per_train_water}
+                onToggle={v => update({ ro_has_per_train_water: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+
+            {/* Shared power meter group notice — shown when per-train kWh is enabled */}
+            {cfg.ro_has_per_train_electricity && (
+              <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 shrink-0" /> Shared Power Meter Groups
+                </p>
+                <p className="opacity-80 leading-relaxed">
+                  If multiple trains share <em>one physical meter</em> (e.g. Umapad Colbox 1/2/3),
+                  set <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">shared_power_meter_group</code> to
+                  the same label on each train (via CSV import or SQL).
+                  Operators enter the <strong>same meter reading</strong> on each train — the delta is stored per-train;
+                  volume-weighted kWh attribution runs in reporting queries.
+                </p>
+                <p className="text-[10px] opacity-60 font-mono">
+                  SQL: UPDATE ro_trains SET shared_power_meter_group = 'colbox' WHERE plant_id = '…' AND train_number IN (1,2,3);
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Wells ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Droplet className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Raw water — wells</span>
+              <span className="text-[10px] text-muted-foreground ml-1">(each well always has its own water meter)</span>
+            </div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Electricity metering</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Shared electric meter"
+                subtitle="Multiple wells / colboxes share one kWh meter"
+                checked={cfg.wells_shared_electric_groups.length > 0}
+                onToggle={v => update({ wells_shared_electric_groups: v ? [{ id: crypto.randomUUID(), name: 'Group 1', members: [] }] : [] })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-amber-500" />}
+                title="Dedicated meter (per well)"
+                subtitle="Some wells have their own kWh meter"
+                checked={cfg.wells_dedicated_electric_ids.length > 0}
+                onToggle={v => update({ wells_dedicated_electric_ids: v ? (wells[0] ? [wells[0].id] : []) : [] })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<Zap className="h-4 w-4 text-muted-foreground" />}
+                title="No electricity metering"
+                subtitle="Some wells have no kWh meter at all"
+                checked={cfg.wells_no_electric}
+                onToggle={v => update({ wells_no_electric: v })}
+                canEdit={canEdit}
+                accentColor="teal"
+              />
+            </div>
+
+            {/* Shared electric groups */}
+            {cfg.wells_shared_electric_groups.length > 0 && (
+              <div className="space-y-2 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Shared meter groups</p>
+                {cfg.wells_shared_electric_groups.map((grp, gi) => (
+                  <div key={grp.id} className="relative">
+                    <MeterGroupChips
+                      label={grp.name}
+                      groupName={grp.name}
+                      members={grp.members}
+                      allEntities={wells}
+                      entityLabel="well"
+                      canEdit={canEdit}
+                      onGroupNameChange={name => {
+                        const next = [...cfg.wells_shared_electric_groups];
+                        next[gi] = { ...grp, name };
+                        update({ wells_shared_electric_groups: next });
+                      }}
+                      onMembersChange={members => {
+                        const next = [...cfg.wells_shared_electric_groups];
+                        next[gi] = { ...grp, members };
+                        update({ wells_shared_electric_groups: next });
+                      }}
+                    />
+                    {canEdit && (
+                      <button
+                        onClick={() => update({ wells_shared_electric_groups: cfg.wells_shared_electric_groups.filter((_, i) => i !== gi) })}
+                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
+                        aria-label="Remove group"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => update({ wells_shared_electric_groups: [...cfg.wells_shared_electric_groups, { id: crypto.randomUUID(), name: `Group ${cfg.wells_shared_electric_groups.length + 1}`, members: [] }] })}>
+                    <Plus className="h-3 w-3" />Add group
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Dedicated electric wells */}
+            {cfg.wells_dedicated_electric_ids.length > 0 && (
+              <div className="space-y-1 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Wells with dedicated meter</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cfg.wells_dedicated_electric_ids.map(id => {
+                    const w = wells.find(x => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+                        {w?.name ?? id}
+                        {canEdit && (
+                          <button onClick={() => update({ wells_dedicated_electric_ids: cfg.wells_dedicated_electric_ids.filter(x => x !== id) })} className="ml-0.5 opacity-60 hover:opacity-100">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {canEdit && wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).length > 0 && (
+                    <Select onValueChange={id => update({ wells_dedicated_electric_ids: [...cfg.wells_dedicated_electric_ids, id] })}>
+                      <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+                        <Plus className="h-2.5 w-2.5 mr-1" />Add well
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wells.filter(w => !cfg.wells_dedicated_electric_ids.includes(w.id)).map(w => (
+                          <SelectItem key={w.id} value={w.id} className="text-xs">{w.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Locators ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Locators / distribution</span>
+              <span className="text-[10px] text-muted-foreground ml-1">(each locator always has its own water meter)</span>
+            </div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Bulk / product metering</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-teal-600" />}
+                title="Dedicated bulk meter"
+                subtitle="Some locators have their own bulk meter"
+                checked={cfg.locators_dedicated_bulk_ids.length > 0}
+                onToggle={v => update({ locators_dedicated_bulk_ids: v ? (locators[0] ? [locators[0].id] : []) : [] })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-purple-500" />}
+                title="Shared bulk meter group"
+                subtitle="Multiple locators share one bulk meter"
+                checked={cfg.locators_shared_bulk_groups.length > 0}
+                onToggle={v => update({ locators_shared_bulk_groups: v ? [{ id: crypto.randomUUID(), name: 'South Cluster', members: [] }] : [] })}
+                canEdit={canEdit}
+                accentColor="purple"
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-muted-foreground" />}
+                title="No bulk meter (some locators)"
+                subtitle="Certain locators only track water meter"
+                checked={cfg.locators_no_bulk}
+                onToggle={v => update({ locators_no_bulk: v })}
+                canEdit={canEdit}
+                accentColor="teal"
+              />
+            </div>
+
+            {/* Dedicated bulk locators */}
+            {cfg.locators_dedicated_bulk_ids.length > 0 && (
+              <div className="space-y-1 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Locators with dedicated bulk meter</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {cfg.locators_dedicated_bulk_ids.map(id => {
+                    const l = locators.find(x => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border border-teal-200 dark:border-teal-800">
+                        {l?.name ?? id}
+                        {canEdit && (
+                          <button onClick={() => update({ locators_dedicated_bulk_ids: cfg.locators_dedicated_bulk_ids.filter(x => x !== id) })} className="ml-0.5 opacity-60 hover:opacity-100">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {canEdit && locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).length > 0 && (
+                    <Select onValueChange={id => update({ locators_dedicated_bulk_ids: [...cfg.locators_dedicated_bulk_ids, id] })}>
+                      <SelectTrigger className="h-6 w-auto text-[11px] px-2 py-0 rounded-full border-dashed">
+                        <Plus className="h-2.5 w-2.5 mr-1" />Add locator
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locators.filter(l => !cfg.locators_dedicated_bulk_ids.includes(l.id)).map(l => (
+                          <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Shared bulk locator groups */}
+            {cfg.locators_shared_bulk_groups.length > 0 && (
+              <div className="space-y-2 mb-2">
+                <p className="text-[11px] font-medium text-muted-foreground">Shared bulk meter groups <span className="font-normal opacity-70">(for reference / reporting only — each locator still logs separately)</span></p>
+                {cfg.locators_shared_bulk_groups.map((grp, gi) => (
+                  <div key={grp.id} className="relative">
+                    <MeterGroupChips
+                      label={grp.name}
+                      groupName={grp.name}
+                      members={grp.members}
+                      allEntities={locators}
+                      entityLabel="locator"
+                      canEdit={canEdit}
+                      onGroupNameChange={name => {
+                        const next = [...cfg.locators_shared_bulk_groups];
+                        next[gi] = { ...grp, name };
+                        update({ locators_shared_bulk_groups: next });
+                      }}
+                      onMembersChange={members => {
+                        const next = [...cfg.locators_shared_bulk_groups];
+                        next[gi] = { ...grp, members };
+                        update({ locators_shared_bulk_groups: next });
+                      }}
+                    />
+                    {canEdit && (
+                      <button
+                        onClick={() => update({ locators_shared_bulk_groups: cfg.locators_shared_bulk_groups.filter((_, i) => i !== gi) })}
+                        className="absolute top-2 right-2 text-destructive hover:text-destructive/80"
+                        aria-label="Remove group"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    onClick={() => update({ locators_shared_bulk_groups: [...cfg.locators_shared_bulk_groups, { id: crypto.randomUUID(), name: `Cluster ${cfg.locators_shared_bulk_groups.length + 1}`, members: [] }] })}>
+                    <Plus className="h-3 w-3" />Add group
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* ── Locator readings frequency ── */}
+            <div className="mt-3 rounded-lg border border-teal-200 dark:border-teal-800/50 bg-teal-50/40 dark:bg-teal-950/10 p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <div className="text-sm font-medium">Locator readings per day</div>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                How many times per day operators can submit a reading per locator. Only managers and admins can change this.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Preset buttons */}
+                {([3, 8, 24] as const).map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => canEdit && update({ locator_readings_per_day: preset })}
+                    disabled={!canEdit}
+                    className={[
+                      'px-3 py-1 text-xs font-medium rounded-md border transition-colors',
+                      (cfg.locator_readings_per_day ?? 3) === preset
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-transparent text-muted-foreground border-border hover:bg-muted dark:hover:bg-muted/50',
+                      !canEdit ? 'opacity-50 cursor-default' : 'cursor-pointer',
+                    ].join(' ')}
+                    title={preset === 24 ? 'Hourly (every hour)' : `${preset} times per day`}
+                  >
+                    {preset === 24 ? 'Hourly (24)' : `${preset}×/day`}
+                  </button>
+                ))}
+                {/* Custom stepper */}
+                {canEdit ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Custom:</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => update({ locator_readings_per_day: Math.max(1, (cfg.locator_readings_per_day ?? 3) - 1) })}
+                        disabled={(cfg.locator_readings_per_day ?? 3) <= 1}
+                        className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                      >−</button>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={48}
+                        value={cfg.locator_readings_per_day ?? 3}
+                        onChange={e => {
+                          const v = parseInt(e.target.value);
+                          if (!isNaN(v) && v >= 1 && v <= 48) update({ locator_readings_per_day: v });
+                        }}
+                        className="h-7 w-14 text-xs text-center font-mono font-semibold"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => update({ locator_readings_per_day: Math.min(48, (cfg.locator_readings_per_day ?? 3) + 1) })}
+                        disabled={(cfg.locator_readings_per_day ?? 3) >= 48}
+                        className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                      >+</button>
+                    </div>
+                    <span className="text-xs text-muted-foreground">per day</span>
+                  </div>
+                ) : (
+                  <span className="text-sm font-mono font-semibold">{cfg.locator_readings_per_day ?? 3}×/day</span>
+                )}
+              </div>
+              {!canEdit && (
+                <p className="text-[10px] text-muted-foreground">Only managers and admins can change the reading frequency.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Energy / Power ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Energy sources</span>
+              <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded ml-1">
+                {cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar only' : 'Grid only'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<Sun className="h-4 w-4 text-yellow-500" />}
+                title="Solar"
+                subtitle="Photovoltaic energy source"
+                checked={cfg.has_solar}
+                onToggle={v => update({ has_solar: v })}
+                canEdit={canEdit}
+                accentColor="amber"
+              />
+              <MeterToggleTile
+                icon={<GridPylonIcon className="h-4 w-4 text-blue-500" />}
+                title="Grid"
+                subtitle="Utility / mains power supply"
+                checked={cfg.has_grid}
+                onToggle={v => update({ has_grid: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+            {cfg.has_solar && canEdit && (
+              <div className="mt-2 space-y-2">
+                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Input
+                  type="number" step="any" value={cfg.solar_capacity_kw ?? ''}
+                  onChange={e => update({ solar_capacity_kw: e.target.value ? +e.target.value : null })}
+                  placeholder="e.g. 50"
+                  className="h-9 text-sm mt-1 max-w-[180px]"
+                />
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Solar reading input mode
+                    <span className="ml-1 text-[10px] opacity-70">(used in Operations entry form)</span>
+                  </Label>
+                  <div className="flex items-center rounded-md border border-yellow-200 dark:border-yellow-800/40 overflow-hidden text-[11px] font-medium w-fit">
+                    <button
+                      type="button"
+                      onClick={() => update({ default_solar_input_mode: 'raw' })}
+                      className={[
+                        'px-3 py-1.5 transition-colors',
+                        cfg.default_solar_input_mode !== 'direct'
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30',
+                      ].join(' ')}
+                      title="Cumulative meter reading — Δ auto-computed from previous"
+                    >
+                      Raw Meter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update({ default_solar_input_mode: 'direct' })}
+                      className={[
+                        'px-3 py-1.5 transition-colors border-l border-yellow-200 dark:border-yellow-800/40',
+                        cfg.default_solar_input_mode === 'direct'
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-transparent text-muted-foreground hover:bg-yellow-50 dark:hover:bg-yellow-950/30',
+                      ].join(' ')}
+                      title="Enter daily kWh directly — no cumulative meter needed"
+                    >
+                      Direct kWh
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {cfg.default_solar_input_mode === 'direct'
+                      ? 'Operators enter daily solar kWh directly (e.g. from inverter display).'
+                      : 'Operators enter a cumulative meter reading; Δ is auto-computed.'}
+                  </p>
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Power meter names (Solar/Grid meter count &amp; labels) are configured in the <strong className="font-medium">Power tab</strong>.
+            </p>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: NRW / Product ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production & NRW</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <MeterToggleTile
+                icon={<BarChart2 className="h-4 w-4 text-teal-600" />}
+                title="Enable NRW calculation"
+                subtitle="Auto-compute non-revenue water"
+                checked={cfg.nrw_enabled}
+                onToggle={v => update({ nrw_enabled: v })}
+                canEdit={canEdit}
+              />
+              <MeterToggleTile
+                icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                title="Billed volume meter"
+                subtitle="Separate meter for billed / sold water"
+                checked={cfg.has_billed_volume_meter}
+                onToggle={v => update({ has_billed_volume_meter: v })}
+                canEdit={canEdit}
+                accentColor="blue"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Component Types & Backwash ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Component Types & Backwash</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <PlantComponentTypeCard plant={plant} embedded />
+              <BackwashModeCard plant={plant} />
+            </div>
+          </div>
+
+          <div className="border-t border-border/50" />
+
+          {/* ══ SECTION: Chemicals ══ */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base leading-none">🧪</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chemicals in use</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Select which chemicals this plant uses. Only checked chemicals appear in{' '}
+              <strong className="font-medium">RO Trains → Chemical Dosing</strong>.
+              {!canEdit && ' (view only)'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PLANT_CHEMICALS.map(chem => {
+                // Empty array = all chemicals enabled (backwards compat)
+                const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
+                return (
+                  <label
+                    key={chem.name}
+                    className={[
+                      'flex items-center gap-3 p-3 rounded-lg border transition-colors',
+                      isEnabled
+                        ? 'border-teal-400/60 bg-teal-50/70 dark:bg-teal-950/20 dark:border-teal-700/50'
+                        : 'border-border bg-muted/30',
+                      canEdit ? 'cursor-pointer' : 'cursor-default',
+                    ].join(' ')}
+                  >
+                    <Checkbox
+                      checked={isEnabled}
+                      disabled={!canEdit}
+                      onCheckedChange={canEdit ? (checked) => {
+                        // When first toggling from "all" (empty) state, expand to full list first
+                        const current = cfg.enabled_chemicals.length === 0
+                          ? PLANT_CHEMICALS.map(c => c.name)
+                          : [...cfg.enabled_chemicals];
+                        const next = checked
+                          ? [...new Set([...current, chem.name])]
+                          : current.filter(n => n !== chem.name);
+                        update({ enabled_chemicals: next });
+                      } : undefined}
+                      className="data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{chem.name}</div>
+                      <div className="text-[11px] text-muted-foreground">default unit: {chem.defaultUnit}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {canEdit && cfg.enabled_chemicals.length > 0 && cfg.enabled_chemicals.length < PLANT_CHEMICALS.length && (
+              <button
+                type="button"
+                onClick={() => update({ enabled_chemicals: [] })}
+                className="mt-2 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              >
+                Enable all chemicals
+              </button>
+            )}
+          </div>
+
+          {/* Save button */}
+          {canEdit && (
+            <Button onClick={doSave} disabled={saving} className="w-full h-10 bg-teal-700 text-white hover:bg-teal-800 text-sm" data-testid="save-meter-config-btn">
+              {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save meter configuration
+            </Button>
+          )}
+          {!canEdit && (
+            <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── BackwashModeCard ─────────────────────────────────────────────────────────
+function BackwashModeCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager, user, profile } = useAuth();
+  const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
+
+  // Derive the media type label dynamically from the plant setting
+  const mediaLabel = (plant as any).filter_media_type ?? 'AFM';
+
+  const save = async (next: 'independent' | 'synchronized') => {
+    if (next === mode) return;
+    const prev = mode;
+    setMode(next);
+    const { error } = await supabase.from('plants').update({ backwash_mode: next }).eq('id', plant.id);
+    if (error) { setMode(prev); toast.error(error.message); return; }
+    const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
+      || (profile as any)?.email
+      || user?.email
+      || null;
+    try {
+      const { error: auditErr } = await supabase
+        .from('deletion_audit_log' as any)
+        .insert({
+          kind: 'plant',
+          entity_id: plant.id,
+          entity_label: plant.name ?? null,
+          action: 'soft',
+          actor_user_id: user?.id ?? null,
+          actor_label: actorLabel,
+          reason: `Backwash mode: ${prev} → ${next}`,
+          dependencies: { type: 'backwash_mode_change', from: prev, to: next },
+        } as any);
+      if (auditErr) console.warn('[audit] backwash_mode_change insert failed:', auditErr.message);
+    } catch (e: any) {
+      console.warn('[audit] backwash_mode_change threw:', e?.message ?? e);
+    }
+    toast.success(`Backwash mode set to ${next}`);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  return (
+    <Card className="p-3 flex flex-col" data-testid="backwash-mode-card">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 flex-1">
+        <div className="min-w-0">
+          {/* Title updates dynamically based on plant media type */}
+          <div className="text-sm font-semibold">
+            {mediaLabel} Backwash Mode
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {mode === 'synchronized'
+              ? `All ${mediaLabel} units on a train backwash together.`
+              : `Each ${mediaLabel} unit backwashes independently.`}
+          </div>
+        </div>
+        {/* Segmented pill toggle */}
+        <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg shrink-0 w-full sm:w-auto">
+          {(['independent', 'synchronized'] as const).map((m) => {
+            const active = mode === m;
+            return (
+              <button
+                key={m}
+                disabled={!isManager}
+                onClick={() => save(m)}
+                data-testid={`backwash-mode-${m}`}
+                className={[
+                  'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                  active
+                    ? 'bg-teal-700 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                  !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <span
+                  aria-hidden
+                  className={`h-2 w-2 rounded-full border ${
+                    active ? 'bg-white border-white' : 'border-muted-foreground/40'
+                  }`}
+                />
+                <span className="capitalize">{m}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── EnergySourceInline ──────────────────────────────────────────────────────
+// Compact energy source display + edit — sits inside the gradient plant card.
+
+function EnergySourceInline({ plant }: { plant: any; isManager?: boolean; qc?: any }) {
+  const hasSolar = !!plant.has_solar;
+  const hasGrid  = plant.has_grid !== false;
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-semibold opacity-70 uppercase tracking-wide flex items-center gap-1">
+        <Zap className="h-3 w-3" /> Energy
+      </span>
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        {hasSolar && (
+          <span className="inline-flex items-center gap-1 opacity-90">
+            <Sun className="h-3 w-3 text-yellow-300" />
+            Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
+          </span>
+        )}
+        {hasGrid && (
+          <span className="inline-flex items-center gap-1 opacity-90">
+            <GridPylonIcon className="h-3 w-3" /> Grid
+          </span>
+        )}
+        {!hasSolar && !hasGrid && <span className="opacity-50 italic text-xs">No source</span>}
+        <span className="opacity-40 text-[10px] ml-1">(configure in Power tab)</span>
+      </div>
+    </div>
+  );
+}
+
+function EnergySourceCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [hasSolar, setHasSolar] = useState<boolean>(!!plant.has_solar);
+  const [hasGrid, setHasGrid] = useState<boolean>(plant.has_grid !== false);
+  const [solarKw, setSolarKw] = useState<string>(
+    plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '',
+  );
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const payload: any = {
+      has_solar: hasSolar,
+      has_grid: hasGrid,
+      solar_capacity_kw: solarKw ? +solarKw : null,
+    };
+    const { error } = await supabase.from('plants').update(payload).eq('id', plant.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Energy sources updated');
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  return (
+    <Card className="p-3" data-testid="energy-source-card">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold flex items-center gap-2">
+              <Zap className="h-4 w-4 text-chart-6" /> Energy Sources
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              {hasSolar && (
+                <span className="inline-flex items-center gap-1">
+                  <Sun className="h-3 w-3 text-yellow-500" />
+                  Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
+                </span>
+              )}
+              {hasGrid && (
+                <span className="inline-flex items-center gap-1">
+                  <GridPylonIcon className="h-3 w-3" /> Grid
+                </span>
+              )}
+              {!hasSolar && !hasGrid && <span className="italic">No source configured</span>}
+            </div>
+          </div>
+        </div>
+        {isManager && !editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="edit-energy-btn">
+            <Wrench className="h-3 w-3 mr-1" />Edit
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasSolar}
+              onCheckedChange={setHasSolar}
+              data-testid="energy-has-solar"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={hasGrid}
+              onCheckedChange={setHasGrid}
+              data-testid="energy-has-grid"
+            />
+            <span className="inline-flex items-center gap-1">
+              <GridPylonIcon className="h-3.5 w-3.5" /> Has grid
+            </span>
+          </label>
+          <div>
+            <Label className="text-xs">Solar capacity (kW)</Label>
+            <Input
+              type="number" step="any" value={solarKw}
+              onChange={(e) => setSolarKw(e.target.value)}
+              disabled={!hasSolar}
+              placeholder="e.g. 50"
+              data-testid="energy-solar-kw"
+            />
+          </div>
+          <div className="sm:col-span-3 flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => {
+              setEditing(false);
+              setHasSolar(!!plant.has_solar);
+              setHasGrid(plant.has_grid !== false);
+              setSolarKw(plant.solar_capacity_kw != null ? String(plant.solar_capacity_kw) : '');
+            }} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving} data-testid="save-energy-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Entity History Chart ─────────────────────────────────────────────────────
+// Reusable historical consumption chart used by Locators, Wells, Product meters.
+// Queries the relevant readings table, computes daily consumption, renders a bar+line chart.
+// onExport fires a CSV download of the raw data.
+
+interface HistoryRow { date: string; consumption: number; reading?: number; }
+
+function EntityHistoryChart({
+  entityId,
+  entityType,
+  entityName,
+}: {
+  entityId: string;
+  entityType: 'locator' | 'well' | 'product_meter';
+  entityName: string;
+}) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<HistoryRow[]>({
+    queryKey: ['entity-history', entityType, entityId, range],
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+
+      let raw: any[] = [];
+
+      if (entityType === 'locator') {
+        const { data } = await supabase
+          .from('locator_readings')
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .eq('locator_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = data ?? [];
+      } else if (entityType === 'well') {
+        const { data } = await supabase
+          .from('well_readings')
+          // Fix: include daily_volume so stored delta is preferred over live current-previous calc
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .eq('well_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = data ?? [];
+      } else {
+        const { data } = await supabase
+          .from('product_meter_readings' as any)
+          .select('reading_datetime, current_reading, previous_reading, daily_volume')
+          .eq('meter_id', entityId)
+          .gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true });
+        raw = (data ?? []) as any[];
+      }
+
+      return raw.map((r: any) => {
+        const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
+        let consumption = 0;
+        if (r.daily_volume != null && +r.daily_volume > 0) {
+          consumption = +r.daily_volume;
+        } else if (r.current_reading != null && r.previous_reading != null) {
+          consumption = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        return { date: dateStr, consumption: +consumption.toFixed(2), reading: r.current_reading != null ? +r.current_reading : undefined };
+      }).filter(r => r.date);
+    },
+    staleTime: 60_000,
+  });
+
+  // Aggregate by date (sum consumption for multi-reading days)
+  const aggregated = useMemo<HistoryRow[]>(() => {
+    const map = new Map<string, HistoryRow>();
+    rows.forEach(r => {
+      if (map.has(r.date)) {
+        map.get(r.date)!.consumption += r.consumption;
+        if (r.reading != null) map.get(r.date)!.reading = r.reading;
+      } else {
+        map.set(r.date, { ...r });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [rows]);
+
+  const exportCSV = () => {
+    if (!aggregated.length) { toast.error('No data to export'); return; }
+    const header = 'date,consumption_m3,reading';
+    const lines = aggregated.map(r => `${r.date},${r.consumption},${r.reading ?? ''}`);
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${entityName.replace(/\s+/g, '_')}_history.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const totalConsumption = aggregated.reduce((s, r) => s + r.consumption, 0);
+  const avgConsumption = aggregated.length ? totalConsumption / aggregated.length : 0;
+
+  const customTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.name} style={{ color: p.color }}>
+            {p.name === 'consumption' ? 'Consumption' : 'Reading'}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
+            {p.name === 'consumption' ? ' m³' : ''}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Historical Consumption</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* Range pills */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >{r === 'all' ? 'All' : `${r}d`}</button>
+            ))}
+          </div>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={exportCSV}
+            title="Export to CSV"
+          >
+            <Download className="h-3 w-3" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      {aggregated.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Readings</div>
+            <div className="font-mono font-semibold text-base">{aggregated.length}</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Total</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(totalConsumption)}</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg/day</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(avgConsumption)}</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading chart…
+        </div>
+      ) : aggregated.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-52 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={aggregated} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / aggregated.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                interval="preserveStartEnd"
+                angle={-30}
+                textAnchor="end"
+                height={36}
+              />
+              <YAxis
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                width={38}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+              />
+              <Tooltip content={customTooltip} />
+              <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="consumption" radius={[2,2,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MeterDetailSheet ─────────────────────────────────────────────────────────
+// A button that expands into a Dialog showing meter details.
+// Used in LocatorDetail, WellDetail, etc. as a replacement for inline meter rows.
+
+function MeterDetailButton({
+  label,
+  icon,
+  fields,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  fields: { label: string; value: string | null | undefined }[];
+  children?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const filledCount = fields.filter(f => f.value && f.value !== '—').length;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors group text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon && <span className="text-muted-foreground">{icon}</span>}
+          <span className="text-sm font-medium truncate">{label}</span>
+          {filledCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
+              {filledCount} field{filledCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 -rotate-90" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {icon}
+              <span>{label}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {fields.map((f, i) => (
+                <div key={i} className={f.label === 'Installed' ? 'col-span-2' : ''}>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
+                  <div className="font-mono-num font-medium">{f.value || '—'}</div>
+                </div>
+              ))}
+            </div>
+            {children && <div className="pt-2 border-t">{children}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function LocatorsList({ plantId }: { plantId: string }) {
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
+  const [adding, setAdding] = useState(false);
+  const [showLocatorCsv, setShowLocatorCsv] = useState(false);
+  const [detail, setDetail] = useState<string | null>(null);
+  // Inline graph expansion — click a locator card to show its history chart
+  const [selectedLocator, setSelectedLocator] = useState<string | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const doDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'locator', entity_id: deleteTarget.id, entity_label: deleteTarget.name, action: 'hard', reason: deleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('locators').delete().eq('id', deleteTarget.id);
+    setDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Locator deleted');
+    setDeleteTarget(null);
+    setDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+  };
+
+  const toggleLocatorStatus = async (l: any) => {
+    if (!isManager) return;
+    const newStatus = l.status === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase.from('locators').update({ status: newStatus }).eq('id', l.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: activeOperator?.id ?? user?.id ?? null,
+      plant_id: l.plant_id,
+      entity_type: 'Locator',
+      entity_id: l.id,
+      entity_label: l.name,
+      from_status: l.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Locator marked ${newStatus}`);
+  };
+
+  const { data: locators } = useQuery({
+    queryKey: ['locators', plantId],
+    queryFn: async () => {
+      const { data } = await supabase.from('locators').select('*').eq('plant_id', plantId).order('name');
+      return data ?? [];
+    },
+  });
+
+  // Product meters for this plant — used to show "Fed by" on each locator row
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name')
+        .eq('plant_id', plantId)
+        .order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
+  // Admin selection / bulk-delete state.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+  const toggleAll = () => {
+    if (!locators) return;
+    if (selected.size === locators.length) setSelected(new Set());
+    else setSelected(new Set(locators.map((l: any) => l.id)));
+  };
+
+  const auditDelete = async (rows: { id: string; name: string }[], reason: string, bulk: boolean) => {
+    try {
+      const payload = rows.map((r) => ({
+        kind: 'locator',
+        entity_id: r.id,
+        entity_label: r.name ?? null,
+        action: 'hard',
+        reason: bulk ? `[BULK] ${reason}` : reason,
+        performed_by: activeOperator?.id ?? user?.id ?? null,
+        forced: false,
+      }));
+      await supabase.from('deletion_audit_log' as any).insert(payload as any);
+    } catch (err) {
+      // Log non-fatal: deletion_audit_log table may be missing pre-migration.
+      // Surfacing keeps debugging easy without crashing the delete flow.
+      // eslint-disable-next-line no-console
+      console.warn('[Plants] deletion_audit_log insert failed (non-fatal):', err);
+    }
+  };
+
+  const doBulkDelete = async () => {
+    if (!selected.size) return;
+    if (bulkReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const rows = (locators ?? []).filter((l: any) => ids.includes(l.id)).map((l: any) => ({ id: l.id, name: l.name }));
+    // locators have ON DELETE CASCADE on readings/replacements.
+    const { error } = await supabase.from('locators').delete().in('id', ids);
+    if (error) { setBulkBusy(false); toast.error(error.message); return; }
+    await auditDelete(rows, bulkReason.trim(), true);
+    setBulkBusy(false);
+    setBulkOpen(false);
+    setBulkReason('');
+    setSelected(new Set());
+    toast.success(`${ids.length} locator(s) permanently deleted`);
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+  };
+
+  if (detail) return <LocatorDetail locatorId={detail} onBack={() => setDetail(null)} />;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center gap-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Locators ({locators?.length ?? 0})</h3>
+        <div className="flex items-center gap-1.5">
+          {isAdmin && locators && locators.length > 0 && (
+            <button
+              onClick={toggleAll}
+              className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+              data-testid="locators-toggle-all"
+            >
+              {selected.size === locators.length ? 'Clear' : 'Select all'}
+            </button>
+          )}
+          {isAdmin && selected.size > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs border-destructive text-destructive hover:bg-destructive/10"
+              onClick={() => setBulkOpen(true)}
+              data-testid="locators-bulk-delete-btn"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />{selected.size}
+            </Button>
+          )}
+          {isManager && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setAdding(true)}>
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setShowLocatorCsv(true)}>
+              <Upload className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+      {locators?.map((l: any) => {
+        const checked = selected.has(l.id);
+        return (
+          <Card
+            key={l.id}
+            className={`p-3 hover:shadow-elev border-l-2 transition-colors ${
+              checked ? 'ring-1 ring-primary' : ''
+            } ${
+              l.status === 'Active'
+                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                : 'border-l-muted-foreground/30'
+            }`}
+            data-testid={`locator-card-${l.id}`}
+          >
+            <div className="flex items-start gap-2">
+              {isAdmin && (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggleOne(l.id)}
+                  className="mt-0.5 h-4 w-4 shrink-0 [&]:rounded-sm"
+                  data-testid={`locator-select-${l.id}`}
+                />
+              )}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setSelectedLocator(selectedLocator === l.id ? null : l.id)}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate flex items-center gap-1.5">
+                      {l.name}
+                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedLocator === l.id ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
+                    </div>
+                    {/* Fed by: product meter badge */}
+                    {(() => {
+                      const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
+                      if (!supplyMeter) return null;
+                      return (
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                          <Droplet className="h-2.5 w-2.5" />
+                          Fed by: {supplyMeter.name}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleLocatorStatus(l); }}
+                    title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
+                      l.status === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {l.status}
+                  </button>
+                </div>
+              </div>
+              {isManager && (
+                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit" onClick={() => setEditing(l)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => { setDeleteTarget(l); setDeleteReason(''); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+            {/* ── Details link ── */}
+            <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => setDetail(l.id)}
+                className="text-[11px] text-teal-600 hover:underline inline-flex items-center gap-0.5"
+              >
+                Details →
+              </button>
+            </div>
+            {/* ── Inline history chart ── */}
+            {selectedLocator === l.id && (
+              <div className="mt-3 pt-3 border-t">
+                <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} />
+              </div>
+            )}
+          </Card>
+        );
+      })}
+      {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
+      {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+      {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }} />}
+      {showLocatorCsv && (
+        <LocatorCsvImportDialog
+          plantId={plantId}
+          onClose={() => { setShowLocatorCsv(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); }}
+        />
+      )}
+
+      {/* Single delete confirm */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleteBusy && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>All meter readings and replacement logs will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={deleteReason} onChange={setDeleteReason} testId="locator-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doDelete} disabled={deleteBusy || deleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete dialog */}
+      <AlertDialog open={bulkOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete {selected.size} locator(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings and meter-replacement logs attached to the
+              selected locators will be removed via the database cascade rule.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={bulkReason} onChange={setBulkReason} testId="locators-bulk-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doBulkDelete}
+              disabled={bulkBusy || bulkReason.trim().length < 5}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-locators-bulk-delete"
+            >
+              {bulkBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+    </div>
+  );
+}
+
+// Shared "reason" textarea with min-5-char hint, used by all admin delete dialogs.
+function ReasonField({
+  value, onChange, testId,
+}: { value: string; onChange: (v: string) => void; testId: string }) {
+  const tooShort = value.length > 0 && value.trim().length < 5;
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">
+        Reason <span className="text-danger">*</span>
+        <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+      </Label>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. Decommissioned after Q1 2026 inspection"
+        maxLength={500}
+        rows={2}
+        data-testid={testId}
+        aria-invalid={tooShort}
+        className={tooShort ? 'border-danger' : ''}
+      />
+      {tooShort && (
+        <p className="text-[10px] text-danger">
+          Reason must be at least 5 characters ({value.trim().length}/5).
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EditLocatorDialog({ locator, onClose }: { locator: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: locator.name ?? '', address: locator.address ?? locator.location_desc ?? '',
+    meter_brand: locator.meter_brand ?? '', meter_size: locator.meter_size ?? '', meter_serial: locator.meter_serial ?? '',
+    meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
+    product_meter_id: locator.product_meter_id ?? '',
+  });
+  const [locating, setLocating] = useState(false);
+
+  // Product meters for "Supplied by" select
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', locator.plant_id],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name').eq('plant_id', locator.plant_id).order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm(f => ({ ...f, gps_lat: pos.coords.latitude.toFixed(6), gps_lng: pos.coords.longitude.toFixed(6) }));
+      toast.success('Location captured');
+    } catch {
+      toast.error('Could not get location');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const { user, activeOperator } = useAuth();
+
+  const submit = async () => {
+    if (!form.name) { toast.error('Name Required'); return; }
+    const payload: any = {
+      name: form.name, address: form.address || null, location_desc: form.address || null,
+      meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+    };
+    // Mirror the Add form pattern: only include product_meter_id when setting a value,
+    // or when the original row had one (so the user can intentionally clear it to null).
+    // Omitting the key entirely avoids a schema-cache crash if the column doesn't exist yet.
+    if (form.product_meter_id || locator.product_meter_id != null) {
+      payload.product_meter_id = form.product_meter_id || null;
+    }
+    const { error } = await supabase.from('locators').update(payload).eq('id', locator.id);
+    if (error) { toast.error(error.message); return; }
+    // Audit status flip
+    if (form.status && form.status !== locator.status) {
+      await logStatusChange({
+        user_id: activeOperator?.id ?? user?.id ?? null,
+        plant_id: locator.plant_id,
+        entity_type: 'Locator',
+        entity_id: locator.id,
+        entity_label: form.name,
+        from_status: locator.status,
+        to_status: form.status,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    toast.success('Locator updated'); onClose();
+  };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Locator</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div>
+              <Label>Size</Label>
+              <div className="relative">
+                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
+              </div>
+            </div>
+            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+
+          {/* Supplied by product meter */}
+          {(productMeters?.length ?? 0) > 0 && (
+            <div>
+              <Label>Supplied by (Product Meter)</Label>
+              <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {productMeters!.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* GPS row — editable inputs + clickable map link + use-my-location */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" />View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use my location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [form, setForm] = useState({ name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '', product_meter_id: '' });
+  const [locating, setLocating] = useState(false);
+
+  // Product meters for "Supplied by" select
+  const { data: productMeters } = useQuery({
+    queryKey: ['product-meters', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meters' as any) as any)
+        .select('id, name').eq('plant_id', plantId).order('sort_order', { ascending: true });
+      return (data ?? []) as any[];
+    },
+  });
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!form.name) { toast.error('Name Required'); return; }
+    const payload: any = {
+      plant_id: plantId, name: form.name, address: form.address || null, location_desc: form.address || null,
+      meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+    };
+    if (form.product_meter_id) payload.product_meter_id = form.product_meter_id;
+    const { error } = await supabase.from('locators').insert(payload);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Locator Added'); onClose();
+  };
+
+  const hasCoords = form.gps_lat && form.gps_lng;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${form.gps_lat},${form.gps_lng}` : null;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Add Locator</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div>
+              <Label>Size</Label>
+              <div className="relative">
+                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
+              </div>
+            </div>
+            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+
+          {/* Supplied by product meter */}
+          {(productMeters?.length ?? 0) > 0 && (
+            <div>
+              <Label>Supplied by (Product Meter)</Label>
+              <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="None — select a product meter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {productMeters!.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* GPS row */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>GPS Coordinates</Label>
+              <div className="flex items-center gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <MapPin className="h-3 w-3" />View on map
+                  </a>
+                )}
+                <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2"
+                  onClick={useMyLocation} disabled={locating}>
+                  {locating ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  {locating ? 'Locating…' : 'Use my location'}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () => void }) {
+  const qc = useQueryClient();
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const { data: locator } = useQuery({
+    queryKey: ['locator', locatorId],
+    queryFn: async () => (await supabase.from('locators').select('*').eq('id', locatorId).single()).data,
+  });
+  const { data: replacements } = useQuery({
+    queryKey: ['locator-replacements', locatorId],
+    queryFn: async () => (await supabase.from('locator_meter_replacements').select('*').eq('locator_id', locatorId).order('replacement_date', { ascending: false })).data ?? [],
+  });
+  if (!locator) return (
+    <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+    </div>
+  );
+
+  const hasCoords = locator.gps_lat != null && locator.gps_lng != null;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${locator.gps_lat},${locator.gps_lng}` : null;
+
+  return (
+    <div className="space-y-3">
+      {/* Back */}
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ChevronLeft className="h-4 w-4" /> Back to Locators
+      </button>
+
+      {/* Hero info card */}
+      <Card className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-base">{locator.name}</h3>
+            {locator.address && <p className="text-xs text-muted-foreground mt-0.5">{locator.address}</p>}
+            {hasCoords && (
+              <a href={mapsUrl!} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                <MapPin className="h-3 w-3" />
+                {(+locator.gps_lat).toFixed(5)}, {(+locator.gps_lng).toFixed(5)}
+              </a>
+            )}
+          </div>
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+            locator.status === 'Active'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900'
+              : 'text-muted-foreground bg-muted border-border'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            {locator.status ?? 'Active'}
+          </span>
+        </div>
+      </Card>
+
+      {/* Meter — expandable popup button */}
+      <MeterDetailButton
+        label="Meter Details"
+        icon={<Gauge className="h-4 w-4" />}
+        fields={[
+          { label: 'Brand', value: locator.meter_brand },
+          { label: 'Size', value: locator.meter_size ? `${locator.meter_size} in` : null },
+          { label: 'Serial No.', value: locator.meter_serial },
+          { label: 'Installed', value: locator.meter_installed_date },
+        ]}
+      >
+        <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceOpen(true)}>
+          <Wrench className="h-3.5 w-3.5" /> Replace Meter
+        </Button>
+      </MeterDetailButton>
+
+      {/* Historical Consumption Chart */}
+      <Card className="p-3">
+        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} />
+      </Card>
+
+      {/* Replacement history */}
+      <Card className="p-3">
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> Replacement History
+        </h4>
+        {replacements?.length ? (
+          <div className="space-y-0">
+            {(replacements as any[]).map((r: any) => (
+              <div key={r.id} className="border-t py-2 text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <div className="col-span-2 font-medium text-foreground">{r.replacement_date}</div>
+                <div className="text-muted-foreground">Old: SN {r.old_meter_serial ?? '—'} <span className="font-mono">({r.old_meter_final_reading ?? '—'})</span></div>
+                <div className="text-muted-foreground">New: SN {r.new_meter_serial ?? '—'} <span className="font-mono">({r.new_meter_initial_reading ?? '—'})</span></div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-xs text-muted-foreground">No replacements recorded</p>}
+      </Card>
+
+      {replaceOpen && (
+        <ReplaceMeterDialog
+          kind="locator" assetId={locatorId} plantId={locator.plant_id} oldSerial={locator.meter_serial}
+          onClose={() => { setReplaceOpen(false); qc.invalidateQueries({ queryKey: ['locator', locatorId] }); qc.invalidateQueries({ queryKey: ['locator-replacements', locatorId] }); }}
+        />
+      )}
+    </div>
+  );
+}
+
+export function ReplaceMeterDialog({ kind, assetId, plantId, oldSerial, onClose }: { kind: 'locator' | 'well'; assetId: string; plantId: string; oldSerial: string | null; onClose: () => void }) {
+  const { user, activeOperator } = useAuth();
+  const [form, setForm] = useState({
+    replacement_date: format(new Date(), 'yyyy-MM-dd'),
+    old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
+  });
+  const submit = async () => {
+    if (!form.new_serial) { toast.error('New serial required'); return; }
+    const payload: any = {
+      plant_id: plantId, replacement_date: form.replacement_date,
+      replaced_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
+    };
+    if (kind === 'locator') {
+      Object.assign(payload, {
+        locator_id: assetId, old_meter_serial: oldSerial, old_meter_final_reading: form.old_final_reading ? +form.old_final_reading : null,
+        new_meter_brand: form.new_brand, new_meter_size: form.new_size, new_meter_serial: form.new_serial,
+        new_meter_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
+        new_meter_installed_date: form.new_installed_date,
+      });
+      const { error } = await supabase.from('locator_meter_replacements').insert(payload);
+      if (error) { toast.error(error.message); return; }
+      await supabase.from('locators').update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
+    } else {
+      Object.assign(payload, {
+        well_id: assetId, old_serial: oldSerial, old_final_reading: form.old_final_reading ? +form.old_final_reading : null,
+        new_brand: form.new_brand, new_size: form.new_size, new_serial: form.new_serial,
+        new_initial_reading: form.new_initial_reading ? +form.new_initial_reading : null,
+        new_installed_date: form.new_installed_date,
+      });
+      const { error } = await supabase.from('well_meter_replacements').insert(payload);
+      if (error) { toast.error(error.message); return; }
+      await supabase.from('wells').update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
+    }
+    toast.success('Meter replaced');
+    onClose();
+  };
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Replace meter</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Replacement date</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} /></div>
+            <div><Label>Old final reading</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} /></div>
+          </div>
+          <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{oldSerial ?? '—'}</span></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} /></div>
+            <div><Label>New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} /></div>
+            <div><Label>New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Initial reading</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} /></div>
+            <div><Label>Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} /></div>
+          </div>
+          <div><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} /></div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save replacement</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WellsList({ plantId }: { plantId: string }) {
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
+  const [wellDeleteReason, setWellDeleteReason] = useState('');
+  const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
+
+  const doWellDelete = async () => {
+    if (!wellDeleteTarget) return;
+    if (wellDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setWellDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'well', entity_id: wellDeleteTarget.id, entity_label: wellDeleteTarget.name, action: 'hard', reason: wellDeleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('wells').delete().eq('id', wellDeleteTarget.id);
+    setWellDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Well deleted');
+    setWellDeleteTarget(null);
+    setWellDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+  };
+  const { data: wells } = useQuery({
+    queryKey: ['wells', plantId],
+    queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
+  });
+
+  // Toggle a single well Active ↔ Inactive and write audit log
+  const toggleWellStatus = async (w: any) => {
+    if (!isManager) return;
+    const newStatus = w.status === 'Active' ? 'Inactive' : 'Active';
+    const { error } = await supabase.from('wells').update({ status: newStatus }).eq('id', w.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: activeOperator?.id ?? user?.id ?? null,
+      plant_id: w.plant_id,
+      entity_type: 'Well',
+      entity_id: w.id,
+      entity_label: w.name,
+      from_status: w.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Well marked ${newStatus}`);
+  };
+  // Plant-level blending state — used to render the blending checkbox
+  // per row and to know which wells inject directly into the product line.
+  const { data: plant } = useQuery({
+    queryKey: ['plant-name', plantId],
+    queryFn: async () => (await supabase.from('plants').select('name').eq('id', plantId).single()).data,
+  });
+  const { data: blendingIds } = useQuery<string[]>({
+    queryKey: ['blending-wells', plantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('well_blending')
+        .select('well_id')
+        .eq('plant_id', plantId);
+      if (error) return [];
+      return (data ?? []).map((r: any) => r.well_id).filter(Boolean);
+    },
+  });
+  const blendingSet = new Set(Array.isArray(blendingIds) ? blendingIds : []);
+
+  const [detail, setDetail] = useState<string | null>(null);
+  // Inline graph expansion — click a well card to show its history chart
+  const [selectedWell, setSelectedWell] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Per-well blending-toggle in-flight indicator.
+  const [blendingBusy, setBlendingBusy] = useState<Set<string>>(new Set());
+  // Per-well power-meter toggle in-flight indicator.
+  const [powerBusy, setPowerBusy] = useState<Set<string>>(new Set());
+  // Add-well dialog visibility.
+  const [adding, setAdding] = useState(false);
+  // Well targeted for single deletion.
+  const [wellDeleteTarget, setWellDeleteTarget] = useState<any>(null);
+  // Well being edited.
+  const [editingWell, setEditingWell] = useState<any>(null);
+  // CSV import dialog visibility.
+  const [showWellCsv, setShowWellCsv] = useState(false);
+
+  // ── Meter config — used to derive each well's electric metering mode ──────────
+  // WellsList reads the config to reflect the correct state in the Power pill, and
+  // writes it when the pill is toggled so both data stores stay in sync.
+  const { config: meterCfg, saveConfig: saveMeterCfg } = usePlantMeterConfig(plantId);
+
+  /** Returns the electricity metering mode for a given well based on meter config. */
+  const getWellElectricMode = (wellId: string): 'none' | 'dedicated' | 'shared' => {
+    if (meterCfg.wells_shared_electric_groups.some(g => g.members.includes(wellId))) return 'shared';
+    if (meterCfg.wells_dedicated_electric_ids.includes(wellId)) return 'dedicated';
+    return 'none';
+  };
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+  const toggleAll = () => {
+    if (!wells) return;
+    if (selected.size === wells.length) setSelected(new Set());
+    else setSelected(new Set(wells.map((w: any) => w.id)));
+  };
+
+  const auditWellDelete = async (rows: { id: string; name: string }[], reason: string, bulk: boolean) => {
+    try {
+      const payload = rows.map((r) => ({
+        kind: 'well',
+        entity_id: r.id,
+        entity_label: r.name ?? null,
+        action: 'hard',
+        reason: bulk ? `[BULK] ${reason}` : reason,
+        performed_by: activeOperator?.id ?? user?.id ?? null,
+        forced: false,
+      }));
+      await supabase.from('deletion_audit_log' as any).insert(payload as any);
+    } catch (err) {
+      // Log non-fatal: deletion_audit_log table may be missing pre-migration.
+      // Surfacing keeps debugging easy without crashing the delete flow.
+      // eslint-disable-next-line no-console
+      console.warn('[Plants] deletion_audit_log insert failed (non-fatal):', err);
+    }
+  };
+
+  const doBulkDelete = async () => {
+    if (!selected.size) return;
+    if (bulkReason.trim().length < 5) {
+      toast.error('Please enter a reason of at least 5 characters.');
+      return;
+    }
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const rows = (wells ?? []).filter((w: any) => ids.includes(w.id)).map((w: any) => ({ id: w.id, name: w.name }));
+    // Wells have ON DELETE CASCADE on readings/replacements/pms — Supabase
+    // will remove dependent rows automatically.
+    const { error } = await supabase.from('wells').delete().in('id', ids);
+    if (error) {
+      setBulkBusy(false);
+      toast.error(error.message);
+      return;
+    }
+    await auditWellDelete(rows, bulkReason.trim(), true);
+    setBulkBusy(false);
+    setBulkDeleteOpen(false);
+    setBulkReason('');
+    setSelected(new Set());
+    toast.success(`${ids.length} well(s) permanently deleted`);
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+  };
+
+  // Toggle electricity metering on a well. Keeps both `wells.has_power_meter`
+  // (which controls the kWh input in Operations) and `plant_meter_config`
+  // (which controls topology / reporting groupings) in sync.
+  //
+  // Behaviour:
+  //  • none  → dedicated  Adds to wells_dedicated_electric_ids, sets has_power_meter = true
+  //  • dedicated → none   Removes from wells_dedicated_electric_ids, sets has_power_meter = false
+  //  • shared → none      Removes from all shared groups, sets has_power_meter = false
+  //                       (wells already in a shared group are managed via the config panel;
+  //                        the pill is a quick escape hatch to remove them entirely)
+  const toggleWellElectric = async (w: any) => {
+    const mode = getWellElectricMode(w.id);
+    const turningOff = mode !== 'none';
+
+    setPowerBusy(prev => { const n = new Set(prev); n.add(w.id); return n; });
+
+    // 1 — Update wells.has_power_meter (controls Operations kWh input)
+    const { error } = await supabase
+      .from('wells')
+      .update({ has_power_meter: !turningOff })
+      .eq('id', w.id);
+
+    if (error) {
+      setPowerBusy(prev => { const n = new Set(prev); n.delete(w.id); return n; });
+      toast.error(`Power meter toggle failed: ${error.message}`);
+      return;
+    }
+
+    // 2 — Sync meter config so topology / reporting stays consistent
+    const nextCfg = { ...meterCfg };
+    if (turningOff) {
+      // Remove from dedicated list
+      nextCfg.wells_dedicated_electric_ids = nextCfg.wells_dedicated_electric_ids.filter(id => id !== w.id);
+      // Remove from every shared group
+      nextCfg.wells_shared_electric_groups = nextCfg.wells_shared_electric_groups.map(g => ({
+        ...g,
+        members: g.members.filter(m => m !== w.id),
+      }));
+    } else {
+      // Add to dedicated only if not already captured by a shared group
+      const alreadyShared = nextCfg.wells_shared_electric_groups.some(g => g.members.includes(w.id));
+      if (!alreadyShared && !nextCfg.wells_dedicated_electric_ids.includes(w.id)) {
+        nextCfg.wells_dedicated_electric_ids = [...nextCfg.wells_dedicated_electric_ids, w.id];
+      }
+    }
+    await saveMeterCfg(nextCfg);
+
+    setPowerBusy(prev => { const n = new Set(prev); n.delete(w.id); return n; });
+    toast.success(turningOff
+      ? `${w.name}: electricity metering removed`
+      : `${w.name}: dedicated meter enabled — kWh input will appear in Operations`);
+    qc.invalidateQueries({ queryKey: ['wells', plantId] });
+  };
+
+  const toggleBlending = async (w: any, next: boolean) => {
+    if (!isManager) return;
+    setBlendingBusy((prev) => { const s = new Set(prev); s.add(w.id); return s; });
+    try {
+      if (next) {
+        const { error } = await supabase
+          .from('well_blending')
+          .upsert({ well_id: w.id, plant_id: plantId, tagged_at: new Date().toISOString(), tagged_by: activeOperator?.id ?? user?.id ?? null }, { onConflict: 'well_id' });
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from('well_blending')
+          .delete()
+          .eq('well_id', w.id);
+        if (error) throw new Error(error.message);
+      }
+      toast.success(next
+        ? `${w.name}: marked as blending — its meter feeds product line separately`
+        : `${w.name}: blending cleared`);
+      qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
+    } catch (e: any) {
+      toast.error(`Blending toggle failed: ${e.message || e}`);
+    } finally {
+      setBlendingBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });
+    }
+  };
+
+  if (detail) return <WellDetail wellId={detail} onBack={() => setDetail(null)} />;
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center gap-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Wells ({wells?.length ?? 0})</h3>
+        <div className="flex items-center gap-1.5">
+          {isAdmin && wells && wells.length > 0 && (
+            <button
+              onClick={toggleAll}
+              className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+              data-testid="wells-toggle-all"
+            >
+              {selected.size === wells.length ? 'Clear' : 'Select all'}
+            </button>
+          )}
+          {isAdmin && selected.size > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs border-destructive text-destructive hover:bg-destructive/10"
+              onClick={() => setBulkDeleteOpen(true)}
+              data-testid="wells-bulk-delete-btn"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />{selected.size}
+            </Button>
+          )}
+          {isManager && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setAdding(true)} data-testid="add-well-btn">
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setShowWellCsv(true)}>
+              <Upload className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+      {wells?.map((w: any) => {
+        const checked = selected.has(w.id);
+        const isBlending = blendingSet.has(w.id);
+        const blendingPending = blendingBusy.has(w.id);
+        return (
+          <Card
+            key={w.id}
+            className={`p-3 hover:shadow-elev border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
+              w.status === 'Active'
+                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                : 'border-l-muted-foreground/30'
+            } ${isBlending ? 'border-teal-400' : ''}`}
+            data-testid={`well-card-${w.id}`}
+          >
+            <div className="flex items-start gap-2">
+              {isAdmin && (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggle(w.id)}
+                  className="mt-1 h-4 w-4 [&]:rounded-sm"
+                  data-testid={`well-select-${w.id}`}
+                />
+              )}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setSelectedWell(selectedWell === w.id ? null : w.id)}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
+                      <span className="truncate">{w.name}</span>
+                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedWell === w.id ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
+                      {w.has_power_meter && (() => {
+                        const elMode = getWellElectricMode(w.id);
+                        return (
+                          <span
+                            className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
+                              elMode === 'shared'
+                                ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                            }`}
+                            title={elMode === 'shared' ? 'Shared kWh meter group' : 'Dedicated kWh meter'}
+                          >
+                            <Zap className="h-2.5 w-2.5" />
+                            {elMode === 'shared' ? 'Shared kWh' : 'Electric'}
+                          </span>
+                        );
+                      })()}
+                      {isBlending && (
+                        <span
+                          className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded"
+                          title="Blending: separate water meter feeding product line"
+                        >
+                          Blending
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                      {(w.diameter != null || w.drilling_depth_m != null) && (
+                        <span>
+                          {w.diameter ?? '—'}{w.drilling_depth_m != null ? ` · ${w.drilling_depth_m} m` : ''}
+                        </span>
+                      )}
+                      {w.meter_serial && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Gauge className="h-2.5 w-2.5" /> Water SN {w.meter_serial}
+                        </span>
+                      )}
+                      {w.has_power_meter && w.electric_meter_serial && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Zap className="h-2.5 w-2.5" /> kWh SN {w.electric_meter_serial}
+                        </span>
+                      )}
+                      {(w.gps_lat != null && w.gps_lng != null) && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <MapPin className="h-2.5 w-2.5" /> {(+w.gps_lat).toFixed(4)}, {(+w.gps_lng).toFixed(4)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleWellStatus(w); }}
+                    title={isManager ? `Click to toggle status (currently ${w.status})` : w.status}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
+                      w.status === 'Active'
+                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                    } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${w.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {w.status}
+                  </button>
+                </div>
+              </div>
+              {/* Right-side row controls — Blending and Power are independent
+                  attributes (a well can be either, both, or neither). Hidden
+                  during read-only roles. */}
+              {isManager && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" title="Edit well" onClick={e => { e.stopPropagation(); setEditingWell(w); }}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete well" onClick={e => { e.stopPropagation(); setWellDeleteTarget(w); setWellDeleteReason(''); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+            {/* Blending + Power toggles as compact pill row below */}
+            {isManager && (
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => toggleBlending(w, !isBlending)}
+                  disabled={blendingPending}
+                  className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-colors ${
+                    isBlending
+                      ? 'bg-teal-700 border-teal-700 text-white'
+                      : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  } ${blendingPending ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                  title={isBlending ? 'Blending on — click to clear' : 'Mark as blending well'}
+                  data-testid={`well-blending-${w.id}`}
+                >
+                  {blendingPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isBlending ? 'bg-white' : 'bg-muted-foreground'}`} />}
+                  Blending
+                </button>
+                {/* Power pill — 3 states: none / dedicated / shared.
+                    Reflects meter config and syncs both config + wells.has_power_meter on click. */}
+                {(() => {
+                  const elMode = getWellElectricMode(w.id);
+                  return (
+                    <button
+                      onClick={() => toggleWellElectric(w)}
+                      disabled={powerBusy.has(w.id)}
+                      className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-colors ${
+                        elMode === 'dedicated'
+                          ? 'bg-amber-600 border-amber-600 text-white'
+                          : elMode === 'shared'
+                          ? 'bg-teal-600 border-teal-600 text-white'
+                          : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                      } ${powerBusy.has(w.id) ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                      title={
+                        elMode === 'dedicated'
+                          ? 'Dedicated meter — click to remove'
+                          : elMode === 'shared'
+                          ? 'In a shared meter group — click to remove from metering'
+                          : 'No electric meter — click to add as dedicated'
+                      }
+                      data-testid={`well-power-${w.id}`}
+                    >
+                      {powerBusy.has(w.id)
+                        ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        : <Zap className="h-2.5 w-2.5" />}
+                      {elMode === 'dedicated' ? 'Dedicated' : elMode === 'shared' ? 'Shared' : 'Power'}
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+            {/* ── Details link ── */}
+            <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => setDetail(w.id)}
+                className="text-[11px] text-teal-600 hover:underline inline-flex items-center gap-0.5"
+              >
+                Details →
+              </button>
+            </div>
+            {/* ── Inline history chart ── */}
+            {selectedWell === w.id && (
+              <div className="mt-3 pt-3 border-t">
+                <EntityHistoryChart entityId={w.id} entityType="well" entityName={w.name} />
+              </div>
+            )}
+          </Card>
+        );
+      })}
+      {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Wells Yet</Card>}
+      {adding && (
+        <AddWellDialog plantId={plantId} onClose={() => {
+          setAdding(false);
+          qc.invalidateQueries({ queryKey: ['wells', plantId] });
+        }} />
+      )}
+      {editingWell && <EditWellDialog well={editingWell} onClose={() => { setEditingWell(null); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }} />}
+      {showWellCsv && (
+        <WellCsvImportDialog
+          plantId={plantId}
+          onClose={() => { setShowWellCsv(false); qc.invalidateQueries({ queryKey: ['wells', plantId] }); }}
+        />
+      )}
+
+      {/* Single well delete confirm */}
+      <AlertDialog open={!!wellDeleteTarget} onOpenChange={(o) => !o && !wellDeleteBusy && setWellDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete "{wellDeleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>All meter readings, hydraulic history, and replacement logs will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={wellDeleteReason} onChange={setWellDeleteReason} testId="well-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={wellDeleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doWellDelete} disabled={wellDeleteBusy || wellDeleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {wellDeleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !o && !bulkBusy && setBulkDeleteOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Permanently delete {selected.size} well(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All meter readings, hydraulic history, and meter-replacement logs
+              attached to the selected wells will be removed via the database
+              cascade rule. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Reason <span className="text-danger">*</span>
+              <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+            </Label>
+            <Textarea
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              placeholder="e.g. Wells decommissioned after Q1 2026"
+              maxLength={500}
+              rows={2}
+              data-testid="wells-bulk-reason"
+              aria-invalid={bulkReason.length > 0 && bulkReason.trim().length < 5}
+              className={bulkReason.length > 0 && bulkReason.trim().length < 5 ? 'border-danger' : ''}
+            />
+            {bulkReason.length > 0 && bulkReason.trim().length < 5 && (
+              <p className="text-[10px] text-danger">
+                Reason must be at least 5 characters ({bulkReason.trim().length}/5).
+              </p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doBulkDelete}
+              disabled={bulkBusy || bulkReason.trim().length < 5}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="confirm-wells-bulk-delete"
+            >
+              {bulkBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+    </div>
+  );
+}
+
+function EditWellDialog({ well, onClose }: { well: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: well.name ?? '', diameter: well.diameter ?? '', drilling_depth_m: well.drilling_depth_m?.toString() ?? '',
+    meter_brand: well.meter_brand ?? '', meter_size: well.meter_size ?? '', meter_serial: well.meter_serial ?? '',
+    gps_lat: well.gps_lat?.toString() ?? '', gps_lng: well.gps_lng?.toString() ?? '',
+  });
+  const { user } = useAuth();
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    const prevStatus = well.status;
+    const nextStatus = well.status; // EditWellDialog doesn't change status — status changes via the toggle in the card
+    const { error } = await supabase.from('wells').update({
+      name: form.name.trim(), diameter: form.diameter || null,
+      drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
+      meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+    }).eq('id', well.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Well updated'); onClose();
+  };
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Well</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} /></div>
+            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label>Meter Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+            <div><Label>Meter Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
+            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+          </div>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [form, setForm] = useState({
+    name: '', diameter: '', drilling_depth_m: '', has_power_meter: false,
+    meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '',
+    electric_meter_brand: '', electric_meter_size: '', electric_meter_serial: '', electric_meter_installed_date: '',
+    gps_lat: '', gps_lng: '',
+  });
+  const [locating, setLocating] = useState(false);
+
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+      );
+      setForm((f) => ({
+        ...f,
+        gps_lat: pos.coords.latitude.toFixed(6),
+        gps_lng: pos.coords.longitude.toFixed(6),
+      }));
+      toast.success('Location Captured');
+    } catch (e: any) {
+      toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error('Name Required'); return; }
+    const payload: Database['public']['Tables']['wells']['Insert'] & {
+      gps_lat?: number | null; gps_lng?: number | null;
+      electric_meter_brand?: string | null;
+      electric_meter_size?: string | null;
+      electric_meter_serial?: string | null;
+      electric_meter_installed_date?: string | null;
+    } = {
+      plant_id: plantId,
+      name: form.name.trim(),
+      diameter: form.diameter || null,
+      drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
+      has_power_meter: form.has_power_meter,
+      meter_brand: form.meter_brand || null,
+      meter_size: form.meter_size || null,
+      meter_serial: form.meter_serial || null,
+      meter_installed_date: form.meter_installed_date || null,
+      gps_lat: form.gps_lat ? +form.gps_lat : null,
+      gps_lng: form.gps_lng ? +form.gps_lng : null,
+      status: 'Active',
+    };
+    if (form.has_power_meter) {
+      payload.electric_meter_brand = form.electric_meter_brand || null;
+      payload.electric_meter_size = form.electric_meter_size || null;
+      payload.electric_meter_serial = form.electric_meter_serial || null;
+      payload.electric_meter_installed_date = form.electric_meter_installed_date || null;
+    }
+    let { error } = await supabase.from('wells').insert(payload as never);
+    // Graceful fallback: if optional columns (gps_lat, gps_lng, electric_meter_*) are missing
+    // from the schema cache, retry without them rather than failing the entire insert.
+    if (error && (error.message.includes('gps_lat') || error.message.includes('gps_lng') || error.message.includes('column') || error.message.includes('schema cache'))) {
+      const { gps_lat: _lat, gps_lng: _lng, electric_meter_brand: _emb, electric_meter_size: _ems, electric_meter_serial: _emse, electric_meter_installed_date: _emid, ...fallbackPayload } = payload as any;
+      const { error: e2 } = await supabase.from('wells').insert(fallbackPayload as never);
+      error = e2 ?? null;
+    }
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${form.name.trim()} added`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Add Well</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div><Label>Name *</Label>
+            <Input data-testid="add-well-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Well #1" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} placeholder="8 inch" /></div>
+            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+          </div>
+
+          {/* Water meter */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-semibold inline-flex items-center gap-1">
+              <Gauge className="h-3 w-3" /> Water Meter
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-xs">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+              <div><Label className="text-xs">Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
+              <div><Label className="text-xs">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+            </div>
+          </div>
+
+          {/* Electric meter (optional) */}
+          <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <Checkbox
+                checked={form.has_power_meter}
+                onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
+                className="shrink-0 h-4 w-4 [&]:rounded-sm"
+                data-testid="add-well-has-power-meter"
+              />
+              <Zap className="h-3 w-3 text-amber-500" />
+              Has Dedicated Electric Meter
+            </label>
+            {form.has_power_meter && (
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} data-testid="add-well-em-brand" /></div>
+                <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
+                <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} data-testid="add-well-em-serial" /></div>
+                <div className="col-span-3">
+                  <Label className="text-xs">Installed</Label>
+                  <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>GPS Lat</Label>
+              <Input data-testid="add-well-lat" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} placeholder="10.295" />
+            </div>
+            <div><Label>GPS Lng</Label>
+              <Input data-testid="add-well-lng" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} placeholder="123.877" />
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={useMyLocation} disabled={locating} data-testid="use-my-location-btn">
+            <MapPin className="h-3 w-3 mr-1" />
+            {locating ? 'Capturing…' : 'Use My Location'}
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button data-testid="add-well-save" onClick={submit}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [editHydraulicOpen, setEditHydraulicOpen] = useState(false);
+  const [editElectricOpen, setEditElectricOpen] = useState(false);
+  const { data: well } = useQuery({
+    queryKey: ['well', wellId],
+    queryFn: async () => (await supabase.from('wells').select('*').eq('id', wellId).single()).data,
+  });
+  const { data: pms } = useQuery({
+    queryKey: ['well-pms', wellId],
+    queryFn: async () => (await supabase.from('well_pms_records').select('*').eq('well_id', wellId).order('date_gathered', { ascending: false })).data ?? [],
+  });
+  const { data: latestReplacement } = useQuery({
+    queryKey: ['well-latest-replacement', wellId],
+    queryFn: async () => {
+      const { data } = await supabase.from('well_meter_replacements')
+        .select('*, replacer:user_profiles!well_meter_replacements_replaced_by_fkey(first_name,last_name)')
+        .eq('well_id', wellId).order('replacement_date', { ascending: false }).limit(1);
+      return (data?.[0] ?? null) as any;
+    },
+  });
+  const { data: rawReadings = [] } = useQuery<any[]>({
+    queryKey: ['well-raw-readings', wellId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('well_readings')
+        .select('id, reading_datetime, current_reading, previous_reading, power_meter_reading, tds_ppm, pressure_psi')
+        .eq('well_id', wellId)
+        .order('reading_datetime', { ascending: false })
+        .limit(10);
+      return data ?? [];
+    },
+  });
+
+  if (!well) return (
+    <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+    </div>
+  );
+
+  const latest = pms?.[0];
+  const replacerName = latestReplacement?.replacer
+    ? [latestReplacement.replacer.first_name, latestReplacement.replacer.last_name].filter(Boolean).join(' ')
+    : null;
+  const hasCoords = (well as any).gps_lat != null && (well as any).gps_lng != null;
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${(well as any).gps_lat},${(well as any).gps_lng}` : null;
+
+  return (
+    <div className="space-y-3">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ChevronLeft className="h-4 w-4" /> Back to Wells
+      </button>
+
+      {/* Hero */}
+      <Card className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-base">{well.name}</h3>
+            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              {well.diameter && <span>{well.diameter}</span>}
+              {(well as any).drilling_depth_m && <span>{(well as any).drilling_depth_m} m depth</span>}
+            </div>
+            {hasCoords && (
+              <a href={mapsUrl!} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                <MapPin className="h-3 w-3" />
+                {(+(well as any).gps_lat).toFixed(5)}, {(+(well as any).gps_lng).toFixed(5)}
+              </a>
+            )}
+          </div>
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+            well.status === 'Active'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30'
+              : 'text-muted-foreground bg-muted border-border'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${well.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            {well.status ?? 'Active'}
+          </span>
+        </div>
+      </Card>
+
+      {/* Water Meter — popup button */}
+      <MeterDetailButton
+        label="Water Meter"
+        icon={<Gauge className="h-4 w-4 text-blue-500" />}
+        fields={[
+          { label: 'Brand', value: well.meter_brand },
+          { label: 'Size', value: well.meter_size ? `${well.meter_size} in` : null },
+          { label: 'Serial No.', value: well.meter_serial },
+          { label: 'Installed', value: well.meter_installed_date },
+          { label: 'Last Replaced By', value: replacerName },
+          { label: 'Replacement Date', value: latestReplacement?.replacement_date },
+        ]}
+      >
+        <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceOpen(true)}>
+          <Wrench className="h-3.5 w-3.5" /> Replace Meter
+        </Button>
+      </MeterDetailButton>
+
+      {/* Electric Meter — popup button (if applicable) */}
+      {well.has_power_meter && (
+        <MeterDetailButton
+          label="Electric Meter"
+          icon={<Zap className="h-4 w-4 text-amber-500" />}
+          fields={[
+            { label: 'Brand', value: (well as any).electric_meter_brand },
+            { label: 'Size', value: (well as any).electric_meter_size },
+            { label: 'Serial No.', value: (well as any).electric_meter_serial },
+            { label: 'Installed', value: (well as any).electric_meter_installed_date },
+          ]}
+        >
+          {isManager && (
+            <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setEditElectricOpen(true)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit Electric Meter
+            </Button>
+          )}
+        </MeterDetailButton>
+      )}
+
+      {/* Historical Consumption Chart */}
+      <Card className="p-3">
+        <EntityHistoryChart entityId={wellId} entityType="well" entityName={well.name} />
+      </Card>
+
+      {/* Hydraulic data */}
+      <Card className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-semibold flex items-center gap-1.5">
+            <Gauge className="h-4 w-4 text-sky-500" /> Hydraulic Data
+          </span>
+          {isManager && (
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setEditHydraulicOpen(true)}>
+              <Wrench className="h-3 w-3 mr-1" />Edit
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+          {([
+            ['Drilling depth', `${(latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '—'} m`],
+            ['SWL', `${latest?.static_water_level_m ?? '—'} m`],
+            ['PWL', `${latest?.pumping_water_level_m ?? '—'} m`],
+            ['Pump setting', latest?.pump_setting ?? '—'],
+            ['Motor HP', latest?.motor_hp ?? '—'],
+            ['TDS (PMS)', `${latest?.tds_ppm ?? '—'} ppm`],
+            ['TDS (daily)', `${(rawReadings as any[]).find((r: any) => r.tds_ppm != null)?.tds_ppm ?? '—'} ppm`],
+            ['Pressure', `${(rawReadings as any[]).find((r: any) => r.pressure_psi != null)?.pressure_psi ?? '—'} psi`],
+            ['Turbidity', `${latest?.turbidity_ntu ?? '—'} NTU`],
+          ] as [string, string | number | null | undefined][]).map(([k, val]) => (
+            <div key={k}>
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
+              <div className="font-mono-num font-medium">{val ?? '—'}</div>
+            </div>
+          ))}
+          {latest?.date_gathered && (
+            <div className="col-span-2 text-[10px] text-muted-foreground pt-1">Last gathered: {latest.date_gathered}</div>
+          )}
+        </div>
+        {pms && pms.length > 1 && (
+          <details className="mt-3">
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+              History ({pms.length} records)
+            </summary>
+            <div className="mt-2 space-y-0 text-[11px] max-h-48 overflow-y-auto">
+              {(pms as any[]).map((p: any) => (
+                <div key={p.id} className="border-t py-1.5 grid grid-cols-3 gap-x-2">
+                  <span className="font-medium col-span-3">{p.date_gathered}</span>
+                  <span className="text-muted-foreground">D: {p.drilling_depth_m ?? '—'}m</span>
+                  <span className="text-muted-foreground">SWL: {p.static_water_level_m ?? '—'}m</span>
+                  <span className="text-muted-foreground">PWL: {p.pumping_water_level_m ?? '—'}m</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </Card>
+
+      {/* Recent raw readings table */}
+      {rawReadings.length > 0 && (
+        <Card className="p-3" data-testid="well-raw-readings-card">
+          <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+            <Gauge className="h-3.5 w-3.5" /> Recent Readings
+            {well.has_power_meter && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                <Zap className="h-2.5 w-2.5" /> kWh tracked
+              </span>
+            )}
+          </h4>
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase text-muted-foreground">
+                <tr className="border-b">
+                  <th className="text-left px-1 py-1 font-medium">Date</th>
+                  <th className="text-right px-1 py-1 font-medium">Water m³</th>
+                  <th className="text-right px-1 py-1 font-medium">Δ</th>
+                  {well.has_power_meter && <th className="text-right px-1 py-1 font-medium">kWh</th>}
+                  <th className="text-right px-1 py-1 font-medium">TDS (ppm)</th>
+                  <th className="text-right px-1 py-1 font-medium">Pressure (psi)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rawReadings.map((r: any) => {
+                  const delta = r.previous_reading != null && r.current_reading != null
+                    ? +r.current_reading - +r.previous_reading : null;
+                  return (
+                    <tr key={r.id} className="border-b last:border-0">
+                      <td className="px-1 py-1 text-muted-foreground whitespace-nowrap">
+                        {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d HH:mm') : '—'}
+                      </td>
+                      <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading) : '—'}</td>
+                      <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta) : '—'}</td>
+                      {well.has_power_meter && (
+                        <td className="px-1 py-1 text-right font-mono-num text-amber-700 dark:text-amber-300">
+                          {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading) : '—'}
+                        </td>
+                      )}
+                      <td className="px-1 py-1 text-right font-mono-num">
+                        {r.tds_ppm != null ? fmtNum(+r.tds_ppm) : '—'}
+                      </td>
+                      <td className="px-1 py-1 text-right font-mono-num">
+                        {r.pressure_psi != null ? fmtNum(+r.pressure_psi) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {replaceOpen && (
+        <ReplaceMeterDialog kind="well" assetId={wellId} plantId={well.plant_id} oldSerial={well.meter_serial}
+          onClose={() => {
+            setReplaceOpen(false);
+            qc.invalidateQueries({ queryKey: ['well', wellId] });
+            qc.invalidateQueries({ queryKey: ['well-latest-replacement', wellId] });
+          }}
+        />
+      )}
+      {editHydraulicOpen && (
+        <EditHydraulicDialog well={well} latest={latest} onClose={() => {
+          setEditHydraulicOpen(false);
+          qc.invalidateQueries({ queryKey: ['well-pms', wellId] });
+          qc.invalidateQueries({ queryKey: ['well', wellId] });
+        }} />
+      )}
+      {editElectricOpen && (
+        <EditElectricMeterDialog well={well} onClose={() => {
+          setEditElectricOpen(false);
+          qc.invalidateQueries({ queryKey: ['well', wellId] });
+          qc.invalidateQueries({ queryKey: ['wells', well.plant_id] });
+        }} />
+      )}
+    </div>
+  );
+}
+
+function EditElectricMeterDialog({ well, onClose }: { well: any; onClose: () => void }) {
+  const [form, setForm] = useState({
+    has_power_meter: !!well.has_power_meter,
+    electric_meter_brand: well.electric_meter_brand ?? '',
+    electric_meter_size: well.electric_meter_size ?? '',
+    electric_meter_serial: well.electric_meter_serial ?? '',
+    electric_meter_installed_date: well.electric_meter_installed_date ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const payload: any = {
+      has_power_meter: form.has_power_meter,
+      electric_meter_brand: form.electric_meter_brand || null,
+      electric_meter_size: form.electric_meter_size || null,
+      electric_meter_serial: form.electric_meter_serial || null,
+      electric_meter_installed_date: form.electric_meter_installed_date || null,
+    };
+    const { error } = await supabase.from('wells').update(payload).eq('id', well.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Electric meter updated');
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Electric Meter — {well.name}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={form.has_power_meter}
+              onCheckedChange={(v) => setForm({ ...form, has_power_meter: v })}
+              data-testid="edit-em-has-power"
+            />
+            Has dedicated electric meter
+          </label>
+          {form.has_power_meter && (
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} /></div>
+              <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
+              <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} /></div>
+              <div className="col-span-3">
+                <Label className="text-xs">Installed</Label>
+                <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button onClick={submit} disabled={saving} data-testid="save-electric-meter">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditHydraulicDialog({ well, latest, onClose }: { well: any; latest: any; onClose: () => void }) {
+  const { user, activeOperator } = useAuth();
+  const [form, setForm] = useState({
+    date_gathered: format(new Date(), 'yyyy-MM-dd'),
+    drilling_depth_m: (latest as any)?.drilling_depth_m ?? well.drilling_depth_m ?? '',
+    static_water_level_m: latest?.static_water_level_m ?? '',
+    pumping_water_level_m: latest?.pumping_water_level_m ?? '',
+    pump_setting: latest?.pump_setting ?? '',
+    motor_hp: latest?.motor_hp ?? '',
+    tds_ppm: latest?.tds_ppm ?? '',
+    turbidity_ntu: latest?.turbidity_ntu ?? '',
+    remarks: '',
+  });
+  const submit = async () => {
+    const num = (v: any) => v === '' || v == null ? null : +v;
+    const { error } = await supabase.from('well_pms_records').insert({
+      well_id: well.id, plant_id: well.plant_id,
+      record_type: 'PMS',
+      date_gathered: form.date_gathered,
+      static_water_level_m: num(form.static_water_level_m),
+      pumping_water_level_m: num(form.pumping_water_level_m),
+      pump_setting: form.pump_setting || null,
+      motor_hp: num(form.motor_hp),
+      tds_ppm: num(form.tds_ppm),
+      turbidity_ntu: num(form.turbidity_ntu),
+      recorded_by: activeOperator?.id ?? user?.id, remarks: form.remarks || null,
+    } as any);
+    if (error) { toast.error(error.message); return; }
+    // Keep wells.drilling_depth_m in sync with the latest entry
+    if (form.drilling_depth_m !== '') {
+      await supabase.from('wells').update({ drilling_depth_m: num(form.drilling_depth_m) }).eq('id', well.id);
+    }
+    toast.success('Hydraulic data logged');
+    onClose();
+  };
+  const set = (k: string, v: string) => setForm({ ...form, [k]: v });
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit hydraulic data — {well.name}</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Date gathered *</Label><Input type="date" value={form.date_gathered} onChange={e => set('date_gathered', e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label>Drilling depth (m)</Label><Input type="number" step="any" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} /></div>
+            <div><Label>Pump setting</Label><Input value={form.pump_setting} onChange={e => set('pump_setting', e.target.value)} /></div>
+            <div><Label>SWL (m)</Label><Input type="number" step="any" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} /></div>
+            <div><Label>PWL (m)</Label><Input type="number" step="any" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} /></div>
+            <div><Label>Motor HP</Label><Input type="number" step="any" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} /></div>
+            <div><Label>TDS (ppm)</Label><Input type="number" step="any" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} /></div>
+            <div className="col-span-2"><Label>Turbidity (NTU)</Label><Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} /></div>
+            <div className="col-span-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => set('remarks', e.target.value)} /></div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Each save creates a new history entry so you can track changes over time.</p>
+        </div>
+        <DialogFooter><Button onClick={submit}>Save entry</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Plant-level component type card ────────────────────────────────────────
+
+function PlantComponentTypeCard({ plant, embedded = false }: { plant: any; embedded?: boolean }) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
+  const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
+
+  // Independent collapse state for each row — collapsed by default
+  const [mediaOpen, setMediaOpen]   = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const setMediaType = (v: 'AFM' | 'MMF') => { setMediaTypeState(v); setEditing(true); };
+  const setFilterType = (v: 'Cartridge Filter' | 'Bag Filter') => { setFilterTypeState(v); setEditing(true); };
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('plants')
+      .update({ filter_media_type: mediaType, filter_housing_type: filterType } as any)
+      .eq('id', plant.id);
+    setSaving(false);
+    if (error) {
+      toast.error(`Could not save plant-level type: ${error.message}. Apply DB migration to add filter_media_type / filter_housing_type columns to plants.`);
+      return;
+    }
+    toast.success('Component types updated for all trains');
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['plants'] });
+  };
+
+  const cancel = () => {
+    setMediaTypeState((plant as any).filter_media_type ?? 'AFM');
+    setFilterTypeState((plant as any).filter_housing_type ?? 'Cartridge Filter');
+    setEditing(false);
+  };
+
+  const inner = (
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <Wrench className="h-4 w-4 text-chart-6 shrink-0" />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">Plant-wide Component Types</div>
+          <div className="text-[10px] text-muted-foreground">Applies universally — reflected in all train labels &amp; forms.</div>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 flex-1">
+        {/* ── Media filter collapsible row ── */}
+        <div className="rounded-md border border-border/60 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setMediaOpen(o => !o)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Media</span>
+              {/* Current value badge — visible when collapsed */}
+              {!mediaOpen && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                  {mediaType}
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${mediaOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {mediaOpen && (
+            <div className="p-2">
+              <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg">
+                {(['AFM', 'MMF'] as const).map((opt) => {
+                  const active = mediaType === opt;
+                  return (
+                    <button
+                      key={opt}
+                      disabled={!isManager}
+                      onClick={() => { if (isManager) setMediaType(opt); }}
+                      data-testid={`media-type-${opt}`}
+                      className={[
+                        'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                        active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Pre-filter collapsible row ── */}
+        <div className="rounded-md border border-border/60 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFilterOpen(o => !o)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Pre-filter</span>
+              {!filterOpen && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                  {filterType === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${filterOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {filterOpen && (
+            <div className="p-2">
+              <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg">
+                {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => {
+                  const active = filterType === opt;
+                  return (
+                    <button
+                      key={opt}
+                      disabled={!isManager}
+                      onClick={() => { if (isManager) setFilterType(opt); }}
+                      data-testid={`filter-type-${opt.replace(' ', '-')}`}
+                      className={[
+                        'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
+                        active ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span aria-hidden className={`h-2 w-2 rounded-full border ${active ? 'bg-white border-white' : 'border-muted-foreground/40'}`} />
+                      {opt === 'Cartridge Filter' ? 'Cartridge' : 'Bag'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save / Cancel — only shown when manager has made changes */}
+      {isManager && editing && (
+        <div className="flex gap-1.5 justify-end pt-2.5">
+          <Button size="sm" variant="ghost" onClick={cancel} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
+          <Button size="sm" onClick={save} disabled={saving} data-testid="save-component-types-btn" className="h-7 text-xs px-3 bg-teal-700 text-white hover:bg-teal-800">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
+  if (embedded) return <div className="flex flex-col" data-testid="plant-component-type-card">{inner}</div>;
+  return <Card className="p-3 flex flex-col" data-testid="plant-component-type-card">{inner}</Card>;
+}
+
+// ─── Edit Train Dialog ───────────────────────────────────────────────────────
+
+function EditTrainDialog({
+  train,
+  plant,
+  onClose,
+}: {
+  train: any;
+  plant: any;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+
+  // Plant-wide type defaults
+  const plantMediaType: 'AFM' | 'MMF' = (plant as any).filter_media_type ?? 'AFM';
+  const plantFilterType: 'Cartridge Filter' | 'Bag Filter' = (plant as any).filter_housing_type ?? 'Cartridge Filter';
+
+  const [form, setForm] = useState({
+    name: train.name ?? '',
+    num_afm: String(train.num_afm ?? 0),
+    num_booster_pumps: String(train.num_booster_pumps ?? 0),
+    num_hp_pumps: String(train.num_hp_pumps ?? 0),
+    num_cartridge_filters: String(train.num_cartridge_filters ?? 0),
+    num_controllers: String(train.num_controllers ?? 0),
+    num_filter_housings: String(train.num_filter_housings ?? 0),
+    // Per-train overrides (fallback to plant-wide)
+    filter_media_type: (train as any).filter_media_type ?? plantMediaType,
+    filter_housing_type: (train as any).filter_housing_type ?? plantFilterType,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const num = (v: string) => (v === '' ? 0 : Math.max(0, parseInt(v, 10) || 0));
+
+  const save = async () => {
+    setSaving(true);
+    const payload: any = {
+      name: form.name.trim() || null,
+      num_afm: num(form.num_afm),
+      num_booster_pumps: num(form.num_booster_pumps),
+      num_hp_pumps: num(form.num_hp_pumps),
+      num_cartridge_filters: num(form.num_cartridge_filters),
+      num_controllers: num(form.num_controllers),
+      num_filter_housings: num(form.num_filter_housings),
+      filter_media_type: form.filter_media_type,
+      filter_housing_type: form.filter_housing_type,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('ro_trains').update(payload).eq('id', train.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Train ${train.train_number} updated`);
+    qc.invalidateQueries({ queryKey: ['ro-trains', train.plant_id] });
+    onClose();
+  };
+
+  const mediaType = form.filter_media_type as 'AFM' | 'MMF';
+  const filterHousingType = form.filter_housing_type as 'Cartridge Filter' | 'Bag Filter';
+  const usingPlantMedia = mediaType === plantMediaType;
+  const usingPlantFilter = filterHousingType === plantFilterType;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Train {train.train_number}{train.name ? ` · ${train.name}` : ''}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Train name */}
+          <div>
+            <Label className="text-xs">Train label / name (optional)</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. North Wing"
+              disabled={!isManager}
+              data-testid="train-name-input"
+            />
+          </div>
+
+          {/* ── Component counts ── */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Component Counts</div>
+
+            {/* Media filters row */}
+            <div>
+              <Label className="text-xs">
+                {mediaType} units{' '}
+                <span className="text-muted-foreground font-normal">(media filter)</span>
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_afm: String(Math.max(0, num(form.num_afm) - 1)) })}
+                  data-testid="dec-afm"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_afm}
+                  onChange={(e) => setForm({ ...form, num_afm: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-afm-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_afm: String(num(form.num_afm) + 1) })}
+                  data-testid="inc-afm"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Pre-filter housing — label & visibility driven by plant-wide filter type */}
+            <div>
+              <Label className="text-xs">
+                {/* Bag Filter → "Filter Housing" (single merged field)
+                    Cartridge Filter → "Cartridge Housing" (separate field below) */}
+                {filterHousingType === 'Bag Filter' ? 'Filter Housing' : 'Cartridge Housing'}{' '}
+                <span className="text-muted-foreground font-normal">(pre-filter)</span>
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_cartridge_filters: String(Math.max(0, num(form.num_cartridge_filters) - 1)) })}
+                  data-testid="dec-cf"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_cartridge_filters}
+                  onChange={(e) => setForm({ ...form, num_cartridge_filters: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-cf-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_cartridge_filters: String(num(form.num_cartridge_filters) + 1) })}
+                  data-testid="inc-cf"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Booster pumps */}
+            <div>
+              <Label className="text-xs">Booster Pumps</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_booster_pumps: String(Math.max(0, num(form.num_booster_pumps) - 1)) })}
+                  data-testid="dec-bp"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_booster_pumps}
+                  onChange={(e) => setForm({ ...form, num_booster_pumps: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-bp-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_booster_pumps: String(num(form.num_booster_pumps) + 1) })}
+                  data-testid="inc-bp"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* HP pumps */}
+            <div>
+              <Label className="text-xs">High-Pressure Pumps (HPP)</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_hp_pumps: String(Math.max(0, num(form.num_hp_pumps) - 1)) })}
+                  data-testid="dec-hpp"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_hp_pumps}
+                  onChange={(e) => setForm({ ...form, num_hp_pumps: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-hpp-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_hp_pumps: String(num(form.num_hp_pumps) + 1) })}
+                  data-testid="inc-hpp"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Controllers */}
+            <div>
+              <Label className="text-xs">Controllers</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_controllers: String(Math.max(0, num(form.num_controllers) - 1)) })}
+                  data-testid="dec-ctrl"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_controllers}
+                  onChange={(e) => setForm({ ...form, num_controllers: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-ctrl-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_controllers: String(num(form.num_controllers) + 1) })}
+                  data-testid="inc-ctrl"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
+            {/* Filter Housings — hidden for Bag Filter plants (merged into Cartridge Housing above) */}
+            {filterHousingType !== 'Bag Filter' && (
+            <div>
+              <Label className="text-xs">Filter Housings</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_filter_housings: String(Math.max(0, num(form.num_filter_housings) - 1)) })}
+                  data-testid="dec-fh"
+                >
+                  −
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.num_filter_housings}
+                  onChange={(e) => setForm({ ...form, num_filter_housings: e.target.value })}
+                  className="text-center font-mono-num"
+                  data-testid="num-fh-input"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setForm({ ...form, num_filter_housings: String(num(form.num_filter_housings) + 1) })}
+                  data-testid="inc-fh"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+            )}
+          </div>
+
+          {/* ── Per-train type overrides ── */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Component Types{' '}
+              <span className="normal-case font-normal text-muted-foreground">(overrides plant-wide setting for this train)</span>
+            </div>
+
+            {/* Media filter type */}
+            <div>
+              <Label className="text-xs mb-1.5 block">
+                Media Filter Type
+                {usingPlantMedia && (
+                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                    ✓ Matches plant default
+                  </span>
+                )}
+              </Label>
+              <div className="flex gap-2">
+                {(['AFM', 'MMF'] as const).map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={mediaType === opt ? 'default' : 'outline'}
+                    onClick={() => setForm({ ...form, filter_media_type: opt })}
+                    data-testid={`train-media-${opt}`}
+                    className="flex-1"
+                  >
+                    <span
+                      aria-hidden
+                      className={`mr-1.5 h-2 w-2 rounded-full border ${mediaType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                    />
+                    {opt}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">AFM = Active Filter Media · MMF = Multi-Media Filter</p>
+            </div>
+
+            {/* Pre-filter housing type */}
+            <div>
+              <Label className="text-xs mb-1.5 block">
+                Pre-filter Housing Type
+                {usingPlantFilter && (
+                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                    ✓ Matches plant default
+                  </span>
+                )}
+              </Label>
+              <div className="flex gap-2">
+                {(['Cartridge Filter', 'Bag Filter'] as const).map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={filterHousingType === opt ? 'default' : 'outline'}
+                    onClick={() => setForm({ ...form, filter_housing_type: opt })}
+                    data-testid={`train-filter-${opt.replace(' ', '-')}`}
+                    className="flex-1"
+                  >
+                    <span
+                      aria-hidden
+                      className={`mr-1.5 h-2 w-2 rounded-full border ${filterHousingType === opt ? 'bg-primary-foreground border-primary-foreground' : 'border-muted-foreground/40'}`}
+                    />
+                    {opt}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {(!usingPlantMedia || !usingPlantFilter) && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                ⚠ This train differs from the plant default. It will display its own type labels.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            {isManager ? 'Cancel' : 'Close'}
+          </Button>
+          {isManager && (
+            <Button onClick={save} disabled={saving} data-testid="save-train-btn">
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Save Train
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Train History Chart ─────────────────────────────────────────────────────
+// Queries ro_train_readings for daily production volume and renders a bar chart.
+
+function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<{ date: string; volume: number }[]>({
+    queryKey: ['train-history', trainId, range],
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('reading_datetime, permeate_flow, product_flow, net_production')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+
+      // Aggregate per day — use permeate_flow or product_flow or net_production
+      const byDate = new Map<string, number>();
+      for (const r of data ?? []) {
+        const date = (r as any).reading_datetime?.slice(0, 10) ?? '';
+        if (!date) continue;
+        const vol = +((r as any).net_production ?? (r as any).permeate_flow ?? (r as any).product_flow ?? 0);
+        byDate.set(date, (byDate.get(date) ?? 0) + vol);
+      }
+      return Array.from(byDate.entries()).map(([date, volume]) => ({ date, volume: +volume.toFixed(2) })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const blob = new Blob([['date,volume_m3', ...rows.map(r => `${r.date},${r.volume}`)].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `${trainLabel.replace(/\s+/g,'_')}_history.csv`; a.click(); URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const total = rows.reduce((s, r) => s + r.volume, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Production History</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV} title="Export CSV">
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase">Days</div>
+            <div className="font-mono font-semibold text-base">{rows.length}</div>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase">Total m³</div>
+            <div className="font-mono font-semibold text-base">{fmtNum(total)}</div>
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-44 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / rows.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={38} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)} />
+              <Tooltip formatter={(v: any) => [`${fmtNum(v)} m³`, 'Volume']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Bar dataKey="volume" fill="hsl(174, 72%, 40%)" radius={[2,2,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TrainMetricChart ────────────────────────────────────────────────────────
+// Renders a bar chart for one or two numeric columns from ro_train_readings.
+// Used for per-component drill-downs: AFM/MMF, Booster Pump, HPP, etc.
+
+type TrainMetricDef = {
+  key: string;
+  label: string;
+  unit: string;
+  color?: string;
+};
+
+function TrainMetricChart({
+  trainId,
+  trainLabel,
+  title,
+  metrics,
+}: {
+  trainId: string;
+  trainLabel: string;
+  title: string;
+  metrics: TrainMetricDef[];
+}) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const cols = ['reading_datetime', ...metrics.map(m => m.key)].join(',');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['train-metric', trainId, metrics.map(m => m.key).join('-'), range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+        .select(cols)
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (!data?.length) return [];
+      // Aggregate per day — average readings for that day
+      const byDate = new Map<string, any>();
+      for (const r of data as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date)) byDate.set(date, { date, _count: 0 });
+        const e = byDate.get(date)!;
+        e._count++;
+        for (const m of metrics) {
+          if (r[m.key] != null) e[m.key] = (e[m.key] ?? 0) + +r[m.key];
+        }
+      }
+      return Array.from(byDate.values()).map(e => {
+        const out: any = { date: e.date };
+        for (const m of metrics) {
+          if (e[m.key] != null) out[m.key] = +(e[m.key] / e._count).toFixed(2);
+        }
+        return out;
+      }).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const csvCols = ['date', ...metrics.map(m => m.key)];
+    const header  = csvCols.join(',');
+    const lines   = rows.map(r => csvCols.map(c => r[c] ?? '').join(','));
+    const blob    = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
+    const url     = URL.createObjectURL(blob);
+    const a       = document.createElement('a');
+    a.href        = url;
+    a.download    = `${trainLabel.replace(/\s+/g, '_')}_${metrics[0].key}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const PALETTE = ['hsl(174,72%,40%)', 'hsl(216,72%,46%)', 'hsl(38,84%,52%)'];
+
+  const customTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => {
+          const m = metrics.find(x => x.key === p.dataKey);
+          return (
+            <p key={p.dataKey} style={{ color: p.fill }}>
+              {m?.label ?? p.dataKey}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span> {m?.unit}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">{title}</span>
+          <span className="text-xs text-muted-foreground">(daily avg)</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30', '90', '180', 'all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+      {rows.length > 0 && (() => {
+        const firstMetric = metrics[0];
+        const vals = rows.map(r => r[firstMetric.key]).filter((v): v is number => v != null);
+        const avg  = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        const max  = vals.length ? Math.max(...vals) : 0;
+        return (
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg</div>
+              <div className="font-mono font-semibold text-sm">{fmtNum(avg)}<span className="text-[10px] font-normal ml-0.5">{firstMetric.unit}</span></div>
+            </div>
+            <div className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Peak</div>
+              <div className="font-mono font-semibold text-sm">{fmtNum(max)}<span className="text-[10px] font-normal ml-0.5">{firstMetric.unit}</span></div>
+            </div>
+            <div className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Days</div>
+              <div className="font-mono font-semibold text-sm">{rows.length}</div>
+            </div>
+          </div>
+        );
+      })()}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-44 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(14, 380 / rows.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={40}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)} />
+              <Tooltip content={customTooltip} />
+              {metrics.map((m, i) => (
+                <Bar key={m.key} dataKey={m.key} name={m.label} fill={m.color ?? PALETTE[i % PALETTE.length]} radius={[2, 2, 0, 0]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TrainRODetailCharts ──────────────────────────────────────────────────────
+// 2×3 grid of mini sparkline cards for RO performance metrics.
+// Source: ro_train_readings — no extra tables needed.
+
+function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['train-ro-detail', trainId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+        .select('reading_datetime,permeate_flow,feed_flow,reject_flow,feed_pressure_psi,reject_pressure_psi,permeate_tds,feed_tds,reject_tds,recovery_pct,permeate_meter_delta,temperature_c')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (!data?.length) return [];
+      const byDate = new Map<string, any>();
+      for (const r of data as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date)) byDate.set(date, { date, _count: 0, perm_vol: 0 });
+        const e = byDate.get(date)!;
+        e._count++;
+        const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
+        for (const col of avgCols) if (r[col] != null) e[col] = (e[col] ?? 0) + +r[col];
+        if (r.permeate_meter_delta != null && +r.permeate_meter_delta > 0) e.perm_vol += +r.permeate_meter_delta;
+      }
+      return Array.from(byDate.values()).map(e => {
+        const out: any = { date: e.date, permeate_volume: +e.perm_vol.toFixed(2) };
+        const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
+        for (const col of avgCols) if (e[col] != null) out[col] = +(e[col] / e._count).toFixed(2);
+        return out;
+      }).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data'); return; }
+    const cols = ['date','permeate_flow','feed_flow','reject_flow','feed_pressure_psi','permeate_tds','recovery_pct','permeate_volume'];
+    const blob = new Blob([[cols.join(','), ...rows.map(r => cols.map(c => r[c] ?? '').join(','))].join('\n')], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${trainLabel.replace(/\s+/g, '_')}_ro_performance.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  const miniMetrics: { key: string; label: string; unit: string; color: string }[] = [
+    { key: 'permeate_flow',     label: 'Permeate Flow',  unit: 'm³/h', color: 'hsl(174,72%,40%)' },
+    { key: 'feed_pressure_psi', label: 'Feed Pressure',  unit: 'psi',  color: 'hsl(216,72%,46%)' },
+    { key: 'permeate_tds',      label: 'Permeate TDS',   unit: 'ppm',  color: 'hsl(38,84%,52%)'  },
+    { key: 'recovery_pct',      label: 'Recovery',       unit: '%',    color: 'hsl(150,60%,40%)' },
+    { key: 'reject_flow',       label: 'Reject Flow',    unit: 'm³/h', color: 'hsl(0,65%,50%)'   },
+    { key: 'permeate_volume',   label: 'Daily Volume',   unit: 'm³',   color: 'hsl(174,72%,40%)' },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">RO Performance</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30', '90', '180', 'all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {miniMetrics.map(m => {
+            const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
+            if (!vals.length) return null;
+            const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+            const max = Math.max(...vals);
+            return (
+              <div key={m.key} className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{m.unit}</span>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
+                  <span className="text-[10px] text-muted-foreground">avg · pk {fmtNum(max)}</span>
+                </div>
+                <div className="h-14 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={rows} margin={{ top: 1, right: 0, bottom: 0, left: 0 }}
+                      barSize={Math.max(2, Math.min(8, 200 / Math.max(rows.length, 1)))}>
+                      <Bar dataKey={m.key} fill={m.color} radius={[1, 1, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PretreatAFMChart ─────────────────────────────────────────────────────────
+// Queries ro_pretreatment_readings → afm_units JSONB.
+// Press view: In/Out pressure + ΔP line (daily avg across all units).
+// Backwash view: event count bars + avg duration line + avg volume stat.
+function PretreatAFMChart({
+  trainId,
+  mediaType = 'AFM',
+}: {
+  trainId: string;
+  mediaType?: string;
+}) {
+  const [range, setRange]       = useState<'30' | '90' | '180' | 'all'>('30');
+  const [view, setView]         = useState<'pressure' | 'backwash'>('pressure');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['pretreat-afm', trainId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+        .select('reading_datetime,afm_units,mmf_readings,backwash_start,backwash_end')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (!data?.length) return [];
+
+      const byDate = new Map<string, any>();
+      for (const r of data as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date))
+          byDate.set(date, {
+            date,
+            _inSum: 0, _inN: 0, _outSum: 0, _outN: 0, _dpSum: 0, _dpN: 0,
+            _bwCount: 0, _durSum: 0, _durN: 0, _volSum: 0, _volN: 0,
+          });
+        const e = byDate.get(date)!;
+
+        for (const u of (r.afm_units ?? []) as any[]) {
+          if (u.inlet_psi  != null) { e._inSum  += +u.inlet_psi;  e._inN++;  }
+          if (u.outlet_psi != null) { e._outSum += +u.outlet_psi; e._outN++; }
+          if (u.dp_psi     != null) { e._dpSum  += +u.dp_psi;     e._dpN++;  }
+          if (u.backwash_start && u.backwash_end) {
+            e._bwCount++;
+            const dur = (new Date(u.backwash_end).getTime() - new Date(u.backwash_start).getTime()) / 60_000;
+            if (dur > 0) { e._durSum += dur; e._durN++; }
+          }
+        }
+        if (r.backwash_start && r.backwash_end) {
+          e._bwCount++;
+          const dur = (new Date(r.backwash_end).getTime() - new Date(r.backwash_start).getTime()) / 60_000;
+          if (dur > 0) { e._durSum += dur; e._durN++; }
+        }
+        for (const m of (r.mmf_readings ?? []) as any[]) {
+          if (m.meter_start != null && m.meter_end != null) {
+            const vol = Math.max(0, +m.meter_end - +m.meter_start);
+            e._volSum += vol; e._volN++;
+          }
+        }
+      }
+
+      return Array.from(byDate.values()).map(e => ({
+        date:            e.date,
+        inlet_psi:       e._inN  ? +(e._inSum  / e._inN ).toFixed(2) : null,
+        outlet_psi:      e._outN ? +(e._outSum / e._outN).toFixed(2) : null,
+        dp_psi:          e._dpN  ? +(e._dpSum  / e._dpN ).toFixed(2) : null,
+        bw_count:        e._bwCount,
+        bw_duration_min: e._durN ? +(e._durSum / e._durN).toFixed(1) : null,
+        bw_volume_m3:    e._volN ? +(e._volSum / e._volN).toFixed(3) : null,
+      })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const dpVals   = rows.map(r => r.dp_psi).filter((v): v is number => v != null);
+  const avgDp    = dpVals.length ? dpVals.reduce((a, b) => a + b, 0) / dpVals.length : 0;
+  const maxDp    = dpVals.length ? Math.max(...dpVals) : 0;
+  const totalBw  = rows.reduce((s, r) => s + (r.bw_count ?? 0), 0);
+  const durRows  = rows.filter(r => r.bw_duration_min != null);
+  const avgDur   = durRows.length ? durRows.reduce((s, r) => s + (r.bw_duration_min ?? 0), 0) / durRows.length : 0;
+  const volRows  = rows.filter(r => r.bw_volume_m3 != null);
+  const avgVol   = volRows.length ? volRows.reduce((s, r) => s + (r.bw_volume_m3 ?? 0), 0) / volRows.length : 0;
+
+  const barSize = Math.max(3, Math.min(14, 360 / Math.max(rows.length, 1)));
+
+  const Tooltip2 = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const unit = (key: string) =>
+      key === 'inlet_psi' || key === 'outlet_psi' || key === 'dp_psi' ? 'psi'
+      : key === 'bw_duration_min' ? 'min'
+      : key === 'bw_volume_m3'   ? 'm³'
+      : '';
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs space-y-0.5">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.stroke ?? p.fill }}>
+            {p.name}:{' '}
+            <span className="font-mono font-semibold">{fmtNum(p.value)}</span>{' '}
+            {unit(p.dataKey)}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  const RangeBar = () => (
+    <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+      {(['30', '90', '180', 'all'] as const).map(r => (
+        <button key={r} onClick={() => setRange(r)}
+          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
+            ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+          {r === 'all' ? 'All' : `${r}d`}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">{mediaType} — Pressure & Backwash</span>
+          <span className="text-xs text-muted-foreground">(daily avg)</span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['pressure', 'backwash'] as const).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors
+                  ${view === v ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                {v}
+              </button>
+            ))}
+          </div>
+          <RangeBar />
+        </div>
+      </div>
+
+      {rows.length > 0 && view === 'pressure' && (
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Avg ΔP',   val: fmtNum(avgDp), unit: 'psi' },
+            { label: 'Peak ΔP',  val: fmtNum(maxDp), unit: 'psi' },
+            { label: 'BW Total', val: String(totalBw), unit: 'events' },
+          ].map(s => (
+            <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="font-mono font-semibold text-sm">
+                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {rows.length > 0 && view === 'backwash' && (
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Total BW',     val: String(totalBw),    unit: 'events' },
+            { label: 'Avg Duration', val: fmtNum(avgDur, 1),  unit: 'min'    },
+            { label: 'Avg Volume',   val: fmtNum(avgVol, 3),  unit: 'm³'     },
+          ].map(s => (
+            <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="font-mono font-semibold text-sm">
+                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
+        </div>
+      ) : view === 'pressure' ? (
+        <>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+            {[
+              { color: 'hsl(216,72%,50%)', label: 'In Pressure' },
+              { color: 'hsl(38,84%,52%)',  label: 'Out Pressure' },
+              { color: 'hsl(0,65%,50%)',   label: 'ΔP (dashed)' },
+            ].map(l => (
+              <span key={l.label} className="flex items-center gap-1">
+                <span className="inline-block w-3 h-0.5 rounded" style={{ background: l.color }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)}
+                  interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+                <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={36} />
+                <Tooltip content={<Tooltip2 />} />
+                <Area type="monotone" dataKey="inlet_psi"  name="In Pressure"
+                  stroke="hsl(216,72%,50%)" fill="hsl(216,72%,50%)" fillOpacity={0.07}
+                  strokeWidth={1.5} dot={false} connectNulls />
+                <Area type="monotone" dataKey="outlet_psi" name="Out Pressure"
+                  stroke="hsl(38,84%,52%)"  fill="hsl(38,84%,52%)"  fillOpacity={0.07}
+                  strokeWidth={1.5} dot={false} connectNulls />
+                <Line  type="monotone" dataKey="dp_psi"    name="ΔP"
+                  stroke="hsl(0,65%,50%)" strokeWidth={2}
+                  strokeDasharray="5 3" dot={false} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      ) : (
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)}
+                interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis yAxisId="cnt" allowDecimals={false}
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={28} />
+              <YAxis yAxisId="dur" orientation="right"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={38}
+                tickFormatter={(v: number) => `${v}m`} />
+              <Tooltip content={<Tooltip2 />} />
+              <Bar yAxisId="cnt" dataKey="bw_count" name="BW Events"
+                fill="hsl(270,55%,58%)" radius={[2, 2, 0, 0]} barSize={barSize} />
+              <Line yAxisId="dur" type="monotone" dataKey="bw_duration_min" name="Avg Duration"
+                stroke="hsl(174,72%,40%)" strokeWidth={2} dot={false} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PretreatBoosterChart ─────────────────────────────────────────────────────
+// Queries ro_pretreatment_readings → booster_pumps JSONB.
+// Shows target_pressure_psi (psi mode) and/or target_hz (Hz mode).
+function PretreatBoosterChart({ trainId }: { trainId: string }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['pretreat-booster', trainId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+        .select('reading_datetime,booster_pumps')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (!data?.length) return [];
+
+      const byDate = new Map<string, any>();
+      for (const r of data as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date))
+          byDate.set(date, { date, _psiSum: 0, _psiN: 0, _hzSum: 0, _hzN: 0 });
+        const e = byDate.get(date)!;
+        for (const p of (r.booster_pumps ?? []) as any[]) {
+          if (p.target_pressure_psi != null) { e._psiSum += +p.target_pressure_psi; e._psiN++; }
+          if (p.target_hz           != null) { e._hzSum  += +p.target_hz;           e._hzN++;  }
+        }
+      }
+      return Array.from(byDate.values()).map(e => ({
+        date:       e.date,
+        target_psi: e._psiN ? +(e._psiSum / e._psiN).toFixed(2) : null,
+        target_hz:  e._hzN  ? +(e._hzSum  / e._hzN ).toFixed(2) : null,
+      })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const psiVals = rows.map(r => r.target_psi).filter((v): v is number => v != null);
+  const hzVals  = rows.map(r => r.target_hz ).filter((v): v is number => v != null);
+  const hasPsi  = psiVals.length > 0;
+  const hasHz   = hzVals.length  > 0;
+  const avgPsi  = hasPsi ? psiVals.reduce((a, b) => a + b, 0) / psiVals.length : 0;
+  const avgHz   = hasHz  ? hzVals .reduce((a, b) => a + b, 0) / hzVals.length  : 0;
+
+  const Tooltip2 = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs space-y-0.5">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.stroke }}>
+            {p.name}:{' '}
+            <span className="font-mono font-semibold">{fmtNum(p.value)}</span>{' '}
+            {p.dataKey === 'target_psi' ? 'psi' : 'Hz'}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">Booster Pump — Target Setting</span>
+          <span className="text-xs text-muted-foreground">(daily avg)</span>
+        </div>
+        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+          {(['30', '90', '180', 'all'] as const).map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
+                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              {r === 'all' ? 'All' : `${r}d`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {rows.length > 0 && (
+        <div className={`grid gap-2 ${hasPsi && hasHz ? 'grid-cols-2' : 'grid-cols-1 max-w-xs'}`}>
+          {hasPsi && (
+            <div className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg Target (PSI)</div>
+              <div className="font-mono font-semibold text-sm">
+                {fmtNum(avgPsi)}<span className="text-[10px] font-normal ml-0.5">psi</span>
+              </div>
+            </div>
+          )}
+          {hasHz && (
+            <div className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg Target (Hz)</div>
+              <div className="font-mono font-semibold text-sm">
+                {fmtNum(avgHz)}<span className="text-[10px] font-normal ml-0.5">Hz</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-44 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)}
+                interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              {hasPsi && (
+                <YAxis yAxisId="psi"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={36}
+                  tickFormatter={(v: number) => String(v)} />
+              )}
+              {hasHz && (
+                <YAxis yAxisId="hz" orientation={hasPsi ? 'right' : 'left'}
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={40}
+                  tickFormatter={(v: number) => `${v}Hz`} />
+              )}
+              <Tooltip content={<Tooltip2 />} />
+              {hasPsi && (
+                <Line yAxisId="psi" type="monotone" dataKey="target_psi" name="Target (psi)"
+                  stroke="hsl(216,72%,46%)" strokeWidth={2} dot={false} connectNulls />
+              )}
+              {hasHz && (
+                <Line yAxisId="hz" type="monotone" dataKey="target_hz" name="Target (Hz)"
+                  stroke="hsl(38,84%,52%)" strokeWidth={2} dot={false} connectNulls strokeDasharray="5 3" />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PretreatHPPChart ─────────────────────────────────────────────────────────
+// Dual-source: hpp_target_pressure_psi from ro_pretreatment_readings (target)
+// overlaid with feed_pressure_psi from ro_train_readings (achieved).
+function PretreatHPPChart({ trainId }: { trainId: string }) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['pretreat-hpp', trainId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+      const [ptRes, roRes] = await Promise.all([
+        (supabase.from('ro_pretreatment_readings' as any) as any)
+          .select('reading_datetime,hpp_target_pressure_psi')
+          .eq('train_id', trainId).gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true }),
+        (supabase.from('ro_train_readings' as any) as any)
+          .select('reading_datetime,feed_pressure_psi,reject_pressure_psi')
+          .eq('train_id', trainId).gte('reading_datetime', since)
+          .order('reading_datetime', { ascending: true }),
+      ]);
+
+      const byDate = new Map<string, any>();
+      const ensureDate = (d: string) => {
+        if (!byDate.has(d))
+          byDate.set(d, { date: d, _tgtSum: 0, _tgtN: 0, _feedSum: 0, _feedN: 0, _rejSum: 0, _rejN: 0 });
+        return byDate.get(d)!;
+      };
+      for (const r of (ptRes.data ?? []) as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10); if (!date) continue;
+        const e = ensureDate(date);
+        if (r.hpp_target_pressure_psi != null) { e._tgtSum += +r.hpp_target_pressure_psi; e._tgtN++; }
+      }
+      for (const r of (roRes.data ?? []) as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10); if (!date) continue;
+        const e = ensureDate(date);
+        if (r.feed_pressure_psi   != null) { e._feedSum += +r.feed_pressure_psi;   e._feedN++; }
+        if (r.reject_pressure_psi != null) { e._rejSum  += +r.reject_pressure_psi; e._rejN++;  }
+      }
+      return Array.from(byDate.values()).map(e => ({
+        date:        e.date,
+        hpp_target:  e._tgtN  ? +(e._tgtSum  / e._tgtN ).toFixed(1) : null,
+        feed_actual: e._feedN ? +(e._feedSum  / e._feedN).toFixed(1) : null,
+        reject_psi:  e._rejN  ? +(e._rejSum   / e._rejN ).toFixed(1) : null,
+      })).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const tgtVals  = rows.map(r => r.hpp_target ).filter((v): v is number => v != null);
+  const feedVals = rows.map(r => r.feed_actual).filter((v): v is number => v != null);
+  const avgTgt   = tgtVals .length ? tgtVals .reduce((a, b) => a + b, 0) / tgtVals.length  : null;
+  const avgFeed  = feedVals.length ? feedVals.reduce((a, b) => a + b, 0) / feedVals.length  : null;
+
+  const Tooltip2 = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs space-y-0.5">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.stroke }}>
+            {p.name}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span> psi
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">HPP — Target vs Actual Pressure</span>
+          <span className="text-xs text-muted-foreground">(daily avg)</span>
+        </div>
+        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+          {(['30', '90', '180', 'all'] as const).map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
+                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              {r === 'all' ? 'All' : `${r}d`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {rows.length > 0 && (
+        <>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+            {[
+              { color: 'hsl(216,72%,46%)', label: 'Feed (actual)', dashed: false },
+              { color: 'hsl(174,72%,40%)', label: 'HPP Target',    dashed: true  },
+              { color: 'hsl(0,65%,50%)',   label: 'Reject',        dashed: false },
+            ].map(l => (
+              <span key={l.label} className="flex items-center gap-1">
+                <span className="inline-block w-4 h-0.5 rounded" style={{
+                  background: l.dashed
+                    ? `repeating-linear-gradient(90deg,${l.color} 0,${l.color} 4px,transparent 4px,transparent 7px)`
+                    : l.color
+                }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2 flex-wrap text-xs">
+            {avgTgt  != null && (
+              <div className="bg-muted/40 rounded-lg px-3 py-1.5 text-center">
+                <span className="text-muted-foreground text-[10px] uppercase tracking-wide block">Avg Target</span>
+                <span className="font-mono font-semibold">{fmtNum(avgTgt)} <span className="font-normal text-[10px]">psi</span></span>
+              </div>
+            )}
+            {avgFeed != null && (
+              <div className="bg-muted/40 rounded-lg px-3 py-1.5 text-center">
+                <span className="text-muted-foreground text-[10px] uppercase tracking-wide block">Avg Feed</span>
+                <span className="font-mono font-semibold">{fmtNum(avgFeed)} <span className="font-normal text-[10px]">psi</span></span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)}
+                interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={36} />
+              <Tooltip content={<Tooltip2 />} />
+              <Area type="monotone" dataKey="feed_actual" name="Feed (actual)"
+                stroke="hsl(216,72%,46%)" fill="hsl(216,72%,46%)" fillOpacity={0.08}
+                strokeWidth={1.5} dot={false} connectNulls />
+              <Line type="monotone" dataKey="hpp_target" name="HPP Target"
+                stroke="hsl(174,72%,40%)" strokeWidth={2}
+                strokeDasharray="5 3" dot={false} connectNulls />
+              <Line type="monotone" dataKey="reject_psi" name="Reject"
+                stroke="hsl(0,65%,50%)" strokeWidth={1.5} dot={false} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PretreatCFChart ──────────────────────────────────────────────────────────
+// Queries ro_pretreatment_readings → cartridge_filter_housings JSONB.
+// Shows In/Out pressure and computed ΔP per day (avg across all housing units).
+function PretreatCFChart({
+  trainId,
+  filterType = 'Cartridge Filter',
+}: {
+  trainId: string;
+  filterType?: string;
+}) {
+  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ['pretreat-cf', trainId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+        .select('reading_datetime,cartridge_filter_housings')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (!data?.length) return [];
+
+      const byDate = new Map<string, any>();
+      for (const r of data as any[]) {
+        const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
+        if (!date) continue;
+        if (!byDate.has(date))
+          byDate.set(date, { date, _inSum: 0, _inN: 0, _outSum: 0, _outN: 0 });
+        const e = byDate.get(date)!;
+        for (const h of (r.cartridge_filter_housings ?? []) as any[]) {
+          if (h.in_psi  != null) { e._inSum  += +h.in_psi;  e._inN++;  }
+          if (h.out_psi != null) { e._outSum += +h.out_psi; e._outN++; }
+        }
+      }
+      return Array.from(byDate.values()).map(e => {
+        const inP  = e._inN  ? +(e._inSum  / e._inN ).toFixed(2) : null;
+        const outP = e._outN ? +(e._outSum / e._outN).toFixed(2) : null;
+        const dp   = inP != null && outP != null ? +(inP - outP).toFixed(2) : null;
+        return { date: e.date, in_psi: inP, out_psi: outP, dp_psi: dp };
+      }).sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  const dpVals  = rows.map(r => r.dp_psi).filter((v): v is number => v != null);
+  const avgDp   = dpVals.length ? dpVals.reduce((a, b) => a + b, 0) / dpVals.length : 0;
+  const maxDp   = dpVals.length ? Math.max(...dpVals) : 0;
+  const inVals  = rows.map(r => r.in_psi ).filter((v): v is number => v != null);
+  const avgIn   = inVals.length ? inVals.reduce((a, b) => a + b, 0) / inVals.length  : 0;
+
+  const label = filterType === 'Bag Filter' ? 'Filter Housing' : 'CF Housing';
+
+  const Tooltip2 = ({ active, payload, label: lbl }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs space-y-0.5">
+        <p className="font-semibold text-foreground mb-1">{lbl}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.stroke }}>
+            {p.name}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span> psi
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-semibold">{label} — In / Out / ΔP</span>
+          <span className="text-xs text-muted-foreground">(daily avg)</span>
+        </div>
+        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+          {(['30', '90', '180', 'all'] as const).map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
+                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              {r === 'all' ? 'All' : `${r}d`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Avg In',   val: fmtNum(avgIn),  unit: 'psi' },
+            { label: 'Avg ΔP',  val: fmtNum(avgDp),  unit: 'psi' },
+            { label: 'Peak ΔP', val: fmtNum(maxDp),  unit: 'psi' },
+          ].map(s => (
+            <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
+              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="font-mono font-semibold text-sm">
+                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Legend */}
+      {rows.length > 0 && (
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+          {[
+            { color: 'hsl(216,72%,50%)', label: 'In Pressure',  dashed: false },
+            { color: 'hsl(38,84%,52%)',  label: 'Out Pressure', dashed: false },
+            { color: 'hsl(0,65%,50%)',   label: 'ΔP',          dashed: true  },
+          ].map(l => (
+            <span key={l.label} className="flex items-center gap-1">
+              <span className="inline-block w-3 h-0.5 rounded" style={{
+                background: l.dashed
+                  ? `repeating-linear-gradient(90deg,${l.color} 0,${l.color} 4px,transparent 4px,transparent 7px)`
+                  : l.color
+              }} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
+        </div>
+      ) : (
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)}
+                interval="preserveStartEnd" angle={-30} textAnchor="end" height={36} />
+              <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={36} />
+              <Tooltip content={<Tooltip2 />} />
+              <Area type="monotone" dataKey="in_psi"  name="In Pressure"
+                stroke="hsl(216,72%,50%)" fill="hsl(216,72%,50%)" fillOpacity={0.08}
+                strokeWidth={1.5} dot={false} connectNulls />
+              <Area type="monotone" dataKey="out_psi" name="Out Pressure"
+                stroke="hsl(38,84%,52%)" fill="hsl(38,84%,52%)" fillOpacity={0.08}
+                strokeWidth={1.5} dot={false} connectNulls />
+              <Line  type="monotone" dataKey="dp_psi" name="ΔP"
+                stroke="hsl(0,65%,50%)" strokeWidth={2}
+                strokeDasharray="5 3" dot={false} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── recalculateTrainDeltas ──────────────────────────────────────────────────
+//
+// Recomputes permeate_meter_delta for EVERY reading of an RO train in strict
+// chronological order.  Call this whenever the permeate_meter baseline changes:
+//
+//   • is_meter_replacement toggled on or off  (toggleMeterReplacement below)
+//   • DataAnalysis applies a permeate_meter correction  (DataAnalysis.tsx)
+//   • A new reading is inserted between existing rows
+//       → HOOK POINT in ROTrains.tsx: call recalculateTrainDeltas(trainId) at
+//         the end of the submit() handler after every successful insert.
+//
+// ── HYBRID STRATEGY ──────────────────────────────────────────────────────────
+// After every successful DB write this function also calls deltaCache.set() with
+// the freshly-computed delta so the Dashboard and TrendChart pick up the new
+// value immediately (Tier-1 cache shortcut) without waiting for a refetch.
+// If permeate_meter is null the cache entry for that (trainId, dateKey) is
+// cleared via deltaCache.invalidate() so consumers fall back to Tier-2 raw
+// computation on the next render.
+//
+// Rules:
+//   is_meter_replacement = true  → delta = 0; baseline still advances
+//   Normal row, prev available   → delta = max(0, current − prev)
+//   First row / meter is null    → delta = null
+async function recalculateTrainDeltas(trainId: string): Promise<void> {
+  try {
+    const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
+      .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement, reading_datetime')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: true });
+
+    if (!rows?.length) return;
+
+    let prevMeter: number | null = null;
+
+    for (const row of rows as any[]) {
+      const isRepl   = !!row.is_meter_replacement;
+      const curMeter = row.permeate_meter != null ? +row.permeate_meter : null;
+      const stored   = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
+      // Date key for cache population (yyyy-MM-dd local)
+      const dateKey  = row.reading_datetime
+        ? new Date(row.reading_datetime).toLocaleDateString('en-CA') // YYYY-MM-DD
+        : null;
+
+      let newDelta: number | null;
+      if (isRepl) {
+        newDelta = 0;
+      } else if (prevMeter != null && curMeter != null) {
+        newDelta = Math.max(0, curMeter - prevMeter);
+      } else {
+        newDelta = null;
+      }
+
+      // Always advance baseline — replacement rows still set the new meter floor
+      if (curMeter != null) prevMeter = curMeter;
+
+      // Only write to DB when the value has actually changed
+      if (newDelta !== stored) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ permeate_meter_delta: newDelta })
+          .eq('id', row.id);
+      }
+
+      // ── HYBRID STRATEGY: sync in-memory delta cache ──────────────────────
+      // Always update the cache after the DB write (even if the stored value
+      // didn't change) so consumers get the backend-verified value immediately.
+      if (dateKey) {
+        if (newDelta !== null) {
+          // Mark as 'stored' — value now matches the backend authoritative value.
+          deltaCache.set(trainId, dateKey, newDelta, 'stored');
+        } else {
+          // No computable delta for this row — remove stale cache entry so Tier-2
+          // raw computation runs on the next render rather than returning 0.
+          deltaCache.invalidate(trainId);
+        }
+      }
+    }
+  } catch {
+    // Non-critical — log and continue
+  }
+}
+
+// ─── Train Operator Log Modal ─────────────────────────────────────────────────
+// Full paginated operator log with all columns + meter-replacement toggle,
+// matching the Operations reading-history pattern.
+
+function TrainOperatorLogModal({
+  trainId,
+  trainLabel,
+  onClose,
+}: {
+  trainId: string;
+  trainLabel: string;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { isManager } = useAuth();
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Date range — default last 30 days
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const thirtyDaysAgoStr = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+  const [dateFrom, setDateFrom] = useState(thirtyDaysAgoStr);
+  const [dateTo, setDateTo]     = useState(todayStr);
+  const [rangePreset, setRangePreset] = useState<'7' | '30' | '90' | 'custom'>('30');
+
+  const applyPreset = (p: '7' | '30' | '90') => {
+    const days = parseInt(p);
+    setDateFrom(format(new Date(Date.now() - days * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'));
+    setDateTo(todayStr);
+    setRangePreset(p);
+    setPage(0);
+  };
+
+  const untilNextDay = dateTo
+    ? (() => {
+        const [y, m, d] = dateTo.split('-').map(Number);
+        const next = new Date(y, m - 1, d + 1);
+        return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+      })()
+    : null;
+
+  const queryKey = ['train-operator-log', trainId, dateFrom, untilNextDay];
+
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      try {
+        // Columns added by migration — may not exist in un-migrated DBs.
+        // Try full select first; if Supabase returns a schema error for any
+        // new column, fall back to the original safe set so logs always load.
+        // Column tiers — each retry drops only the columns that failed.
+        // This way is_meter_replacement stays in the query once it exists in DB,
+        // even if other newer columns (remarks, reject_flow etc.) are still missing.
+        const ALL_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'feed_ph', 'permeate_ph', 'temperature_c', 'turbidity_ntu',
+          'recovery_pct',
+          'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+          'is_meter_replacement', 'remarks',
+        ];
+        // Tier 2: drop migration-only columns (remarks, permeate_meter_prev) but
+        // keep all original schema columns so Rej. Flow / Suction / Temp etc. display.
+        const TIER2_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'temperature_c', 'recovery_pct',
+          'permeate_meter', 'permeate_meter_delta',
+          'is_meter_replacement',
+        ];
+        // Tier 3: absolute minimum — original columns only, no migration deps
+        const TIER3_COLS = [
+          'id', 'reading_datetime', 'recorded_by',
+          'permeate_flow', 'feed_flow', 'reject_flow',
+          'feed_pressure_psi', 'reject_pressure_psi', 'suction_pressure_psi',
+          'feed_tds', 'permeate_tds', 'reject_tds',
+          'temperature_c', 'recovery_pct',
+          'permeate_meter',
+        ];
+
+        const buildQ = (cols: string[]) => {
+          let q = (supabase.from('ro_train_readings' as any) as any)
+            .select(cols.join(','))
+            .eq('train_id', trainId)
+            .order('reading_datetime', { ascending: false })
+            .limit(2000);
+          if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
+          if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
+          return q;
+        };
+
+        // Try each tier in order — stop at first success
+        let readings: any[] | null = null;
+        for (const tier of [ALL_COLS, TIER2_COLS, TIER3_COLS]) {
+          const { data, error } = await buildQ(tier);
+          if (!error) { readings = data ?? []; break; }
+          // If the error isn't about a missing column, stop retrying — it's a real error
+          const isMissingCol = error.message.includes('column') || error.message.includes('does not exist');
+          if (!isMissingCol) { console.error('operator log fetch:', error); break; }
+        }
+        if (!readings?.length) return [];
+
+        // Compute permeate_meter_delta in-memory from consecutive permeate_meter values.
+        // Rows are sorted descending; reverse to ascending so prev-curr diff is correct.
+        //
+        // FIX: previously lastMeter was only updated inside the
+        //   `if (permeate_meter_delta == null)` branch, so any row that already had a
+        //   stored delta (even a wrong one written before DataAnalysis correction) would
+        //   freeze the baseline.  Every subsequent null-delta row then computed against
+        //   a stale previous reading, inflating or deflating its computed delta.
+        //
+        // Now:
+        //   • lastMeter ALWAYS advances to the current row's permeate_meter.
+        //   • _computed_delta is set for EVERY row that has a permeate_meter — it
+        //     uses the corrected meter value, so DataAnalysis corrections to
+        //     permeate_meter are reflected immediately without waiting for the stored
+        //     permeate_meter_delta to be back-filled.
+        const ascReadings = [...(readings as any[])].reverse();
+        const lastMeter = new Map<string, number>(); // trainId → last seen permeate_meter
+        ascReadings.forEach((r: any) => {
+          if (r.permeate_meter != null) {
+            const prev = lastMeter.get(r.train_id ?? trainId);
+            // Always compute from meter readings — overrides stored delta which may
+            // have been derived from a permeate_meter value that was later corrected.
+            r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
+            lastMeter.set(r.train_id ?? trainId, +r.permeate_meter);
+          }
+        });
+
+        // Resolve operator names
+        const uids = [...new Set((readings as any[]).map((r: any) => r.recorded_by).filter(Boolean))];
+        let profileMap: Record<string, string> = {};
+        if (uids.length) {
+          for (const table of ['user_profiles', 'profiles']) {
+            const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
+              .select('id, first_name, last_name, username').in('id', uids);
+            if (!perr && pdata?.length) {
+              profileMap = Object.fromEntries(
+                (pdata as any[]).map((p: any) => {
+                  const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username?.trim() || '';
+                  return [p.id, name || null];
+                }).filter(([, n]) => n)
+              );
+              if (Object.keys(profileMap).length) break;
+            }
+          }
+        }
+        return (readings as any[]).map((r: any) => ({
+          ...r,
+          _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0, 8)}` : 'Unknown'),
+        }));
+      } catch (err) {
+        console.error('operator log error:', err);
+        return [];
+      }
+    },
+    staleTime: 30_000,
+    gcTime: 60_000,
+  });
+
+  // Toggle is_meter_replacement on a row (manager-only).
+  // Toggling ON  → this row's delta becomes 0 in TrendChart / Dashboard.
+  // Toggling OFF → this row's delta must be recalculated from actual meter readings.
+  // Either way, a full cascade recalculation runs for the entire train so every
+  // downstream row's delta stays consistent with the updated baseline.
+  const toggleMeterReplacement = async (r: any) => {
+    if (!isManager) return;
+    setTogglingId(r.id);
+    const next = !r.is_meter_replacement;
+    const { error } = await (supabase.from('ro_train_readings' as any) as any)
+      .update({ is_meter_replacement: next }).eq('id', r.id);
+    setTogglingId(null);
+    if (error) {
+      toast.error('is_meter_replacement column missing — run: ALTER TABLE ro_train_readings ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN DEFAULT FALSE');
+      return;
+    }
+
+    // ── HYBRID STRATEGY: flush delta cache for this train ────────────────────
+    // Toggling is_meter_replacement changes the delta of every row that follows
+    // this one in the sequence.  Clear the entire train's cache entries so the
+    // next render recomputes from Tier-2 raw data.  recalculateTrainDeltas below
+    // will then re-populate the cache with corrected Tier-1 (stored) values.
+    deltaCache.invalidate(r.train_id ?? trainId);
+
+    // Full cascade: recompute permeate_meter_delta for every row in this train
+    // so the changed flag propagates correctly through the entire meter sequence.
+    // recalculateTrainDeltas also re-populates deltaCache with the new values.
+    await recalculateTrainDeltas(r.train_id ?? trainId);
+
+    toast.success(
+      next
+        ? 'Marked as meter replacement — Δ zeroed and downstream deltas recalculated'
+        : 'Replacement flag removed — Δ recalculated from actual meter readings',
+    );
+    qc.invalidateQueries({ queryKey });
+    // Invalidate Dashboard / TrendChart so the corrected production totals appear immediately
+    qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    // DataSummaryModal Production tab reads dsm-ro-readings directly
+    qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+    qc.invalidateQueries();
+  };
+
+  const totalPages = Math.ceil(logs.length / PAGE_SIZE);
+  const pageLogs   = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const fmtVal = (v: any, unit = '') =>
+    v != null ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-[10px]">{unit}</span></span>
+              : <span className="text-muted-foreground/30">—</span>;
+
+  const exportCSV = () => {
+    if (!logs.length) { toast.error('No logs to export'); return; }
+    const headers = [
+      'Date/Time','Operator','Meter Repl.',
+      'Perm Flow (m³/h)','Feed Flow (m³/h)','Reject Flow (m³/h)',
+      'Feed Press (psi)','Reject Press (psi)','Suction Press (psi)',
+      'Feed TDS (ppm)','Perm TDS (ppm)','Reject TDS (ppm)',
+      'Feed pH','Perm pH','Temp (°C)','Turbidity (NTU)',
+      'Recovery (%)','Perm Meter Curr','Perm Meter Prev','Perm Delta (m³)',
+      'Remarks',
+    ];
+    const csvRows = logs.map((r: any) => [
+      r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd HH:mm') : '',
+      r._operatorName ?? 'Unknown',
+      r.is_meter_replacement ? 'YES' : '',
+      r.permeate_flow ?? '', r.feed_flow ?? '', r.reject_flow ?? '',
+      r.feed_pressure_psi ?? '', r.reject_pressure_psi ?? '', r.suction_pressure_psi ?? '',
+      r.feed_tds ?? '', r.permeate_tds ?? '', r.reject_tds ?? '',
+      r.feed_ph ?? '', r.permeate_ph ?? '', r.temperature_c ?? '', r.turbidity_ntu ?? '',
+      r.recovery_pct ?? '',
+      r.permeate_meter ?? '', r.permeate_meter_prev ?? '', r.permeate_meter_delta ?? '',
+      r.remarks ?? '',
+    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `${trainLabel.replace(/\s+/g, '_')}_operator_log.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success('Log exported');
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
+        onInteractOutside={() => onClose()}
+      >
+        <DialogTitle className="sr-only">Operator Log — {trainLabel}</DialogTitle>
+
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
+          <div className="min-w-0">
+            <div className="text-base font-semibold flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-teal-600 shrink-0" />
+              <span className="truncate">Operator Log — {trainLabel}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              All readings submitted for this RO train · {isManager ? 'Click orange checkbox to flag meter replacement' : 'Managers can flag meter replacements'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 mr-8">
+            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
+              <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Filters bar ── */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/20 shrink-0 flex-wrap">
+          {(['7','30','90'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => applyPreset(p)}
+              className={[
+                'h-6 px-2 rounded text-xs font-medium border transition-colors',
+                rangePreset === p
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-background border-input text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >{p}d</button>
+          ))}
+          <input
+            type="date" value={dateFrom} max={dateTo || todayStr}
+            onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
+            className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+          />
+          <span className="text-muted-foreground text-xs">→</span>
+          <input
+            type="date" value={dateTo} min={dateFrom} max={todayStr}
+            onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
+            className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600"
+          />
+          {!isLoading && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              <span className="font-semibold text-foreground">{logs.length}</span> {logs.length === 1 ? 'entry' : 'entries'}
+            </span>
+          )}
+        </div>
+
+        {/* ── Log table ── */}
+        <div className="flex-1 overflow-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Calendar className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm font-medium">No logs found</p>
+              <p className="text-xs mt-0.5">Try expanding the date range.</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs border-collapse">
+              <thead className="sticky top-0 bg-background border-b z-10">
+                <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
+                  <th className="text-left px-2 py-2 font-semibold w-[110px]">Operator</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Suction</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Temp</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Recovery</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ m³</th>
+                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[54px]" title="Meter Replacement — flags reading as meter change; zeroes Δ in chart">Repl.</th>
+                  <th className="text-left px-2 py-2 font-semibold">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {pageLogs.map((r: any, i: number) => {
+                  const isRepl     = !!r.is_meter_replacement;
+                  const isToggling = togglingId === r.id;
+                  const opName     = r._operatorName ?? 'Unknown';
+                  const initials   = opName !== 'Unknown'
+                    ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+                    : '?';
+                  return (
+                    <tr
+                      key={r.id ?? i}
+                      className={[
+                        'border-t transition-colors',
+                        isRepl ? 'bg-orange-50/40 dark:bg-orange-950/10' : 'hover:bg-muted/30',
+                      ].join(' ')}
+                    >
+                      {/* Date / Time */}
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground font-mono text-[11px]">
+                        <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
+                        <div className="flex items-center gap-1">
+                          {r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}
+                          {isRepl && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">repl.</span>
+                          )}
+                        </div>
+                      </td>
+                      {/* Operator */}
+                      <td className="px-2 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[9px] font-bold shrink-0">
+                            {initials}
+                          </div>
+                          <span className="truncate max-w-[80px]" title={opName}>{opName}</span>
+                        </div>
+                      </td>
+                      {/* Flow */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_flow, 'm³/h')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_flow, 'm³/h')}</td>
+                      {/* Pressure */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_pressure_psi, 'psi')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.suction_pressure_psi, 'psi')}</td>
+                      {/* Quality */}
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.feed_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.permeate_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.reject_tds, 'ppm')}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtVal(r.temperature_c, '°C')}</td>
+                      {/* Recovery */}
+                      <td className="px-2 py-2 text-right font-mono">
+                        {r.recovery_pct != null
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{Number(r.recovery_pct).toFixed(1)}%</span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      {/* Permeate meter */}
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">{fmtVal(r.permeate_meter, 'm³')}</td>
+                      {/* Δ m³ — prefer in-memory delta (computed from corrected permeate_meter)
+                           over the stored permeate_meter_delta, which may have been written
+                           before DataAnalysis corrected the underlying meter reading. */}
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {(() => {
+                          // _computed_delta is always available when permeate_meter exists and
+                          // there is a predecessor row.  Fall back to stored delta only when
+                          // _computed_delta is null (e.g. first-ever reading for this train).
+                          const d = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
+                          if (d == null) return <span className="text-muted-foreground/30">—</span>;
+                          if (isRepl) return <span className="text-orange-500 font-medium">0</span>;
+                          return d > 0
+                            ? <span className="text-teal-600 dark:text-teal-400">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
+                            : <span className="text-muted-foreground/40">0</span>;
+                        })()}
+                      </td>
+                      {/* Meter replacement toggle — next to Perm Meter / Δ */}
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          title={isRepl ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ in chart)'}
+                          disabled={!isManager || isToggling}
+                          onClick={() => toggleMeterReplacement(r)}
+                          className={[
+                            'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                            !isManager ? 'opacity-30 cursor-not-allowed' : 'disabled:opacity-40 disabled:cursor-not-allowed',
+                            isRepl
+                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                          ].join(' ')}
+                        >
+                          {isToggling
+                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                          }
+                        </button>
+                      </td>
+                      {/* Remarks */}
+                      <td className="px-2 py-2 text-muted-foreground max-w-[140px] truncate" title={r.remarks ?? ''}>{r.remarks || <span className="opacity-30">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ── Pagination footer ── */}
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {totalPages > 1 ? `Page ${page + 1} of ${totalPages} · ` : ''}{logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Trains List ─────────────────────────────────────────────────────────────
+
+function TrainsList({ plantId }: { plantId: string }) {
+  const navigate = useNavigate();
+  const { data: plants } = usePlants();
+  const plant = plants?.find((p) => p.id === plantId);
+
+  const qc = useQueryClient();
+  const { isManager, isAdmin, user, activeOperator } = useAuth();
+  const { data: trains } = useQuery({
+    queryKey: ['ro-trains', plantId],
+    queryFn: async () =>
+      (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? [],
+  });
+
+  // Derive Running/Offline using the same 2-hr data rule as the Overview tab.
+  // Avoids relying on the raw DB status field which defaults to 'Offline' for all trains.
+  const trainIdsKey = (trains ?? []).map((t: any) => t.id).join(',');
+  const { data: recentTrainIds } = useQuery({
+    queryKey: ['ro-trains-recent', plantId, trainIdsKey],
+    queryFn: async () => {
+      const ids = (trains ?? []).map((t: any) => t.id);
+      if (!ids.length) return new Set<string>();
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id')
+        .in('train_id', ids)
+        .gte('reading_datetime', twoHoursAgo);
+      return new Set((data ?? []).map((r: any) => r.train_id));
+    },
+    enabled: (trains ?? []).length > 0,
+  });
+
+  // Maintenance => Maintenance (hard lock) | recent data => Running | else Offline
+  const deriveTrainStatus = (t: any): 'Running' | 'Maintenance' | 'Offline' => {
+    if (t.status === 'Maintenance') return 'Maintenance';
+    if (recentTrainIds?.has(t.id)) return 'Running';
+    return 'Offline';
+  };
+
+  const [editTrain, setEditTrain] = useState<any | null>(null);
+  const [trainDeleteTarget, setTrainDeleteTarget] = useState<any | null>(null);
+  const [trainDeleteReason, setTrainDeleteReason] = useState('');
+  const [trainDeleteBusy, setTrainDeleteBusy] = useState(false);
+  const [showAddTrain, setShowAddTrain] = useState(false);
+  const [addTrainBusy, setAddTrainBusy] = useState(false);
+  const [showTrainCsv, setShowTrainCsv] = useState(false);
+
+  const doAddTrain = async (form: {
+    train_number: number; name: string;
+    num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
+    num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
+  }) => {
+    setAddTrainBusy(true);
+    const { error } = await supabase.from('ro_trains').insert({
+      plant_id: plantId,
+      train_number: form.train_number,
+      name: form.name || null,
+      num_afm: form.num_afm,
+      num_booster_pumps: form.num_booster_pumps,
+      num_cartridge_filters: form.num_cartridge_filters,
+      num_controllers: form.num_controllers,
+      num_filter_housings: form.num_filter_housings,
+      num_hp_pumps: form.num_hp_pumps,
+      status: 'Running' as any,
+    });
+    setAddTrainBusy(false);
+    if (error) { toast.error(`Failed to add train: ${error.message}`); return; }
+    toast.success('RO Train added');
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    setShowAddTrain(false);
+  };
+
+  const doTrainDelete = async () => {
+    if (!trainDeleteTarget) return;
+    if (trainDeleteReason.trim().length < 5) { toast.error('Reason must be at least 5 characters.'); return; }
+    setTrainDeleteBusy(true);
+    try {
+      await supabase.from('deletion_audit_log' as any).insert([{ kind: 'ro_train', entity_id: trainDeleteTarget.id, entity_label: `Train ${trainDeleteTarget.train_number}`, action: 'hard', reason: trainDeleteReason.trim(), performed_by: activeOperator?.id ?? user?.id ?? null, forced: false }] as any);
+    } catch {}
+    const { error } = await supabase.from('ro_trains').delete().eq('id', trainDeleteTarget.id);
+    setTrainDeleteBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Train deleted');
+    setTrainDeleteTarget(null);
+    setTrainDeleteReason('');
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+  };
+
+  // Resolve the effective media/filter type for a given train:
+  // Train-level override wins; falls back to plant default; then hardcoded default.
+  const toggleTrainStatus = async (t: any) => {
+    if (!isManager) return;
+    // Cycle through effective status: Running → Offline → Maintenance → Running
+    //   Offline = no recent data (data will flip it back to Running automatically)
+    //   Maintenance = hard manual lock that beats even live data
+    const effectiveStatus = deriveTrainStatus(t);
+    const cycle: Record<string, string> = { Running: 'Offline', Offline: 'Maintenance', Maintenance: 'Running' };
+    const newStatus = cycle[effectiveStatus] ?? 'Running';
+    const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
+    if (error) { toast.error(error.message); return; }
+    await logStatusChange({
+      user_id: activeOperator?.id ?? user?.id ?? null,
+      plant_id: t.plant_id,
+      entity_type: 'RO Train',
+      entity_id: t.id,
+      entity_label: `Train ${t.train_number}${t.name ? ' · ' + t.name : ''}`,
+      from_status: t.status,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    toast.success(`Train ${t.train_number} → ${newStatus}`);
+  };
+
+  const effectiveMediaType = (t: any) =>
+    (t as any).filter_media_type ?? (plant as any)?.filter_media_type ?? 'AFM';
+  const effectiveFilterType = (t: any) =>
+    (t as any).filter_housing_type ?? (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
+
+  // Per-train active component graph: maps trainId → active section key
+  // Sections: 'afm' | 'booster' | 'hpp' | 'ro' | null (none expanded)
+  const [activeSection, setActiveSection] = useState<Record<string, string | null>>({});
+  const toggleSection = (trainId: string, section: string) => {
+    setActiveSection(prev => ({
+      ...prev,
+      [trainId]: prev[trainId] === section ? null : section,
+    }));
+  };
+
+  // ── Component-selector button — defined outside map() to avoid React remount
+  const CompBtn = ({
+    trainId: tid, activeKey, sectionKey, icon, label, count,
+  }: {
+    trainId: string; activeKey: string | null;
+    sectionKey: string; icon: React.ReactNode; label: string; count?: number;
+  }) => (
+    <button
+      onClick={() => toggleSection(tid, sectionKey)}
+      className={[
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all',
+        activeKey === sectionKey
+          ? 'bg-teal-50 border-teal-300 text-teal-800 dark:bg-teal-950/30 dark:border-teal-700 dark:text-teal-200'
+          : 'bg-muted/40 border-border text-muted-foreground hover:border-teal-300 hover:text-foreground hover:bg-muted/60',
+      ].join(' ')}
+    >
+      {icon}
+      {label}
+      {count !== undefined && (
+        <span className="ml-0.5 text-[10px] font-normal opacity-70">×{count}</span>
+      )}
+      <TrendingUp className={`h-2.5 w-2.5 ml-0.5 transition-colors ${activeKey === sectionKey ? 'text-teal-600' : 'opacity-30'}`} />
+    </button>
+  );
+
+  const [logTrain, setLogTrain] = useState<{ id: string; label: string } | null>(null);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center gap-2 pt-1">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          RO Trains{' '}
+          <span className="font-normal">
+            ({trains ? `${trains.filter((t: any) => deriveTrainStatus(t) === 'Running').length}/${trains.length}` : '0/0'})
+          </span>
+        </h3>
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <Button size="sm" variant="outline" className="h-8 px-3 text-xs gap-1.5" onClick={() => setShowAddTrain(true)}>
+              <Plus className="h-3.5 w-3.5" />Add
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => setShowTrainCsv(true)} title="Import CSV">
+              <Upload className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {trains?.map((t: any) => {
+        const mt = effectiveMediaType(t);
+        const ft = effectiveFilterType(t);
+        const effectiveStatus = deriveTrainStatus(t);
+        const borderColor =
+          effectiveStatus === 'Running'     ? 'border-l-emerald-400 dark:border-l-emerald-600' :
+          effectiveStatus === 'Maintenance' ? 'border-l-amber-400 dark:border-l-amber-500'     :
+                                              'border-l-muted-foreground/30';
+        const activeKey = activeSection[t.id] ?? null;
+        const trainLabel = `Train ${t.train_number}${t.name ? ` · ${t.name}` : ''}`;
+
+        // Resolved component counts (fall back to 0)
+        const numAfm   = t.num_afm            ?? 0;
+        const numBp    = t.num_booster_pumps  ?? 0;
+        const numHpp   = t.num_hp_pumps       ?? 0;
+        const numCf    = t.num_cartridge_filters ?? 0;
+        const numCtrl  = t.num_controllers    ?? 0;
+
+        return (
+          <Card key={t.id} className={`overflow-hidden border-l-2 ${borderColor}`} data-testid={`train-card-${t.id}`}>
+            {/* ── Train header ── */}
+            <div className="p-3 flex justify-between items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm">
+                  {trainLabel}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span>{mt} × {numAfm}</span>
+                  <span>BP × {numBp}</span>
+                  <span>HPP × {numHpp}</span>
+                  <span>{ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'} × {numCf}</span>
+                  {numCtrl > 0 && <span>Ctrl × {numCtrl}</span>}
+                </div>
+                {/* Type badges */}
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">{mt}</span>
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">{ft}</span>
+                </div>
+              </div>
+              {/* Status + edit actions */}
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => toggleTrainStatus(t)}
+                  title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
+                    effectiveStatus === 'Running'
+                      ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                      : effectiveStatus === 'Maintenance'
+                        ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 hover:bg-amber-100'
+                        : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
+                  } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    effectiveStatus === 'Running' ? 'bg-emerald-500'
+                    : effectiveStatus === 'Maintenance' ? 'bg-amber-500'
+                    : 'bg-muted-foreground'
+                  }`} />
+                  {effectiveStatus}
+                </button>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                    onClick={() => setEditTrain(t)} data-testid={`edit-train-${t.id}`}>
+                    <Wrench className="h-3 w-3 mr-1" />Edit
+                  </Button>
+                  {isManager && (
+                    <Button size="sm" variant="ghost"
+                      className="h-7 w-7 p-0 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                      title="Delete train"
+                      onClick={() => { setTrainDeleteTarget(t); setTrainDeleteReason(''); }}
+                      data-testid={`delete-train-${t.id}`}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ══ PRE-TREATMENT SECTION ══ */}
+            <div className="border-t border-border/60">
+              <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  Pre-treatment
+                </span>
+                <span className="text-[10px] text-muted-foreground">{mt} → Booster Pump → Pre-filter</span>
+              </div>
+              <div className="px-3 pb-3 flex flex-wrap gap-2">
+                {numAfm > 0 && (
+                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="afm"
+                    icon={<Gauge className="h-3 w-3" />} label={mt} count={numAfm} />
+                )}
+                {numBp > 0 && (
+                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="booster"
+                    icon={<Wrench className="h-3 w-3" />} label="Booster Pump" count={numBp} />
+                )}
+                {/* CF Housing — NOW CLICKABLE */}
+                {numCf > 0 && (
+                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="cf"
+                    icon={<Wrench className="h-3 w-3" />}
+                    label={ft === 'Bag Filter' ? 'Filter Housing' : 'CF Housing'}
+                    count={numCf} />
+                )}
+              </div>
+
+              {/* AFM expanded */}
+              {activeKey === 'afm' && (
+                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
+                  <div className="mt-3">
+                    <PretreatAFMChart trainId={t.id} mediaType={mt} />
+                  </div>
+                </div>
+              )}
+
+              {/* Booster expanded */}
+              {activeKey === 'booster' && (
+                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
+                  <div className="mt-3">
+                    <PretreatBoosterChart trainId={t.id} />
+                  </div>
+                </div>
+              )}
+
+              {/* CF Housing expanded */}
+              {activeKey === 'cf' && (
+                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
+                  <div className="mt-3">
+                    <PretreatCFChart trainId={t.id} filterType={ft} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ══ RO SECTION ══ */}
+            <div className="border-t border-border/60">
+              <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                  RO
+                </span>
+                <span className="text-[10px] text-muted-foreground">HPP → RO Membranes → Permeate</span>
+              </div>
+              <div className="px-3 pb-3 flex flex-wrap gap-2">
+                {numHpp > 0 && (
+                  <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="hpp"
+                    icon={<Zap className="h-3 w-3" />} label="High Pressure Pump" count={numHpp} />
+                )}
+                <CompBtn trainId={t.id} activeKey={activeKey} sectionKey="ro"
+                  icon={<BarChart2 className="h-3 w-3" />} label="RO Performance" />
+              </div>
+
+              {/* HPP expanded — target vs actual */}
+              {activeKey === 'hpp' && (
+                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
+                  <div className="mt-3">
+                    <PretreatHPPChart trainId={t.id} />
+                  </div>
+                </div>
+              )}
+              {/* Expanded RO performance mini-charts grid */}
+              {activeKey === 'ro' && (
+                <div className="px-3 pb-3 pt-0 border-t border-dashed border-border/50">
+                  <div className="mt-3">
+                    <TrainRODetailCharts trainId={t.id} trainLabel={trainLabel} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })}
+      {!trains?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No trains yet</Card>}
+
+      <AddTrainDialog
+        open={showAddTrain}
+        onOpenChange={setShowAddTrain}
+        defaultTrainNumber={(trains?.length ?? 0) + 1}
+        onSubmit={doAddTrain}
+        loading={addTrainBusy}
+        plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
+        plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
+      />
+      {showTrainCsv && (
+        <TrainCsvImportDialog
+          plantId={plantId}
+          plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
+          plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
+          onClose={() => { setShowTrainCsv(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
+        />
+      )}
+
+      {editTrain && plant && (
+        <EditTrainDialog
+          train={editTrain}
+          plant={plant}
+          onClose={() => {
+            setEditTrain(null);
+            qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
+          }}
+        />
+      )}
+
+      <AlertDialog open={!!trainDeleteTarget} onOpenChange={(o) => !o && !trainDeleteBusy && setTrainDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Delete Train {trainDeleteTarget?.train_number}?</AlertDialogTitle>
+            <AlertDialogDescription>All logs associated with this train will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ReasonField value={trainDeleteReason} onChange={setTrainDeleteReason} testId="train-delete-reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={trainDeleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doTrainDelete} disabled={trainDeleteBusy || trainDeleteReason.trim().length < 5} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {trainDeleteBusy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {logTrain && (
+        <TrainOperatorLogModal
+          trainId={logTrain.id}
+          trainLabel={logTrain.label}
+          onClose={() => setLogTrain(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Add Train Dialog ─────────────────────────────────────────────────────────
+
+type AddTrainFormData = {
+  train_number: number; name: string;
+  num_afm: number; num_booster_pumps: number; num_cartridge_filters: number;
+  num_controllers: number; num_filter_housings: number; num_hp_pumps: number;
+};
+
+function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmit, loading,
+  plantFilterType = 'Cartridge Filter', plantMediaType = 'AFM',
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultTrainNumber: number;
+  onSubmit: (form: AddTrainFormData) => void;
+  loading: boolean;
+  plantFilterType?: 'Cartridge Filter' | 'Bag Filter';
+  plantMediaType?: 'AFM' | 'MMF';
+}) {
+  const isBagFilter = plantFilterType === 'Bag Filter';
+
+  const blank = (): AddTrainFormData => ({
+    train_number: defaultTrainNumber, name: '',
+    num_afm: 2, num_booster_pumps: 1, num_cartridge_filters: 1,
+    num_controllers: 1,
+    // num_filter_housings is merged into num_cartridge_filters for Bag Filter plants
+    num_filter_housings: isBagFilter ? 0 : 1,
+    num_hp_pumps: 1,
+  });
+  const [form, setForm] = useState<AddTrainFormData>(blank);
+
+  useEffect(() => {
+    if (open) setForm({ ...blank(), train_number: defaultTrainNumber });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultTrainNumber]);
+
+  const num = (field: keyof AddTrainFormData) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm(f => ({ ...f, [field]: parseInt(e.target.value) || 0 }));
+
+  // Dynamic labels based on plant-wide component types:
+  // - Media field:  "AFM Units" or "MMF Units" (follows plantMediaType)
+  // - Housing field: ONE combined pre-filter field whose label reflects plantFilterType:
+  //     Cartridge Filter → "Cartridge Filter Housing"  (num_cartridge_filters)
+  //     Bag Filter       → "Filter Housing"            (num_cartridge_filters)
+  //   num_filter_housings is always hidden — it is merged into this single field.
+  // - HP Pumps → "High Pressure Pumps"
+  const afmLabel = `${plantMediaType} Units`;
+  const housingLabel = isBagFilter ? 'Filter Housing' : 'Cartridge Filter Housing';
+  // Always hide the separate num_filter_housings — merged into housingLabel above.
+  const fields: { key: keyof AddTrainFormData; label: string; hide?: boolean }[] = [
+    { key: 'num_afm',               label: afmLabel         },
+    { key: 'num_booster_pumps',     label: 'Booster Pumps'  },
+    { key: 'num_cartridge_filters', label: housingLabel      },
+    { key: 'num_controllers',       label: 'Controllers'    },
+    { key: 'num_filter_housings',   label: 'Filter Housings', hide: true },
+    { key: 'num_hp_pumps',          label: 'High Pressure Pumps' },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add RO Train</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Train Number</Label>
+              <Input type="number" min={1} value={form.train_number} onChange={num('train_number')} />
+            </div>
+            <div>
+              <Label>Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input placeholder="e.g. Train A" value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {fields.filter(f => !f.hide).map(({ key, label }) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                <Input type="number" min={0} value={form[key] as number} onChange={num(key)} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={() => onSubmit(form)} disabled={loading}>
+            {loading ? 'Adding…' : 'Add Train'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Shared CSV utilities ─────────────────────────────────────────────────────
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    // Handle quoted fields containing commas
+    const vals: string[] = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    vals.push(cur.trim());
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function downloadTemplate(filename: string, headers: string[]) {
+  const blob = new Blob([headers.join(',') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function CsvPreviewTable({ rows, headers }: { rows: Record<string, string>[]; headers: string[] }) {
+  if (!rows.length) return null;
+  // Fixed column width — wide enough to read, narrow enough to scroll cleanly
+  const colW = 120;
+  return (
+    <div className="rounded border overflow-hidden">
+      <div className="overflow-x-auto overflow-y-auto max-h-44" style={{ fontSize: 11 }}>
+        <table className="table-fixed text-left w-max" style={{ minWidth: headers.length * colW }}>
+          <thead className="bg-muted/80 sticky top-0 z-10">
+            <tr>
+              {headers.map(h => (
+                <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap border-b"
+                    style={{ width: colW, minWidth: colW }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 10).map((row, i) => (
+              <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                {headers.map(h => (
+                  <td key={h} className="px-2 py-1 truncate border-b border-border/40"
+                      style={{ width: colW, maxWidth: colW }} title={row[h] ?? ''}>
+                    {row[h] ?? <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 10 && (
+        <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/30 border-t">
+          …and {rows.length - 10} more rows
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Locator CSV Import ───────────────────────────────────────────────────────
+
+const LOCATOR_CSV_HEADERS = [
+  'name', 'address',
+  'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
+  'gps_lat', 'gps_lng',
+];
+
+function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseCsv(ev.target?.result as string);
+      setRows(parsed);
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 1}: name is required`); });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    const payload = rows.map(r => ({
+      plant_id: plantId,
+      name: r.name.trim(),
+      address: r.address || null,
+      location_desc: r.address || null,
+      meter_brand: r.meter_brand || null,
+      meter_size: r.meter_size ? r.meter_size : null,
+      meter_serial: r.meter_serial || null,
+      meter_installed_date: r.meter_installed_date || null,
+      gps_lat: r.gps_lat ? +r.gps_lat : null,
+      gps_lng: r.gps_lng ? +r.gps_lng : null,
+    }));
+    const { error } = await supabase.from('locators').insert(payload);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} locator(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Import Locators from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate('locators_template.csv', LOCATOR_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{LOCATOR_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> is required. All others optional.</p>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={LOCATOR_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Well CSV Import ──────────────────────────────────────────────────────────
+
+const WELL_CSV_HEADERS = [
+  'name', 'diameter', 'drilling_depth_m',
+  'meter_brand', 'meter_size', 'meter_serial', 'meter_installed_date',
+  'has_power_meter',
+  'electric_meter_brand', 'electric_meter_size', 'electric_meter_serial', 'electric_meter_installed_date',
+];
+
+function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setRows(parseCsv(ev.target?.result as string));
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 1}: name is required`); });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    const payload = rows.map(r => {
+      const hasPower = r.has_power_meter?.toLowerCase() === 'true';
+      const row: any = {
+        plant_id: plantId,
+        name: r.name.trim(),
+        diameter: r.diameter || null,
+        drilling_depth_m: r.drilling_depth_m ? +r.drilling_depth_m : null,
+        meter_brand: r.meter_brand || null,
+        meter_size: r.meter_size ? +r.meter_size : null,
+        meter_serial: r.meter_serial || null,
+        meter_installed_date: r.meter_installed_date || null,
+        has_power_meter: hasPower,
+        status: 'Active',
+      };
+      if (hasPower) {
+        row.electric_meter_brand = r.electric_meter_brand || null;
+        row.electric_meter_size = r.electric_meter_size || null;
+        row.electric_meter_serial = r.electric_meter_serial || null;
+        row.electric_meter_installed_date = r.electric_meter_installed_date || null;
+      }
+      return row;
+    });
+    const { error } = await supabase.from('wells').insert(payload as any);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} well(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Import Wells from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate('wells_template.csv', WELL_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{WELL_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Electric meter fields only needed if has_power_meter is true. Numeric: drilling_depth_m, meter_size.</p>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={WELL_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Train CSV Import ─────────────────────────────────────────────────────────
+
+// Train CSV helpers — dynamic column names that reflect the plant-wide component type.
+// The housing field uses a single descriptive column name (no separate filter_housings column).
+function getTrainCsvHeaders(
+  plantMediaType: 'AFM' | 'MMF' = 'AFM',
+  plantFilterType: 'Cartridge Filter' | 'Bag Filter' = 'Cartridge Filter',
+): string[] {
+  // Column name mirrors the plant-wide filter type so the CSV is self-documenting.
+  const housingCol = plantFilterType === 'Bag Filter' ? 'filter_housing' : 'cartridge_filter_housing';
+  const afmCol     = plantMediaType === 'MMF' ? 'num_mmf' : 'num_afm';
+  return [
+    'train_number', 'name',
+    afmCol, 'num_booster_pumps',
+    housingCol,
+    'num_controllers', 'num_hp_pumps',
+    // Power meter topology — leave blank for trains with individual meters.
+    // Trains sharing one physical meter get the SAME non-empty group label
+    // e.g. "colbox" for Umapad Colbox 1/2/3. Used for volume-weighted kWh allocation.
+    'shared_power_meter_group',
+  ];
+}
+
+function TrainCsvImportDialog({ plantId, onClose,
+  plantFilterType = 'Cartridge Filter', plantMediaType = 'AFM',
+}: { plantId: string; onClose: () => void;
+     plantFilterType?: 'Cartridge Filter' | 'Bag Filter';
+     plantMediaType?: 'AFM' | 'MMF'; }) {
+  const isBagFilter = plantFilterType === 'Bag Filter';
+  // Dynamic CSV headers based on plant component types
+  const TRAIN_CSV_HEADERS = getTrainCsvHeaders(plantMediaType, plantFilterType);
+  const housingCol = isBagFilter ? 'filter_housing' : 'cartridge_filter_housing';
+  const afmCol     = plantMediaType === 'MMF' ? 'num_mmf' : 'num_afm';
+  // Human-readable notes shown in the dialog
+  const headerNotes = [
+    `${afmCol} = ${plantMediaType} Units`,
+    'num_booster_pumps = Booster Pumps',
+    `${housingCol} = ${isBagFilter ? 'Filter Housing' : 'Cartridge Filter Housing'}`,
+    'num_controllers = Controllers',
+    'num_hp_pumps = High Pressure Pumps',
+    'shared_power_meter_group = same label on trains that share one physical power meter (leave blank if each train has its own)',
+  ].join(' · ');
+
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setRows(parseCsv(ev.target?.result as string));
+      setErrors([]);
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    const errs: string[] = [];
+    rows.forEach((r, i) => {
+      if (!r.train_number || isNaN(+r.train_number)) errs.push(`Row ${i + 1}: train_number must be a number`);
+      // Warn if a shared_power_meter_group value contains spaces or special chars
+      if (r.shared_power_meter_group && /[^a-zA-Z0-9_\-]/.test(r.shared_power_meter_group.trim())) {
+        errs.push(`Row ${i + 1}: shared_power_meter_group should only contain letters, numbers, hyphens or underscores (got "${r.shared_power_meter_group}")`);
+      }
+    });
+    if (errs.length) { setErrors(errs); return; }
+    setBusy(true);
+    // Read from dynamic column names — both the old internal names and the new descriptive ones are accepted.
+    const resolveHousing = (r: Record<string, string>) =>
+      +(r[housingCol] ?? r.num_cartridge_filters ?? 0);
+    const resolveAfm = (r: Record<string, string>) =>
+      +(r[afmCol] ?? r.num_afm ?? 0);
+    const payload = rows.map(r => ({
+      plant_id: plantId,
+      train_number: +r.train_number,
+      name: r.name || null,
+      num_afm: resolveAfm(r),
+      num_booster_pumps: r.num_booster_pumps ? +r.num_booster_pumps : 0,
+      num_cartridge_filters: resolveHousing(r),
+      num_controllers: r.num_controllers ? +r.num_controllers : 0,
+      num_filter_housings: 0,
+      num_hp_pumps: r.num_hp_pumps ? +r.num_hp_pumps : 0,
+      filter_media_type: plantMediaType,
+      filter_housing_type: plantFilterType,
+      // Shared power meter group — null if blank (train has its own meter or no per-train meter)
+      shared_power_meter_group: r.shared_power_meter_group?.trim() || null,
+    }));
+    const { error } = await supabase.from('ro_trains').insert(payload);
+    setBusy(false);
+    if (error) { setErrors([error.message]); return; }
+    toast.success(`${rows.length} train(s) imported`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Import RO Trains from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadTemplate(`ro_trains_${plantMediaType}_${plantFilterType.replace(' ', '_')}_template.csv`, TRAIN_CSV_HEADERS)}>
+              <FileDown className="h-3 w-3 mr-1" />Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+          <div className="rounded-md bg-muted/40 border p-2">
+            <p className="text-xs font-medium mb-1">Expected columns:</p>
+            <p className="text-xs text-muted-foreground font-mono">{TRAIN_CSV_HEADERS.join(', ')}</p>
+            <p className="text-xs text-muted-foreground mt-1"><strong>train_number</strong> required (integer). All component count fields default to 0 if blank.</p>
+            <p className="text-xs text-muted-foreground mt-0.5 italic">{headerNotes}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              <strong>shared_power_meter_group</strong>: leave blank for trains with individual meters.
+              Trains sharing one physical power meter (e.g. Umapad Colbox 1/2/3) should all have
+              the same short label such as <code className="font-mono bg-muted px-1 rounded">colbox</code>.
+              kWh is stored per-train; volume-weighted attribution runs in reports.
+            </p>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Select CSV file</Label>
+            <div className="mt-1">
+              <label className="inline-flex items-center gap-2 cursor-pointer group">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Choose File
+                </span>
+                <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+                {rows.length > 0
+                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  : <span className="text-xs text-muted-foreground">No file chosen</span>}
+              </label>
+            </div>
+          </div>
+          {rows.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground">{rows.length} row(s) parsed</p>
+              <CsvPreviewTable rows={rows} headers={TRAIN_CSV_HEADERS} />
+            </>
+          )}
+          {errors.length > 0 && (
+            <div className="rounded bg-destructive/10 border border-destructive/30 p-2 space-y-0.5">
+              {errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={doImport} disabled={busy || !rows.length}>
+            {busy ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Importing…</> : `Import ${rows.length || ''} Rows`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── MeterNameList (inline chip editor) ─────────────────────────────────────
+function MeterNameList({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const isYellow = accentColor === 'yellow';
+  const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
+  const border = isYellow ? 'border-yellow-300' : 'border-blue-300';
+  const chip   = isYellow
+    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/20 dark:border-yellow-800 dark:text-yellow-300'
+    : 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300';
+
+  const [editingIdx, setEditingIdx]           = useState<number>(-1);
+  const [editVal, setEditVal]                 = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit     = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
+  const commitEdit    = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSave(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSave(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="flex gap-1.5 flex-wrap mt-1">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+        if (editingIdx === i) return (
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${border} bg-background px-1 py-0.5`}>
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className={`h-5 w-24 text-[11px] bg-transparent focus:outline-none focus-visible:ring-1 ${ring} rounded px-0.5`} />
+            <button onClick={commitEdit} className="text-[9px] font-semibold text-emerald-700 hover:text-emerald-900 px-0.5">✓</button>
+            <button onClick={cancelEdit} className="text-[9px] text-muted-foreground hover:text-foreground px-0.5">✕</button>
+          </div>
+        );
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="flex items-center gap-0.5 rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5">
+            <span className="text-[10px] text-destructive font-medium">Delete "{name}"?</span>
+            <button onClick={() => confirmDelete(i)} className="text-[9px] font-bold text-destructive ml-1 px-0.5">Yes</button>
+            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[9px] text-muted-foreground px-0.5">No</button>
+          </div>
+        );
+        return (
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+            <span>{name}</span>
+            <button onClick={() => startEdit(i)} className="ml-0.5 opacity-60 hover:opacity-100" title={`Rename "${name}"`}>
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button onClick={() => askDelete(i)} className="opacity-60 hover:opacity-100 hover:text-destructive" title={`Remove "${name}"`}>
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── GridMeterListRows ────────────────────────────────────────────────────────
+// Table-style rows: Meter Name | Multiplier | actions
+// Consumption = (current − previous) × multiplier (per meter).
+function GridMeterListRows({
+  count, names, multipliers, onSaveNames, onSaveMultiplier, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  multipliers: number[];
+  onSaveNames: (names: string[]) => void;
+  onSaveMultiplier: (idx: number, val: number) => void;
+  onRemoveLast: () => void;
+}) {
+  const [editingIdx, setEditingIdx]             = useState<number>(-1);
+  const [editVal, setEditVal]                   = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  // Local string state for each multiplier input so the user can type freely
+  // without the controlled value snapping back on every keystroke.
+  const [multInputs, setMultInputs] = useState<string[]>(() =>
+    Array.from({ length: multipliers.length }, (_, i) => String(multipliers[i] ?? 1))
+  );
+
+  // Track which multiplier cell the user is actively typing in.
+  // A ref (not state) is used deliberately: the useEffect below reads this
+  // value when it fires — a state variable would give a stale value in the
+  // closure because focusedMultIdx would not be in the dependency array.
+  const focusedMultIdxRef = useRef<number>(-1);
+
+  // Sync display strings whenever the parent multipliers array changes
+  // (e.g. savedConfig loads, navigate-back remount, post-save refetch).
+  // The ref guarantees we always read the live focused index, never a stale one.
+  useEffect(() => {
+    setMultInputs(prev => {
+      const next = [...prev];
+      multipliers.forEach((m, i) => {
+        if (i !== focusedMultIdxRef.current) next[i] = String(m > 0 ? m : 1);
+      });
+      return next;
+    });
+  }, [multipliers]);
+
+  const commitMultiplier = (i: number, raw: string) => {
+    const v = parseFloat(raw);
+    if (v > 0) {
+      onSaveMultiplier(i, v);
+    } else {
+      // Invalid/empty — revert displayed value to the last known good value
+      setMultInputs(prev => {
+        const next = [...prev]; next[i] = String(multipliers[i] ?? 1); return next;
+      });
+    }
+  };
+
+  const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `Grid Meter ${i + 1}`); };
+  const commitEdit = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `Grid Meter ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSaveNames(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSaveNames(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="rounded-md border border-input overflow-hidden">
+      {/* Table header */}
+      <div className="grid grid-cols-[1fr_100px_auto] items-center bg-muted/50 border-b border-input px-2 py-1 gap-2">
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Meter Name</span>
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide text-center">
+          Multiplier
+          <span className="normal-case font-normal ml-0.5 opacity-70">(CT ratio)</span>
+        </span>
+        <span className="w-10" />
+      </div>
+
+      {/* Rows */}
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `Grid Meter ${i + 1}`;
+        const mult = multipliers[i] ?? 1;
+
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-2 py-2 bg-destructive/5 border-b border-input last:border-b-0">
+            <span className="text-xs text-destructive font-medium truncate col-span-2">Delete "{name}"?</span>
+            <div className="flex items-center gap-1 w-10">
+              <button onClick={() => confirmDelete(i)} className="text-[10px] font-bold text-destructive hover:underline">Yes</button>
+              <span className="text-muted-foreground/40">/</span>
+              <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[10px] text-muted-foreground hover:underline">No</button>
+            </div>
+          </div>
+        );
+
+        if (editingIdx === i) return (
+          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-2 py-1.5 border-b border-input last:border-b-0 bg-background">
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className="text-xs bg-transparent border-b border-blue-400 focus:outline-none w-full" />
+            {/* Keep multiplier visible while editing name */}
+            <div className="flex items-center justify-center gap-1">
+              <span className="text-[11px] text-muted-foreground font-mono">×</span>
+              <span className="text-xs font-mono font-semibold text-blue-700 dark:text-blue-300">{mult}</span>
+            </div>
+            <div className="flex items-center gap-1 w-10">
+              <button onClick={commitEdit} className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900">✓</button>
+              <button onClick={cancelEdit} className="text-[11px] text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+          </div>
+        );
+
+        return (
+          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-2 py-1.5 border-b border-input last:border-b-0 bg-background hover:bg-muted/20 transition-colors">
+            {/* Meter name */}
+            <span className="text-xs truncate" title={name}>{name}</span>
+
+            {/* Multiplier cell — uses local state so typing is not interrupted */}
+            <div className="flex items-center gap-1 justify-center">
+              <span className="text-[11px] text-muted-foreground font-mono shrink-0">×</span>
+              <input
+                type="number" step="any" min="0.001"
+                value={multInputs[i] ?? String(mult)}
+                onChange={e => {
+                  const raw = e.target.value;
+                  setMultInputs(prev => { const next = [...prev]; next[i] = raw; return next; });
+                }}
+                onFocus={() => { focusedMultIdxRef.current = i; }}
+                onBlur={e => { focusedMultIdxRef.current = -1; commitMultiplier(i, e.target.value); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); }
+                  if (e.key === 'Escape') {
+                    setMultInputs(prev => { const next = [...prev]; next[i] = String(mult); return next; });
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                className="w-[60px] text-xs text-center font-mono font-semibold text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                title={`CT multiplier for "${name}". Consumption = (Current − Previous) × ${mult}. Press Enter or click away to save.`}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-0.5 w-10 justify-end">
+              <button
+                onClick={() => startEdit(i)}
+                className="inline-flex items-center justify-center h-5 w-5 rounded-full text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+                title={`Rename "${name}"`}
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => askDelete(i)}
+                className="inline-flex items-center justify-center h-5 w-5 rounded-full text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                title={`Remove "${name}"`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MeterNameListRows (full-width row editor matching image 2 design) ────────
+function MeterNameListRows({
+  count, names, accentColor, defaultPrefix, onSave, onRemoveLast,
+}: {
+  count: number;
+  names: string[];
+  accentColor: 'yellow' | 'blue';
+  defaultPrefix: string;
+  onSave: (names: string[]) => void;
+  onRemoveLast: () => void;
+}) {
+  const [editingIdx, setEditingIdx]             = useState<number>(-1);
+  const [editVal, setEditVal]                   = useState('');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
+
+  const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
+  const commitEdit = () => {
+    if (editingIdx < 0) return;
+    const trimmed = editVal.trim() || `${defaultPrefix} ${editingIdx + 1}`;
+    const next = [...names]; next[editingIdx] = trimmed;
+    onSave(next); setEditingIdx(-1);
+  };
+  const cancelEdit    = () => setEditingIdx(-1);
+  const askDelete     = (i: number) => { setEditingIdx(-1); setConfirmDeleteIdx(i); };
+  const confirmDelete = (i: number) => {
+    const next = [...names]; next.splice(i, 1);
+    onSave(next); onRemoveLast(); setConfirmDeleteIdx(-1);
+  };
+
+  return (
+    <div className="space-y-1">
+      {Array.from({ length: count }).map((_, i) => {
+        const name = names[i] ?? `${defaultPrefix} ${i + 1}`;
+
+        if (editingIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5">
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
+              className="flex-1 text-xs bg-transparent focus:outline-none" />
+            <button onClick={commitEdit} className="text-[10px] font-semibold text-emerald-700 hover:text-emerald-900 px-1">✓</button>
+            <button onClick={cancelEdit} className="text-[10px] text-muted-foreground hover:text-foreground px-1">✕</button>
+          </div>
+        );
+
+        if (confirmDeleteIdx === i) return (
+          <div key={i} className="flex items-center gap-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5">
+            <span className="flex-1 text-xs text-destructive font-medium">Delete "{name}"?</span>
+            <button onClick={() => confirmDelete(i)} className="text-[10px] font-bold text-destructive px-1">Yes</button>
+            <button onClick={() => setConfirmDeleteIdx(-1)} className="text-[10px] text-muted-foreground px-1">No</button>
+          </div>
+        );
+
+        return (
+          <div key={i} className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1.5 text-xs">
+            <span className="flex-1 truncate">{name}</span>
+            <button
+              onClick={() => startEdit(i)}
+              className="inline-flex items-center justify-center h-5 w-5 rounded-full text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              title={`Rename "${name}"`}
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => askDelete(i)}
+              className="inline-flex items-center justify-center h-5 w-5 rounded-full text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              title={`Remove "${name}"`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Power History Chart ──────────────────────────────────────────────────────
+// ─── PowerConsumptionEnergyMix ────────────────────────────────────────────────
+// Merged card: Power Consumption & Energy Mix.
+// • Single stacked bar chart (Solar + Grid) shared by both sections.
+// • Stat summary row (Today Solar / Today Grid / Today Total + solar % of mix).
+// • Range selector (30d / 90d / 180d / All) and Source filter (Both / Solar / Grid).
+// • CSV export.
+// Replaces the old separate PowerHistoryChart and the standalone Energy Mix card.
+function PowerConsumptionEnergyMix({
+  plantId, hasSolar, hasGrid,
+}: {
+  plantId: string;
+  hasSolar: boolean;
+  hasGrid: boolean;
+}) {
+  const [range, setRange]   = useState<'30' | '90' | '180' | 'all'>('30');
+  const [source, setSource] = useState<'both' | 'solar' | 'grid'>('both');
+
+  const { data: rows = [], isLoading } = useQuery<{ date: string; solar: number; grid: number }[]>({
+    queryKey: ['power-history', plantId, range],
+    queryFn: async () => {
+      const days  = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+
+      // ── Step 1: Per-meter multipliers from plant_power_config ──────────────
+      // Load the full array so multi-meter plants can apply the correct CT ratio
+      // per meter index.  Falls back to multiplier = 1 when the table is absent.
+      let multiplier = 1;
+      let multiplierArr: number[] = [1];
+      try {
+        const { data: ppc } = await (supabase.from('plant_power_config' as any) as any)
+          .select('grid_meter_multipliers')
+          .eq('plant_id', plantId)
+          .maybeSingle();
+        const mArr = ppc?.grid_meter_multipliers;
+        if (Array.isArray(mArr) && mArr.length > 0) {
+          multiplierArr = mArr.map((v: any) => +v > 0 ? +v : 1);
+          multiplier    = multiplierArr[0];
+        }
+      } catch { /* table may not exist — keep defaults */ }
+
+      // ── Step 2: Fetch window rows + one row BEFORE the window ───────────────
+      // We need the row before `since` to compute the delta for the first in-window
+      // reading (otherwise the first bar is always 0 or shows a spike).
+      const { data: allRows } = await supabase
+        .from('power_readings' as any)
+        .select('reading_datetime, meter_reading_kwh, grid_meter_readings, solar_meter_reading, daily_consumption_kwh, daily_grid_kwh, daily_solar_kwh, is_meter_replacement, multiplier')
+        .eq('plant_id', plantId)
+        .order('reading_datetime', { ascending: true });
+
+      const rows = (allRows ?? []) as any[];
+
+      // ── Step 3: Compute per-day grid kWh ───────────────────────────────────
+      // Priority order — highest wins, falls through to next when null/zero:
+      //   1. daily_consumption_kwh  — pre-multiplied total written by Operations save
+      //   2. daily_grid_kwh         — same value written by trigger / SQL backfill
+      //   3. grid_meter_readings JSONB delta × per-meter multiplierArr (config, NOT r.multiplier)
+      //   4. meter_reading_kwh delta × multiplierArr[0]  (single-meter legacy fallback)
+      // NOTE: r.multiplier (power_readings.multiplier column) is NEVER used here —
+      //       it is stuck at 1.0000 for all rows and would produce the wrong value.
+      //       multiplierArr comes from plant_power_config.grid_meter_multipliers (live).
+      const byDate = new Map<string, { solar: number; grid: number }>();
+      const ensure = (d: string) => {
+        if (!byDate.has(d)) byDate.set(d, { solar: 0, grid: 0 });
+        return byDate.get(d)!;
+      };
+
+      let prevGridMeter: number | null = null;
+      let prevGridReadings: Record<string, number> | null = null;
+      let afterGridRepl = false;
+
+      for (const r of rows) {
+        // Fix: use format() (local timezone) instead of slice(0,10) (UTC date).
+        // In UTC+8, a reading saved at "May 21 00:00 local" is stored as
+        // "2026-05-20T16:00:00Z". slice(0,10) returns "2026-05-20", shifting
+        // every bar 1 day behind Operations. format() resolves to local date.
+        const date = r.reading_datetime ? format(new Date(r.reading_datetime), 'yyyy-MM-dd') : '';
+        if (!date) continue;
+
+        const isMeterRepl = !!r.is_meter_replacement;
+        const gridCurrent = r.meter_reading_kwh != null ? +r.meter_reading_kwh : null;
+        const rGmr = r.grid_meter_readings as Record<string, number> | null | undefined;
+
+        // ── Grid kWh ──
+        if (isMeterRepl) {
+          // Replacement row: zero this day, reset baseline for next delta
+          prevGridMeter    = gridCurrent;
+          prevGridReadings = rGmr ?? null;
+          afterGridRepl    = true;
+        } else {
+          let gridKwh = 0;
+
+          // ── Priority order (highest = most accurate, matches "Last 7 readings" display) ──
+          // 1. Raw JSONB multi-meter delta × per-meter CT multiplier  ← always recomputed, never stale
+          // 2. Raw single-meter delta × multiplierArr[0]              ← same, single-meter fallback
+          // 3. daily_consumption_kwh                                  ← stored at save time; may be stale
+          // 4. daily_grid_kwh                                         ← same staleness risk
+          //
+          // Rationale: daily_consumption_kwh is computed once at write time using whatever
+          // previous reading existed then. If that baseline was wrong (e.g. a meter was
+          // recently changed or an earlier row was backfilled), the stored value is
+          // permanently inflated/deflated — causing chart spikes that disagree with the
+          // "Last 7 readings" panel, which always recomputes live from consecutive rows.
+          // By computing from raw readings first we stay consistent with that panel.
+
+          if (!afterGridRepl) {
+            const pGmr = prevGridReadings;
+
+            if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
+              // Priority 1: multi-meter — sum (Δ per JSONB meter key × per-meter CT mult)
+              let total = 0;
+              for (const k of Object.keys(rGmr)) {
+                const mi    = parseInt(k, 10);
+                const mMult = multiplierArr[mi] ?? multiplierArr[0] ?? 1;
+                if (pGmr[k] != null) total += (rGmr[k] - pGmr[k]) * mMult;
+              }
+              if (total >= 0) gridKwh = total;
+            } else if (prevGridMeter != null && gridCurrent != null) {
+              // Priority 2: single-meter legacy — (curr − prev) × multiplierArr[0]
+              const delta = gridCurrent - prevGridMeter;
+              if (delta >= 0) gridKwh = delta * (multiplierArr[0] ?? 1);
+            }
+
+            // Priority 3 & 4: fall back to stored daily totals only when raw readings
+            // are unavailable (e.g. very old rows where JSONB was never stored).
+            if (gridKwh === 0) {
+              if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0) {
+                gridKwh = +r.daily_consumption_kwh;
+              } else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0) {
+                gridKwh = +r.daily_grid_kwh;
+              }
+            }
+
+            afterGridRepl = false;
+          } else {
+            afterGridRepl = false;
+          }
+
+          prevGridMeter    = gridCurrent;
+          prevGridReadings = rGmr ?? null;
+
+          // Only accumulate dates that fall within the requested window
+          if (r.reading_datetime >= since && gridKwh > 0) {
+            ensure(date).grid += gridKwh;
+          }
+        }
+
+        // ── Solar kWh ──
+        // daily_solar_kwh is always stored directly (either direct-entry or delta-computed
+        // by Operations at save time). No further delta math needed.
+        if (!isMeterRepl && r.reading_datetime >= since) {
+          const solarKwh = r.daily_solar_kwh != null ? Math.max(0, +r.daily_solar_kwh) : 0;
+          if (solarKwh > 0) ensure(date).solar += solarKwh;
+        }
+      }
+
+      // Filter to only dates within the window, then sort
+      return Array.from(byDate.entries())
+        .filter(([date]) => date >= since.slice(0, 10))
+        .map(([date, v]) => ({ date, solar: +v.solar.toFixed(2), grid: +v.grid.toFixed(2) }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    },
+    staleTime: 60_000,
+  });
+
+  // ── Chart data — filter by source toggle ───────────────────────────────────
+  const chartRows = useMemo(() => rows.map(r => ({
+    date: r.date,
+    solar: source !== 'grid'  ? r.solar : 0,
+    grid:  source !== 'solar' ? r.grid  : 0,
+  })), [rows, source]);
+
+  // ── Today's stats (last row) ────────────────────────────────────────────────
+  const today     = rows.length ? rows[rows.length - 1] : null;
+  const yesterday = rows.length > 1 ? rows[rows.length - 2] : null;
+
+  const todaySolar = today?.solar ?? 0;
+  const todayGrid  = today?.grid  ?? 0;
+  const todayTotal = +(todaySolar + todayGrid).toFixed(2);
+  const solarPct   = todayTotal > 0 ? +((todaySolar / todayTotal) * 100).toFixed(1) : 0;
+
+  const solarDelta = yesterday && yesterday.solar > 0
+    ? +(((todaySolar - yesterday.solar) / yesterday.solar) * 100).toFixed(1)
+    : null;
+  const gridDelta = yesterday && yesterday.grid > 0
+    ? +(((todayGrid - yesterday.grid) / yesterday.grid) * 100).toFixed(1)
+    : null;
+
+  // ── CSV export ─────────────────────────────────────────────────────────────
+  const exportCSV = () => {
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const blob = new Blob(
+      [['date,solar_kwh,grid_kwh,total_kwh', ...rows.map(r => `${r.date},${r.solar},${r.grid},${+(r.solar + r.grid).toFixed(2)}`)].join('\n')],
+      { type: 'text/csv' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `power_energy_mix_${plantId}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported');
+  };
+
+  // ── Range label for subtitle ────────────────────────────────────────────────
+  const rangeLabel = range === 'all' ? 'all time' : `last ${range}d`;
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-semibold">Power Consumption &amp; Energy Mix</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-0.5 pl-6">
+            {rangeLabel} · daily totals · Solar vs Grid (kWh)
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Range pills */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+            {(['30','90','180','all'] as const).map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                {r === 'all' ? 'All' : `${r}d`}
+              </button>
+            ))}
+          </div>
+          {/* Source pills — only shown when plant has both sources */}
+          {hasSolar && hasGrid && (
+            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+              {(['both','solar','grid'] as const).map(s => (
+                <button key={s} onClick={() => setSource(s)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors ${
+                    source === s ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Export */}
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
+            <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Today stat cards ── */}
+      {today && (
+        <div className="grid grid-cols-3 gap-2">
+          {/* Today Solar */}
+          {hasSolar && (
+            <div className="rounded-lg border border-yellow-200/70 bg-yellow-50/40 dark:border-yellow-800/30 dark:bg-yellow-950/10 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sun className="h-3 w-3 text-yellow-500" />
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">Today Solar</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold tabular-nums">{fmtNum(todaySolar)}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {solarDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${solarDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {solarDelta >= 0 ? '↑' : '↓'} {Math.abs(solarDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+          )}
+          {/* Today Grid */}
+          {hasGrid && (
+            <div className="rounded-lg border border-blue-200/70 bg-blue-50/40 dark:border-blue-800/30 dark:bg-blue-950/10 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <GridPylonIcon className="h-3 w-3 text-blue-500" />
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Today Grid</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold tabular-nums">{fmtNum(todayGrid)}</span>
+                <span className="text-[10px] text-muted-foreground">kWh</span>
+              </div>
+              {gridDelta !== null && (
+                <div className={`text-[10px] mt-0.5 font-medium ${gridDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {gridDelta >= 0 ? '↑' : '↓'} {Math.abs(gridDelta)}% vs yesterday
+                </div>
+              )}
+            </div>
+          )}
+          {/* Today Total */}
+          <div className="rounded-lg border border-teal-200/70 bg-teal-50/40 dark:border-teal-800/30 dark:bg-teal-950/10 px-3 py-2.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Zap className="h-3 w-3 text-teal-600" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">Today Total</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-semibold tabular-nums">{fmtNum(todayTotal)}</span>
+              <span className="text-[10px] text-muted-foreground">kWh</span>
+            </div>
+            {hasSolar && (
+              <div className="text-[10px] mt-0.5 text-muted-foreground">
+                Solar: <span className="font-medium text-yellow-600 dark:text-yellow-400">{solarPct}%</span> of mix
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Chart ── */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : chartRows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-48 gap-2 text-xs text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p>No power readings in this period</p>
+        </div>
+      ) : (
+        <>
+          <div className="h-52 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartRows}
+                margin={{ top: 4, right: 4, bottom: 20, left: 0 }}
+                barSize={Math.max(3, Math.min(14, 400 / chartRows.length))}
+              >
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)}
+                  interval="preserveStartEnd"
+                  angle={-30}
+                  textAnchor="end"
+                  height={36}
+                />
+                <YAxis
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  width={42}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                />
+                <Tooltip
+                  formatter={(v: any, name: string) => [`${fmtNum(v)} kWh`, name === 'solar' ? '☀ Solar' : '⚡ Grid']}
+                  labelFormatter={(label: string) => `Date: ${label}`}
+                  labelStyle={{ fontSize: 11 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                />
+                {hasSolar && source !== 'grid' && (
+                  <Bar dataKey="solar" fill="hsl(48, 96%, 53%)" name="solar" radius={[0, 0, 0, 0]} stackId="a" />
+                )}
+                {hasGrid && source !== 'solar' && (
+                  <Bar dataKey="grid" fill="hsl(213, 94%, 68%)" name="grid" radius={[2, 2, 0, 0]} stackId="a" />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+            {hasSolar && source !== 'grid' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-yellow-400" />
+                Solar (kWh)
+              </div>
+            )}
+            {hasGrid && source !== 'solar' && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />
+                Grid (kWh)
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── PowerMeterChangeDialog ───────────────────────────────────────────────────
+// Records a physical grid meter replacement for a plant's Power tab.
+// On save it:
+//   1. Updates grid_meter_multipliers in plant_power_config (new ratio takes effect immediately)
+//   2. Inserts a best-effort audit row into power_meter_changes (table may not exist yet)
+//   3. Inserts an is_meter_replacement=true power_reading at the change date so the
+//      Δ is zeroed at the rollover point — mirrors how Locator / Well "Replace Meter" works.
+function PowerMeterChangeDialog({
+  plant, gridMeterCount, gridMeterNames, currentMultipliers, onClose,
+}: {
+  plant: any;
+  gridMeterCount: number;
+  gridMeterNames: string[];
+  currentMultipliers: number[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [form, setForm] = useState({
+    meterIndex: 0,
+    changeDate: format(new Date(), 'yyyy-MM-dd'),
+    newMultiplier: '',
+    notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const oldMultiplier = currentMultipliers[form.meterIndex] ?? 1;
+  const getMeterName = (i: number) =>
+    gridMeterNames[i] ?? (gridMeterCount === 1 ? 'Grid Meter' : `Grid Meter ${i + 1}`);
+
+  const submit = async () => {
+    const newMult = parseFloat(form.newMultiplier);
+    if (!(newMult > 0)) { toast.error('Enter a valid multiplier (must be > 0)'); return; }
+    setSaving(true);
+
+    // 1. Update plant_power_config with new multiplier for this meter index
+    try {
+      const updatedArr = Array.isArray(currentMultipliers) ? [...currentMultipliers] : [];
+      while (updatedArr.length <= form.meterIndex) updatedArr.push(1);
+      updatedArr[form.meterIndex] = newMult;
+      await (supabase.from('plant_power_config' as any) as any).upsert(
+        { plant_id: plant.id, grid_meter_multipliers: updatedArr, updated_at: new Date().toISOString() },
+        { onConflict: 'plant_id' }
+      );
+    } catch { /* table may not exist yet */ }
+
+    // 2. Audit row in power_meter_changes (best-effort — table may not exist)
+    try {
+      await (supabase.from('power_meter_changes' as any) as any).insert({
+        plant_id: plant.id,
+        meter_index: form.meterIndex,
+        change_date: form.changeDate,
+        old_multiplier: oldMultiplier,
+        new_multiplier: newMult,
+        notes: form.notes || null,
+        changed_by: user?.id ?? null,
+        created_at: new Date().toISOString(),
+      });
+    } catch { /* ignore if table missing */ }
+
+    // 3. Insert a power_reading at the change date with is_meter_replacement=true
+    // so the Δ is zeroed at the rollover — the same mechanism Locator / Well replacement uses.
+    try {
+      const { data: latestRow } = await (supabase
+        .from('power_readings')
+        .select('meter_reading_kwh, grid_meter_readings')
+        .eq('plant_id', plant.id)
+        .order('reading_datetime', { ascending: false })
+        .limit(1) as any).maybeSingle();
+      if (latestRow) {
+        const [y, m, d] = form.changeDate.split('-').map(Number);
+        const changeDt  = new Date(y, m - 1, d, 0, 0, 0).toISOString();
+        const gmr = (latestRow.grid_meter_readings as Record<string, number> | null) ?? {};
+        await supabase.from('power_readings').insert({
+          plant_id: plant.id,
+          reading_datetime: changeDt,
+          meter_reading_kwh: latestRow.meter_reading_kwh ?? 0,
+          grid_meter_readings: gmr,
+          is_meter_replacement: true,
+          recorded_by: user?.id ?? null,
+        } as any);
+      }
+    } catch { /* non-critical — reading row is a convenience, not required */ }
+
+    setSaving(false);
+    qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
+    qc.invalidateQueries();
+    toast.success(
+      `${getMeterName(form.meterIndex)}: meter change recorded · multiplier → ×${newMult}`
+    );
+    onClose();
+  };
+
+  const newMultNum = parseFloat(form.newMultiplier);
+  const newMultValid = newMultNum > 0;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Wrench className="h-4 w-4 text-teal-600" /> Change Power Meter
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm">
+          {/* Meter selector — only shown when there are multiple grid meters */}
+          {gridMeterCount > 1 && (
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Grid Meter
+              </Label>
+              <Select
+                value={String(form.meterIndex)}
+                onValueChange={v => setForm(f => ({ ...f, meterIndex: +v }))}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: gridMeterCount }).map((_, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {getMeterName(i)}
+                      <span className="ml-2 text-muted-foreground font-mono text-[10px]">
+                        ×{currentMultipliers[i] ?? 1}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Change date + new multiplier — side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Change Date
+              </Label>
+              <Input
+                type="date"
+                value={form.changeDate}
+                onChange={e => setForm(f => ({ ...f, changeDate: e.target.value }))}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                New Multiplier <span className="normal-case font-normal">(CT ratio)</span>
+              </Label>
+              <Input
+                type="number" step="any" min="0.001"
+                placeholder={`was ×${oldMultiplier}`}
+                value={form.newMultiplier}
+                onChange={e => setForm(f => ({ ...f, newMultiplier: e.target.value }))}
+                className="h-9"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Current: <span className="font-mono font-semibold">×{oldMultiplier}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Notes <span className="normal-case font-normal">(optional)</span>
+            </Label>
+            <Input
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="e.g. CT meter replaced, new ratio 40:1"
+              className="h-9"
+            />
+          </div>
+
+          {/* Effect summary — shown only once user types a valid multiplier */}
+          {newMultValid && (
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-semibold text-[12px]">What happens on save</p>
+              <p>
+                • <strong>{getMeterName(form.meterIndex)}</strong> multiplier:
+                {' '}<span className="font-mono">×{oldMultiplier}</span>
+                {' '}→{' '}<span className="font-mono font-semibold text-teal-700 dark:text-teal-400">×{form.newMultiplier}</span>
+              </p>
+              <p>
+                • A replacement reading is created on <strong>{form.changeDate}</strong> — Δ zeroed at rollover
+              </p>
+              <p>
+                • All readings from <strong>{form.changeDate}</strong> onward use the new multiplier
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving} className="h-9">
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={saving || !newMultValid || !form.changeDate}
+            className="h-9 bg-teal-700 text-white hover:bg-teal-800"
+          >
+            {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Record meter change
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── PowerMetersCard ──────────────────────────────────────────────────────────
+// Lives in Plant Detail > Power tab.
+// Energy sources are now the single source of truth in PlantMeterConfigCard
+// (Trains tab). This card reads from usePlantMeterConfig for hasSolar/hasGrid
+// and only manages the power meter names / count (solar meters, grid meters).
+// The old standalone saveEnergy() path is preserved for back-compat but the
+// canonical save is through the unified meter config.
+
+const POWER_CONFIG_KEY = (plantId: string) => `power_config_${plantId}`;
+
+function PowerMetersCard({ plant }: { plant: any }) {
+  const qc = useQueryClient();
+  const { isAdmin, isManager } = useAuth();
+  const canEdit = isAdmin || isManager;
+
+  // ── Energy sources — read from unified meter config (Trains tab) ──
+  // These toggles are now the canonical home in PlantMeterConfigCard.
+  // The Power tab shows them as read-only with a link back.
+  const { config: meterConfig } = usePlantMeterConfig(plant.id);
+  const hasSolar = meterConfig.has_solar;
+  const hasGrid  = meterConfig.has_grid;
+
+  // ── Meter config (names) — still owned here ──
+  const { data: savedConfig, isLoading } = useQuery({
+    queryKey: ['plant-power-config', plant.id],
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase.from('plant_power_config' as any) as any)
+          .select('solar_meter_count, solar_meter_names, grid_meter_count, grid_meter_names, grid_meter_multipliers')
+          .eq('plant_id', plant.id)
+          .maybeSingle();
+        if (!error && data) return data as any;
+      } catch { /* table may not exist */ }
+      try {
+        const raw = localStorage.getItem(POWER_CONFIG_KEY(plant.id));
+        if (raw) return JSON.parse(raw);
+      } catch { /* ignore */ }
+      return null;
+    },
+  });
+
+  const [changeMeterOpen, setChangeMeterOpen] = useState(false);
+
+  const [solarCount, setSolarCount] = useState(1);
+  const [gridCount,  setGridCount]  = useState(1);
+  // Pad to MAX_METERS so indices beyond the initial 5 always have a default name
+  // rather than falling back to the computed `${defaultPrefix} ${i + 1}` string
+  // which gets lost whenever savedConfig refetches.
+  const MAX_METERS = 20;
+  const [solarNames, setSolarNames] = useState<string[]>(
+    Array.from({ length: MAX_METERS }, (_, i) => `Solar Meter ${i + 1}`)
+  );
+  const [gridNames,  setGridNames]  = useState<string[]>(
+    Array.from({ length: MAX_METERS }, (_, i) => `Grid Meter ${i + 1}`)
+  );
+  const [gridMultipliers, setGridMultipliers] = useState<number[]>(
+    Array.from({ length: MAX_METERS }, () => 1)
+  );
+  const [saving, setSaving] = useState(false);
+
+  // Track whether the user has unsaved local edits.
+  // When true, background refetches of savedConfig must NOT overwrite local state —
+  // that is the root cause of renames reverting to the default name on window focus.
+  const isDirty = useRef(false);
+
+  useEffect(() => {
+    // Skip if user has pending unsaved changes — otherwise a React Query
+    // background refetch (e.g. on window focus) would silently overwrite them.
+    if (!savedConfig || isDirty.current) return;
+    if (savedConfig.solar_meter_count != null) setSolarCount(savedConfig.solar_meter_count);
+    if (savedConfig.grid_meter_count  != null) setGridCount(savedConfig.grid_meter_count);
+    if (Array.isArray(savedConfig.solar_meter_names) && savedConfig.solar_meter_names.length) setSolarNames(savedConfig.solar_meter_names);
+    if (Array.isArray(savedConfig.grid_meter_names)  && savedConfig.grid_meter_names.length)  setGridNames(savedConfig.grid_meter_names);
+    if (Array.isArray(savedConfig.grid_meter_multipliers) && savedConfig.grid_meter_multipliers.length) {
+      setGridMultipliers(prev => {
+        const next = [...prev];
+        (savedConfig.grid_meter_multipliers as number[]).forEach((m, i) => { next[i] = m > 0 ? m : 1; });
+        return next;
+      });
+    }
+  }, [savedConfig]);
+
+  const saveConfig = async () => {
+    setSaving(true);
+    const payload = {
+      plant_id: plant.id,
+      solar_meter_count: solarCount,
+      solar_meter_names: solarNames,
+      grid_meter_count:  gridCount,
+      grid_meter_names:  gridNames,
+      grid_meter_multipliers: gridMultipliers.slice(0, gridCount),
+      updated_at: new Date().toISOString(),
+    };
+    let savedToDb = false;
+    try {
+      const { error } = await (supabase.from('plant_power_config' as any) as any)
+        .upsert(payload, { onConflict: 'plant_id' });
+      if (!error) savedToDb = true;
+    } catch { /* table missing */ }
+    try { localStorage.setItem(POWER_CONFIG_KEY(plant.id), JSON.stringify(payload)); } catch { /* ignore */ }
+    setSaving(false);
+    // Clear dirty flag BEFORE invalidating so the subsequent useEffect refetch
+    // is allowed to re-sync (it will now carry the names we just saved).
+    isDirty.current = false;
+    qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
+    toast.success(savedToDb ? 'Power meter config saved' : 'Power meter config saved (local)');
+  };
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading power config…
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+
+      {/* ── Meter Configuration ── */}
+      <Card className="p-4 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-teal-600" />
+            <h3 className="font-semibold text-sm">Power meter config</h3>
+          </div>
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide bg-muted px-2 py-0.5 rounded">
+            {hasSolar && hasGrid ? 'Solar + Grid' : hasSolar ? 'Solar only' : 'Grid only'}
+          </span>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Configure meters per source. Names appear in <strong>Operations → Power</strong>. Energy sources are configured in <strong>Plant Configuration</strong> above.
+        </p>
+
+        {/* Meter panels — stacked on mobile, side-by-side on sm+ */}
+        <div className={`grid gap-3 ${hasSolar ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+
+          {/* Solar meters panel */}
+          {hasSolar && (
+            <div className="rounded-lg border border-yellow-300/60 bg-yellow-50/40 dark:border-yellow-800/40 dark:bg-yellow-950/10 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sun className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                <span className="text-sm font-semibold">Solar meters</span>
+              </div>
+              {/* Count stepper */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Count</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => canEdit && setSolarCount(c => Math.max(1, c - 1))}
+                    disabled={!canEdit || solarCount <= 1}
+                    className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                  >−</button>
+                  <span className="w-6 text-center text-sm font-mono font-semibold">{solarCount}</span>
+                  <button
+                    onClick={() => canEdit && setSolarCount(c => Math.min(20, c + 1))}
+                    disabled={!canEdit || solarCount >= 20}
+                    className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                  >+</button>
+                </div>
+              </div>
+              {/* Meter name rows */}
+              {canEdit && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Meter names</p>
+                  <MeterNameListRows count={solarCount} names={solarNames} accentColor="yellow" defaultPrefix="Solar Meter"
+                    onSave={names => { isDirty.current = true; setSolarNames(names); }}
+                    onRemoveLast={() => setSolarCount(c => Math.max(1, c - 1))} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Grid meters panel */}
+          <div className="rounded-lg border border-blue-300/60 bg-blue-50/40 dark:border-blue-800/40 dark:bg-blue-950/10 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <GridPylonIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+              <span className="text-sm font-semibold">Grid meters</span>
+            </div>
+            {/* Count stepper */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Count</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => canEdit && setGridCount(c => Math.max(1, c - 1))}
+                  disabled={!canEdit || gridCount <= 1}
+                  className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                >−</button>
+                <span className="w-6 text-center text-sm font-mono font-semibold">{gridCount}</span>
+                <button
+                  onClick={() => canEdit && setGridCount(c => Math.min(20, c + 1))}
+                  disabled={!canEdit || gridCount >= 20}
+                  className="h-7 w-7 rounded-md border bg-background flex items-center justify-center text-sm font-medium hover:bg-muted disabled:opacity-40"
+                >+</button>
+              </div>
+            </div>
+            {/* Meter name + multiplier rows */}
+            {canEdit && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Meter names &amp; multipliers</p>
+                <GridMeterListRows
+                  count={gridCount}
+                  names={gridNames}
+                  multipliers={gridMultipliers}
+                  onSaveNames={names => { isDirty.current = true; setGridNames(names); }}
+                  onSaveMultiplier={(idx, val) => { isDirty.current = true; setGridMultipliers(prev => { const next = [...prev]; next[idx] = val; return next; }); }}
+                  onRemoveLast={() => setGridCount(c => Math.max(1, c - 1))}
+                />
+              </div>
+            )}
+
+            {/* Change Meter — manager/admin only; separate from the name/count config */}
+            {canEdit && (
+              <div className="pt-1 border-t border-blue-200/60 dark:border-blue-800/30">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setChangeMeterOpen(true)}
+                  className="w-full gap-1.5 h-8 text-xs border-blue-300/70 text-blue-700 hover:bg-blue-50 hover:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950/20"
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  Change Meter
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {canEdit ? (
+          <Button onClick={saveConfig} disabled={saving} className="w-full h-10 bg-teal-700 text-white hover:bg-teal-800 text-sm">
+            {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Save power meter config
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground text-center">Only managers and admins can edit meter configuration.</p>
+        )}
+      </Card>
+
+      {/* ── Power Consumption & Energy Mix ── */}
+      <Card className="p-4">
+        <PowerConsumptionEnergyMix plantId={plant.id} hasSolar={hasSolar} hasGrid={hasGrid} />
+      </Card>
+
+      {/* Change Meter dialog */}
+      {changeMeterOpen && (
+        <PowerMeterChangeDialog
+          plant={plant}
+          gridMeterCount={gridCount}
+          gridMeterNames={gridNames}
+          currentMultipliers={gridMultipliers}
+          onClose={() => {
+            setChangeMeterOpen(false);
+            // Reload config so multiplier display stays in sync
+            qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
