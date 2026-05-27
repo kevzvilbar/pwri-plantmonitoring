@@ -2514,8 +2514,8 @@ function PretreatmentAndROLog() {
 
         <div>
           <Label>Reading Date &amp; Time</Label>
-          <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)}
-            className="h-10 w-full sm:max-w-[260px] min-w-[220px]" />
+          <Input type="datetime-local" value={dt} readOnly
+            className="h-10 w-full sm:max-w-[260px] min-w-[220px] cursor-not-allowed opacity-60 bg-muted pointer-events-none" />
         </div>
         {plant && (
           <div className="text-[11px] text-muted-foreground">
