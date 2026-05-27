@@ -1576,7 +1576,7 @@ function PretreatmentAndROLog() {
   // On shared-email accounts (e.g. resourcespilipinaswater@gmail.com) user.id
   // is always the auth-owner (Reynan). activeOperator reflects whoever was
   // selected on the operator-picker screen or switched via OperatorSwitcher.
-  const { activeOperator } = useAuth();
+  const { activeOperator, isManager } = useAuth();
   const [showImport, setShowImport] = useState(false);
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
@@ -2514,8 +2514,13 @@ function PretreatmentAndROLog() {
 
         <div>
           <Label>Reading Date &amp; Time</Label>
-          <Input type="datetime-local" value={dt} readOnly
-            className="h-10 w-full sm:max-w-[260px] min-w-[220px] cursor-not-allowed opacity-60 bg-muted pointer-events-none" />
+          <Input type="datetime-local" value={dt}
+            onChange={isManager ? (e) => setDt(e.target.value) : undefined}
+            readOnly={!isManager}
+            className={cn(
+              "h-10 w-full sm:max-w-[260px] min-w-[220px]",
+              !isManager && "cursor-not-allowed opacity-60 bg-muted pointer-events-none"
+            )} />
         </div>
         {plant && (
           <div className="text-[11px] text-muted-foreground">
