@@ -200,7 +200,7 @@ def _fit_and_flag(
     return corrections, stats
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# ── Public API ───────────────────────────────────────────────────────────────
 
 async def run_regression(
     req: RegressionRequest,
@@ -292,6 +292,8 @@ async def apply_regression(
     """
     Apply a pending regression result: write adjusted values back to the
     source table's norm_status and append reading_normalizations rows.
+    
+    PERF: Uses batched updates instead of looping, reducing N requests to 1-2.
     """
     client = _supa(access_token)
 
@@ -307,15 +309,20 @@ async def apply_regression(
     outliers      = [c for c in corrections if c.get("is_outlier") and c.get("corrected_value") is not None]
 
     norm_rows = []
-    for c in outliers:
-        # Update norm_status on source table
+    
+    # PERF FIX: Batch update all outlier reading IDs at once instead of looping
+    # This reduces from O(n) requests to O(1) for the update operation
+    if outliers:
+        outlier_ids = [c["reading_id"] for c in outliers]
         try:
             client.table(source_table).update(
                 {"norm_status": "normalized"}
-            ).eq("id", c["reading_id"]).execute()
+            ).in_("id", outlier_ids).execute()
         except Exception as exc:
-            log.warning("Failed to update norm_status for %s: %s", c["reading_id"], exc)
-
+            log.warning("Failed to batch update norm_status for %d records: %s", len(outlier_ids), exc)
+    
+    # Build normalization rows for audit trail
+    for c in outliers:
         norm_rows.append({
             "source_table":   source_table,
             "source_id":      c["reading_id"],
@@ -349,6 +356,8 @@ async def retract_regression(
     """
     Retract an applied regression: restore norm_status to 'retracted' and
     append retract rows to reading_normalizations.
+    
+    PERF: Uses batched updates instead of looping, reducing N requests to 1-2.
     """
     client = _supa(access_token)
 
@@ -364,14 +373,20 @@ async def retract_regression(
     outliers     = [c for c in corrections if c.get("is_outlier")]
 
     norm_rows = []
-    for c in outliers:
+    
+    # PERF FIX: Batch update all outlier reading IDs at once instead of looping
+    # This reduces from O(n) requests to O(1) for the update operation
+    if outliers:
+        outlier_ids = [c["reading_id"] for c in outliers]
         try:
             client.table(source_table).update(
                 {"norm_status": "retracted"}
-            ).eq("id", c["reading_id"]).execute()
+            ).in_("id", outlier_ids).execute()
         except Exception as exc:
-            log.warning("Failed to update norm_status for retract %s: %s", c["reading_id"], exc)
+            log.warning("Failed to batch update norm_status for retract %d records: %s", len(outlier_ids), exc)
 
+    # Build retraction rows for audit trail
+    for c in outliers:
         norm_rows.append({
             "source_table":   source_table,
             "source_id":      c["reading_id"],

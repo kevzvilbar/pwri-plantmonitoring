@@ -33,7 +33,12 @@ function canSwitchOperator(profile: Profile | null): boolean {
 
 /**
  * Fetches Active Operator profiles on the same plant(s).
- * Uses .contains() per plant id to work around PostgREST array overlap issues.
+ * 
+ * PERF NOTE: Uses parallel queries (one per plant) + client-side merge instead of
+ * a single overlaps() query. This works around PostgREST array overlap issues.
+ * 
+ * Future optimization: If PostgREST adds better array containment support,
+ * consolidate to a single query with overlaps() to reduce network requests.
  */
 function useSamePlantOperators(plantAssignments: string[]) {
   return useQuery<Profile[]>({

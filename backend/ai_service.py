@@ -2,7 +2,7 @@
 AI service for the PWRI monitoring app.
 
 Provides:
-  - /api/ai/chat      : multi-turn conversational Q&A (message history persisted in Mongo)
+  - /api/ai/chat      : multi-turn conversational Q&A (message history persisted in Supabase)
   - /api/ai/anomalies : stateless batch anomaly detection on a list of readings
 
 Uses EMERGENT_LLM_KEY via the `emergentintegrations` library.
@@ -31,6 +31,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_PROVIDER = "openai"
 DEFAULT_MODEL = "gpt-5.1"
+
+# PERF: Max messages to load in one session to prevent bloat
+# After this many messages, only load the most recent ones for context
+MAX_SESSION_MESSAGES = 50
 
 # --- System prompts -------------------------------------------------------
 
@@ -217,7 +221,10 @@ async def chat_turn(
 ) -> ChatResponse:
     """
     Persists conversation in Supabase `ai_chat_sessions` table.
-    Maintains multi-turn context by loading the full message history.
+    Maintains multi-turn context by loading recent message history.
+    
+    PERF FIX: Now loads only the most recent MAX_SESSION_MESSAGES messages
+    instead of the entire history, preventing array bloat over long conversations.
     """
     session_id = req.session_id or f"sess_{uuid.uuid4().hex[:12]}"
     now = datetime.utcnow()
@@ -238,7 +245,12 @@ async def chat_turn(
             res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybeSingle().execute()
             doc = res.data
             if doc:
-                for m in (doc.get("messages") or []):
+                # PERF FIX: Only load the most recent messages to prevent history bloat
+                msg_list = doc.get("messages") or []
+                if len(msg_list) > MAX_SESSION_MESSAGES:
+                    msg_list = msg_list[-MAX_SESSION_MESSAGES:]
+                
+                for m in msg_list:
                     role = m.get("role")
                     content = m.get("content")
                     if role in ("user", "assistant") and content:
@@ -261,6 +273,10 @@ async def chat_turn(
             existing = []
             if res.data:
                 existing = res.data.get("messages") or []
+
+            # PERF FIX: Trim old messages to keep array bounded
+            if len(existing) >= MAX_SESSION_MESSAGES:
+                existing = existing[-(MAX_SESSION_MESSAGES - 2):]  # Keep room for new 2 messages
 
             new_msgs = existing + [
                 {"role": "user",      "content": req.message, "created_at": now.isoformat()},

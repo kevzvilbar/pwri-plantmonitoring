@@ -64,13 +64,17 @@ export function PMDueSoonCard({ plantIds }: Props) {
     return m;
   }, [plants]);
 
-  // Fetch all checklist templates in scope
+  // PERF FIX: Add .limit() to avoid loading unnecessary template records.
+  // Only fetch the most recently modified templates since we only display top 3.
+  // Fetch slightly more (MAX_ITEMS * 5) to account for filtering by date range.
   const { data: templates } = useQuery({
     queryKey: ['pm-templates', plantIds],
     queryFn: async () => {
       let q = supabase
         .from('checklist_templates')
-        .select('id, plant_id, equipment_name, frequency, category, schedule_start_date');
+        .select('id, plant_id, equipment_name, frequency, category, schedule_start_date')
+        .order('updated_at', { ascending: false })
+        .limit(MAX_ITEMS * 5);  // PERF: Limit query to ~15 records instead of all
       if (plantIds.length) q = q.in('plant_id', plantIds);
       const { data } = await q;
       return data ?? [];

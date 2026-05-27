@@ -1,7 +1,7 @@
 /**
  * useBackgroundSync
  *
- * Silently refetches all active react-query queries every SYNC_INTERVAL_MS
+ * Silently refetches stale react-query queries every SYNC_INTERVAL_MS
  * (default 60 s) without triggering any navigation, scroll reset, or component
  * remount. Scroll position, active tab, form inputs, and filter state are all
  * naturally preserved because:
@@ -14,6 +14,9 @@
  *   • On a failed sync, retry after RETRY_DELAY_MS (10 s) up to MAX_RETRIES times
  *   • Only surface an error toast when ALL retries are exhausted or when the very
  *     first data load fails (critical error)
+ *
+ * PERF: Uses stale:true to skip refetching queries that are still fresh,
+ * reducing unnecessary network calls.
  *
  * Usage: mount once inside AppShell (via BackgroundSyncMount) so the sync
  * lifecycle mirrors the authenticated app shell.
@@ -51,10 +54,12 @@ export function useBackgroundSync() {
     setStatus('syncing');
 
     try {
-      // Refetch only queries that are currently mounted and active.
+      // PERF FIX: Only refetch queries where the cache is older than staleTime.
+      // By passing stale:true, we skip queries that are still fresh, reducing
+      // network calls. Each query's staleTime controls its own freshness interval.
       // react-query will merge updated data into the cache; React's virtual DOM
       // then diffs and re-paints only the changed nodes — no full re-render.
-      await qc.refetchQueries({ type: 'active', throwOnError: true });
+      await qc.refetchQueries({ type: 'active', stale: true, throwOnError: true });
 
       if (!isMountedRef.current) return true;
 
@@ -131,4 +136,3 @@ export function useBackgroundSync() {
     };
   }, [triggerSync, clearRetryTimeout]);
 }
-
