@@ -4409,7 +4409,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base flex items-center gap-1.5">
             <Gauge className="h-4 w-4 text-teal-600" /> {meter.name} — History
@@ -4470,7 +4470,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
           </div>
         )}
 
-        <div className="overflow-auto max-h-72 rounded border text-xs">
+        <div className="overflow-auto max-h-[520px] rounded border text-xs">
           {isLoading ? (
             <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -6276,7 +6276,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">{title}</DialogTitle>
         </DialogHeader>
@@ -6442,7 +6442,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
         )}
 
         {/* Table */}
-        <div className="overflow-auto max-h-72 rounded border text-xs">
+        <div className="overflow-auto max-h-[520px] rounded border text-xs">
           {isLoading ? (
             <div className="flex items-center justify-center p-6 text-muted-foreground gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
