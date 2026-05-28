@@ -54,7 +54,7 @@ import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 // locators (consumption) or product meters (production). Non-retractable —
 // closes only via the ✕ button or clicking outside the dialog.
 
-type SummaryTab = 'both' | 'production' | 'consumption';
+type SummaryTab = 'both' | 'production' | 'consumption' | 'current';
 
 /**
  * Replacement-aware delta pivot — mirrors TrendChart.tsx `computeEntityDeltas`.
@@ -192,6 +192,8 @@ interface DataSummaryModalProps {
 
 function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummaryModalProps) {
   const [tab, setTab] = useState<SummaryTab>('both');
+  // Which side to show in the Current Readings tab: production or consumption
+  const [currentSide, setCurrentSide] = useState<'consumption' | 'production'>('consumption');
 
   // Date range: default last 7 days
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -475,7 +477,9 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     ? (locatorsLoading || consLoading)
     : tab === 'production'
       ? prodDataLoading
-      : (locatorsLoading || consLoading || prodDataLoading);
+      : tab === 'current'
+        ? (locatorsLoading || consLoading || prodDataLoading)
+        : (locatorsLoading || consLoading || prodDataLoading);
 
   // Active pivot data for the detail tabs
   const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
@@ -527,6 +531,83 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     [consPivot],
   );
 
+  // ── Current readings pivots (raw absolute meter values) ──────────────────────
+  // For each (date, entity) we keep only the LATEST reading recorded that day
+  // (highest reading_datetime), since a day can have multiple readings.
+  const consCurrentPivot = useMemo(() => {
+    const latestTime = new Map<string, number>();
+    const pivot = new Map<string, Map<string, number>>();
+    (consReadings ?? []).forEach((r: any) => {
+      if (r.current_reading == null) return;
+      const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const key     = `${dateKey}__${r.locator_id}`;
+      const t       = new Date(r.reading_datetime).getTime();
+      if (!latestTime.has(key) || t > latestTime.get(key)!) {
+        latestTime.set(key, t);
+        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+        pivot.get(dateKey)!.set(r.locator_id, +r.current_reading);
+      }
+    });
+    return { dates: consPivot.dates, entities: consPivot.entities, pivot };
+  }, [consReadings, consPivot.dates, consPivot.entities]);
+
+  const prodCurrentPivot = useMemo(() => {
+    const latestTime = new Map<string, number>();
+    const pivot = new Map<string, Map<string, number>>();
+    (prodReadings ?? []).forEach((r: any) => {
+      if (r.current_reading == null) return;
+      const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const key     = `${dateKey}__${r.meter_id}`;
+      const t       = new Date(r.reading_datetime).getTime();
+      if (!latestTime.has(key) || t > latestTime.get(key)!) {
+        latestTime.set(key, t);
+        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+        pivot.get(dateKey)!.set(r.meter_id, +r.current_reading);
+      }
+    });
+    return { dates: prodPivot.dates, entities: prodPivot.entities, pivot };
+  }, [prodReadings, prodPivot.dates, prodPivot.entities]);
+
+  // RO trains: fetch permeate_meter (cumulative) for the current-readings view.
+  // Separate query so the main roProdPivot (delta-based) is unaffected.
+  const { data: roCurrentReadings } = useQuery({
+    queryKey: ['dsm-ro-current', permeateIsProductionPlantIds, fromStr, toStr],
+    queryFn: async () => {
+      if (!permeateIsProductionPlantIds.length) return [] as any[];
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id,permeate_meter,reading_datetime')
+        .in('plant_id', permeateIsProductionPlantIds)
+        .not('permeate_meter', 'is', null)
+        .gte('reading_datetime', startISO)
+        .lte('reading_datetime', endISO);
+      return (data ?? []) as any[];
+    },
+    enabled: open && tab === 'current' && permeateIsProductionPlantIds.length > 0,
+  });
+
+  const roCurrentPivot = useMemo(() => {
+    const latestTime = new Map<string, number>();
+    const pivot = new Map<string, Map<string, number>>();
+    (roCurrentReadings ?? []).forEach((r: any) => {
+      if (r.permeate_meter == null) return;
+      const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      const key     = `${dateKey}__${r.train_id}`;
+      const t       = new Date(r.reading_datetime).getTime();
+      if (!latestTime.has(key) || t > latestTime.get(key)!) {
+        latestTime.set(key, t);
+        if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+        pivot.get(dateKey)!.set(r.train_id, +r.permeate_meter);
+      }
+    });
+    return { dates: roProdPivot.dates, entities: roProdPivot.entities, pivot };
+  }, [roCurrentReadings, roProdPivot.dates, roProdPivot.entities]);
+
+  // Active current-readings pivot for the 'current' tab
+  const currentPivotData = currentSide === 'production'
+    ? (useRoProd ? roCurrentPivot : prodCurrentPivot)
+    : consCurrentPivot;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
@@ -567,9 +648,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         {/* ── Option toggles: Prod. vs Consum. / Production / Consumption ── */}
         <div className="flex border-b shrink-0 px-5 bg-muted/20">
           {([
-            { key: 'both',        label: 'Prod. vs Consum.', icon: <Activity className="h-3 w-3" /> },
-            { key: 'production',  label: 'Production',       icon: <Droplet  className="h-3 w-3" /> },
-            { key: 'consumption', label: 'Consumption',      icon: <Receipt  className="h-3 w-3" /> },
+            { key: 'both',        label: 'Prod. vs Consum.',  icon: <Activity className="h-3 w-3" /> },
+            { key: 'production',  label: 'Production',        icon: <Droplet  className="h-3 w-3" /> },
+            { key: 'consumption', label: 'Consumption',       icon: <Receipt  className="h-3 w-3" /> },
+            { key: 'current',     label: 'Current Readings',  icon: <Gauge    className="h-3 w-3" /> },
           ] as { key: SummaryTab; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
             <button
               key={key}
@@ -587,7 +669,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </div>
 
         {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-y-auto">
           {isLoading && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
           )}
@@ -623,6 +705,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const totBal  = totProd - totCons;
             const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
             return (
+              <div className="overflow-x-auto">
               <table className="w-full text-[11px] border-collapse" data-testid="dsm-both-table">
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-muted/95 backdrop-blur-sm">
@@ -655,21 +738,23 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                   })}
                 </tbody>
               </table>
+              </div>
             );
           })()}
 
           {/* ── Production / Consumption detail tabs ── */}
-          {!isLoading && tab !== 'both' && entities.length === 0 && (
+          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length === 0 && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
               No {tab === 'consumption' ? 'locators' : useRoProd ? 'RO trains' : 'product meters'} found.
             </div>
           )}
-          {!isLoading && tab !== 'both' && entities.length > 0 && dates.length === 0 && (
+          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length === 0 && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
               No readings in this date range.
             </div>
           )}
-          {!isLoading && tab !== 'both' && entities.length > 0 && dates.length > 0 && (
+          {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length > 0 && (
+            <div className="overflow-x-auto">
             <table className="w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
               <thead className="sticky top-0 z-20">
                 {/* Entity name header row */}
@@ -772,7 +857,116 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                 })}
               </tbody>
             </table>
+            </div>
           )}
+
+          {/* ── Current Readings table ── */}
+          {!isLoading && tab === 'current' && (() => {
+            const crEntities = currentPivotData.entities;
+            const crDates    = currentPivotData.dates;
+            const crPivot    = currentPivotData.pivot;
+
+            const sideToggle = (
+              <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/10 shrink-0">
+                <span className="text-[10px] text-muted-foreground mr-1">Show:</span>
+                {(['consumption', 'production'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setCurrentSide(s)}
+                    className={[
+                      'px-2.5 py-0.5 text-[10px] rounded-full border transition-colors',
+                      currentSide === s
+                        ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    ].join(' ')}
+                  >
+                    {s === 'consumption' ? 'Consumption' : (useRoProd ? 'Production (RO)' : 'Production')}
+                  </button>
+                ))}
+              </div>
+            );
+
+            if (crEntities.length === 0) return (
+              <>{sideToggle}<div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                No entities found for current readings.
+              </div></>
+            );
+            if (crDates.length === 0) return (
+              <>{sideToggle}<div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                No readings in this date range.
+              </div></>
+            );
+            return (
+              <>{sideToggle}
+              <div className="overflow-x-auto">
+              <table className="w-full text-[11px] border-collapse" data-testid="dsm-current-table">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-muted/95 backdrop-blur-sm">
+                    <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
+                      Date
+                    </th>
+                    {crEntities.map((e: any, i: number) => {
+                      const isRoTrain = useRoProd;
+                      const label = isRoTrain
+                        ? `RO${e.train_number ?? i + 1}`
+                        : (e.name ?? e.code ?? `#${i + 1}`);
+                      const sublabel = plantCodeById.get(e.plant_id) ?? '';
+                      return (
+                        <th
+                          key={e.id}
+                          className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[110px]"
+                          title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
+                        >
+                          <div className="truncate max-w-[120px] mx-auto font-mono-num">{label}</div>
+                          {sublabel && (
+                            <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
+                          )}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...crDates].reverse().map((date: string, di: number) => {
+                    const isEven = di % 2 === 0;
+                    return (
+                      <tr
+                        key={date}
+                        className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
+                      >
+                        <td className={[
+                          'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
+                          isEven ? 'bg-background' : 'bg-muted/10',
+                        ].join(' ')}>
+                          {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
+                        </td>
+                        {crEntities.map((e: any) => {
+                          const val = crPivot.get(date)?.get(e.id);
+                          return (
+                            <td
+                              key={e.id}
+                              className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
+                              title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })}` : undefined}
+                            >
+                              {val != null ? (
+                                <span className="text-foreground">
+                                  {val.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* ── Footer legend ── */}
@@ -784,11 +978,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               ? <><Droplet className="h-3 w-3 text-primary" /> Production — summed permeate_meter_delta (m³) per RO train per production day</>
               : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter per day</>
           )}
-          {tab !== 'both' && estimatedKeys.size > 0 && (
+          {(tab === 'production' || tab === 'consumption') && estimatedKeys.size > 0 && (
             <span className="flex items-center gap-1 ml-3 text-amber-600 dark:text-amber-400">
               <span className="font-bold text-[10px]">~</span>
               Auto-estimated (Poly. Regression deg. 3) — hover cell for details
             </span>
+          )}
+          {tab === 'current' && (
+            <><Gauge className="h-3 w-3 text-muted-foreground" /> Current Readings — latest raw meter value per entity per day (absolute, not delta)</>
           )}
           <span className="ml-auto">
             {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.length} days in range`}
@@ -798,6 +995,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                 ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.length} days`
                 : `${entities.length} meters · ${dates.length} days`
             )}
+            {tab === 'current' && `${currentPivotData.entities.length} entities · ${currentPivotData.dates.length} days`}
           </span>
         </div>
       </DialogContent>
