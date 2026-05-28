@@ -51,6 +51,50 @@ const DOSING_KEYS = [
   { key: 'soda_ash_kg', name: 'Soda Ash', unit: 'kg' },
 ];
 
+// ─── CIP Chemical constants ────────────────────────────────────────────────────
+// These are the default 3 CIP chemicals; plant config (cip_chemicals) can override.
+// "Built-in" chemicals map to dedicated DB columns; custom ones are serialised
+// into the remarks field as __cip_extra:{...} so no migration is needed.
+const DEFAULT_CIP_CHEMICALS: Array<{ name: string; unit: string }> = [
+  { name: 'Caustic Soda', unit: 'kg' },
+  { name: 'HCl',          unit: 'L'  },
+  { name: 'SLS',          unit: 'g'  },
+];
+// Maps CIP chemical name → cip_logs DB column (for the 3 built-ins only).
+const CIP_BUILTIN_DB_MAP: Record<string, string> = {
+  'Caustic Soda': 'caustic_soda_kg',
+  'HCl':          'hcl_l',
+  'SLS':          'sls_g',
+};
+// Accent colours for each CIP chemical card (built-ins first, then fallback palette).
+const CIP_CHEM_ACCENTS: Record<string, { border: string; bg: string; bar: string; badge: string }> = {
+  'Caustic Soda': {
+    border: 'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-teal-500',
+    badge:  'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
+  },
+  'HCl': {
+    border: 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-amber-400',
+    badge:  'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300',
+  },
+  'SLS': {
+    border: 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-yellow-400',
+    badge:  'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
+  },
+};
+// Fallback accent for custom chemicals
+const CIP_CUSTOM_ACCENT = {
+  border: 'border-purple-400 bg-purple-50/40 dark:bg-purple-950/30',
+  bg:     'border-border bg-muted/20',
+  bar:    'bg-purple-400',
+  badge:  'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
+};
+
 
 // ─── CSV helpers (same pattern as Operations.tsx) ────────────────────────────
 
@@ -4204,6 +4248,14 @@ function CIPLog() {
     setTrainId('');
   }, []);
 
+  // ── Load plant meter config to get CIP chemical list ──────────────────────
+  const { config: plantConfig } = usePlantMeterConfig(plantId || null);
+  // Use plant-configured chemicals; fall back to the 3 built-in defaults.
+  const cipChemicals: Array<{ name: string; unit: string }> =
+    plantConfig?.cip_chemicals?.length
+      ? plantConfig.cip_chemicals
+      : DEFAULT_CIP_CHEMICALS;
+
   const { data: trains } = useQuery({
     queryKey: ['cip-trains', plantId],
     queryFn: async () => plantId ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId)).data ?? [] : [],
@@ -4229,7 +4281,6 @@ function CIPLog() {
       (data ?? []).forEach((p: any) => {
         const fullName = p.chemical_name as string;
         if (!(fullName in map)) map[fullName] = p.unit_price;
-        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
         const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
         if (!(baseName in map)) map[baseName] = p.unit_price;
       });
@@ -4240,13 +4291,19 @@ function CIPLog() {
   const selectedTrain = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
   const numVessels = selectedTrain?.num_vessels ?? 15;
 
-  // Form state — was missing, causing "v is not defined" crash on mount
-  const [v, setV] = useState({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
+  // ── Form state: dynamic chemicals map + timing/remarks ────────────────────
+  // chemicals: Record<chemicalName, inputValue>
+  const [v, setV] = useState<{ start: string; end: string; remarks: string; chemicals: Record<string, string> }>({
+    start: '', end: '', remarks: '', chemicals: {},
+  });
 
-  // Live computed values
-  const causticKg  = +v.caustic || 0;
-  const hclL       = +v.hcl     || 0;
-  const slsG       = +v.sls     || 0;
+  const setChemVal = (name: string, val: string) =>
+    setV(prev => ({ ...prev, chemicals: { ...prev.chemicals, [name]: val } }));
+
+  // ── Live computed values (built-ins drive the cost/mass summary) ──────────
+  const causticKg = +(v.chemicals['Caustic Soda'] || '') || 0;
+  const hclL      = +(v.chemicals['HCl']          || '') || 0;
+  const slsG      = +(v.chemicals['SLS']           || '') || 0;
   const totalMassKg   = causticKg + slsG / 1000;
   const totalVolumeL  = hclL;
   const liveCost =
@@ -4268,6 +4325,16 @@ function CIPLog() {
     if (c.caustic_soda_kg > 0) parts.push('Caustic Alkaline');
     if (c.hcl_l > 0)           parts.push('Acid HCl');
     if (c.sls_g > 0)           parts.push('Anti Scalant');
+    // Custom chemicals stored as JSON in remarks
+    try {
+      const match = (c.remarks ?? '').match(/__cip_extra:(\{[^}]+\})/);
+      if (match) {
+        const extra = JSON.parse(match[1]) as Record<string, { value: string }>;
+        Object.entries(extra).forEach(([name, { value }]) => {
+          if (+value > 0) parts.push(name);
+        });
+      }
+    } catch { /* ignore bad JSON */ }
     return parts.join(' + ') || '—';
   };
 
@@ -4279,18 +4346,48 @@ function CIPLog() {
 
   const submit = async () => {
     if (!trainId) { toast.error('Select a train'); return; }
-    const { error } = await supabase.from('cip_logs').insert({
+
+    // Build payload for built-in DB columns
+    const payload: Record<string, any> = {
       train_id: trainId, plant_id: plantId,
       start_datetime: v.start ? new Date(v.start).toISOString() : null,
       end_datetime:   v.end   ? new Date(v.end).toISOString()   : null,
-      sls_g: v.sls ? +v.sls : null, hcl_l: v.hcl ? +v.hcl : null, caustic_soda_kg: v.caustic ? +v.caustic : null,
-      conducted_by: activeOperator?.id, remarks: v.remarks || null,
+      conducted_by: activeOperator?.id,
+    };
+
+    // Map built-in chemicals to their DB columns
+    cipChemicals.forEach(chem => {
+      const col = CIP_BUILTIN_DB_MAP[chem.name];
+      const val = v.chemicals[chem.name];
+      if (col) payload[col] = val ? +val : null;
     });
+    // Ensure null for any built-in columns not in cipChemicals
+    if (!('caustic_soda_kg' in payload)) payload.caustic_soda_kg = null;
+    if (!('hcl_l'           in payload)) payload.hcl_l           = null;
+    if (!('sls_g'           in payload)) payload.sls_g           = null;
+
+    // Serialize custom chemicals into remarks
+    const customChems = cipChemicals.filter(c => !CIP_BUILTIN_DB_MAP[c.name]);
+    let remarksOut = v.remarks || null;
+    if (customChems.length > 0) {
+      const extra: Record<string, { value: string; unit: string }> = {};
+      customChems.forEach(c => {
+        const val = v.chemicals[c.name];
+        if (val) extra[c.name] = { value: val, unit: c.unit };
+      });
+      if (Object.keys(extra).length > 0) {
+        const suffix = `__cip_extra:${JSON.stringify(extra)}`;
+        remarksOut = remarksOut ? `${remarksOut} ${suffix}` : suffix;
+      }
+    }
+    payload.remarks = remarksOut;
+
+    const { error } = await supabase.from('cip_logs').insert(payload);
     if (error) { toast.error(error.message); return; }
     toast.success('CIP logged'); qc.invalidateQueries();
     clearForm();
   };
-  const clearForm = () => setV({ start: '', end: '', sls: '', hcl: '', caustic: '', remarks: '' });
+  const clearForm = () => setV({ start: '', end: '', remarks: '', chemicals: {} });
 
   const trainStatusLabel = selectedTrain?.status === 'Running'
     ? 'Online - Optimal Health'
@@ -4334,62 +4431,66 @@ function CIPLog() {
         {/* Main content */}
         <div className="flex-1 min-w-0 space-y-2.5">
 
-          {/* Dosing & Time */}
+          {/* ── Dosing & Time (dynamic chemical cards) ─────────────────── */}
           <Card className="p-3 space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Dosing & Time</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {/* Caustic Soda */}
-              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
-                v.caustic ? 'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30' : 'border-border bg-muted/20')}>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-900 text-[9px] font-bold text-teal-700 dark:text-teal-300">A</span>
-                  <span className="text-xs font-semibold">Caustic Soda (kg)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Input type="number" step="any" value={v.caustic}
-                    onChange={e => setV({ ...v, caustic: e.target.value })}
-                    className="h-7 text-sm flex-1" placeholder="0" />
-                  <span className="text-[11px] text-muted-foreground shrink-0">kg</span>
-                </div>
-                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
-                  <div className={cn('h-full rounded-full bg-teal-400 transition-all', v.caustic ? 'w-1/2' : 'w-0')} />
-                </div>
-              </div>
-              {/* HCl */}
-              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
-                v.hcl ? 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30' : 'border-border bg-muted/20')}>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900 text-[9px] font-bold text-amber-700 dark:text-amber-300">A</span>
-                  <span className="text-xs font-semibold">HCl (L)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Input type="number" step="any" value={v.hcl}
-                    onChange={e => setV({ ...v, hcl: e.target.value })}
-                    className="h-7 text-sm flex-1" placeholder="0" />
-                  <span className="text-[11px] text-muted-foreground shrink-0">L</span>
-                </div>
-                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
-                  <div className={cn('h-full rounded-full bg-amber-400 transition-all', v.hcl ? 'w-1/2' : 'w-0')} />
-                </div>
-              </div>
-              {/* SLS */}
-              <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors',
-                v.sls ? 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30' : 'border-border bg-muted/20')}>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-yellow-100 dark:bg-yellow-900 text-[8px] font-bold text-yellow-700 dark:text-yellow-300">SO₃</span>
-                  <span className="text-xs font-semibold">SLS (g)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Input type="number" step="any" value={v.sls}
-                    onChange={e => setV({ ...v, sls: e.target.value })}
-                    className="h-7 text-sm flex-1" placeholder="0" />
-                  <span className="text-[11px] text-muted-foreground shrink-0">g</span>
-                </div>
-                <div className="h-0.5 rounded-full bg-muted overflow-hidden">
-                  <div className={cn('h-full rounded-full bg-yellow-400 transition-all', v.sls ? 'w-1/2' : 'w-0')} />
-                </div>
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Dosing & Time</h4>
+              {cipChemicals.length > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {cipChemicals.length} chemical{cipChemicals.length !== 1 ? 's' : ''} configured
+                </span>
+              )}
             </div>
+
+            {/* Chemical input cards — one per configured CIP chemical */}
+            <div className="grid grid-cols-2 gap-2">
+              {cipChemicals.map(chem => {
+                const val = v.chemicals[chem.name] ?? '';
+                const accent = CIP_CHEM_ACCENTS[chem.name] ?? CIP_CUSTOM_ACCENT;
+                const isBuiltin = !!CIP_BUILTIN_DB_MAP[chem.name];
+                return (
+                  <div
+                    key={chem.name}
+                    className={cn(
+                      'rounded-lg border-2 p-2 space-y-1.5 transition-colors',
+                      val ? accent.border : 'border-border bg-muted/20',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn(
+                        'inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold',
+                        accent.badge,
+                      )}>
+                        {isBuiltin ? chem.name.slice(0, 2).toUpperCase() : '✦'}
+                      </span>
+                      <span className="text-xs font-semibold">{chem.name} ({chem.unit})</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={val}
+                        onChange={e => setChemVal(chem.name, e.target.value)}
+                        className="h-7 text-sm flex-1"
+                        placeholder="0"
+                      />
+                      <span className="text-[11px] text-muted-foreground shrink-0">{chem.unit}</span>
+                    </div>
+                    <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                      <div className={cn('h-full rounded-full transition-all', accent.bar, val ? 'w-1/2' : 'w-0')} />
+                    </div>
+                  </div>
+                );
+              })}
+
+              {cipChemicals.length === 0 && (
+                <div className="col-span-2 rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center text-xs text-muted-foreground">
+                  No CIP chemicals configured for this plant.
+                  Go to <strong>Plant Configuration → CIP Chemicals</strong> to add them.
+                </div>
+              )}
+            </div>
+
             {/* Datetime pickers */}
             <div className="grid grid-cols-2 gap-2">
               <div>
