@@ -478,7 +478,9 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     : tab === 'production'
       ? prodDataLoading
       : tab === 'current'
-        ? (locatorsLoading || consLoading || prodDataLoading)
+        ? (currentSide === 'consumption'
+            ? (locatorsLoading || consLoading)
+            : prodDataLoading)
         : (locatorsLoading || consLoading || prodDataLoading);
 
   // Active pivot data for the detail tabs
@@ -646,7 +648,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </DialogHeader>
 
         {/* ── Option toggles: Prod. vs Consum. / Production / Consumption ── */}
-        <div className="flex border-b shrink-0 px-5 bg-muted/20">
+        <div className="flex overflow-x-auto border-b shrink-0 px-5 bg-muted/20 scrollbar-none">
           {([
             { key: 'both',        label: 'Prod. vs Consum.',  icon: <Activity className="h-3 w-3" /> },
             { key: 'production',  label: 'Production',        icon: <Droplet  className="h-3 w-3" /> },
