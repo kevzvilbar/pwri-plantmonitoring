@@ -5,10 +5,13 @@ import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Sun, Zap, Download } from 'lucide-react';
+import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Sun, Zap, Download, MoreVertical } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Legend, ComposedChart, Bar, BarChart, ReferenceLine,
@@ -1479,13 +1482,6 @@ export function TrendChart({
         powerCost: null as number | null,   // ₱/m³  (computed in final map)
         chemCost: null as number | null,    // ₱/m³
         totalCost: null as number | null,   // ₱/m³  = powerCost + chemCost
-        // _raw* fields accumulate the true unclamped deltas so the tooltip
-        // can show the real value even when the chart plots 0 (clamped).
-        // null means "no negative delta seen" → tooltip shows normal value.
-        _rawProduction: null as number | null,
-        _rawConsumption: null as number | null,
-        _rawRawwater: null as number | null,
-        _rawKwh: null as number | null,
         // _meterReplacements: list of human-readable entity names replaced on this day.
         _meterReplacements: [] as string[],
         // _permeateSourcePlants: set of plant IDs whose production came from the permeate
@@ -1560,12 +1556,8 @@ export function TrendChart({
 
         if (dailyVolumeField && r[dailyVolumeField] != null) {
           const storedVol = +r[dailyVolumeField];
-          const delta     = Math.max(0, storedVol);
+          const delta     = storedVol;
           lastReading.set(entityKey, +r.current_reading);
-          // daily_volume is the operator-recorded value — do NOT pass it as a
-          // rawDelta that triggers the negative-reading warning. The value is
-          // already the ground truth; clamping it to 0 is the correct display.
-          // Return rawDelta = null so accumulateRaw never fires for this path.
           return { r, delta, rawDelta: null, isMeterReplacement: false };
         }
 
@@ -1576,7 +1568,7 @@ export function TrendChart({
           // always shows 0, causing a false dip at the start of every range.
           if (r.previous_reading != null) {
             const rawDelta = +r.current_reading - +r.previous_reading;
-            const delta    = Math.max(0, rawDelta);
+            const delta    = rawDelta;
             return { r, delta, rawDelta, isMeterReplacement: false };
           }
           // No previous_reading in DB → we genuinely don't know the delta for this
@@ -1587,20 +1579,11 @@ export function TrendChart({
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-        const delta    = Math.max(0, rawDelta);
+        const delta    = rawDelta;
         lastReading.set(entityKey, +r.current_reading);
         return { r, delta, rawDelta, isMeterReplacement: false };
       });
     }
-
-    // Helper: accumulate raw delta into a _raw field only when it's negative.
-    // Keeps null when all readings are non-negative (tooltip shows normal value).
-    const accumulateRaw = (row: any, field: string, rawDelta: number | null) => {
-      if (rawDelta === null) return;
-      if (rawDelta < 0) {
-        row[field] = (row[field] ?? 0) + rawDelta;
-      }
-    };
 
     // ── Raw Water = sum of per-well deltas ─────────────────────────────────
     // Uses computeEntityDeltas for sequential in-memory delta tracking
@@ -1612,7 +1595,6 @@ export function TrendChart({
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.rawwater += delta;
-      accumulateRaw(row, '_rawRawwater', rawDelta);
       if (isMeterReplacement) {
         const entityName = wellNames?.get(r.well_id) ?? r.well_id ?? 'Well';
         const label = `${entityName} Raw Meter`;
@@ -1637,7 +1619,6 @@ export function TrendChart({
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.production += delta;
-      accumulateRaw(row, '_rawProduction', rawDelta);
       if (isMeterReplacement) {
         const entityName = productMeterNames?.get(r.meter_id) ?? r.meter_id ?? 'Product Meter';
         const label = `${entityName} Product Meter`;
@@ -1734,7 +1715,6 @@ export function TrendChart({
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
       row.consumption += delta;
-      accumulateRaw(row, '_rawConsumption', rawDelta);
       if (isMeterReplacement) {
         const entityName = locatorNames?.get(r.locator_id) ?? r.locator_id ?? 'Locator';
         const label = `${entityName} Meter`;
@@ -1811,13 +1791,11 @@ export function TrendChart({
               const mMult = multArr[mi] ?? multArr[0] ?? 1;
               if (pGmr[k] != null) total += (rGmr[k] - pGmr[k]) * mMult;
             }
-            if (total >= 0) gridKwh = total;
-            else accumulateRaw(ensure(format(new Date(r.reading_datetime), 'MMM d'), new Date(r.reading_datetime).getTime()), '_rawKwh', total);
+            gridKwh = total;
           } else if (pMeter != null && gridCurrent != null) {
             // Priority 2: single-meter legacy — (curr − prev) × multArr[0]
             const rawDelta = gridCurrent - pMeter;
-            gridKwh = Math.max(0, rawDelta) * (multArr[0] ?? 1);
-            if (rawDelta < 0) accumulateRaw(ensure(format(new Date(r.reading_datetime), 'MMM d'), new Date(r.reading_datetime).getTime()), '_rawKwh', rawDelta * (multArr[0] ?? 1));
+            gridKwh = rawDelta * (multArr[0] ?? 1);
           }
 
           // Priority 3 & 4: stored daily totals — only when no raw readings available
@@ -1974,7 +1952,6 @@ export function TrendChart({
         recovery: null, tds: null, kwh: null, solarKwh: null,
         nrw: null, powerCost: null, chemCost: null, totalCost: null,
         _meterReplacements: [], _permeateSourceNames: [],
-        _rawProduction: null, _rawConsumption: null, _rawRawwater: null, _rawKwh: null,
       };
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
@@ -2435,72 +2412,6 @@ export function TrendChart({
     : [];
 
 
-  // ── Per-day negative-value index ────────────────────────────────────────
-  // Built from the _raw* fields stored in chartData. Each entry lists only
-  // the fields that are actually plotted for this metric and had a negative
-  // raw delta on that date. The tooltip uses this to show the true value
-  // (e.g. -900.3) even though the chart bar/line shows 0 (clamped).
-  const negativeByDate = useMemo<Map<string, { label: string; rawValue: number; chartValue: number }[]>>(() => {
-    const map = new Map<string, { label: string; rawValue: number; chartValue: number }[]>();
-
-    // Mapping: metric → which _raw field to check, its display label, and the
-    // corresponding plotted (clamped) field name.
-    const checks: Record<string, Array<{ rawField: string; chartField: string; label: string }>> = {
-      production:     [
-        { rawField: '_rawProduction',  chartField: 'production',  label: 'Production (m³)' },
-        { rawField: '_rawConsumption', chartField: 'consumption', label: 'Consumption (m³)' },
-      ],
-      nrw:            [
-        { rawField: '_rawProduction',  chartField: 'production',  label: 'Production (m³)' },
-        { rawField: '_rawConsumption', chartField: 'consumption', label: 'Consumption (m³)' },
-        // nrw is derived — flag it when the computed value is negative
-        { rawField: 'nrw',             chartField: 'nrw',         label: 'NRW %' },
-      ],
-      rawwater:       [{ rawField: '_rawRawwater', chartField: 'rawwater', label: 'Raw Water (m³)' }],
-      pv:             [
-        { rawField: '_rawProduction', chartField: 'production', label: 'Production (m³)' },
-        { rawField: '_rawKwh',        chartField: 'kwh',        label: 'Power (kWh)' },
-      ],
-      kwh:            [{ rawField: '_rawKwh', chartField: 'kwh', label: 'Grid (kWh)' }],
-      // recovery, tds, productionCost values come straight from the DB —
-      // no clamping — so rawField === chartField (negative = truly negative).
-      recovery:       [{ rawField: 'recovery',  chartField: 'recovery',  label: 'Recovery (%)' }],
-      tds:            [{ rawField: 'tds',        chartField: 'tds',       label: 'Permeate TDS (ppm)' }],
-      productionCost: [
-        { rawField: 'powerCost', chartField: 'powerCost', label: 'Power (₱)' },
-        { rawField: 'chemCost',  chartField: 'chemCost',  label: 'Chemical (₱)' },
-        { rawField: 'totalCost', chartField: 'totalCost', label: 'Total (₱)' },
-      ],
-      chemCost: [
-        { rawField: 'chemCost', chartField: 'chemCost', label: 'Chemical Cost (₱)' },
-      ],
-      powerCost: [
-        { rawField: 'powerCost', chartField: 'powerCost', label: 'Power Cost (₱)' },
-      ],
-    };
-
-    const fields = checks[metric] ?? [];
-
-    for (const row of chartData) {
-      for (const { rawField, chartField, label } of fields) {
-        const raw = row[rawField];
-        // For _raw* fields: null means no negative delta → skip.
-        // For direct fields (recovery, tds, costs, nrw): check if < 0.
-        const isNegative = rawField.startsWith('_raw')
-          ? raw !== null && raw < 0
-          : raw != null && +raw < 0;
-
-        if (!isNegative) continue;
-
-        const entry = { label, rawValue: +raw, chartValue: +(row[chartField] ?? 0) };
-        const existing = map.get(row.date);
-        if (existing) existing.push(entry);
-        else map.set(row.date, [entry]);
-      }
-    }
-
-    return map;
-  }, [chartData, metric]);
 
   // Custom tooltip — same look as Recharts default but:
   //  • Shows the true raw (unclamped) value for any field that was clamped to 0
@@ -2509,25 +2420,9 @@ export function TrendChart({
   //  • If both a replacement AND a genuine negative exist on the same day, shows both
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
-    const warnings = negativeByDate.get(label as string) ?? [];
-
-    // Meter replacements and permeate source info — from chartData row
     const chartRow = chartData.find((d) => d.date === label);
     const replacements: string[] = chartRow?._meterReplacements ?? [];
     const permeateSourceNames: string[] = chartRow?._permeateSourceNames ?? [];
-
-    // Warnings that are NOT covered by a meter replacement (genuine negatives).
-    // A warning is "covered" if there are replacements on this day — the zero
-    // was caused by the replacement, not a true data anomaly.
-    const genuineNegatives = replacements.length > 0
-      ? warnings.filter((w) => {
-          const entry = payload.find((p: any) => p.name === w.label);
-          const chartVal = entry?.value ?? 0;
-          // If the chart shows 0, the replacement explains it — not a genuine negative
-          return chartVal !== 0;
-        })
-      : warnings;
-
     return (
       <div style={{
         background: 'hsl(var(--card))',
@@ -2540,85 +2435,29 @@ export function TrendChart({
         boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.92, backdropFilter: 'blur(4px)',
       }}>
         <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
-        {payload.map((entry: any) => {
-          // Always display the actual chart value (already clamped to ≥ 0 at
-          // the data layer). Never replace it with a raw negative partial delta
-          // from a single locator — entry.value is the correct aggregated total.
-          const displayValue = entry.value;
-          return (
-            <p key={entry.dataKey} style={{
-              margin: '1px 0',
-              color: entry.color ?? entry.stroke,
-            }}>
-              {entry.name}:{' '}
-              <span>
-                {displayValue != null ? displayValue.toLocaleString() : '—'}
-              </span>
-            </p>
-          );
-        })}
-
-        {/* ── Meter replacement notice — replaces negative-reading warning ── */}
+        {payload.map((entry: any) => (
+          <p key={entry.dataKey} style={{ margin: '1px 0', color: entry.color ?? entry.stroke }}>
+            {entry.name}:{' '}
+            <span>{entry.value != null ? entry.value.toLocaleString() : '—'}</span>
+          </p>
+        ))}
         {replacements.length > 0 && (
-          <div style={{
-            marginTop: 6,
-            paddingTop: 5,
-            borderTop: '1px solid hsl(var(--border))',
-          }}>
+          <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
             {replacements.map((name) => (
-              <div key={name} style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 5,
-                color: '#92400e',
-                marginBottom: 2,
-              }}>
+              <div key={name} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: '#92400e', marginBottom: 2 }}>
                 <span style={{ fontSize: 12, lineHeight: 1 }}>🔧</span>
                 <span style={{ fontSize: 10, lineHeight: 1.4 }}>
                   <strong>{name} was Replaced</strong>
-                  {' '}
-                  <span style={{ opacity: 0.75 }}>(value adjusted to 0)</span>
                 </span>
               </div>
             ))}
           </div>
         )}
-
-        {/* ── Genuine negative readings (not explained by a replacement) ── */}
-        {genuineNegatives.length > 0 && (
-          <div style={{
-            marginTop: 6,
-            paddingTop: 5,
-            borderTop: '1px solid hsl(var(--border))',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 5,
-            color: '#92400e',
-          }}>
-            <span style={{ fontSize: 12, lineHeight: 1 }}>⚠️</span>
-            <span style={{ fontSize: 10, lineHeight: 1.4 }}>
-              <strong>Negative reading:</strong>{' '}
-              {genuineNegatives.map((w) => w.label).join(', ')}
-            </span>
-          </div>
-        )}
-
-        {/* ── Permeate-source note — shown when ≥1 plant uses permeate_is_production ── */}
         {permeateSourceNames.length > 0 && (
-          <div style={{
-            marginTop: 6,
-            paddingTop: 5,
-            borderTop: '1px solid hsl(var(--border))',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 5,
-            color: 'hsl(var(--muted-foreground))',
-          }}>
+          <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsl(var(--border))', display: 'flex', alignItems: 'flex-start', gap: 5, color: 'hsl(var(--muted-foreground))' }}>
             <span style={{ fontSize: 11, lineHeight: 1 }}>💧</span>
-            <span style={{ fontSize: 10, lineHeight: 1.4 }}>
-              <span style={{ opacity: 0.85 }}>
-                Source: Permeate meter ({permeateSourceNames.join(', ')})
-              </span>
+            <span style={{ fontSize: 10, lineHeight: 1.4, opacity: 0.85 }}>
+              Source: Permeate meter ({permeateSourceNames.join(', ')})
             </span>
           </div>
         )}
@@ -2742,6 +2581,121 @@ export function TrendChart({
         >
           Data Summary
         </button>
+
+        {/* ── Mobile ⋮ overflow — secondary controls ───────────────────────── */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="sm:hidden h-6 w-6 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
+              title="More chart options"
+              aria-label="More chart options"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={6} className="w-56 p-2.5 flex flex-col gap-3">
+            {/* Drill section — production / nrw */}
+            {hasConsumptionDrill && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Consumption drill</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => setDrillMode(drillMode === 'drillup' ? 'default' : 'drillup')}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'drillup' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    <ChevronsUp className="h-3 w-3" />Monthly
+                  </button>
+                  <button onClick={() => { setDrillMode('default'); setShowLocatorFilter(false); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'default' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    <BarChart2 className="h-3 w-3" />Daily
+                  </button>
+                  <button onClick={() => setDrillMode(drillMode === 'drilldown' ? 'default' : 'drilldown')}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'drilldown' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    <ChevronsDown className="h-3 w-3" />Per locator
+                  </button>
+                </div>
+                {metric === 'production' && drillMode !== 'default' && (
+                  <div className="flex gap-1 mt-1.5 flex-wrap">
+                    <button onClick={() => { setProdDrillSource('locator'); setSelectedLocatorIds(null); }}
+                      className={['h-6 px-2 rounded text-[10px] font-medium border', prodDrillSource === 'locator' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Per Locator</button>
+                    <button onClick={() => { setProdDrillSource('source'); setSelectedLocatorIds(null); }}
+                      className={['h-6 px-2 rounded text-[10px] font-medium border', prodDrillSource === 'source' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Per Source</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* RO drill section — tds / recovery */}
+            {hasRoDrill && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">RO drill</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'default' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
+                    <BarChart2 className="h-3 w-3" />Daily
+                  </button>
+                  <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
+                    <ChevronsDown className="h-3 w-3" />Per train
+                  </button>
+                  <button onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'by-hour' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
+                    <ChevronsUp className="h-3 w-3" />Hourly
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* Plant health granularity */}
+            {hasPlantHealth && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Granularity</p>
+                <div className="flex flex-wrap gap-1">
+                  {(['daily','hourly','monthly'] as const).map((m) => (
+                    <button key={m} onClick={() => setPhDrillMode(m)}
+                      className={['h-6 px-2 rounded text-[10px] font-medium border capitalize', phDrillMode === m ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{m}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Production cost toggles */}
+            {metric === 'productionCost' && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Show lines</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => setShowTotalCostLine(v => !v)}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border', showTotalCostLine ? 'bg-accent text-accent-foreground border-accent' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Prod</button>
+                  <button onClick={() => setShowPowerCostLine(v => !v)}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border', showPowerCostLine ? 'border-[hsl(var(--chart-6))] text-[hsl(var(--chart-6))] bg-[hsl(var(--chart-6))]/10' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Power</button>
+                  <button onClick={() => setShowChemCostLine(v => !v)}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border', showChemCostLine ? 'border-[hsl(var(--highlight))] text-[hsl(var(--highlight))] bg-[hsl(var(--highlight))]/10' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Chem</button>
+                </div>
+              </div>
+            )}
+            {/* kWh source filter + export */}
+            {metric === 'kwh' && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Energy source</p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {(['both','solar','grid'] as const).map(s => (
+                    <button key={s} onClick={() => setKwhSource(s)}
+                      className={['h-6 px-2 rounded text-[10px] font-medium border capitalize', kwhSource === s ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{s}</button>
+                  ))}
+                </div>
+                <button onClick={() => {
+                    if (!chartData.length) return;
+                    const rows = chartData.map((d: any) => `${d.date},${+(d.solarKwh??0).toFixed(2)},${+(d.kwh??0).toFixed(2)},${+((d.solarKwh??0)+(d.kwh??0)).toFixed(2)}`);
+                    const csv = ['date,solar_kwh,grid_kwh,total_kwh',...rows].join('\n');
+                    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+                    const a = document.createElement('a'); a.href=url; a.download='power_energy_mix.csv'; a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="w-full h-7 rounded border border-border bg-muted text-[11px] font-medium flex items-center justify-center gap-1 text-muted-foreground hover:text-foreground">
+                  <Download className="h-3 w-3" /> Export CSV
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* ── Desktop-only secondary controls (hidden on mobile) ─────────────── */}
+        <div className="hidden sm:contents">
 
         {/* kwh: Source filter — Both / Solar / Grid + CSV Export */}
         {metric === 'kwh' && (() => {
@@ -3259,6 +3213,8 @@ export function TrendChart({
           </div>
         </div>
       )}
+
+        </div>{/* end hidden sm:contents */}
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
       {showSummary && (
