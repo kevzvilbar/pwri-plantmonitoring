@@ -669,7 +669,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </div>
 
         {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           {isLoading && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading…</div>
           )}
@@ -705,15 +705,14 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const totBal  = totProd - totCons;
             const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
             return (
-              <div className="overflow-x-auto">
-              <table className="w-full text-[11px] border-collapse" data-testid="dsm-both-table">
-                <thead className="sticky top-0 z-20">
+              <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-both-table">
+                <thead>
                   <tr className="bg-muted/95 backdrop-blur-sm">
-                    <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">Date</th>
-                    <th className="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">Production (m³)</th>
-                    <th className="px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[120px]">Consumption (m³)</th>
-                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[100px]">Balance (m³)</th>
-                    <th className="sticky right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
+                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">Date</th>
+                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">Production (m³)</th>
+                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[120px]">Consumption (m³)</th>
+                    <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[100px]">Balance (m³)</th>
+                    <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
                   </tr>
                   <tr className="bg-teal-50/60 dark:bg-teal-950/20">
                     <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">TOTAL</td>
@@ -738,7 +737,6 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                   })}
                 </tbody>
               </table>
-              </div>
             );
           })()}
 
@@ -754,12 +752,11 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </div>
           )}
           {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length > 0 && (
-            <div className="overflow-x-auto">
-            <table className="w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
-              <thead className="sticky top-0 z-20">
+            <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
+              <thead>
                 {/* Entity name header row */}
                 <tr className="bg-muted/95 backdrop-blur-sm">
-                  <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
+                  <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
                     Date
                   </th>
                   {entities.map((e, i) => {
@@ -772,7 +769,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                     return (
                       <th
                         key={e.id}
-                        className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
+                        className="sticky top-0 z-20 bg-muted/95 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[90px]"
                         title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
                       >
                         <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
@@ -782,7 +779,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                       </th>
                     );
                   })}
-                  <th className="sticky right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[90px]">
+                  <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[90px]">
                     {tab === 'production' ? 'Total Prod. (m³)' : 'Total (m³)'}
                   </th>
                 </tr>
@@ -857,7 +854,6 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                 })}
               </tbody>
             </table>
-            </div>
           )}
 
           {/* ── Current Readings table ── */}
@@ -898,11 +894,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             );
             return (
               <>{sideToggle}
-              <div className="overflow-x-auto">
-              <table className="w-full text-[11px] border-collapse" data-testid="dsm-current-table">
-                <thead className="sticky top-0 z-20">
+              <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-current-table">
+                <thead>
                   <tr className="bg-muted/95 backdrop-blur-sm">
-                    <th className="sticky left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
+                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
                       Date
                     </th>
                     {crEntities.map((e: any, i: number) => {
@@ -914,7 +909,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                       return (
                         <th
                           key={e.id}
-                          className="px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[110px]"
+                          className="sticky top-0 z-20 bg-muted/95 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[110px]"
                           title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
                         >
                           <div className="truncate max-w-[120px] mx-auto font-mono-num">{label}</div>
@@ -963,7 +958,6 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                   })}
                 </tbody>
               </table>
-              </div>
               </>
             );
           })()}
