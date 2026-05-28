@@ -134,7 +134,7 @@ function computePivotFromReadings(
         // value correctly represents THAT reading's interval — which may span
         // multiple days if readings were skipped. Use it as-is (it's already the
         // correct single-interval delta stored at insert time), clamped ≥ 0.
-        delta = Math.max(0, +r[dailyVolumeField]);
+        delta = +r[dailyVolumeField];
         lastReading.set(entityKey, +r.current_reading);
       } else if (!lastReading.has(entityKey)) {
         // FIX: No daily_volume and no prior row in range.
@@ -142,11 +142,11 @@ function computePivotFromReadings(
         // time) instead of treating the full cumulative meter value as today's delta.
         // This prevents the "millions" spike when the date range starts mid-history.
         if (r.previous_reading != null && r.current_reading != null)
-          delta = Math.max(0, +r.current_reading - +r.previous_reading);
+          delta = +r.current_reading - +r.previous_reading;
         lastReading.set(entityKey, +r.current_reading);
       } else {
-        // Normal: subtract the last seen reading. Clamp for meter rollbacks.
-        delta = Math.max(0, +r.current_reading - lastReading.get(entityKey)!);
+        // Normal: subtract the last seen reading. Pass through negatives.
+        delta = +r.current_reading - lastReading.get(entityKey)!;
         lastReading.set(entityKey, +r.current_reading);
       }
       // Populate the cache for subsequent renders / pivots in this session.
