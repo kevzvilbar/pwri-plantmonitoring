@@ -367,7 +367,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-    const pivot = computePivotFromReadings(consReadings ?? [], 'locator_id', 'daily_volume');
+    const pivot = computePivotFromReadingsNoCache(consReadings ?? [], 'locator_id', 'daily_volume');
 
     // Track which (dateKey, locatorId) cells come from estimated rows so the
     // table can render them with a distinct "~" indicator and tooltip.
@@ -396,7 +396,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-    const pivot = computePivotFromReadings(prodReadings ?? [], 'meter_id', 'daily_volume');
+    const pivot = computePivotFromReadingsNoCache(prodReadings ?? [], 'meter_id', 'daily_volume');
 
     const estimatedKeys = new Set<string>();
     (prodReadings ?? []).forEach((r: any) => {
