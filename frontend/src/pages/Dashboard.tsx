@@ -80,11 +80,72 @@ type SummaryTab = 'both' | 'production' | 'consumption' | 'current';
  * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
  * After building the full pivot, populates deltaCache for the session.
  */
-function computePivotFromReadings(
+/**
+ * Identical to computePivotFromReadings but NEVER reads from or writes to
+ * deltaCache. Used by the Dashboard stat-card useMemos (consumption,
+ * production, rawWaterVol, etc.) so their transient single-day computations
+ * cannot poison the shared cache that DataSummaryModal relies on for its
+ * multi-day pivot.
+ *
+ * Without this isolation the stat card would write a delta derived from an
+ * open-ended "today" query (or a partial date window) into deltaCache, and
+ * when the modal later computed the same (entityKey, dateKey) pair it would
+ * hit that stale/wrong cached value instead of recomputing from its own
+ * correctly-bounded raw data — producing the discrepancy visible in the
+ * "Prod. vs Consum." vs "Consumption" tabs.
+ */
+function computePivotFromReadingsNoCache(
   readings: any[],
   entityKeyField: string,
   dailyVolumeField: string | null,
 ): Map<string, Map<string, number>> {
+  const byEntity = new Map<string, any[]>();
+  readings.forEach((r) => {
+    const k = r[entityKeyField] ?? '__';
+    if (!byEntity.has(k)) byEntity.set(k, []);
+    byEntity.get(k)!.push(r);
+  });
+  const pivot = new Map<string, Map<string, number>>();
+  byEntity.forEach((rows, entityKey) => {
+    const sorted = [...rows].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const lastReading = new Map<string, number>();
+    const afterRepl   = new Set<string>();
+    sorted.forEach((r) => {
+      const isMR    = !!r.is_meter_replacement;
+      const dateKey = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
+      if (!pivot.has(dateKey)) pivot.set(dateKey, new Map());
+      if (isMR) {
+        lastReading.set(entityKey, +r.current_reading);
+        afterRepl.add(entityKey);
+        return;
+      }
+      if (afterRepl.has(entityKey)) {
+        lastReading.set(entityKey, +r.current_reading);
+        afterRepl.delete(entityKey);
+        return;
+      }
+      let delta = 0;
+      if (dailyVolumeField && r[dailyVolumeField] != null) {
+        delta = +r[dailyVolumeField];
+        lastReading.set(entityKey, +r.current_reading);
+      } else if (!lastReading.has(entityKey)) {
+        if (r.previous_reading != null && r.current_reading != null)
+          delta = +r.current_reading - +r.previous_reading;
+        lastReading.set(entityKey, +r.current_reading);
+      } else {
+        delta = +r.current_reading - lastReading.get(entityKey)!;
+        lastReading.set(entityKey, +r.current_reading);
+      }
+      const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+      pivot.get(dateKey)!.set(entityKey, prev + delta);
+    });
+  });
+  return pivot;
+}
+
+
   const byEntity = new Map<string, any[]>();
   readings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
@@ -1332,11 +1393,19 @@ export default function Dashboard() {
     queryKey: ['dash-loc-today', _locatorIds, today],
     queryFn: async () => {
       if (!_locatorIds?.length) return [];
+      // FIX: Added .lte upper bound so the query is strictly scoped to the
+      // current calendar day. Without it, any reading timestamped after
+      // midnight (e.g. timezone drift, future-dated rows) would be included
+      // and computePivotFromReadings would treat the full cumulative meter
+      // value as a single-day delta — producing the "-898,003" spike seen
+      // in the Prod. vs Consum. tab.
+      const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('locator_readings')
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
+        .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
@@ -1349,11 +1418,14 @@ export default function Dashboard() {
     queryKey: ['dash-wells-today', _wellIds, today],
     queryFn: async () => {
       if (!_wellIds?.length) return [];
+      // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
+      const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await supabase
         .from('well_readings')
         .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
+        .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
@@ -1370,10 +1442,13 @@ export default function Dashboard() {
         .select('id').in('plant_id', plantIds);
       const meterIds = (meters ?? []).map((m: any) => m.id);
       if (!meterIds.length) return [];
+      // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
+      const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
         .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', today)
+        .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
       return (data ?? []) as any[];
     },
@@ -1781,7 +1856,8 @@ export default function Dashboard() {
   // _yesterdayKey is defined earlier (line ~565) so the permeate-production queries can use it.
 
   const rawWaterVol = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
+    // FIX: Use no-cache variant — see production useMemo comment above.
+    computePivotFromReadingsNoCache(todayWells ?? [], 'well_id', 'daily_volume'), _todayKey,
   ), [todayWells, _todayKey]);
 
   // RO permeate contribution to production — applies cut-off bucketing and date-range
@@ -1813,8 +1889,11 @@ export default function Dashboard() {
   // This ensures the Production Volume card never shows 0 just because product meters
   // haven't been configured or haven't been read yet today.
   const production = useMemo(() => {
+    // FIX: Use no-cache variant so the stat-card computation does not write
+    // transient single-day deltas into deltaCache, which would be picked up
+    // by DataSummaryModal's multi-day pivot and produce wrong totals.
     const meterTotal = pivotDayTotal(
-      computePivotFromReadings(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
+      computePivotFromReadingsNoCache(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
     );
     const combined = meterTotal + roPermeateProduction;
     if (combined > 0) return combined;
@@ -1831,7 +1910,8 @@ export default function Dashboard() {
   }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds]);
 
   const consumption = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
+    // FIX: Use no-cache variant — see production useMemo comment above.
+    computePivotFromReadingsNoCache(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
   ), [todayLocators, _todayKey]);
 
   // Compute daily grid kWh from raw meter readings (same priority order as Plants.tsx fix).
@@ -1888,17 +1968,20 @@ export default function Dashboard() {
   const pv = calc.pvRatio(kwh, production);
 
   const yRawWaterVol = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(yWells ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
+    // FIX: Use no-cache variant — see production useMemo comment above.
+    computePivotFromReadingsNoCache(yWells ?? [], 'well_id', 'daily_volume'), _yesterdayKey,
   ), [yWells, _yesterdayKey]);
 
   const yProduction = useMemo(() =>
     pivotDayTotal(
-      computePivotFromReadings(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
+      // FIX: Use no-cache variant — see production useMemo comment above.
+      computePivotFromReadingsNoCache(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
     ) + yRoPermeateProduction,
   [yProductMeters, _yesterdayKey, yRoPermeateProduction]);
 
   const yConsumption = useMemo(() => pivotDayTotal(
-    computePivotFromReadings(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
+    // FIX: Use no-cache variant — see production useMemo comment above.
+    computePivotFromReadingsNoCache(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
   ), [yLocators, _yesterdayKey]);
 
   const yKwh = computePowerKwh(yPower?.rows ?? [], yPower?.prevRows ?? [], dashPowerConfigMap);
