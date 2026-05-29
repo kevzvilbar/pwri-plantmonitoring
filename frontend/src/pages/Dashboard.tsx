@@ -668,10 +668,10 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
           ))}
         </div>
 
-        {/* ── Current-Readings side toggle — sits OUTSIDE the scroll container
-             so the sticky thead is never overlapped by it when scrolling.       ── */}
+        {/* ── Current-Readings side toggle — OUTSIDE the scroll container so
+             sticky thead is never displaced when scrolling horizontally. ── */}
         {!isLoading && tab === 'current' && (
-          <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/10 shrink-0">
+          <div className="flex items-center gap-1 px-4 py-2 border-b bg-muted/10 shrink-0">
             <span className="text-[10px] text-muted-foreground mr-1">Show:</span>
             {(['consumption', 'production'] as const).map((s) => (
               <button
@@ -895,29 +895,27 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
               </div>
             );
 
-            // Per-entity: latest non-null reading across the whole date range
-            const entityLatest: number[] = crEntities.map((e: any) => {
+            // Per-entity: most-recent non-null reading across the date range
+            const entityLatest: (number | null)[] = crEntities.map((e: any) => {
               let latest: number | null = null;
-              [...crDates].reverse().forEach((d) => {
+              for (const d of [...crDates].reverse()) {
                 const v = crPivot.get(d)?.get(e.id);
-                if (v != null && latest == null) latest = v;
-              });
-              return latest ?? 0;
+                if (v != null) { latest = v; break; }
+              }
+              return latest;
             });
 
             return (
               <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-current-table">
                 <thead>
-                  {/* ── Entity name header row ── */}
+                  {/* ── Row 1: column labels ── */}
                   <tr className="bg-muted/95 backdrop-blur-sm">
-                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
+                    <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[110px]">
                       Date
                     </th>
                     {crEntities.map((e: any, i: number) => {
                       const isRoTrain = currentSide === 'production' && useRoProd;
-                      const label = isRoTrain
-                        ? `RO${e.train_number ?? i + 1}`
-                        : (e.name ?? e.code ?? `#${i + 1}`);
+                      const label    = isRoTrain ? `RO${e.train_number ?? i + 1}` : (e.name ?? e.code ?? `#${i + 1}`);
                       const sublabel = plantCodeById.get(e.plant_id) ?? '';
                       return (
                         <th
@@ -925,29 +923,35 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                           className="sticky top-0 z-20 bg-muted/95 px-2 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[110px]"
                           title={`${sublabel}${sublabel ? ' · ' : ''}${isRoTrain ? `Train ${e.train_number}` : (e.name ?? e.code ?? e.id)}`}
                         >
-                          <div className="truncate max-w-[120px] mx-auto font-mono-num">{label}</div>
+                          <div className="truncate max-w-[120px] mx-auto">{label}</div>
                           {sublabel && (
                             <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
                           )}
                         </th>
                       );
                     })}
+                    {/* Coverage header — sticky right */}
                     <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">
                       Coverage
                     </th>
                   </tr>
 
-                  {/* ── Latest-value sub-header row ── */}
+                  {/* ── Row 2: LATEST sub-header ── */}
                   <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                    <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">
+                    <td className="sticky top-0 left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-[10px] font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border">
                       LATEST
                     </td>
                     {entityLatest.map((val, i) => (
-                      <td key={crEntities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-teal-700 dark:text-teal-300 border-b border-border tabular-nums text-[10px]">
-                        {val > 0 ? val.toLocaleString(undefined, { maximumFractionDigits: 2 }) : <span className="text-muted-foreground/50">—</span>}
+                      <td
+                        key={crEntities[i].id}
+                        className="px-2 py-1.5 text-center text-[10px] font-semibold font-mono-num tabular-nums text-teal-700 dark:text-teal-300 border-b border-border"
+                      >
+                        {val != null
+                          ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
                     ))}
-                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums text-[10px]">
+                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right text-[10px] font-bold text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">
                       {crEntities.length} entities
                     </td>
                   </tr>
@@ -955,51 +959,52 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
 
                 <tbody>
                   {[...crDates].reverse().map((date: string, di: number) => {
-                    const isEven = di % 2 === 0;
-                    const rowVals = crEntities.map((e: any) => crPivot.get(date)?.get(e.id) ?? null);
-                    const readingCount = rowVals.filter((v) => v != null).length;
-                    const coveragePct = crEntities.length > 0
-                      ? Math.round((readingCount / crEntities.length) * 100)
-                      : 0;
+                    const isEven      = di % 2 === 0;
+                    const rowVals     = crEntities.map((e: any) => crPivot.get(date)?.get(e.id) ?? null);
+                    const reported    = rowVals.filter((v) => v != null).length;
+                    const total       = crEntities.length;
+                    const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
+                    const coverageColor =
+                      coveragePct === 100 ? 'text-emerald-600 dark:text-emerald-400' :
+                      coveragePct >= 50   ? 'text-amber-600 dark:text-amber-400'    :
+                                            'text-rose-500 dark:text-rose-400';
+
                     return (
                       <tr
                         key={date}
                         className={isEven ? 'bg-background hover:bg-muted/20' : 'bg-muted/10 hover:bg-muted/30'}
                       >
+                        {/* Date cell */}
                         <td className={[
                           'sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border',
                           isEven ? 'bg-background' : 'bg-muted/10',
                         ].join(' ')}>
                           {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
                         </td>
+
+                        {/* Entity cells */}
                         {rowVals.map((val, ei) => (
                           <td
                             key={crEntities[ei].id}
                             className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
                             title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })} m³` : undefined}
                           >
-                            {val != null ? (
-                              <span className="text-foreground">
-                                {val.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground/40">—</span>
-                            )}
+                            {val != null
+                              ? <span className="text-foreground">{val.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                              : <span className="text-muted-foreground/40">—</span>}
                           </td>
                         ))}
-                        {/* Coverage column */}
-                        <td className={[
-                          'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border text-[10px]',
-                          isEven ? 'bg-background' : 'bg-muted/10',
-                          coveragePct === 100
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : coveragePct >= 50
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-rose-500',
-                        ].join(' ')}
-                          title={`${readingCount} of ${crEntities.length} entities reported on this date`}
+
+                        {/* Coverage cell — sticky right */}
+                        <td
+                          className={[
+                            'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[10px] border-l border-border',
+                            isEven ? 'bg-background' : 'bg-muted/10',
+                            coverageColor,
+                          ].join(' ')}
+                          title={`${reported} of ${total} entities reported on this date`}
                         >
-                          {readingCount > 0 ? `${readingCount}/${crEntities.length}` : <span className="text-muted-foreground/40">—</span>}
+                          {reported > 0 ? `${reported}/${total}` : <span className="text-muted-foreground/40">—</span>}
                         </td>
                       </tr>
                     );
