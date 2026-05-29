@@ -128,7 +128,10 @@ function computePivotFromReadingsNoCache(
       }
       let delta = 0;
       if (dailyVolumeField && r[dailyVolumeField] != null) {
-        delta = +r[dailyVolumeField];
+        // Clamp to 0: a negative daily_volume is a corrupt stored value
+        // (e.g. partial write, rollback). Matches TrendChart's buildEntityPivot
+        // and the computeEntityDeltas fix — all three paths must be consistent.
+        delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
       } else if (!lastReading.has(entityKey)) {
         if (r.previous_reading != null && r.current_reading != null)
@@ -223,7 +226,9 @@ function computePivotFromReadings(
         // value correctly represents THAT reading's interval — which may span
         // multiple days if readings were skipped. Use it as-is (it's already the
         // correct single-interval delta stored at insert time), clamped ≥ 0.
-        delta = +r[dailyVolumeField];
+        // Clamp: a negative value means the stored delta is corrupt (bad write,
+        // rollback, etc.) — treat as 0 rather than propagating a huge negative.
+        delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
       } else if (!lastReading.has(entityKey)) {
         // FIX: No daily_volume and no prior row in range.
