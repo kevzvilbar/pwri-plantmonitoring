@@ -1555,7 +1555,10 @@ export function TrendChart({
         }
 
         if (dailyVolumeField && r[dailyVolumeField] != null) {
-          const storedVol = +r[dailyVolumeField];
+          // Clamp to 0: a negative daily_volume means the stored value is corrupt
+          // (e.g. a partial or rolled-back write). Pass-through was the root cause
+          // of the −898K consumption spike on May 29 that also tanked the NRW chart.
+          const storedVol = Math.max(0, +r[dailyVolumeField]);
           const delta     = storedVol;
           lastReading.set(entityKey, +r.current_reading);
           return { r, delta, rawDelta: null, isMeterReplacement: false };
