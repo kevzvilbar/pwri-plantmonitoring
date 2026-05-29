@@ -1571,7 +1571,10 @@ export function TrendChart({
           // always shows 0, causing a false dip at the start of every range.
           if (r.previous_reading != null) {
             const rawDelta = +r.current_reading - +r.previous_reading;
-            const delta    = rawDelta;
+            // Clamp: a backwards reading vs stored previous_reading (bad entry /
+            // un-flagged reset) must not produce a negative delta. Matches
+            // buildEntityPivot line 101: Math.max(0, current - prev).
+            const delta    = Math.max(0, rawDelta);
             return { r, delta, rawDelta, isMeterReplacement: false };
           }
           // No previous_reading in DB → we genuinely don't know the delta for this
@@ -1582,7 +1585,10 @@ export function TrendChart({
         }
 
         const rawDelta = +r.current_reading - lastReading.get(entityKey)!;
-        const delta    = rawDelta;
+        // Clamp to 0: a meter reading that goes backwards is a bad entry or an
+        // un-flagged meter reset. Propagating a negative tanks the chart
+        // (e.g. Raw Water −1.1M spike on May 4–5). Matches buildEntityPivot.
+        const delta    = Math.max(0, rawDelta);
         lastReading.set(entityKey, +r.current_reading);
         return { r, delta, rawDelta, isMeterReplacement: false };
       });
