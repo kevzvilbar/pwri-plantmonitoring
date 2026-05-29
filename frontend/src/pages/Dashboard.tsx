@@ -24,7 +24,7 @@ import {
   Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
-  PlusCircle, Download, ShieldAlert, PenLine,
+  ShieldAlert,
 } from 'lucide-react';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
@@ -2222,13 +2222,6 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            {selectedPlantId ? visiblePlants?.[0]?.name : `All plants`}
-            {' · '}
-            <span className="font-mono-num text-foreground">{fmtNum(production)}</span>
-            <span className="ml-0.5">m³</span>
-            <span className="hidden sm:inline"> today</span>
-          </p>
         </div>
 
         {/* Right: quick actions + view toggle.
@@ -2236,43 +2229,6 @@ export default function Dashboard() {
             Labels are hidden on xs (<640 px) to save space — icons + tooltips
             carry the meaning on narrow screens. */}
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0 sm:overflow-visible sm:pb-0">
-
-          {/* ⑥ Quick action buttons */}
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 gap-1.5 text-[11px]"
-              onClick={() => navigate('/operations')}
-              title="Log a reading"
-            >
-              <PenLine className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Log</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 gap-1.5 text-[11px]"
-              onClick={() => navigate('/incidents')}
-              title="Report an incident"
-            >
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Incident</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 gap-1.5 text-[11px]"
-              onClick={() => navigate('/exports')}
-              title="Export data"
-            >
-              <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-5 w-px bg-border/60 shrink-0" aria-hidden />
 
           {/* View-mode toggle — icon + label on sm+, icon-only on mobile */}
           <ToggleGroup
