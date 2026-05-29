@@ -3561,7 +3561,6 @@ export function TrendChart({
                 stroke="hsl(var(--accent))"
                 tickFormatter={(v) => `₱${formatYAxis(v)}`}
                 width={44}
-               
               />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
@@ -3604,7 +3603,6 @@ export function TrendChart({
                 ]}
                 tickCount={6}
                 tickFormatter={(v) => +v.toFixed(2) === 0 ? '0' : v.toFixed(v < 1 ? 2 : 1)}
-               
               />
               <Tooltip content={<PvTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
