@@ -478,9 +478,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     : tab === 'production'
       ? prodDataLoading
       : tab === 'current'
-        ? (currentSide === 'consumption'
-            ? (locatorsLoading || consLoading)
-            : prodDataLoading)
+        ? (locatorsLoading || consLoading || prodDataLoading)
         : (locatorsLoading || consLoading || prodDataLoading);
 
   // Active pivot data for the detail tabs
@@ -648,7 +646,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
         </DialogHeader>
 
         {/* ── Option toggles: Prod. vs Consum. / Production / Consumption ── */}
-        <div className="flex overflow-x-auto border-b shrink-0 px-5 bg-muted/20 scrollbar-none">
+        <div className="flex border-b shrink-0 px-5 bg-muted/20">
           {([
             { key: 'both',        label: 'Prod. vs Consum.',  icon: <Activity className="h-3 w-3" /> },
             { key: 'production',  label: 'Production',        icon: <Droplet  className="h-3 w-3" /> },
@@ -669,6 +667,28 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             </button>
           ))}
         </div>
+
+        {/* ── Current-Readings side toggle — sits OUTSIDE the scroll container
+             so the sticky thead is never overlapped by it when scrolling.       ── */}
+        {!isLoading && tab === 'current' && (
+          <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/10 shrink-0">
+            <span className="text-[10px] text-muted-foreground mr-1">Show:</span>
+            {(['consumption', 'production'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setCurrentSide(s)}
+                className={[
+                  'px-2.5 py-0.5 text-[10px] rounded-full border transition-colors',
+                  currentSide === s
+                    ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {s === 'consumption' ? 'Consumption' : (useRoProd ? 'Production (RO)' : 'Production')}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── Body: pivot table or Prod. vs Consum. comparison ── */}
         <div className="flex-1 overflow-auto">
@@ -864,46 +884,37 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
             const crDates    = currentPivotData.dates;
             const crPivot    = currentPivotData.pivot;
 
-            const sideToggle = (
-              <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/10 shrink-0">
-                <span className="text-[10px] text-muted-foreground mr-1">Show:</span>
-                {(['consumption', 'production'] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setCurrentSide(s)}
-                    className={[
-                      'px-2.5 py-0.5 text-[10px] rounded-full border transition-colors',
-                      currentSide === s
-                        ? 'bg-primary text-primary-foreground border-primary font-semibold'
-                        : 'border-border text-muted-foreground hover:text-foreground',
-                    ].join(' ')}
-                  >
-                    {s === 'consumption' ? 'Consumption' : (useRoProd ? 'Production (RO)' : 'Production')}
-                  </button>
-                ))}
+            if (crEntities.length === 0) return (
+              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                No entities found for current readings.
+              </div>
+            );
+            if (crDates.length === 0) return (
+              <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                No readings in this date range.
               </div>
             );
 
-            if (crEntities.length === 0) return (
-              <>{sideToggle}<div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-                No entities found for current readings.
-              </div></>
-            );
-            if (crDates.length === 0) return (
-              <>{sideToggle}<div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-                No readings in this date range.
-              </div></>
-            );
+            // Per-entity: latest non-null reading across the whole date range
+            const entityLatest: number[] = crEntities.map((e: any) => {
+              let latest: number | null = null;
+              [...crDates].reverse().forEach((d) => {
+                const v = crPivot.get(d)?.get(e.id);
+                if (v != null && latest == null) latest = v;
+              });
+              return latest ?? 0;
+            });
+
             return (
-              <>{sideToggle}
               <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-current-table">
                 <thead>
+                  {/* ── Entity name header row ── */}
                   <tr className="bg-muted/95 backdrop-blur-sm">
                     <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">
                       Date
                     </th>
                     {crEntities.map((e: any, i: number) => {
-                      const isRoTrain = useRoProd;
+                      const isRoTrain = currentSide === 'production' && useRoProd;
                       const label = isRoTrain
                         ? `RO${e.train_number ?? i + 1}`
                         : (e.name ?? e.code ?? `#${i + 1}`);
@@ -921,11 +932,35 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                         </th>
                       );
                     })}
+                    <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">
+                      Coverage
+                    </th>
+                  </tr>
+
+                  {/* ── Latest-value sub-header row ── */}
+                  <tr className="bg-teal-50/60 dark:bg-teal-950/20">
+                    <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">
+                      LATEST
+                    </td>
+                    {entityLatest.map((val, i) => (
+                      <td key={crEntities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-teal-700 dark:text-teal-300 border-b border-border tabular-nums text-[10px]">
+                        {val > 0 ? val.toLocaleString(undefined, { maximumFractionDigits: 2 }) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                    ))}
+                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums text-[10px]">
+                      {crEntities.length} entities
+                    </td>
                   </tr>
                 </thead>
+
                 <tbody>
                   {[...crDates].reverse().map((date: string, di: number) => {
                     const isEven = di % 2 === 0;
+                    const rowVals = crEntities.map((e: any) => crPivot.get(date)?.get(e.id) ?? null);
+                    const readingCount = rowVals.filter((v) => v != null).length;
+                    const coveragePct = crEntities.length > 0
+                      ? Math.round((readingCount / crEntities.length) * 100)
+                      : 0;
                     return (
                       <tr
                         key={date}
@@ -937,30 +972,40 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
                         ].join(' ')}>
                           {format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}
                         </td>
-                        {crEntities.map((e: any) => {
-                          const val = crPivot.get(date)?.get(e.id);
-                          return (
-                            <td
-                              key={e.id}
-                              className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
-                              title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })}` : undefined}
-                            >
-                              {val != null ? (
-                                <span className="text-foreground">
-                                  {val.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/40">—</span>
-                              )}
-                            </td>
-                          );
-                        })}
+                        {rowVals.map((val, ei) => (
+                          <td
+                            key={crEntities[ei].id}
+                            className="px-2 py-1.5 text-right font-mono-num tabular-nums border-border"
+                            title={val != null ? `Raw meter reading: ${val.toLocaleString(undefined, { maximumFractionDigits: 3 })} m³` : undefined}
+                          >
+                            {val != null ? (
+                              <span className="text-foreground">
+                                {val.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/40">—</span>
+                            )}
+                          </td>
+                        ))}
+                        {/* Coverage column */}
+                        <td className={[
+                          'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border text-[10px]',
+                          isEven ? 'bg-background' : 'bg-muted/10',
+                          coveragePct === 100
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : coveragePct >= 50
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-rose-500',
+                        ].join(' ')}
+                          title={`${readingCount} of ${crEntities.length} entities reported on this date`}
+                        >
+                          {readingCount > 0 ? `${readingCount}/${crEntities.length}` : <span className="text-muted-foreground/40">—</span>}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              </>
             );
           })()}
         </div>
