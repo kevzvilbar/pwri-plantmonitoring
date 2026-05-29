@@ -145,7 +145,35 @@ function computePivotFromReadingsNoCache(
   return pivot;
 }
 
-
+/**
+ * Replacement-aware delta pivot — mirrors TrendChart.tsx `computeEntityDeltas`.
+ *
+ * ── HYBRID STRATEGY (Tier 1 → Tier 2 → Tier 3) ──────────────────────────────
+ * Tier 1: Per (entity, date) pair the function first checks `deltaCache`.
+ *         If a fresh entry exists it is used directly — no row-walking needed.
+ * Tier 2: Cache miss → walk raw readings and derive the delta mathematically.
+ *         The result is written back to `deltaCache` for the current session.
+ * Tier 3: Raw fallback — `hydrateFromStoredDeltas` is called by the query's
+ *         `onSuccess` handler to pre-seed the cache from DB stored values
+ *         (daily_volume, permeate_meter_delta) before this function runs.
+ *         If the stored value is stale (was invalidated by a mutation), the
+ *         cache entry is absent and Tier 2 takes over automatically.
+ *
+ * Groups readings by entityKeyField, walks them chronologically per entity:
+ *   • is_meter_replacement row     → delta 0, set afterRepl flag
+ *   • first row after replacement  → delta 0, clear flag
+ *   • normal row w/ dailyVolumeField → use that value (clamped ≥ 0)
+ *   • normal row w/o dailyVolumeField → current − last (clamped ≥ 0)
+ *   • no predecessor yet (first in range) → current − previous_reading (DB field)
+ *
+ * Returns Map<dateKey yyyy-MM-dd, Map<entityKey, summed volume>>.
+ * After building the full pivot, populates deltaCache for the session.
+ */
+function computePivotFromReadings(
+  readings: any[],
+  entityKeyField: string,
+  dailyVolumeField: string | null,
+): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   readings.forEach((r) => {
     const k = r[entityKeyField] ?? '__';
