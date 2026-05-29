@@ -1,7 +1,7 @@
 # Dashboard UX Improvements - Implementation Summary
 
 ## Overview
-This implementation adds 5 high-impact UX improvements to the PWRI Plant Monitoring dashboard, focused on improving responsiveness, discoverability, and data transparency.
+This implementation adds 6 high-impact UX improvements to the PWRI Plant Monitoring dashboard, focused on improving responsiveness, discoverability, data transparency, and table usability.
 
 ## ✅ Implemented Features
 
@@ -91,6 +91,90 @@ useDashboardKeyboardShortcuts({
 - Proper overflow handling with `overflow-x-auto` on mobile
 - Grid layouts use `grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]`
 
+### 6. **Fixed Data Summary Table Scrolling** (DataSummaryTable.tsx)
+**Problem Solved:**
+- ❌ Independent horizontal scrolling caused header/data misalignment
+- ❌ Headers would scroll separately from table data
+- ❌ Poor UX when viewing wide datasets on mobile
+
+**Solution Implemented:**
+- ✅ Unified container scroll: Header and data scroll together as one unit
+- ✅ Sticky table header: Header remains visible while data scrolls vertically
+- ✅ Proper wrapper structure: `overflow-x-auto` on parent container instead of individual elements
+- ✅ CSS table layout: `table-layout: fixed` for consistent column widths
+- ✅ Mobile-optimized: Horizontal scroll only when necessary
+
+**Implementation Details:**
+```tsx
+// Container wraps entire table with unified scroll
+<div className="overflow-x-auto">
+  <table className="table-layout: fixed w-full">
+    <thead className="sticky top-0 bg-white z-10">
+      {/* Header cells with fixed widths */}
+    </thead>
+    <tbody>
+      {/* Data rows follow header alignment */}
+    </tbody>
+  </table>
+</div>
+```
+
+**Usage:**
+```tsx
+import { DataSummaryTable } from '@/components/dashboard/DataSummaryTable';
+
+<DataSummaryTable 
+  data={summaryData}
+  columns={tableColumns}
+  isLoading={loading}
+/>
+```
+
+### 7. **Current Readings Table** (CurrentReadingsTable.tsx)
+**NEW:** Real-time raw sensor data display
+
+**Features:**
+- ✅ Displays current live readings from all sensors
+- ✅ Shows timestamp of last reading
+- ✅ Includes sensor metadata (location, sensor type, unit)
+- ✅ Color-coded status indicators (Normal, Warning, Critical)
+- ✅ Sortable columns (click header to sort)
+- ✅ Filterable by sensor name or location
+- ✅ Responsive design with mobile support
+- ✅ Auto-refresh capability with configurable interval
+
+**Data Structure:**
+```tsx
+interface CurrentReading {
+  sensorId: string;
+  sensorName: string;
+  location: string;
+  sensorType: 'temperature' | 'humidity' | 'soil_moisture' | 'ph';
+  currentValue: number;
+  unit: string;
+  lastReadingTime: Date;
+  status: 'normal' | 'warning' | 'critical';
+  normalRange: { min: number; max: number };
+}
+```
+
+**Usage:**
+```tsx
+import { CurrentReadingsTable } from '@/components/dashboard/CurrentReadingsTable';
+
+<CurrentReadingsTable 
+  readings={currentReadings}
+  isLoading={loading}
+  onRefresh={handleRefresh}
+  autoRefreshInterval={30000} // 30 seconds
+/>
+```
+
+**Status Color Scheme:**
+- 🟢 **Normal**: Value within acceptable range
+- 🟡 **Warning**: Value slightly outside range or approaching limits
+- 🔴 **Critical**: Value significantly outside safe operating range
+
 ## Integration with Dashboard
 
 The main Dashboard component (`frontend/src/pages/Dashboard.tsx`) now includes:
@@ -102,6 +186,8 @@ The main Dashboard component (`frontend/src/pages/Dashboard.tsx`) now includes:
 5. **Help button**: Opens KeyboardShortcutsDialog
 6. **Widget visibility**: Uses `isWidgetVisible()` to conditionally render sections
 7. **Keyboard handlers**: Enabled via `useDashboardKeyboardShortcuts` hook
+8. **Data Summary Table**: Fixed scrolling with aligned headers and data
+9. **Current Readings Table**: New raw data display with real-time updates
 
 ## File Structure
 
@@ -111,6 +197,8 @@ frontend/src/components/dashboard/
 ├── LastUpdatedBadge.tsx          ← Timestamp indicators
 ├── DashboardCustomizer.tsx       ← Settings dialog + hook
 ├── KeyboardShortcuts.tsx         ← Help dialog + handlers
+├── DataSummaryTable.tsx          ← Fixed scroll, aligned headers
+├── CurrentReadingsTable.tsx      ← NEW: Raw sensor data
 └── StatCard.tsx                  (existing, enhanced)
 ```
 
@@ -120,6 +208,8 @@ frontend/src/components/dashboard/
 - ✅ CSS animations (animate-pulse, animate-spin)
 - ✅ Keyboard events (all modern browsers)
 - ✅ Date formatting (date-fns)
+- ✅ CSS sticky positioning (modern browsers, graceful fallback for older)
+- ✅ CSS table-layout: fixed (all browsers)
 
 ## Performance Impact
 
@@ -127,6 +217,7 @@ frontend/src/components/dashboard/
 - **LocalStorage**: ~2KB for user preferences
 - **No additional queries**: All data reuses existing queries
 - **Keyboard handlers**: Single global listener, efficient filtering
+- **Table rendering**: Virtualization recommended for 1000+ rows
 
 ## Future Enhancements
 
@@ -137,6 +228,9 @@ Suggested next steps (Medium/High effort):
 - Anomaly highlighting on trends
 - Alert snooze/dismiss persistence
 - Performance benchmarking view
+- Table virtualization for large datasets
+- Column customization for Current Readings table
+- Advanced filtering and search
 
 ## Testing Recommendations
 
@@ -145,6 +239,9 @@ Suggested next steps (Medium/High effort):
 3. **Settings Persistence**: Change settings, reload page
 4. **Loading States**: Trigger queries with network throttling
 5. **Timestamps**: Verify auto-update every minute
+6. **Table Scrolling**: Verify header stays aligned with data during horizontal scroll
+7. **Current Readings**: Test sorting, filtering, and auto-refresh
+8. **Status Colors**: Verify color changes when readings cross thresholds
 
 ## Component Quick Reference
 
@@ -176,11 +273,35 @@ import { KeyboardShortcutsDialog } from '@/components/dashboard/KeyboardShortcut
 <KeyboardShortcutsDialog />
 ```
 
+### DataSummaryTable (Fixed)
+```tsx
+import { DataSummaryTable } from '@/components/dashboard/DataSummaryTable';
+
+<DataSummaryTable 
+  data={summaryData}
+  columns={tableColumns}
+  isLoading={loading}
+/>
+```
+
+### CurrentReadingsTable (NEW)
+```tsx
+import { CurrentReadingsTable } from '@/components/dashboard/CurrentReadingsTable';
+
+<CurrentReadingsTable 
+  readings={currentReadings}
+  isLoading={loading}
+  onRefresh={handleRefresh}
+/>
+```
+
 ## Commit History
 
 - `bd74b27` - feat: Add keyboard shortcuts help dialog and shortcut registration hook
 - `54e67aa` - feat: Add dashboard customizer for widget visibility and refresh rate settings
 - `12bb2fb` - feat: Add card and chart skeleton loaders for improved loading states
+- `a8f5c2d` - fix: Unified table scroll with sticky headers for data summary table
+- `c3e2f1a` - feat: Add current readings table for real-time raw sensor data display
 
 ## Support & Questions
 
