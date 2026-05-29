@@ -3420,7 +3420,7 @@ export function TrendChart({
             <LineChart data={roTrainDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
@@ -3451,7 +3451,7 @@ export function TrendChart({
                 textAnchor="end"
                 height={48}
               />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} label={{ value: roUnit, angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
                 formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
@@ -3471,7 +3471,7 @@ export function TrendChart({
             <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
@@ -3496,7 +3496,7 @@ export function TrendChart({
             <ComposedChart data={drillupData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
@@ -3516,7 +3516,7 @@ export function TrendChart({
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} label={{ value: 'm³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} />
               <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="#16a34a" width={28} tickFormatter={(v) => `${v}%`} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -3528,7 +3528,7 @@ export function TrendChart({
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--highlight))' }} name="Chemical Cost (₱)" connectNulls />
@@ -3537,7 +3537,7 @@ export function TrendChart({
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} label={{ value: '₱', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--chart-6))' }} name="Power Cost (₱)" connectNulls />
@@ -3561,7 +3561,7 @@ export function TrendChart({
                 stroke="hsl(var(--accent))"
                 tickFormatter={(v) => `₱${formatYAxis(v)}`}
                 width={44}
-                label={{ value: '₱/m³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+               
               />
               <Tooltip
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
@@ -3604,7 +3604,7 @@ export function TrendChart({
                 ]}
                 tickCount={6}
                 tickFormatter={(v) => +v.toFixed(2) === 0 ? '0' : v.toFixed(v < 1 ? 2 : 1)}
-                label={{ value: 'kWh/m³', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+               
               />
               <Tooltip content={<PvTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -3698,7 +3698,7 @@ export function TrendChart({
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickFormatter={formatYAxis}
                     width={44}
-                    label={{ value: 'kWh', angle: -90, position: 'insideLeft', fontSize: 9, offset: 10 }}
+                   
                   />
                   <Tooltip content={<KwhTooltip />} />
                   {/* Solar — base of stack, no rounded corners */}
@@ -3789,7 +3789,7 @@ export function TrendChart({
                     domain={[0, 100]}
                     tickFormatter={(v) => `${v}%`}
                     width={36}
-                    label={{ value: 'Health %', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }}
+                   
                   />
                   <Tooltip content={<PhTooltip />} />
                   {/* ── Green zone ≥80% ── */}
@@ -3818,7 +3818,7 @@ export function TrendChart({
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} label={{ value: TREND_Y_LABEL[metric] ?? '', angle: -90, position: 'insideLeft', fontSize: 9, offset: 8 }} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {metric === 'production' && (<>
