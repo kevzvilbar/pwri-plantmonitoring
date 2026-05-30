@@ -2540,23 +2540,22 @@ export function TrendChart({
 
   return (
     <>
-      {/* Title + buttons: mobile = column (title above, buttons below); sm+ = original inline flex-wrap row */}
-      <div className="flex flex-col sm:flex-wrap sm:flex-row sm:items-center gap-1 mb-2">
+      {/* Title, range buttons, and Data Summary tab on one compact row */}
+      <div className="flex flex-nowrap items-center gap-1 mb-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
         {title && (
-          <span className="text-sm font-semibold shrink-0 mr-1">{title}</span>
+          <span className="text-sm font-semibold mr-1 shrink-0">{title}</span>
         )}
-        {/* Buttons row — mobile: own full-width row; sm+: inline continuation of the flex-wrap */}
-        <div className="flex items-center gap-0.5 flex-wrap">
-          {/* Range pills — half-height on mobile, original h-5 on desktop */}
+        {/* Range pills — compact size */}
+        <div className="flex flex-nowrap items-center gap-0.5 shrink-0 sm:flex-wrap">
           {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
             <button key={r}
               onClick={() => setRange(r)}
               data-testid={`trend-range-${metric}-${r}`}
               className={[
-                'h-[10px] sm:h-5 px-1.5 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset]',
+                'px-1.5 text-[10px] font-medium transition-colors leading-none sm:h-5 sm:rounded',
                 range === r
-                  ? 'bg-teal-700 text-white'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
+                  ? 'text-teal-600 font-bold sm:bg-teal-700 sm:text-white sm:font-medium'
+                  : 'text-muted-foreground hover:text-foreground sm:bg-muted sm:border sm:border-border',
               ].join(' ')}
             >{r}</button>
           ))}
@@ -2564,10 +2563,10 @@ export function TrendChart({
             onClick={() => setRange('CUSTOM')}
             data-testid={`trend-range-${metric}-CUSTOM`}
             className={[
-              'h-[10px] sm:h-5 px-1.5 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset]',
+              'px-1.5 text-[10px] font-medium transition-colors leading-none sm:h-5 sm:rounded',
               range === 'CUSTOM'
-                ? 'bg-teal-700 text-white'
-                : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
+                ? 'text-teal-600 font-bold sm:bg-teal-700 sm:text-white sm:font-medium'
+                : 'text-muted-foreground hover:text-foreground sm:bg-muted sm:border sm:border-border',
             ].join(' ')}
           >Custom</button>
           {range === 'CUSTOM' && (
@@ -2592,28 +2591,29 @@ export function TrendChart({
           {isFetching && (
             <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
           )}
+        </div>
 
-          {/* Data Summary — half-height on mobile only, original h-5 on desktop */}
-          <button
-            onClick={() => setShowSummary(true)}
-            className="ml-auto h-[10px] sm:h-5 px-2 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset] shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
-            title="Open data summary table"
-          >
-            Data Summary
-          </button>
+        {/* Data Summary — opens a popup dialog (non-retractable) */}
+        <button
+          onClick={() => setShowSummary(true)}
+          className="ml-auto shrink-0 px-1 text-[10px] font-medium transition-colors leading-none text-muted-foreground hover:text-foreground sm:h-5 sm:px-2 sm:rounded sm:border sm:bg-muted sm:hover:bg-muted/80 sm:border-border"
+          title="Open data summary table"
+        >
+          Data Summary
+        </button>
 
-          {/* ── Mobile ⋮ overflow — secondary controls ───────────────────────── */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className="sm:hidden h-[10px] w-6 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0 py-0"
-                title="More chart options"
-                aria-label="More chart options"
-              >
-                <MoreVertical className="h-3 w-3" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" sideOffset={6} className="w-56 p-2.5 flex flex-col gap-3">
+        {/* ── Mobile ⋮ overflow — secondary controls ───────────────────────── */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="sm:hidden h-6 w-6 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
+              title="More chart options"
+              aria-label="More chart options"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={6} className="w-56 p-2.5 flex flex-col gap-3">
             {/* View + Breakdown — production / nrw */}
             {hasConsumptionDrill && (
               <div>
@@ -2716,8 +2716,7 @@ export function TrendChart({
               </div>
             )}
           </PopoverContent>
-          </Popover>
-        </div>{/* end buttons row */}
+        </Popover>
 
         {/* ── Desktop-only secondary controls (hidden on mobile) ─────────────── */}
         <div className="hidden sm:contents">
@@ -3263,7 +3262,7 @@ export function TrendChart({
         </div>
       )}
 
-        </div>{/* end hidden sm:contents / outer header wrapper */}
+        </div>{/* end hidden sm:contents */}
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
       {showSummary && (
