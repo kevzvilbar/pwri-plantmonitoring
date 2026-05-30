@@ -2540,20 +2540,20 @@ export function TrendChart({
 
   return (
     <>
-      {/* Title row — mobile: title alone on its own line; sm+: title inline with buttons */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 mb-2">
+      {/* Title + buttons: mobile = column (title above, buttons below); sm+ = original inline flex-wrap row */}
+      <div className="flex flex-col sm:flex-wrap sm:flex-row sm:items-center gap-1 mb-2">
         {title && (
-          <span className="text-sm font-semibold shrink-0 sm:mr-1">{title}</span>
+          <span className="text-sm font-semibold shrink-0 mr-1">{title}</span>
         )}
-        {/* Buttons row — on mobile spans full width with title above */}
+        {/* Buttons row — mobile: own full-width row; sm+: inline continuation of the flex-wrap */}
         <div className="flex items-center gap-0.5 flex-wrap">
-          {/* Range pills — half-height */}
+          {/* Range pills — half-height on mobile, original h-5 on desktop */}
           {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
             <button key={r}
               onClick={() => setRange(r)}
               data-testid={`trend-range-${metric}-${r}`}
               className={[
-                'h-[10px] px-1.5 rounded text-[9px] font-medium transition-colors leading-none py-0',
+                'h-[10px] sm:h-5 px-1.5 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset]',
                 range === r
                   ? 'bg-teal-700 text-white'
                   : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
@@ -2564,7 +2564,7 @@ export function TrendChart({
             onClick={() => setRange('CUSTOM')}
             data-testid={`trend-range-${metric}-CUSTOM`}
             className={[
-              'h-[10px] px-1.5 rounded text-[9px] font-medium transition-colors leading-none py-0',
+              'h-[10px] sm:h-5 px-1.5 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset]',
               range === 'CUSTOM'
                 ? 'bg-teal-700 text-white'
                 : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
@@ -2593,10 +2593,10 @@ export function TrendChart({
             <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
           )}
 
-          {/* Data Summary — half-height, pushed to the right on the same buttons row */}
+          {/* Data Summary — half-height on mobile only, original h-5 on desktop */}
           <button
             onClick={() => setShowSummary(true)}
-            className="ml-auto h-[10px] px-2 rounded text-[9px] font-medium transition-colors leading-none py-0 shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
+            className="ml-auto h-[10px] sm:h-5 px-2 rounded text-[9px] sm:text-[10px] font-medium transition-colors leading-none py-0 sm:py-[unset] shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
             title="Open data summary table"
           >
             Data Summary
