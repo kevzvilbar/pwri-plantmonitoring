@@ -2540,19 +2540,20 @@ export function TrendChart({
 
   return (
     <>
-      {/* ── Primary control bar — always exactly one line ─────────────────── */}
-      <div className="flex items-center gap-1 mb-1 min-w-0">
-        {title && (
-          <span className="text-[11px] font-semibold shrink-0 truncate max-w-[30%] mr-0.5">{title}</span>
-        )}
-        {/* Range pills — scroll horizontally; never push right-side controls off */}
-        <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
+      {/* Title row — title above, always full-width */}
+      {title && (
+        <span className="text-sm font-semibold mb-1 block shrink-0">{title}</span>
+      )}
+      {/* Range buttons + Data Summary + ⋮ — single bordered pill-row on mobile */}
+      <div className="flex items-center gap-0.5 mb-2 sm:flex-wrap sm:gap-1 border border-border rounded-md px-1.5 py-1 sm:border-0 sm:rounded-none sm:px-0 sm:py-0 overflow-x-auto">
+        {/* Range pills — half-height on mobile */}
+        <div className="flex items-center gap-0.5 shrink-0">
           {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
             <button key={r}
               onClick={() => setRange(r)}
               data-testid={`trend-range-${metric}-${r}`}
               className={[
-                'h-4 px-1 rounded text-[9px] font-medium transition-colors leading-none shrink-0',
+                'h-[10px] px-1 rounded text-[8px] sm:h-5 sm:px-1.5 sm:text-[10px] font-medium transition-colors leading-none',
                 range === r
                   ? 'bg-teal-700 text-white'
                   : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
@@ -2563,37 +2564,54 @@ export function TrendChart({
             onClick={() => setRange('CUSTOM')}
             data-testid={`trend-range-${metric}-CUSTOM`}
             className={[
-              'h-4 px-1 rounded text-[9px] font-medium transition-colors leading-none shrink-0',
+              'h-[10px] px-1 rounded text-[8px] sm:h-5 sm:px-1.5 sm:text-[10px] font-medium transition-colors leading-none',
               range === 'CUSTOM'
                 ? 'bg-teal-700 text-white'
                 : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
             ].join(' ')}
           >Custom</button>
+          {range === 'CUSTOM' && (
+            <div className="flex items-center gap-1 mt-1 w-full sm:w-auto sm:mt-0">
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => handleFromChange(e.target.value)}
+                className="h-6 w-[110px] text-[10px] px-1.5"
+                data-testid={`trend-from-${metric}`}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">→</span>
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => handleToChange(e.target.value)}
+                className="h-6 w-[110px] text-[10px] px-1.5"
+                data-testid={`trend-to-${metric}`}
+              />
+            </div>
+          )}
+          {isFetching && (
+            <span className="text-[8px] sm:text-[10px] text-muted-foreground ml-1">Loading…</span>
+          )}
         </div>
 
-        {/* Right-side controls — shrink-0 so they never wrap to a second line */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {isFetching && (
-            <span className="text-[9px] text-muted-foreground leading-none">…</span>
-          )}
-          {/* Data Summary — opens a popup dialog */}
-          <button
-            onClick={() => setShowSummary(true)}
-            className="h-4 px-1.5 rounded text-[9px] font-medium transition-colors leading-none border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
-            title="Open data summary table"
-          >
-            Data Summary
-          </button>
+        {/* Data Summary — opens a popup dialog (non-retractable) */}
+        <button
+          onClick={() => setShowSummary(true)}
+          className="ml-auto h-[10px] px-1.5 sm:h-5 sm:px-2 rounded text-[8px] sm:text-[10px] font-medium transition-colors leading-none shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
+          title="Open data summary table"
+        >
+          Data Summary
+        </button>
 
-          {/* ── Mobile ⋮ overflow — secondary controls ─────────────────────── */}
-          <Popover>
+        {/* ── Mobile ⋮ overflow — secondary controls ───────────────────────── */}
+        <Popover>
           <PopoverTrigger asChild>
             <button
-              className="sm:hidden h-5 w-5 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
+              className="sm:hidden h-[10px] w-[10px] flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
               title="More chart options"
               aria-label="More chart options"
             >
-              <MoreVertical className="h-3.5 w-3.5" />
+              <MoreVertical className="h-2.5 w-2.5" />
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" sideOffset={6} className="w-56 p-2.5 flex flex-col gap-3">
@@ -2700,32 +2718,9 @@ export function TrendChart({
             )}
           </PopoverContent>
         </Popover>
-        </div>{/* end right-side group */}
-      </div>{/* end primary control bar */}
 
-      {/* Custom date pickers — own row, only when Custom range active */}
-      {range === 'CUSTOM' && (
-        <div className="flex items-center gap-1 mb-1">
-          <Input
-            type="date"
-            value={from}
-            onChange={(e) => handleFromChange(e.target.value)}
-            className="h-6 w-[110px] text-[10px] px-1.5"
-            data-testid={`trend-from-${metric}`}
-          />
-          <span className="text-[10px] text-muted-foreground shrink-0">→</span>
-          <Input
-            type="date"
-            value={to}
-            onChange={(e) => handleToChange(e.target.value)}
-            className="h-6 w-[110px] text-[10px] px-1.5"
-            data-testid={`trend-to-${metric}`}
-          />
-        </div>
-      )}
-
-      {/* ── Secondary controls — desktop only, second row ──────────────────── */}
-      <div className="hidden sm:flex items-center gap-0.5 mb-1.5 flex-wrap">
+        {/* ── Desktop-only secondary controls (hidden on mobile) ─────────────── */}
+        <div className="hidden sm:contents">
 
         {/* kwh: Source filter — Both / Solar / Grid + CSV Export */}
         {metric === 'kwh' && (() => {
@@ -3268,7 +3263,7 @@ export function TrendChart({
         </div>
       )}
 
-      </div>{/* end secondary controls row */}
+        </div>{/* end hidden sm:contents */}
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
       {showSummary && (
