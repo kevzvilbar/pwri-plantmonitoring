@@ -2553,7 +2553,7 @@ export function TrendChart({
               onClick={() => setRange(r)}
               data-testid={`trend-range-${metric}-${r}`}
               className={[
-                'h-[10px] px-1 rounded text-[8px] sm:h-5 sm:px-1.5 sm:text-[10px] font-medium transition-colors leading-none',
+                'h-[10px] px-1.5 rounded text-[10px] font-medium transition-colors leading-none',
                 range === r
                   ? 'bg-teal-700 text-white'
                   : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
@@ -2564,7 +2564,7 @@ export function TrendChart({
             onClick={() => setRange('CUSTOM')}
             data-testid={`trend-range-${metric}-CUSTOM`}
             className={[
-              'h-[10px] px-1 rounded text-[8px] sm:h-5 sm:px-1.5 sm:text-[10px] font-medium transition-colors leading-none',
+              'h-[10px] px-1.5 rounded text-[10px] font-medium transition-colors leading-none',
               range === 'CUSTOM'
                 ? 'bg-teal-700 text-white'
                 : 'bg-muted text-muted-foreground hover:text-foreground border border-border',
@@ -2590,14 +2590,14 @@ export function TrendChart({
             </div>
           )}
           {isFetching && (
-            <span className="text-[8px] sm:text-[10px] text-muted-foreground ml-1">Loading…</span>
+            <span className="text-[10px] text-muted-foreground ml-1">Loading…</span>
           )}
         </div>
 
         {/* Data Summary — opens a popup dialog (non-retractable) */}
         <button
           onClick={() => setShowSummary(true)}
-          className="ml-auto h-[10px] px-1.5 sm:h-5 sm:px-2 rounded text-[8px] sm:text-[10px] font-medium transition-colors leading-none shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
+          className="ml-auto h-[10px] px-2 rounded text-[10px] font-medium transition-colors leading-none shrink-0 border bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border"
           title="Open data summary table"
         >
           Data Summary
