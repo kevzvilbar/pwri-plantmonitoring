@@ -2541,9 +2541,9 @@ export function TrendChart({
   return (
     <>
       {/* Title, range buttons, and Data Summary tab on one compact row */}
-      <div className="flex flex-nowrap items-center gap-1 mb-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
+      <div className="flex flex-wrap items-center gap-1 mb-2">
         {title && (
-          <span className="text-sm font-semibold mr-1 shrink-0">{title}</span>
+          <span className="text-sm font-semibold w-full sm:w-auto sm:mr-1 shrink-0">{title}</span>
         )}
         {/* Range pills — compact size */}
         <div className="flex flex-nowrap items-center gap-0.5 shrink-0 sm:flex-wrap">
