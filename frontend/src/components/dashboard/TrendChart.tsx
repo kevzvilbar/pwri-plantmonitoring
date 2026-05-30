@@ -907,14 +907,25 @@ export function TrendChart({
   // Toggle for the inline data summary table
   const [showSummary, setShowSummary] = useState(false);
 
-  // Drill mode: 'default' = daily sum, 'drilldown' = per-locator daily, 'drillup' = monthly per-locator
-  const [drillMode, setDrillMode] = useState<DrillMode>('default');
+  // ── Unified view state (production / nrw) ────────────────────────────────
+  // Two independent axes replace the old drillMode + prodDrillSource trio:
+  //   viewGran     → time granularity  (daily | monthly)
+  //   viewBreakdown → entity grouping  (total | by-locator | by-source)
+  // All downstream computation continues to use the derived `drillMode` and
+  // `prodDrillSource` values below so the data layer needs zero changes.
+  type ViewGran = 'daily' | 'monthly';
+  type ViewBreakdown = 'total' | 'by-locator' | 'by-source';
+  const [viewGran, setViewGran] = useState<ViewGran>('daily');
+  const [viewBreakdown, setViewBreakdown] = useState<ViewBreakdown>('total');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
 
-  // Production drill source: 'locator' = per distribution locator, 'source' = per production source
-  // (product meter if the plant uses dedicated meters; RO Train permeate if permeate_is_production=true)
+  // Derived backward-compat — consumed by computation useMemos unchanged.
   type ProdDrillSource = 'locator' | 'source';
-  const [prodDrillSource, setProdDrillSource] = useState<ProdDrillSource>('locator');
+  const drillMode: DrillMode =
+    viewGran === 'monthly' ? 'drillup' :
+    viewBreakdown !== 'total' ? 'drilldown' :
+    'default';
+  const prodDrillSource: ProdDrillSource = viewBreakdown === 'by-source' ? 'source' : 'locator';
 
   // Locator filter for drill modes — null means "all selected" (default)
   // When the user opens drill mode, all locators start selected.
@@ -2603,58 +2614,62 @@ export function TrendChart({
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" sideOffset={6} className="w-56 p-2.5 flex flex-col gap-3">
-            {/* Drill section — production / nrw */}
+            {/* View + Breakdown — production / nrw */}
             {hasConsumptionDrill && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Consumption drill</p>
-                <div className="flex flex-wrap gap-1">
-                  <button onClick={() => setDrillMode(drillMode === 'drillup' ? 'default' : 'drillup')}
-                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'drillup' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <button onClick={() => { setViewGran('daily'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', viewGran === 'daily' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    <BarChart2 className="h-3 w-3" />Daily
+                  </button>
+                  <button onClick={() => { setViewGran('monthly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', viewGran === 'monthly' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
                     <ChevronsUp className="h-3 w-3" />Monthly
                   </button>
-                  <button onClick={() => { setDrillMode('default'); setShowLocatorFilter(false); }}
-                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'default' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
-                    <BarChart2 className="h-3 w-3" />Daily
-                  </button>
-                  <button onClick={() => setDrillMode(drillMode === 'drilldown' ? 'default' : 'drilldown')}
-                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none flex items-center gap-1', drillMode === 'drilldown' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
-                    <ChevronsDown className="h-3 w-3" />Per locator
-                  </button>
                 </div>
-                {metric === 'production' && drillMode !== 'default' && (
-                  <div className="flex gap-1 mt-1.5 flex-wrap">
-                    <button onClick={() => { setProdDrillSource('locator'); setSelectedLocatorIds(null); }}
-                      className={['h-6 px-2 rounded text-[10px] font-medium border', prodDrillSource === 'locator' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Per Locator</button>
-                    <button onClick={() => { setProdDrillSource('source'); setSelectedLocatorIds(null); }}
-                      className={['h-6 px-2 rounded text-[10px] font-medium border', prodDrillSource === 'source' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Per Source</button>
-                  </div>
-                )}
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => { setViewBreakdown('total'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none', viewBreakdown === 'total' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
+                  <button onClick={() => { setViewBreakdown('by-locator'); setSelectedLocatorIds(null); }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none', viewBreakdown === 'by-locator' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>By locator</button>
+                  {metric === 'production' && (
+                    <button onClick={() => { setViewBreakdown('by-source'); setSelectedLocatorIds(null); }}
+                      className={['h-6 px-2 rounded text-[10px] font-medium border transition-colors leading-none', viewBreakdown === 'by-source' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>By source</button>
+                  )}
+                </div>
               </div>
             )}
-            {/* RO drill section — tds / recovery */}
+            {/* View + Breakdown — tds / recovery */}
             {hasRoDrill && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">RO drill</p>
-                <div className="flex flex-wrap gap-1">
-                  <button onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); }}
-                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'default' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <button onClick={() => { if (roDrillMode === 'by-hour') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', (roDrillMode === 'default' || roDrillMode === 'by-train') ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
                     <BarChart2 className="h-3 w-3" />Daily
-                  </button>
-                  <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
-                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
-                    <ChevronsDown className="h-3 w-3" />Per train
                   </button>
                   <button onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}
                     className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'by-hour' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
-                    <ChevronsUp className="h-3 w-3" />Hourly
+                    Hourly
+                  </button>
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border', roDrillMode !== 'by-train' ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
+                  <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+                    className={['h-6 px-2 rounded text-[10px] font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
+                    <ChevronsDown className="h-3 w-3" />By train
                   </button>
                 </div>
               </div>
             )}
-            {/* Plant health granularity */}
+            {/* View — plant health */}
             {hasPlantHealth && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Granularity</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <div className="flex flex-wrap gap-1">
                   {(['daily','hourly','monthly'] as const).map((m) => (
                     <button key={m} onClick={() => setPhDrillMode(m)}
@@ -2787,82 +2802,85 @@ export function TrendChart({
           </div>
         )}
 
-        {/* Production source toggle — Per Locator vs Per Source — only for production metric in drill mode */}
-        {metric === 'production' && drillMode !== 'default' && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">View:</span>
-            <button
-              onClick={() => { setProdDrillSource('locator'); setSelectedLocatorIds(null); }}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                prodDrillSource === 'locator'
-                  ? 'bg-teal-700 text-white border-teal-700'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title="Breakdown by distribution locator"
-            >Per Locator</button>
-            <button
-              onClick={() => { setProdDrillSource('source'); setSelectedLocatorIds(null); }}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
-                prodDrillSource === 'source'
-                  ? 'bg-teal-700 text-white border-teal-700'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title={usePermeateForSource ? 'Breakdown by RO Train permeate' : 'Breakdown by product meter'}
-            >Per Source</button>
-          </div>
-        )}
 
-        {/* Drill controls — only for charts that have consumption data */}
+
+        {/* ── Production / NRW — View granularity + Breakdown entity ────── */}
         {hasConsumptionDrill && (
-          <div className="flex items-center gap-0.5 shrink-0" title="Drill into Consumption data">
-            {metric !== 'production' && <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">Cons.:</span>}
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* ── Granularity ── */}
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
             <button
-              onClick={() => setDrillMode(drillMode === 'drillup' ? 'default' : 'drillup')}
-              data-testid={`drill-up-${metric}`}
+              onClick={() => { setViewGran('daily'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+              data-testid={`drill-daily-${metric}`}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                drillMode === 'drillup'
-                  ? 'bg-violet-600 text-white border-violet-600'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title="Drill Up — monthly consumption per locator"
-            >
-              <ChevronsUp className="h-3 w-3" />
-              Monthly
-            </button>
-            <button
-              data-testid={`drill-default-${metric}`}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                drillMode === 'default'
+                viewGran === 'daily'
                   ? 'bg-teal-700 text-white border-teal-700'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Default — daily total consumption"
-              onClick={() => { setDrillMode('default'); setShowLocatorFilter(false); }}
+              title="Daily totals"
             >
               <BarChart2 className="h-3 w-3" />
               Daily
             </button>
             <button
-              onClick={() => setDrillMode(drillMode === 'drilldown' ? 'default' : 'drilldown')}
-              data-testid={`drill-down-${metric}`}
+              onClick={() => { setViewGran('monthly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+              data-testid={`drill-monthly-${metric}`}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                drillMode === 'drilldown'
+                viewGran === 'monthly'
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Monthly totals"
+            >
+              <ChevronsUp className="h-3 w-3" />
+              Monthly
+            </button>
+
+            {/* ── Divider ── */}
+            <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
+
+            {/* ── Breakdown ── */}
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
+            <button
+              onClick={() => { setViewBreakdown('total'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+              data-testid={`drill-total-${metric}`}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                viewBreakdown === 'total'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Combined total"
+            >Total</button>
+            <button
+              onClick={() => { setViewBreakdown('by-locator'); setSelectedLocatorIds(null); }}
+              data-testid={`drill-by-locator-${metric}`}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                viewBreakdown === 'by-locator'
                   ? 'bg-chart-2 text-white border-chart-2'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Drill Down — daily consumption per locator"
-            >
-              <ChevronsDown className="h-3 w-3" />
-              Per Locator
-            </button>
+              title="Break down by distribution locator"
+            >By locator</button>
+            {metric === 'production' && (
+              <button
+                onClick={() => { setViewBreakdown('by-source'); setSelectedLocatorIds(null); }}
+                data-testid={`drill-by-source-${metric}`}
+                className={[
+                  'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                  viewBreakdown === 'by-source'
+                    ? 'bg-chart-2 text-white border-chart-2'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+                title={usePermeateForSource ? 'Break down by RO Train permeate' : 'Break down by product meter'}
+              >By source</button>
+            )}
 
-            {/* Locator filter button — only visible in drill modes */}
-            {drillMode !== 'default' && (
+            {/* ── Locator / source filter — visible only when breakdown != total ── */}
+            {viewBreakdown !== 'total' && (
               <button
                 onClick={() => setShowLocatorFilter((v) => !v)}
                 data-testid={`drill-filter-${metric}`}
@@ -2886,35 +2904,29 @@ export function TrendChart({
             )}
           </div>
         )}
-        {/* RO Drill controls — TDS / Recovery */}
+        {/* ── TDS / Recovery — View granularity + Breakdown entity ────────── */}
         {hasRoDrill && (
-          <div className="flex items-center gap-0.5 shrink-0" title="Drill into RO train data">
-            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">RO:</span>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* ── Granularity ── */}
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
             <button
-              onClick={() => { setRoDrillMode('default'); setShowTrainFilter(false); }}
+              onClick={() => {
+                // Stay in 'default' or 'by-train' depending on current breakdown;
+                // switching from hourly preserves "Total" (no by-train in hourly).
+                if (roDrillMode !== 'default' && roDrillMode !== 'by-train') {
+                  setRoDrillMode('default'); setShowTrainFilter(false);
+                }
+              }}
               className={[
                 'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                roDrillMode === 'default'
+                roDrillMode === 'default' || roDrillMode === 'by-train'
                   ? 'bg-teal-700 text-white border-teal-700'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Default — daily average"
+              title="Daily average"
             >
               <BarChart2 className="h-3 w-3" />
               Daily
-            </button>
-            <button
-              onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); }}
-              className={[
-                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                roDrillMode === 'by-train'
-                  ? 'bg-chart-2 text-white border-chart-2'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
-              ].join(' ')}
-              title="Per Train — daily average per RO train"
-            >
-              <ChevronsDown className="h-3 w-3" />
-              Per Train
             </button>
             <button
               onClick={() => setRoDrillMode(roDrillMode === 'by-hour' ? 'default' : 'by-hour')}
@@ -2924,11 +2936,38 @@ export function TrendChart({
                   ? 'bg-violet-600 text-white border-violet-600'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="By Hour — hourly average across date range"
+              title="Hourly average across date range"
+            >Hourly</button>
+
+            {/* ── Divider ── */}
+            <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
+
+            {/* ── Breakdown ── */}
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
+            <button
+              onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none border',
+                roDrillMode !== 'by-train'
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Fleet average (all trains combined)"
+            >Total</button>
+            <button
+              onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
+              className={[
+                'h-5 px-1.5 rounded text-[10px] font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                roDrillMode === 'by-train'
+                  ? 'bg-chart-2 text-white border-chart-2'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Daily average per RO train"
             >
-              <ChevronsUp className="h-3 w-3" />
-              Hourly
+              <ChevronsDown className="h-3 w-3" />
+              By train
             </button>
+
             {/* Train filter — visible in by-train or by-hour mode */}
             {roDrillMode !== 'default' && (
               <button
@@ -2953,10 +2992,10 @@ export function TrendChart({
             )}
           </div>
         )}
-        {/* Plant Health granularity controls */}
+        {/* ── Plant Health — granularity only (no entity breakdown) ────────── */}
         {hasPlantHealth && (
           <div className="flex items-center gap-0.5 shrink-0" title="Plant Health granularity">
-            <span className="text-[9px] text-muted-foreground mr-0.5 hidden sm:inline">View:</span>
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
             <button
               onClick={() => setPhDrillMode('daily')}
               className={[
