@@ -1102,7 +1102,7 @@ function AssignLocatorsDialog({
                   <Checkbox
                     checked={checked}
                     onCheckedChange={() => toggle(l.id)}
-                    className="shrink-0 [&]:rounded-full sm:[&]:rounded-sm"
+                    className="shrink-0 h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{l.name}</div>
@@ -2191,7 +2191,7 @@ function MeterToggleTile({
         checked={checked}
         onCheckedChange={canEdit ? onToggle : undefined}
         disabled={!canEdit}
-        className={`h-7 w-12 sm:h-5 sm:w-9 shrink-0 [&>span]:h-5 [&>span]:w-5 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-5 sm:[&>span]:data-[state=checked]:translate-x-4 ${colors.sw}`}
+        className={`h-8 w-14 sm:h-5 sm:w-9 shrink-0 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-4 ${colors.sw}`}
       />
     </label>
   );
@@ -2525,7 +2525,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                     checked={cfg.permeate_is_production}
                     onCheckedChange={canEdit ? (v) => update({ permeate_is_production: v }) : undefined}
                     disabled={!canEdit}
-                    className="h-7 w-12 sm:h-5 sm:w-9 shrink-0 [&>span]:h-5 [&>span]:w-5 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-5 sm:[&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                    className="h-8 w-14 sm:h-5 sm:w-9 shrink-0 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
                   />
                 </div>
 
@@ -2660,7 +2660,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                           checked={cfg.permeate_cutoff_enabled ?? true}
                           onCheckedChange={canEdit ? (v) => update({ permeate_cutoff_enabled: v }) : undefined}
                           disabled={!canEdit}
-                          className="h-7 w-12 sm:h-5 sm:w-9 shrink-0 [&>span]:h-5 [&>span]:w-5 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-5 sm:[&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
+                          className="h-8 w-14 sm:h-5 sm:w-9 shrink-0 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-4 sm:[&>span]:w-4 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-4 data-[state=checked]:bg-teal-700"
                         />
                       </div>
 
@@ -3233,7 +3233,7 @@ function PlantMeterConfigCard({ plant }: { plant: any }) {
                           : current.filter(n => n !== chem.name);
                         update({ enabled_chemicals: next });
                       } : undefined}
-                      className="[&]:rounded-full sm:[&]:rounded-sm data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700"
+                      className="h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm data-[state=checked]:bg-teal-700 data-[state=checked]:border-teal-700"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{chem.name}</div>
@@ -3455,7 +3455,7 @@ function EnergySourceCard({ plant }: { plant: any }) {
               checked={hasSolar}
               onCheckedChange={setHasSolar}
               data-testid="energy-has-solar"
-              className="h-7 w-12 sm:h-6 sm:w-11 [&>span]:h-5 [&>span]:w-5 [&>span]:data-[state=checked]:translate-x-5"
+              className="h-8 w-14 sm:h-6 sm:w-11 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-5 sm:[&>span]:w-5 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-5"
             />
             <span className="inline-flex items-center gap-1">
               <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
@@ -3466,7 +3466,7 @@ function EnergySourceCard({ plant }: { plant: any }) {
               checked={hasGrid}
               onCheckedChange={setHasGrid}
               data-testid="energy-has-grid"
-              className="h-7 w-12 sm:h-6 sm:w-11 [&>span]:h-5 [&>span]:w-5 [&>span]:data-[state=checked]:translate-x-5"
+              className="h-8 w-14 sm:h-6 sm:w-11 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-5 sm:[&>span]:w-5 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-5"
             />
             <span className="inline-flex items-center gap-1">
               <GridPylonIcon className="h-3.5 w-3.5" /> Has grid
@@ -3951,7 +3951,7 @@ function LocatorsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggleOne(l.id)}
-                  className="mt-0.5 h-4 w-4 shrink-0 [&]:rounded-full sm:[&]:rounded-sm"
+                  className="mt-0.5 h-5 w-5 sm:h-4 sm:w-4 shrink-0 [&]:rounded-full sm:[&]:rounded-sm"
                   data-testid={`locator-select-${l.id}`}
                 />
               )}
@@ -4844,7 +4844,7 @@ function WellsList({ plantId }: { plantId: string }) {
                 <Checkbox
                   checked={checked}
                   onCheckedChange={() => toggle(w.id)}
-                  className="mt-1 h-4 w-4 [&]:rounded-full sm:[&]:rounded-sm"
+                  className="mt-1 h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm"
                   data-testid={`well-select-${w.id}`}
                 />
               )}
@@ -5233,7 +5233,7 @@ function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: () => v
               <Checkbox
                 checked={form.has_power_meter}
                 onCheckedChange={(v) => setForm({ ...form, has_power_meter: !!v })}
-                className="shrink-0 h-4 w-4 [&]:rounded-full sm:[&]:rounded-sm"
+                className="shrink-0 h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm"
                 data-testid="add-well-has-power-meter"
               />
               <Zap className="h-3 w-3 text-amber-500" />
@@ -5568,7 +5568,7 @@ function EditElectricMeterDialog({ well, onClose }: { well: any; onClose: () => 
               checked={form.has_power_meter}
               onCheckedChange={(v) => setForm({ ...form, has_power_meter: v })}
               data-testid="edit-em-has-power"
-              className="h-7 w-12 sm:h-6 sm:w-11 [&>span]:h-5 [&>span]:w-5 [&>span]:data-[state=checked]:translate-x-5"
+              className="h-8 w-14 sm:h-6 sm:w-11 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-5 sm:[&>span]:w-5 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-5"
             />
             Has dedicated electric meter
           </label>

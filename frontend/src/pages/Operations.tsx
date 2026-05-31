@@ -5873,6 +5873,7 @@ interface HistoryEditState {
   value3?: string;           // tertiary (grid for power)
   value4?: string;           // TDS ppm (well)
   value5?: string;           // pressure psi (well)
+  value6?: string;           // turbidity NTU (well)
   isMeterReplacement?: boolean;
 }
 
@@ -6049,7 +6050,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
     const dt = r.reading_datetime ?? r.created_at ?? '';
     const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
     if (module === 'well') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '', value4: r.tds_ppm != null ? String(r.tds_ppm) : '', value5: r.pressure_psi != null ? String(r.pressure_psi) : '', isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), value2: r.power_meter_reading != null ? String(r.power_meter_reading) : '', value4: r.tds_ppm != null ? String(r.tds_ppm) : '', value6: (r as any).turbidity_ntu != null ? String((r as any).turbidity_ntu) : '', value5: r.pressure_psi != null ? String(r.pressure_psi) : '', isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'locator') {
       setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'power') {
@@ -6224,6 +6225,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
       // Only include optional columns when non-undefined — sending null for a
       // missing DB column causes the PostgREST "relation does not exist" error.
       if (editRow.value4 !== undefined) wellEditPayload.tds_ppm = editRow.value4 ? +editRow.value4 : null;
+      if (editRow.value6 !== undefined) wellEditPayload.turbidity_ntu = editRow.value6 ? +editRow.value6 : null;
       if (editRow.value5 !== undefined) wellEditPayload.pressure_psi = editRow.value5 ? +editRow.value5 : null;
       ({ error } = await (supabase.from('well_readings') as any).update(wellEditPayload).eq('id', editRow.id));
     } else if (module === 'locator') {
@@ -6418,6 +6420,14 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
               )}
               {module === 'well' && (
                 <div>
+                  <Label className="text-[11px]">NTU</Label>
+                  <Input type="number" step="any" value={editRow.value6 ?? ''}
+                    onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
+                    className="h-8 text-xs" placeholder="optional" />
+                </div>
+              )}
+              {module === 'well' && (
+                <div>
                   <Label className="text-[11px]">Pressure (psi)</Label>
                   <Input type="number" step="any" value={editRow.value5 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
@@ -6529,6 +6539,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
                     <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
                     <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
+                    <th className="px-3 py-2 font-medium text-right">NTU</th>
                     <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
                   </>}
                   {module === 'blending' && <>
@@ -6975,6 +6986,9 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.tds_ppm != null ? fmtNum(r.tds_ppm) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi) : '—'}
