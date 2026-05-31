@@ -5839,8 +5839,24 @@ function EditTrainDialog({
     // Per-train overrides (fallback to plant-wide)
     filter_media_type: (train as any).filter_media_type ?? plantMediaType,
     filter_housing_type: (train as any).filter_housing_type ?? plantFilterType,
+    // Source well — drives "PER WELL SOURCE" labels on the Dashboard
+    well_id: (train as any).well_id ?? '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Wells for this plant — populates the source-well dropdown
+  const { data: plantWells = [] } = useQuery({
+    queryKey: ['plant-wells-for-train-edit', train.plant_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('wells')
+        .select('id, name')
+        .eq('plant_id', train.plant_id)
+        .order('name');
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    staleTime: 60_000,
+  });
 
   const num = (v: string) => (v === '' ? 0 : Math.max(0, parseInt(v, 10) || 0));
 
@@ -5856,6 +5872,7 @@ function EditTrainDialog({
       num_filter_housings: num(form.num_filter_housings),
       filter_media_type: form.filter_media_type,
       filter_housing_type: form.filter_housing_type,
+      well_id: form.well_id || null,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('ro_trains').update(payload).eq('id', train.id);
@@ -5889,6 +5906,26 @@ function EditTrainDialog({
               disabled={!isManager}
               data-testid="train-name-input"
             />
+          </div>
+
+          {/* Source well link */}
+          <div>
+            <Label className="text-xs">Source well <span className="text-muted-foreground font-normal">(used for "Per Well Source" labels on Dashboard)</span></Label>
+            <Select
+              value={form.well_id || '__none__'}
+              onValueChange={(v) => setForm({ ...form, well_id: v === '__none__' ? '' : v })}
+              disabled={!isManager}
+            >
+              <SelectTrigger data-testid="train-well-select">
+                <SelectValue placeholder="— not linked —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— not linked —</SelectItem>
+                {plantWells.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* ── Component counts ── */}
