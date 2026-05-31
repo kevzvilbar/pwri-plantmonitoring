@@ -1,8 +1,23 @@
+import { useEffect } from 'react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { ALERTS } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
+
+const GEO_FONT = "'DM Sans', 'Outfit', ui-sans-serif, system-ui, sans-serif";
+
+function useDMSans() {
+  useEffect(() => {
+    const id = 'dm-sans-link';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap';
+    document.head.appendChild(link);
+  }, []);
+}
 
 // ── Colour ramp — mirrors nrwColor() thresholds from calculations.ts ─────────
 function nrwHex(pct: number | null): string {
@@ -26,6 +41,7 @@ interface Props {
 }
 
 export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
+  useDMSans();
   const isDark     = typeof window !== 'undefined' && window.document.documentElement.classList.contains('dark');
   const trackColor = isDark ? '#374151' : '#e5e7eb';
   const fillColor  = nrwHex(nrw);
@@ -86,7 +102,10 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
       <div className="min-w-0 flex-1">
         {/* Value + trend */}
         <div className="flex items-baseline gap-1.5 flex-wrap">
-          <span className={cn('text-xl font-mono-num font-semibold leading-none', nrwTextCls(nrw))}>
+          <span
+            className={cn('text-xl font-semibold leading-none', nrwTextCls(nrw))}
+            style={{ fontFamily: GEO_FONT, fontFeatureSettings: '"tnum"' }}
+          >
             {nrw == null ? '—' : nrw}
             <span className="text-xs font-sans text-muted-foreground ml-0.5">%</span>
           </span>
