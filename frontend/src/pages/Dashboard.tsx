@@ -1756,24 +1756,41 @@ export default function Dashboard() {
   const { data: _qualityTrainMeta } = useQuery({
     queryKey: ['dash-quality-train-meta', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null }>() };
+      if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>() };
       const { data } = await (supabase.from('ro_trains' as any) as any)
-        .select('id, plant_id, train_number, name')
+        .select('id, plant_id, train_number, name, well_id')
         .in('plant_id', plantIds);
       const rows = (data ?? []) as any[];
-      const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null }>();
+      const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>();
       rows.forEach((t: any) => metaMap.set(t.id as string, {
-        plant_id:    t.plant_id,
+        plant_id:     t.plant_id,
         train_number: t.train_number ?? null,
-        train_name:  t.name ?? null,
+        train_name:   t.name ?? null,
+        well_id:      t.well_id ?? null,
       }));
       return { ids: rows.map((t: any) => t.id as string), metaMap };
     },
     enabled: plantIds.length > 0,
     staleTime: 60_000,
   });
-  const _qualityTrainIds  = _qualityTrainMeta?.ids    ?? [];
-  const _qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null }>();
+  const _qualityTrainIds   = _qualityTrainMeta?.ids    ?? [];
+  const _qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>();
+
+  // ── Well-name lookup for "PER WELL SOURCE" labels ────────────────────────────
+  // Fetched once per plant selection. When an ro_trains row has well_id set,
+  // roByTrain resolves the label as: well.name → train.name → RO{train_number}.
+  const { data: _wellNamesByTrainWell } = useQuery({
+    queryKey: ['dash-well-names-for-trains', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return new Map<string, string>();
+      const { data } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
+      const map = new Map<string, string>();
+      (data ?? []).forEach((w: any) => map.set(w.id as string, w.name as string));
+      return map;
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 60_000,
+  });
 
   // ── Step 2: Fetch latest quality readings filtered by train_id ───────────────
   // Selects only the quality-relevant columns (no cumulative meter columns needed here).
@@ -1790,8 +1807,8 @@ export default function Dashboard() {
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: false });
       if (error) throw new Error(`ro_train_readings (quality): ${error.message}`);
-      // Reattach plant_id + train_number + train_name from the ro_trains lookup so
-      // downstream consumers (roByTrain dedup key, PerWellSourceCard, expandRows) keep working.
+      // Reattach plant_id + train_number + train_name + well_id from the ro_trains
+      // lookup so downstream consumers (roByTrain, PerWellSourceCard, expandRows) keep working.
       return (data ?? []).map((r: any) => {
         const meta = _qualityTrainMeta2.get(r.train_id);
         return {
@@ -1799,6 +1816,7 @@ export default function Dashboard() {
           plant_id:     meta?.plant_id     ?? null,
           train_number: meta?.train_number ?? null,
           train_name:   meta?.train_name   ?? null,
+          well_id:      meta?.well_id      ?? null,
         };
       });
     },
@@ -2041,7 +2059,11 @@ export default function Dashboard() {
       const key = `${r.plant_id}__${r.train_number ?? '?'}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push(r);
+      // Label priority: linked well name → ro_trains.name → RO{train_number}.
+      // Well name is only available once _wellNamesByTrainWell has loaded; until
+      // then the row renders with train_name and updates on the next memo run.
+      const wellName = r.well_id ? (_wellNamesByTrainWell?.get(r.well_id) ?? null) : null;
+      rows.push({ ...r, train_name: wellName ?? r.train_name });
     });
     rows.sort((a, b) => {
       // Sort by plant_id then train_number for stable rendering across re-renders.
@@ -2049,7 +2071,7 @@ export default function Dashboard() {
       return (a.train_number ?? 0) - (b.train_number ?? 0);
     });
     return rows;
-  }, [latestRO]);
+  }, [latestRO, _wellNamesByTrainWell]);
 
   // Bug 5 fix: recompute RO averages from deduplicated roByTrain so trains with more
   // readings per 24h window don't inflate/skew the aggregate values.
