@@ -1453,14 +1453,26 @@ export default function Dashboard() {
       if (!_wellIds?.length) return [];
       // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await supabase
-        .from('well_readings')
-        .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+      // Try to fetch quality columns (tds_ppm, turbidity_ntu) — these are optional
+      // migration columns that may not exist in all environments yet. Fall back to
+      // base columns only if PostgREST returns a schema-cache error.
+      const { data, error } = await (supabase
+        .from('well_readings') as any)
+        .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,tds_ppm,turbidity_ntu')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
-      return (data ?? []) as any[];
+      if (!error) return (data ?? []) as any[];
+      // Fallback: base columns without quality fields
+      const { data: fallback } = await supabase
+        .from('well_readings')
+        .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .in('well_id', _wellIds)
+        .gte('reading_datetime', today)
+        .lte('reading_datetime', todayEnd)
+        .order('reading_datetime', { ascending: true });
+      return (fallback ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
     staleTime: 0,
@@ -2073,6 +2085,37 @@ export default function Dashboard() {
     return rows;
   }, [latestRO, _wellNamesByTrainWell]);
 
+  // ── wellsByQuality ─────────────────────────────────────────────────────────
+  // Per-well quality snapshot derived from todayWells (well_readings.tds_ppm /
+  // turbidity_ntu). These drive the "PER WELL SOURCE" Raw TDS and Raw NTU cards
+  // so the names and values match exactly what operators enter in Operations.
+  // Deduplication: latest reading per well (todayWells is ordered ASC so last = latest).
+  const wellsByQuality = useMemo(() => {
+    const latestByWell = new Map<string, any>();
+    (todayWells as any[] | undefined ?? []).forEach((r) => {
+      // Keep overwriting — last entry per well_id is the most recent (ASC order).
+      if (r.tds_ppm != null || r.turbidity_ntu != null) {
+        latestByWell.set(r.well_id as string, r);
+      }
+    });
+    const rows: any[] = [];
+    latestByWell.forEach((r) => {
+      const wellName = _wellNamesByTrainWell?.get(r.well_id as string) ?? null;
+      rows.push({
+        ...r,
+        // Alias well_id so PerWellSourceCard key logic uses it
+        well_id: r.well_id,
+        // Map well name into train_name so the shared PerWellSourceCard rowLabel works
+        train_name: wellName ?? `Well ${String(r.well_id).slice(-4)}`,
+      });
+    });
+    rows.sort((a, b) => {
+      if (a.plant_id !== b.plant_id) return String(a.plant_id).localeCompare(String(b.plant_id));
+      return String(a.train_name).localeCompare(String(b.train_name));
+    });
+    return rows;
+  }, [todayWells, _wellNamesByTrainWell]);
+
   // Bug 5 fix: recompute RO averages from deduplicated roByTrain so trains with more
   // readings per 24h window don't inflate/skew the aggregate values.
   const avgPermTds = roByTrain.length
@@ -2086,6 +2129,17 @@ export default function Dashboard() {
     : null;
   const avgTurb = roByTrain.length
     ? +(roByTrain.reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / roByTrain.length).toFixed(2)
+    : null;
+
+  // Per-well raw water quality averages — sourced from well_readings (entered in
+  // Operations) rather than ro_train_readings so names and values match Operations.
+  const wellsWithTds  = wellsByQuality.filter((r) => r.tds_ppm != null);
+  const wellsWithNtu  = wellsByQuality.filter((r) => r.turbidity_ntu != null);
+  const avgRawTds = wellsWithTds.length
+    ? +(wellsWithTds.reduce((s, r) => s + (r.tds_ppm ?? 0), 0) / wellsWithTds.length).toFixed(0)
+    : null;
+  const avgRawTurb = wellsWithNtu.length
+    ? +(wellsWithNtu.reduce((s, r) => s + (r.turbidity_ntu ?? 0), 0) / wellsWithNtu.length).toFixed(2)
     : null;
   // Lookup helper for plant codes inside per-train rows. Falls back to the
   // raw plant_id when the plant list hasn't loaded yet so we never render
@@ -2472,25 +2526,25 @@ export default function Dashboard() {
           }))}
           expandUnit="ppm"
         />
-        {/* Raw TDS — per-train breakdown collapsed by default, expand via chevron */}
+        {/* Raw TDS — per-well breakdown from well_readings.tds_ppm (Operations data) */}
         <PerWellSourceCard
           icon={Gauge}
           label="Raw TDS"
           unit="ppm"
-          aggregate={avgFeedTds}
-          rows={roByTrain}
-          field="feed_tds"
+          aggregate={avgRawTds}
+          rows={wellsByQuality}
+          field="tds_ppm"
           plantCodeById={plantCodeById}
           multiPlant={plantIds.length > 1}
           testId="raw-tds-per-well-source"
         />
-        {/* Raw NTU — per-train breakdown collapsed by default, expand via chevron */}
+        {/* Raw NTU — per-well breakdown from well_readings.turbidity_ntu (Operations data) */}
         <PerWellSourceCard
           icon={Cloud}
           label="Raw NTU"
           unit="NTU"
-          aggregate={avgTurb}
-          rows={roByTrain}
+          aggregate={avgRawTurb}
+          rows={wellsByQuality}
           field="turbidity_ntu"
           plantCodeById={plantCodeById}
           multiPlant={plantIds.length > 1}

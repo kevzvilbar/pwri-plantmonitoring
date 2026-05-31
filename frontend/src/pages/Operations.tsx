@@ -2805,10 +2805,12 @@ function WellRow({
   const lastPrefilledMeter = useRef<string | null>(null);
   const [powerReading, setPowerReading]           = useState('');
   const [tdsReading, setTdsReading]               = useState('');
+  const [ntuReading, setNtuReading]               = useState('');
   const [pressureReading, setPressureReading]     = useState('');
   const [editingId, setEditingId]               = useState<string | null>(null);
   const [saving, setSaving]                     = useState(false);
   const [savingTds, setSavingTds]               = useState(false);
+  const [savingNtu, setSavingNtu]               = useState(false);
   const [savingPressure, setSavingPressure]     = useState(false);
   const [savingPower, setSavingPower]           = useState(false);
   const [sharedPowerReading, setSharedPowerReading] = useState('');
@@ -2881,6 +2883,7 @@ function WellRow({
     // ("relation 'well_readings' does not exist"). Same fix already applied to
     // solar_meter_reading in the CSV import path.
     if (tdsReading) payload.tds_ppm = +tdsReading;
+    if (ntuReading) payload.turbidity_ntu = +ntuReading;
     if (pressureReading) payload.pressure_psi = +pressureReading;
     const { error } = editingId
       ? await supabase.from('well_readings').update(payload).eq('id', editingId)
@@ -2889,7 +2892,7 @@ function WellRow({
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
-    setReading(''); setPowerReading(''); setTdsReading(''); setPressureReading('');
+    setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setEditingId(null); onSaved();
   };
 
@@ -2941,6 +2944,32 @@ function WellRow({
       toast.error(`TDS save failed: ${e.message}`);
       console.error('saveTds error:', e);
     } finally { setSavingTds(false); }
+  };
+
+  // ── NTU save (updates today's record or inserts new) ──
+  const saveNtu = async () => {
+    if (!ntuReading) { toast.error(`${well.name}: enter a turbidity value`); return; }
+    setSavingNtu(true);
+    const val = +ntuReading;
+    try {
+      let error: any;
+      if (lastToday) {
+        ({ error } = await (supabase.from('well_readings') as any).update({ turbidity_ntu: val }).eq('id', lastToday.id));
+      } else {
+        ({ error } = await (supabase.from('well_readings') as any).insert({
+          well_id: well.id, plant_id: plantId,
+          current_reading: previousMeter ?? 0, previous_reading: previousMeter,
+          turbidity_ntu: val, recorded_by: userId,
+          reading_datetime: new Date(customDt).toISOString(),
+        }));
+      }
+      if (error) throw new Error(error.message);
+      toast.success(`${well.name}: NTU saved`);
+      setNtuReading(''); onSaved();
+    } catch (e: any) {
+      toast.error(`NTU save failed: ${e.message}`);
+      console.error('saveNtu error:', e);
+    } finally { setSavingNtu(false); }
   };
 
   // ── Pressure save (updates today's record or inserts new) ──
@@ -3044,6 +3073,7 @@ function WellRow({
                 setReading(String(lastToday.current_reading ?? ''));
                 setPowerReading(lastToday.power_meter_reading != null ? String(lastToday.power_meter_reading) : '');
                 setTdsReading(lastToday.tds_ppm != null ? String(lastToday.tds_ppm) : '');
+                setNtuReading((lastToday as any).turbidity_ntu != null ? String((lastToday as any).turbidity_ntu) : '');
                 setPressureReading(lastToday.pressure_psi != null ? String(lastToday.pressure_psi) : '');
               }}
               title={`Edit last today reading (${fmtNum(lastToday.current_reading)})`}
@@ -3052,7 +3082,7 @@ function WellRow({
             </button>
           )}
           {editingId && (
-            <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setPressureReading(''); }}
+            <button onClick={() => { setEditingId(null); setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading(''); }}
               title="Cancel edit"
               className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
               <X className="h-3.5 w-3.5" />
@@ -3190,6 +3220,25 @@ function WellRow({
               className="h-7 px-2.5 shrink-0 text-xs border-border/70"
               title="Save TDS reading">
               {savingTds ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+            </Button>
+          </div>
+
+          {/* Turbidity (NTU) */}
+          <div className="flex items-center gap-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground w-16 shrink-0">NTU</p>
+            <Input
+              type="number" step="any" inputMode="decimal"
+              value={ntuReading} onChange={e => setNtuReading(e.target.value)}
+              placeholder="NTU"
+              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-teal-500/20 placeholder:text-muted-foreground/40"
+              data-testid={`well-ntu-input-${well.id}`}
+            />
+            <Button
+              onClick={saveNtu} disabled={savingNtu || !ntuReading}
+              size="sm" variant="outline"
+              className="h-7 px-2.5 shrink-0 text-xs border-border/70"
+              title="Save turbidity (NTU) reading">
+              {savingNtu ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
             </Button>
           </div>
 
@@ -5916,7 +5965,7 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, pressure_psi, reading_datetime, is_meter_replacement')
+          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
