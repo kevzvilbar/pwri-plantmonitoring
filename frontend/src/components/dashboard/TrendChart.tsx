@@ -3456,12 +3456,12 @@ export function TrendChart({
         )}
         <ResponsiveContainer width="100%" height="100%">
           {(hasRoDrill && roDrillMode === 'by-train') ? (
-            <LineChart data={roTrainDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} />
+            <LineChart data={roTrainDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -3472,15 +3472,21 @@ export function TrendChart({
                   dataKey={id}
                   name={label}
                   stroke={color}
-                  strokeWidth={1.5}
+                  strokeWidth={2}
                   dot={false}
                   connectNulls
                 />
               ))}
             </LineChart>
           ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
-            <LineChart data={roHourDrillData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <AreaChart data={roHourDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="hourlyDrillFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'} stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis
                 dataKey="label"
                 tick={{ fontSize: 9 }}
@@ -3489,30 +3495,33 @@ export function TrendChart({
                 angle={-35}
                 textAnchor="end"
                 height={48}
+                axisLine={false}
+                tickLine={false}
               />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={36} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
                 formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
                 labelFormatter={(label) => label}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="value"
                 name={metric === 'tds' ? 'Avg TDS (ppm)' : 'Avg Recovery (%)'}
                 stroke={metric === 'tds' ? 'hsl(var(--accent))' : 'hsl(var(--chart-6))'}
-                strokeWidth={2}
+                strokeWidth={2.5}
+                fill="url(#hourlyDrillFill)"
                 dot={false}
                 connectNulls
               />
-            </LineChart>
+            </AreaChart>
           ) : (hasConsumptionDrill && drillMode === 'drilldown') ? (
-            <ComposedChart data={drilldownData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
+            <ComposedChart data={drilldownData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -3523,7 +3532,7 @@ export function TrendChart({
                   dataKey={id}
                   name={label}
                   stroke={color}
-                  strokeWidth={1.5}
+                  strokeWidth={2}
                   dot={false}
                   connectNulls
                 />
@@ -3532,12 +3541,12 @@ export function TrendChart({
           ) : (hasConsumptionDrill && drillMode === 'drillup') ? (
             // Monthly view — grouped bars (one bar per entity per month, not stacked)
             // This makes it easy to compare entities month-over-month.
-            <ComposedChart data={drillupData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
+            <ComposedChart data={drillupData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -3547,40 +3556,53 @@ export function TrendChart({
                   dataKey={id}
                   name={label}
                   fill={color}
-                  maxBarSize={32}
+                  maxBarSize={28}
+                  radius={[3, 3, 0, 0]}
                 />
               ))}
             </ComposedChart>
           ) : metric === 'nrw' ? (
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={36} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="#16a34a" width={28} tickFormatter={(v) => `${v}%`} />
+            <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke="hsl(var(--chart-1))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10 }} stroke="#16a34a" width={32} tickFormatter={(v) => `${v}%`} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" />
-              <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" />
+              <Bar yAxisId="vol" dataKey="production" fill="hsl(var(--chart-1))" name="Production (m³)" radius={[3, 3, 0, 0]} maxBarSize={32} />
+              <Bar yAxisId="vol" dataKey="consumption" fill="hsl(var(--chart-2))" name="Consumption (m³)" radius={[3, 3, 0, 0]} maxBarSize={32} />
               <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3, fill: "#16a34a" }} name="NRW %" />
             </ComposedChart>
           ) : metric === 'chemCost' ? (
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} />
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="chemCostFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--highlight))" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="hsl(var(--highlight))" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--highlight))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--highlight))' }} name="Chemical Cost (₱)" connectNulls />
-            </LineChart>
+              <Area type="monotone" dataKey="chemCost" stroke="hsl(var(--highlight))" strokeWidth={2.5} fill="url(#chemCostFill)" dot={false} name="Chemical Cost (₱)" connectNulls />
+            </AreaChart>
           ) : metric === 'powerCost' ? (
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} />
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="powerCostFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--chart-6))" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-6))" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--chart-6))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} dot={{ r: 2, fill: 'hsl(var(--chart-6))' }} name="Power Cost (₱)" connectNulls />
-            </LineChart>
+              <Area type="monotone" dataKey="powerCost" stroke="hsl(var(--chart-6))" strokeWidth={2.5} fill="url(#powerCostFill)" dot={false} name="Power Cost (₱)" connectNulls />
+            </AreaChart>
           ) : metric === 'productionCost' ? (
             // Production Cost — all lines as ₱/m³ (unit cost per cubic metre):
             //   Prod Cost  = Power Cost + Chem Cost          (teal, always visible)
@@ -3592,17 +3614,19 @@ export function TrendChart({
             //   Costs → Power tab: each monthly bill entry auto-derives a tariff row
             //   (total_amount ÷ kWh). That rate is stored in power_tariffs and looked
             //   up here using the latest effective_date ≤ each reading's date.
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis
                 tick={{ fontSize: 10 }}
                 stroke="hsl(var(--accent))"
                 tickFormatter={(v) => `₱${formatYAxis(v)}`}
                 width={44}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
                 formatter={(v: any, name: string) => [
                   v != null ? `₱${(+v).toFixed(4)}/m³` : '—',
                   name,
@@ -3622,13 +3646,15 @@ export function TrendChart({
           ) : metric === 'pv' ? (
             // PV Ratio — two lines: Grid-only PV and (Grid+Solar) PV.
             // PvTooltip and domain are defined/hoisted above the return().
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis
                 tick={{ fontSize: 10 }}
                 stroke="#f59e0b"
                 width={44}
+                axisLine={false}
+                tickLine={false}
                 domain={[
                   0,
                   (dataMax: number) => {
@@ -3650,7 +3676,7 @@ export function TrendChart({
                 dataKey={(d: any) => d.production > 0 ? +(d.kwh / d.production).toFixed(2) : null}
                 stroke="#f59e0b"
                 strokeWidth={2.5}
-                dot={{ r: 2, fill: '#f59e0b' }}
+                dot={false}
                 name="Grid PV (kWh/m³)"
                 connectNulls
               />
@@ -3662,7 +3688,7 @@ export function TrendChart({
                 stroke="#22c55e"
                 strokeWidth={2}
                 strokeDasharray="4 3"
-                dot={{ r: 2, fill: '#22c55e' }}
+                dot={false}
                 name="(Grid+Solar) PV (kWh/m³)"
                 connectNulls
               />
@@ -3719,10 +3745,10 @@ export function TrendChart({
               return (
                 <ComposedChart
                   data={kwhChartRows}
-                  margin={{ top: 4, right: 8, left: -12, bottom: 20 }}
+                  margin={{ top: 8, right: 8, left: -8, bottom: 20 }}
                   barSize={Math.max(3, Math.min(18, 400 / Math.max(kwhChartRows.length, 1)))}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
@@ -3730,12 +3756,15 @@ export function TrendChart({
                     textAnchor="end"
                     height={36}
                     interval="preserveStartEnd"
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     tickFormatter={formatYAxis}
                     width={44}
-                   
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <Tooltip content={<KwhTooltip />} />
                   {/* Solar — base of stack, no rounded corners */}
@@ -3744,7 +3773,7 @@ export function TrendChart({
                   )}
                   {/* Grid — top of stack, rounded upper corners */}
                   {hasGridData && kwhSource !== 'solar' && (
-                    <Bar dataKey="gridKwh"  name="⚡ Grid (kWh)"  fill="hsl(213,94%,68%)" stackId="kwh" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="gridKwh"  name="⚡ Grid (kWh)"  fill="hsl(213,94%,68%)" stackId="kwh" radius={[3, 3, 0, 0]} />
                   )}
                 </ComposedChart>
               );
@@ -3808,7 +3837,7 @@ export function TrendChart({
 
               return (
                 <ComposedChart data={phActiveData} margin={{ top: 8, right: 8, left: 0, bottom: phDrillMode === 'hourly' ? 32 : 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: phDrillMode === 'hourly' ? 8 : 10 }}
@@ -3819,14 +3848,17 @@ export function TrendChart({
                     interval={phDrillMode === 'hourly'
                       ? Math.max(0, Math.floor(phActiveData.length / 12) - 1)
                       : 'preserveStartEnd'}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <YAxis
                     tick={{ fontSize: 10 }}
                     stroke="hsl(var(--muted-foreground))"
                     domain={[0, 100]}
                     tickFormatter={(v) => `${v}%`}
-                    width={36}
-                   
+                    width={44}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <Tooltip content={<PhTooltip />} />
                   {/* ── Green zone ≥80% ── */}
@@ -3938,23 +3970,39 @@ export function TrendChart({
               />
             </AreaChart>
           ) : (
-            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={36} />
+            // ── Production / Recovery / TDS (default) — gradient area chart ────────
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="productionFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="consumptionFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--chart-2))" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="recoveryFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--chart-6))" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-6))" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip content={<NegativeAwareTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {metric === 'production' && (<>
-                <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
-                <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
+                {/* Render consumption behind production for the overlapping-area effect */}
+                <Area type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fill="url(#consumptionFill)" dot={false} name="Consumption (m³)" connectNulls />
+                <Area type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fill="url(#productionFill)" dot={false} name="Production (m³)" connectNulls />
               </>)}
               {metric === 'recovery' && roDrillMode === 'default' && (
-                <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
+                <Area type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2.5} fill="url(#recoveryFill)" dot={false} name="Recovery (%)" connectNulls />
               )}
               {metric === 'tds' && roDrillMode === 'default' && (
-                <Line type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} name="Permeate TDS (ppm)" />
+                <Area type="monotone" dataKey="tds" stroke="hsl(var(--accent))" strokeWidth={2.5} fill="url(#tdsFill)" dot={false} name="Permeate TDS (ppm)" connectNulls />
               )}
-            </LineChart>
+            </AreaChart>
           )}
         </ResponsiveContainer>
       </div>
