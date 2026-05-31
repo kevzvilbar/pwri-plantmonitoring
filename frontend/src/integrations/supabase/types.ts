@@ -1232,6 +1232,10 @@ export type Database = {
           backwash_mode: string
           created_at: string
           design_capacity_m3: number | null
+          /** Default filter housing type for this plant: 'Cartridge Filter' | 'Bag Filter'. Per-train rows inherit this when their own column is null. */
+          filter_housing_type: string
+          /** Default filter media type for this plant: 'AFM' | 'MMF'. Per-train rows inherit this when their own column is null. */
+          filter_media_type: string
           geofence_radius_m: number
           gps_lat: number | null
           gps_lng: number | null
@@ -1246,6 +1250,8 @@ export type Database = {
           backwash_mode?: string
           created_at?: string
           design_capacity_m3?: number | null
+          filter_housing_type?: string
+          filter_media_type?: string
           geofence_radius_m?: number
           gps_lat?: number | null
           gps_lng?: number | null
@@ -1260,6 +1266,8 @@ export type Database = {
           backwash_mode?: string
           created_at?: string
           design_capacity_m3?: number | null
+          filter_housing_type?: string
+          filter_media_type?: string
           geofence_radius_m?: number
           gps_lat?: number | null
           gps_lng?: number | null
@@ -1667,6 +1675,10 @@ export type Database = {
       ro_trains: {
         Row: {
           created_at: string
+          /** Per-train filter housing type override. Null = inherit from plants.filter_housing_type. */
+          filter_housing_type: string | null
+          /** Per-train filter media type override. Null = inherit from plants.filter_media_type. */
+          filter_media_type: string | null
           id: string
           name: string | null
           num_afm: number
@@ -1679,12 +1691,14 @@ export type Database = {
           status: Database["public"]["Enums"]["train_status"]
           train_number: number
           updated_at: string
-          /** FK → wells.id. When set, the Dashboard shows the well name instead of
-           *  the train name in "Per Well Source" quality cards (Raw TDS, Raw NTU). */
+          /** FK → wells.id. When set, Dashboard shows the well name instead of the
+           *  train name in "Per Well Source" quality cards (Raw TDS, Raw NTU). */
           well_id: string | null
         }
         Insert: {
           created_at?: string
+          filter_housing_type?: string | null
+          filter_media_type?: string | null
           id?: string
           name?: string | null
           num_afm?: number
@@ -1701,6 +1715,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          filter_housing_type?: string | null
+          filter_media_type?: string | null
           id?: string
           name?: string | null
           num_afm?: number
