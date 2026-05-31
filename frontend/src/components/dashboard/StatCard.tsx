@@ -136,7 +136,8 @@ export function PerWellSourceCard({
   unit: string;
   aggregate: number | null | undefined;
   rows: any[];
-  field: 'feed_tds' | 'turbidity_ntu' | 'permeate_tds';
+  /** 'tds_ppm' is used when rows come from well_readings (per-well source cards). */
+  field: 'feed_tds' | 'tds_ppm' | 'turbidity_ntu' | 'permeate_tds';
   plantCodeById: Map<string, string>;
   testId: string;
   decimals?: number;
@@ -198,7 +199,7 @@ export function PerWellSourceCard({
         <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((r) => (
             <div
-              key={`${r.plant_id}-${r.train_id ?? r.train_number}`}
+              key={`${r.plant_id}-${r.well_id ?? r.train_id ?? r.train_number}`}
               className="flex items-center justify-between text-[10px]"
             >
               <span className="text-muted-foreground truncate">{rowLabel(r)}</span>
