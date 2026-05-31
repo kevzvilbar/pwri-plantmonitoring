@@ -2027,12 +2027,19 @@ export type Database = {
           gps_lat: number | null
           gps_lng: number | null
           id: string
+          /** True when this record marks a meter replacement (resets cumulative volume). */
+          is_meter_replacement: boolean
           off_location_flag: boolean
           plant_id: string
           power_meter_reading: number | null
+          pressure_psi: number | null
           previous_reading: number | null
           reading_datetime: string
           recorded_by: string | null
+          /** Raw-water TDS at the wellhead (ppm). Entered in Operations → Well row. */
+          tds_ppm: number | null
+          /** Raw-water turbidity at the wellhead (NTU). Entered in Operations → Well row. */
+          turbidity_ntu: number | null
           well_id: string
         }
         Insert: {
@@ -2042,12 +2049,16 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_meter_replacement?: boolean
           off_location_flag?: boolean
           plant_id: string
           power_meter_reading?: number | null
+          pressure_psi?: number | null
           previous_reading?: number | null
           reading_datetime?: string
           recorded_by?: string | null
+          tds_ppm?: number | null
+          turbidity_ntu?: number | null
           well_id: string
         }
         Update: {
@@ -2057,12 +2068,16 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_meter_replacement?: boolean
           off_location_flag?: boolean
           plant_id?: string
           power_meter_reading?: number | null
+          pressure_psi?: number | null
           previous_reading?: number | null
           reading_datetime?: string
           recorded_by?: string | null
+          tds_ppm?: number | null
+          turbidity_ntu?: number | null
           well_id?: string
         }
         Relationships: [
