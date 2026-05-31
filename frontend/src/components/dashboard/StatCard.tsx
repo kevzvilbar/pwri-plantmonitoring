@@ -1,8 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { StatusPill } from '@/components/StatusPill';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { StatTone, TONE_BG, TONE_ICON } from './types';
+
+// ── Geometric sans-serif for KPI numbers — matches the Solar/Grid/Total cards ──
+// DM Sans is a low-contrast geometric sans with perfectly circular bowls,
+// identical stroke weight, and clean tabular figures. This is the same
+// typeface used by the energy cluster cards.
+const GEO_FONT = "'DM Sans', 'Outfit', ui-sans-serif, system-ui, sans-serif";
+
+// Inject the Google Font link once into <head> (no-op if already present).
+function useDMSans() {
+  useEffect(() => {
+    const id = 'dm-sans-link';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap';
+    document.head.appendChild(link);
+  }, []);
+}
 
 // Tiny up/down/flat arrow with percent label — shown BELOW the value.
 // Renders nothing when `delta` is null or non-finite.
@@ -49,6 +68,7 @@ export function StatCard({
   // Unit appended to each row value; defaults to the card's own `unit`.
   expandUnit?: string;
 }) {
+  useDMSans();
   const [expanded, setExpanded] = useState(false);
 
   const liveRows    = (expandRows ?? []).filter((r) => r.value != null);
@@ -99,7 +119,10 @@ export function StatCard({
       </div>
 
       {/* ── Value row ── */}
-      <div className={`mt-2 font-mono-num text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}>
+      <div
+        className={`mt-2 text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}
+        style={{ fontFamily: GEO_FONT, fontFeatureSettings: '"tnum"' }}
+      >
         {value}
         {unit && <span className={`font-sans font-normal text-muted-foreground ml-1 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
       </div>
@@ -117,7 +140,7 @@ export function StatCard({
           {liveRows.map((row) => (
             <div key={row.label} className="flex items-center justify-between text-[10px]">
               <span className="text-muted-foreground truncate">{row.label}</span>
-              <span className="font-mono-num text-foreground/90 tabular-nums shrink-0 ml-2">
+              <span className="text-foreground/90 tabular-nums shrink-0 ml-2" style={{ fontFamily: GEO_FONT }}>
                 {row.value}
                 {rowUnit && <span className="text-muted-foreground ml-0.5">{rowUnit}</span>}
               </span>
@@ -159,6 +182,7 @@ export function PerWellSourceCard({
   // code so the user can tell which plant each train belongs to.
   multiPlant?: boolean;
 }) {
+  useDMSans();
   const [expanded, setExpanded] = useState(false);
 
   // Filter out rows with no reading for this metric — they'd render as
@@ -212,7 +236,7 @@ export function PerWellSourceCard({
       </div>
 
       {/* ── Value ── */}
-      <div className="mt-2 font-mono-num text-foreground leading-none whitespace-nowrap text-2xl font-bold">
+      <div className="mt-2 text-foreground leading-none whitespace-nowrap text-2xl font-bold" style={{ fontFamily: GEO_FONT, fontFeatureSettings: '"tnum"' }}>
         {aggregate ?? '—'}
         {unit && <span className="font-sans font-normal text-muted-foreground ml-1 text-xs">{unit}</span>}
       </div>
@@ -226,7 +250,7 @@ export function PerWellSourceCard({
               className="flex items-center justify-between text-[10px]"
             >
               <span className="text-muted-foreground truncate">{rowLabel(r)}</span>
-              <span className="font-mono-num text-foreground/90 tabular-nums shrink-0 ml-2">
+              <span className="text-foreground/90 tabular-nums shrink-0 ml-2" style={{ fontFamily: GEO_FONT }}>
                 {decimals === 0 ? Math.round(r[field]) : (+r[field]).toFixed(decimals)}
               </span>
             </div>
