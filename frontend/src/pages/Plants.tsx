@@ -3280,7 +3280,7 @@ function BackwashModeCard({ plant }: { plant: any }) {
   const [mode, setMode] = useState<'independent' | 'synchronized'>(plant.backwash_mode ?? 'independent');
 
   // Derive the media type label dynamically from the plant setting
-  const mediaLabel = (plant as any).filter_media_type ?? 'AFM';
+  const mediaLabel = plant.filter_media_type ?? 'AFM';
 
   const save = async (next: 'independent' | 'synchronized') => {
     if (next === mode) return;
@@ -5659,8 +5659,8 @@ function PlantComponentTypeCard({ plant, embedded = false }: { plant: any; embed
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>((plant as any).filter_media_type ?? 'AFM');
-  const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>((plant as any).filter_housing_type ?? 'Cartridge Filter');
+  const [mediaType, setMediaTypeState] = useState<'AFM' | 'MMF'>(plant.filter_media_type ?? 'AFM');
+  const [filterType, setFilterTypeState] = useState<'Cartridge Filter' | 'Bag Filter'>(plant.filter_housing_type ?? 'Cartridge Filter');
 
   // Independent collapse state for each row — collapsed by default
   const [mediaOpen, setMediaOpen]   = useState(false);
@@ -5673,11 +5673,11 @@ function PlantComponentTypeCard({ plant, embedded = false }: { plant: any; embed
     setSaving(true);
     const { error } = await supabase
       .from('plants')
-      .update({ filter_media_type: mediaType, filter_housing_type: filterType } as any)
+      .update({ filter_media_type: mediaType, filter_housing_type: filterType })
       .eq('id', plant.id);
     setSaving(false);
     if (error) {
-      toast.error(`Could not save plant-level type: ${error.message}. Apply DB migration to add filter_media_type / filter_housing_type columns to plants.`);
+      toast.error(`Could not save plant settings: ${error.message}`);
       return;
     }
     toast.success('Component types updated for all trains');
@@ -5686,8 +5686,8 @@ function PlantComponentTypeCard({ plant, embedded = false }: { plant: any; embed
   };
 
   const cancel = () => {
-    setMediaTypeState((plant as any).filter_media_type ?? 'AFM');
-    setFilterTypeState((plant as any).filter_housing_type ?? 'Cartridge Filter');
+    setMediaTypeState(plant.filter_media_type ?? 'AFM');
+    setFilterTypeState(plant.filter_housing_type ?? 'Cartridge Filter');
     setEditing(false);
   };
 
@@ -5825,8 +5825,8 @@ function EditTrainDialog({
   const { isManager } = useAuth();
 
   // Plant-wide type defaults
-  const plantMediaType: 'AFM' | 'MMF' = (plant as any).filter_media_type ?? 'AFM';
-  const plantFilterType: 'Cartridge Filter' | 'Bag Filter' = (plant as any).filter_housing_type ?? 'Cartridge Filter';
+  const plantMediaType: 'AFM' | 'MMF' = plant.filter_media_type ?? 'AFM';
+  const plantFilterType: 'Cartridge Filter' | 'Bag Filter' = plant.filter_housing_type ?? 'Cartridge Filter';
 
   const [form, setForm] = useState({
     name: train.name ?? '',
@@ -5837,10 +5837,10 @@ function EditTrainDialog({
     num_controllers: String(train.num_controllers ?? 0),
     num_filter_housings: String(train.num_filter_housings ?? 0),
     // Per-train overrides (fallback to plant-wide)
-    filter_media_type: (train as any).filter_media_type ?? plantMediaType,
-    filter_housing_type: (train as any).filter_housing_type ?? plantFilterType,
+    filter_media_type: train.filter_media_type ?? plantMediaType,
+    filter_housing_type: train.filter_housing_type ?? plantFilterType,
     // Source well — drives "PER WELL SOURCE" labels on the Dashboard
-    well_id: (train as any).well_id ?? '',
+    well_id: train.well_id ?? '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -7995,9 +7995,9 @@ function TrainsList({ plantId }: { plantId: string }) {
   };
 
   const effectiveMediaType = (t: any) =>
-    (t as any).filter_media_type ?? (plant as any)?.filter_media_type ?? 'AFM';
+    t.filter_media_type ?? plant?.filter_media_type ?? 'AFM';
   const effectiveFilterType = (t: any) =>
-    (t as any).filter_housing_type ?? (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
+    t.filter_housing_type ?? plant?.filter_housing_type ?? 'Cartridge Filter';
 
   // Per-train active component graph: maps trainId → active section key
   // Sections: 'afm' | 'booster' | 'hpp' | 'ro' | null (none expanded)
@@ -8236,14 +8236,14 @@ function TrainsList({ plantId }: { plantId: string }) {
         defaultTrainNumber={(trains?.length ?? 0) + 1}
         onSubmit={doAddTrain}
         loading={addTrainBusy}
-        plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
-        plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
+        plantFilterType={plant?.filter_housing_type ?? 'Cartridge Filter'}
+        plantMediaType={plant?.filter_media_type ?? 'AFM'}
       />
       {showTrainCsv && (
         <TrainCsvImportDialog
           plantId={plantId}
-          plantFilterType={(plant as any)?.filter_housing_type ?? 'Cartridge Filter'}
-          plantMediaType={(plant as any)?.filter_media_type ?? 'AFM'}
+          plantFilterType={plant?.filter_housing_type ?? 'Cartridge Filter'}
+          plantMediaType={plant?.filter_media_type ?? 'AFM'}
           onClose={() => { setShowTrainCsv(false); qc.invalidateQueries({ queryKey: ['ro-trains', plantId] }); }}
         />
       )}
