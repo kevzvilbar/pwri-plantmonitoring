@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/popover';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  Legend, ComposedChart, Bar, BarChart, ReferenceLine,
+  Legend, ComposedChart, Bar, BarChart, ReferenceLine, Area, AreaChart,
 } from 'recharts';
 import { format, subDays, startOfDay, addDays } from 'date-fns';
 import { toast } from 'sonner';
@@ -3851,6 +3851,92 @@ export function TrendChart({
                 </ComposedChart>
               );
             })()
+          ) : metric === 'rawwater' ? (
+            // ── Raw Water — smooth gradient area chart ────────────────────────────
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="rawWaterFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--chart-1))" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                vertical={false}
+                strokeOpacity={0.6}
+              />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--muted-foreground))"
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--muted-foreground))"
+                tickFormatter={formatYAxis}
+                width={44}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip content={<NegativeAwareTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area
+                type="monotone"
+                dataKey="rawwater"
+                stroke="hsl(var(--chart-1))"
+                strokeWidth={2.5}
+                fill="url(#rawWaterFill)"
+                dot={false}
+                name="Raw Water (m³)"
+                connectNulls
+              />
+            </AreaChart>
+          ) : (metric === 'tds' && roDrillMode === 'default') ? (
+            // ── Permeate TDS — smooth gradient area chart ─────────────────────────
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="tdsFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="hsl(var(--accent))" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                vertical={false}
+                strokeOpacity={0.6}
+              />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--muted-foreground))"
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="hsl(var(--muted-foreground))"
+                tickFormatter={formatYAxis}
+                width={44}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip content={<NegativeAwareTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area
+                type="monotone"
+                dataKey="tds"
+                stroke="hsl(var(--accent))"
+                strokeWidth={2.5}
+                fill="url(#tdsFill)"
+                dot={false}
+                name="Permeate TDS (ppm)"
+                connectNulls
+              />
+            </AreaChart>
           ) : (
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -3862,9 +3948,6 @@ export function TrendChart({
                 <Line type="monotone" dataKey="production" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Production (m³)" />
                 <Line type="monotone" dataKey="consumption" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="Consumption (m³)" />
               </>)}
-              {metric === 'rawwater' && (
-                <Line type="monotone" dataKey="rawwater" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="Raw Water (m³)" />
-              )}
               {metric === 'recovery' && roDrillMode === 'default' && (
                 <Line type="monotone" dataKey="recovery" stroke="hsl(var(--chart-6))" strokeWidth={2} dot={{ r: 2 }} name="Recovery (%)" />
               )}
