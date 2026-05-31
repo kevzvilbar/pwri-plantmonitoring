@@ -1679,6 +1679,9 @@ export type Database = {
           status: Database["public"]["Enums"]["train_status"]
           train_number: number
           updated_at: string
+          /** FK → wells.id. When set, the Dashboard shows the well name instead of
+           *  the train name in "Per Well Source" quality cards (Raw TDS, Raw NTU). */
+          well_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1694,6 +1697,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["train_status"]
           train_number: number
           updated_at?: string
+          well_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1709,6 +1713,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["train_status"]
           train_number?: number
           updated_at?: string
+          well_id?: string | null
         }
         Relationships: [
           {
@@ -1716,6 +1721,13 @@ export type Database = {
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_trains_well_id_fkey"
+            columns: ["well_id"]
+            isOneToOne: false
+            referencedRelation: "wells"
             referencedColumns: ["id"]
           },
         ]
