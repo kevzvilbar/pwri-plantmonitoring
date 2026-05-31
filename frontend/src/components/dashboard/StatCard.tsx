@@ -4,9 +4,8 @@ import { StatusPill } from '@/components/StatusPill';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { StatTone, TONE_BG, TONE_ICON } from './types';
 
-// Tiny up/down/flat arrow with percent label. Renders nothing when
-// `delta` is null or non-finite. Used inside StatCard to show "vs
-// previous day" trends on the highlighted KPIs.
+// Tiny up/down/flat arrow with percent label — shown BELOW the value.
+// Renders nothing when `delta` is null or non-finite.
 export function TrendBadge({ delta }: { delta: number | null }) {
   if (delta === null || !Number.isFinite(delta)) return null;
   const abs = Math.abs(delta);
@@ -15,9 +14,9 @@ export function TrendBadge({ delta }: { delta: number | null }) {
     ? 'text-muted-foreground'
     : delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${cls}`} title="vs previous day">
-      <Icon className="h-3 w-3" />
-      {abs < 0.5 ? '0%' : `${abs.toFixed(0)}%`}
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${cls}`} title="vs previous day">
+      <Icon className="h-3.5 w-3.5" />
+      {abs < 0.5 ? '0%' : `${abs.toFixed(0)}% vs prev day`}
     </span>
   );
 }
@@ -67,10 +66,18 @@ export function StatCard({
       className={`stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all ${onClick ? 'cursor-pointer' : 'cursor-default'} ${lg ? 'p-3.5' : 'p-3'} ${baseBg} ${toneBg} ${calcBg}`}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <Icon className={`shrink-0 ${lg ? 'h-5 w-5' : 'h-4 w-4'} ${iconCls}`} />
-        <div className="flex items-center gap-1">
-          {trend !== null && trend !== undefined && <TrendBadge delta={trend} />}
+      {/* ── Header row: icon · LABEL (uppercase) · badges/expand ── */}
+      <div className="flex items-center justify-between gap-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          <Icon className={`shrink-0 ${lg ? 'h-4 w-4' : 'h-3.5 w-3.5'} ${iconCls}`} />
+          <span className={`uppercase tracking-wide font-semibold truncate leading-none ${lg ? 'text-[11px]' : 'text-[10px]'} ${tone ? iconCls : 'text-muted-foreground'}`}>
+            {label}
+          </span>
+          {threshold && (
+            <span className="text-[9px] text-muted-foreground/60 shrink-0">(limit {threshold})</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           {calc && (
             <span
               className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-200"
@@ -90,14 +97,21 @@ export function StatCard({
           )}
         </div>
       </div>
-      <div className={`mt-2 font-mono-num text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis ${lg ? 'text-2xl sm:text-3xl' : 'text-xl'}`}>
+
+      {/* ── Value row ── */}
+      <div className={`mt-2 font-mono-num text-foreground leading-none whitespace-nowrap overflow-hidden text-ellipsis ${lg ? 'text-2xl sm:text-3xl font-bold' : 'text-2xl font-bold'}`}>
         {value}
-        {unit && <span className={`font-sans text-muted-foreground ml-1 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
+        {unit && <span className={`font-sans font-normal text-muted-foreground ml-1 ${lg ? 'text-sm' : 'text-xs'}`}>{unit}</span>}
       </div>
-      <div className={`text-muted-foreground mt-1 leading-tight break-words ${lg ? 'text-xs font-medium' : 'text-[11px]'}`}>
-        {label}
-        {threshold && <span className="ml-1 text-[10px] text-muted-foreground/70">(limit {threshold})</span>}
-      </div>
+
+      {/* ── Below-value: trend badge (matches Image 1 "↑ 1.4% vs prev day") ── */}
+      {trend !== null && trend !== undefined && (
+        <div className="mt-1">
+          <TrendBadge delta={trend} />
+        </div>
+      )}
+
+      {/* ── Per-train expand rows ── */}
       {showExpand && expanded && (
         <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((row) => (
@@ -169,9 +183,15 @@ export function PerWellSourceCard({
       className="stat-card min-w-0 hover:border-primary/40 hover:shadow-sm transition-all p-3 bg-gradient-to-br from-card to-card/60"
       data-testid={testId}
     >
-      <div className="flex items-start justify-between gap-2">
-        <Icon className="shrink-0 h-4 w-4 text-muted-foreground" />
-        <div className="flex items-center gap-1">
+      {/* ── Header: icon · LABEL (uppercase) · per-well badge + expand ── */}
+      <div className="flex items-center justify-between gap-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          <Icon className="shrink-0 h-3.5 w-3.5 text-muted-foreground" />
+          <span className="uppercase tracking-wide font-semibold truncate leading-none text-[10px] text-muted-foreground">
+            {label}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           <span
             className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted/60 text-muted-foreground"
             title="Raw water characteristics measured at the RO feed manifold (per RO train)"
@@ -190,11 +210,14 @@ export function PerWellSourceCard({
           )}
         </div>
       </div>
-      <div className="mt-2 font-mono-num text-foreground leading-none whitespace-nowrap text-xl">
+
+      {/* ── Value ── */}
+      <div className="mt-2 font-mono-num text-foreground leading-none whitespace-nowrap text-2xl font-bold">
         {aggregate ?? '—'}
-        {unit && <span className="font-sans text-muted-foreground ml-1 text-xs">{unit}</span>}
+        {unit && <span className="font-sans font-normal text-muted-foreground ml-1 text-xs">{unit}</span>}
       </div>
-      <div className="text-muted-foreground mt-1 leading-tight text-[11px]">{label}</div>
+
+      {/* ── Expand rows ── */}
       {showBreakdown && expanded && (
         <div className="mt-2 pt-1.5 border-t space-y-0.5 max-h-24 overflow-y-auto">
           {liveRows.map((r) => (
