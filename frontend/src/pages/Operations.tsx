@@ -6093,7 +6093,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
   // Power-specific: toggle grid meter replacement
   const toggleGridReplacement = async (r: any) => {
     setTogglingGridId(r.id);
-    const next = !r.is_grid_replacement;
+    // Use the same fallback as the display: is_grid_replacement ?? is_meter_replacement.
+    // Without this, when is_grid_replacement is null the toggle always evaluates
+    // !null → true and can never be unchecked.
+    const currentRepl = !!(r.is_grid_replacement ?? r.is_meter_replacement);
+    const next = !currentRepl;
     const { error } = await (supabase.from('power_readings') as any)
       .update({ is_grid_replacement: next }).eq('id', r.id);
     setTogglingGridId(null);
