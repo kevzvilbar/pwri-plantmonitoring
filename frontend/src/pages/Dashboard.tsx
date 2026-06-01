@@ -1865,20 +1865,75 @@ export default function Dashboard() {
     staleTime: 0,
     refetchInterval: 60_000,
   });
+  // ── FIX: StatCard cost sources now mirror TrendChart's productionCost computation ──
+  // Previous: StatCard read production_costs.power_cost (stale legacy column)
+  //           and production_costs.chem_cost only (missed chemical_dosing_logs).
+  // Now:      Power cost  → power_tariffs.rate_per_kwh × kWh (same as chart)
+  //           Chem cost   → production_costs.chem_cost + chemical_dosing_logs (same as chart)
   // If no row exists for today's date, fall back to the latest available row per
   // plant so the dashboard never displays ₱0 when real data exists.
   // `costDataDate` + `costIsStale` drive the "as of MMM d" badge in the cluster header.
   const { data: todayCostsRaw } = useQuery({
     queryKey: ['dash-costs-today', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { rows: [] as any[], costDataDate: null as string | null };
+      if (!plantIds.length) return {
+        rows: [] as any[], costDataDate: null as string | null,
+        tariffByPlant: new Map<string, number>(), dashDosingPeso: 0,
+      };
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const { data: todayData } = await supabase
-        .from('production_costs')
-        .select('chem_cost,power_cost,total_cost,plant_id,cost_date')
-        .in('plant_id', plantIds)
-        .eq('cost_date', todayStr);
-      if ((todayData ?? []).length) return { rows: todayData!, costDataDate: todayStr };
+
+      // Fetch production_costs, power_tariffs, dosing logs, and chemical prices in parallel
+      const [prodCostRes, tariffRes, dosingRes, pricesRes] = await Promise.all([
+        supabase.from('production_costs')
+          .select('chem_cost,power_cost,total_cost,plant_id,cost_date')
+          .in('plant_id', plantIds)
+          .eq('cost_date', todayStr),
+        // Latest effective tariff per plant (ordered DESC → first per plant = most recent ≤ today)
+        supabase.from('power_tariffs')
+          .select('plant_id,effective_date,rate_per_kwh')
+          .in('plant_id', plantIds)
+          .lte('effective_date', todayStr)
+          .order('effective_date', { ascending: false }),
+        // Today's dosing log entries (matches TrendChart's chemical cost accumulation)
+        supabase.from('chemical_dosing_logs')
+          .select('log_datetime,calculated_cost,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg')
+          .in('plant_id', plantIds)
+          .gte('log_datetime', `${todayStr}T00:00:00`)
+          .lte('log_datetime', `${todayStr}T23:59:59`),
+        // Current prices for live fallback when calculated_cost is absent
+        supabase.from('chemical_prices')
+          .select('chemical_name,unit_price')
+          .lte('effective_date', todayStr)
+          .order('effective_date', { ascending: false }),
+      ]);
+
+      // Build tariff map: plant_id → latest ₱/kWh rate (results ordered DESC, first per plant wins)
+      const tariffByPlant = new Map<string, number>();
+      for (const t of (tariffRes.data ?? []) as any[]) {
+        if (!tariffByPlant.has(t.plant_id)) tariffByPlant.set(t.plant_id, +t.rate_per_kwh);
+      }
+
+      // Chemical cost from dosing logs (mirrors TrendChart lines 1398–1410)
+      const priceMap: Record<string, number> = {};
+      for (const p of (pricesRes.data ?? []) as any[]) {
+        if (!(p.chemical_name in priceMap)) priceMap[p.chemical_name] = +p.unit_price;
+      }
+      const DOSING_KEYS = [
+        { key: 'chlorine_kg',    name: 'Chlorine'     },
+        { key: 'smbs_kg',        name: 'SMBS'         },
+        { key: 'anti_scalant_l', name: 'Anti Scalant' },
+        { key: 'soda_ash_kg',    name: 'Soda Ash'     },
+      ];
+      let dashDosingPeso = 0;
+      for (const r of (dosingRes.data ?? []) as any[]) {
+        const stored = +r.calculated_cost || 0;
+        const live   = DOSING_KEYS.reduce((s, c) => s + (+r[c.key] || 0) * (priceMap[c.name] ?? 0), 0);
+        dashDosingPeso += stored > 0 ? stored : live;
+      }
+
+      if ((prodCostRes.data ?? []).length) {
+        return { rows: prodCostRes.data!, costDataDate: todayStr, tariffByPlant, dashDosingPeso };
+      }
       // Fallback: latest cost row per plant
       const { data: recent } = await supabase
         .from('production_costs')
@@ -1891,15 +1946,18 @@ export default function Dashboard() {
         if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
       });
       const rows = Array.from(latestByPlant.values());
-      return { rows, costDataDate: rows[0]?.cost_date ?? null };
+      return { rows, costDataDate: rows[0]?.cost_date ?? null, tariffByPlant, dashDosingPeso };
     },
     enabled: plantIds.length > 0,
     staleTime: 0,
     refetchInterval: 60_000,
   });
-  const todayCosts   = todayCostsRaw?.rows ?? [];
-  const costDataDate = todayCostsRaw?.costDataDate ?? null;
-  const costIsStale  = costDataDate != null && costDataDate !== format(new Date(), 'yyyy-MM-dd');
+  const todayCosts       = todayCostsRaw?.rows ?? [];
+  const costDataDate     = todayCostsRaw?.costDataDate ?? null;
+  const costIsStale      = costDataDate != null && costDataDate !== format(new Date(), 'yyyy-MM-dd');
+  // Per-plant tariff rates and dosing ₱ total — consumed by computePowerKwh and chemCost below
+  const dashTariffByPlant = todayCostsRaw?.tariffByPlant ?? new Map<string, number>();
+  const dashDosingPeso    = todayCostsRaw?.dashDosingPeso ?? 0;
   // Latest daily summary fallback per plant (today first, else latest)
   const { data: dailySummary } = useQuery({
     queryKey: ['dash-summary-recent', plantIds],
@@ -1980,14 +2038,23 @@ export default function Dashboard() {
   // Compute daily grid kWh from raw meter readings (same priority order as Plants.tsx fix).
   // Priority: raw JSONB multi-meter delta × CT multiplier → single-meter delta →
   //           daily_consumption_kwh fallback → daily_grid_kwh fallback.
+  // ── FIX: computePowerKwh now also returns powerCostPeso when tariffByPlant is
+  // supplied. This aligns the StatCard Power Cost with the chart's computation
+  // (chart: power_readings kWh × power_tariffs.rate_per_kwh / production_m³).
+  // Previously the StatCard read production_costs.power_cost, which is a stale
+  // legacy column that the chart ignores — causing the visible ₱225 vs chart
+  // discrepancy. Now both paths share the same kWh × tariff formula.
   function computePowerKwh(
     currentRows: any[],
     prevRows: any[],
     configMap: Map<string, number[]> | undefined,
-  ): number {
+    tariffByPlant?: Map<string, number>, // per-plant ₱/kWh rate from power_tariffs
+  ): { kwh: number; powerCostPeso: number | null } {
     const prevByPlant = new Map<string, any>();
     for (const p of prevRows) prevByPlant.set(p.plant_id, p);
-    let total = 0;
+    let totalKwh = 0;
+    let totalCostPeso = 0;
+    let hasTariff = false;
     for (const r of currentRows) {
       if (r.is_meter_replacement) continue;
       const pid      = r.plant_id;
@@ -2019,12 +2086,21 @@ export default function Dashboard() {
         else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
           kwh = +r.daily_grid_kwh;
       }
-      total += kwh;
+      totalKwh += kwh;
+
+      // Accumulate ₱ cost per plant: kWh × tariff rate (same formula as chart)
+      const rate = tariffByPlant?.get(pid) ?? null;
+      if (rate != null && kwh > 0) {
+        totalCostPeso += kwh * rate;
+        hasTariff = true;
+      }
     }
-    return total;
+    return { kwh: totalKwh, powerCostPeso: hasTariff ? totalCostPeso : null };
   }
 
-  const kwh  = computePowerKwh(todayPower, todayPowerRaw?.prevRows ?? [], dashPowerConfigMap);
+  const { kwh, powerCostPeso: todayPowerCostPeso } = computePowerKwh(
+    todayPower, todayPowerRaw?.prevRows ?? [], dashPowerConfigMap, dashTariffByPlant,
+  );
 
   // NRW uses Production (product meter output) vs Consumption (locator billed)
   const nrw = calc.nrw(production, consumption);
@@ -2047,7 +2123,7 @@ export default function Dashboard() {
     computePivotFromReadingsNoCache(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
   ), [yLocators, _yesterdayKey]);
 
-  const yKwh = computePowerKwh(yPower?.rows ?? [], yPower?.prevRows ?? [], dashPowerConfigMap);
+  const { kwh: yKwh } = computePowerKwh(yPower?.rows ?? [], yPower?.prevRows ?? [], dashPowerConfigMap);
   const dProduction = pctDelta(production, yProduction);
   const dConsumption = pctDelta(consumption, yConsumption);
   const dRawWater = pctDelta(rawWaterVol, yRawWaterVol);
@@ -2150,13 +2226,29 @@ export default function Dashboard() {
     return m;
   }, [plants]);
 
-  // Costs aggregate (today or most-recent fallback).
-  // Use null when the table has no rows at all (no data ever entered) so the
-  // stat cards can render '—' instead of the misleading ₱0.
-  const hasCostData    = todayCosts.length > 0;
-  const chemCost       = hasCostData ? todayCosts.reduce((s, r: any) => s + (+r.chem_cost  || 0), 0) : null;
-  const powerCost      = hasCostData ? todayCosts.reduce((s, r: any) => s + (+r.power_cost || 0), 0) : null;
-  const productionCost = hasCostData ? (chemCost! + powerCost!) : null;
+  // ── Cost aggregates (aligned with TrendChart productionCost computation) ──────
+  // Power cost:  kwh × tariff rate (from power_tariffs — same formula as chart)
+  //              was: production_costs.power_cost (stale legacy column the chart ignores)
+  // Chemical:    production_costs.chem_cost + today's chemical_dosing_logs
+  //              was: production_costs.chem_cost only (missed dosing log entries)
+  // Show '—' when no data has ever been entered (both sources empty) to avoid ₱0 mislead.
+  const hasCostData = todayCosts.length > 0;
+
+  // Chemical cost: legacy rollup + today's dosing logs (mirrors chart's costReadings merge)
+  const prodCostsChem = todayCosts.reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
+  const chemCostTotal = prodCostsChem + dashDosingPeso;
+  const chemCost      = (chemCostTotal > 0) ? chemCostTotal
+    : hasCostData ? null  // row exists but all-zero — still show '—'
+    : null;
+
+  // Power cost: todayPowerCostPeso is from computePowerKwh (kwh × tariff per plant).
+  // Falls back to null when no tariff rate has been configured yet.
+  const powerCost = todayPowerCostPeso != null ? +todayPowerCostPeso.toFixed(0) : null;
+
+  // Total: show when at least one component is available
+  const productionCost = (chemCost != null || powerCost != null)
+    ? (chemCost ?? 0) + (powerCost ?? 0)
+    : null;
 
   // Pull latest daily_plant_summary per plant (for blending, downtime, raw water)
   const latestPerPlant = useMemo(() => {
@@ -2575,12 +2667,14 @@ export default function Dashboard() {
           calc
           calcTooltip={
             costIsStale && costDataDate
-              ? `Production Cost = Power + Chem (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
-              : 'Production Cost = Power Cost + Chemical Cost (today)'
+              ? `Production Cost = (kWh × tariff rate) + Chemical Cost (latest data: ${format(new Date(costDataDate + 'T00:00:00'), 'MMM d, yyyy')})`
+              : 'Production Cost = Power Cost (kWh × ₱/kWh) + Chemical Cost (today)'
           }
           value={productionCost == null ? '—' : `₱${fmtNum(productionCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={Zap} accent="text-chart-6" label="Power Cost"
+          calc
+          calcTooltip="Power Cost = Power kWh × tariff rate (₱/kWh) from power_tariffs — same formula as chart"
           value={powerCost == null ? '—' : `₱${fmtNum(powerCost, 0)}`}
           onClick={handleMetricClick('productionCost', 'Production Cost (Power + Chemical)')} />
         <StatCard icon={FlaskConical} accent="text-highlight" label="Chemical Cost"
