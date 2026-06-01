@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
@@ -948,6 +948,55 @@ export function TrendChart({
   // Toggle for the inline data summary table
   const [showSummary, setShowSummary] = useState(false);
 
+  // ── Supabase Realtime: immediate chart refresh on data insert ─────────────
+  // Without this, the chart relied only on a 60-second refetchInterval poll.
+  // Any INSERT/UPDATE/DELETE on the tables below triggers instant
+  // invalidation of the relevant chart query, causing an immediate refetch.
+  //
+  // Tables watched:
+  //   power_readings       — kWh bars + PV ratio + Production Cost power line
+  //   chemical_dosing_logs — Production Cost chem line
+  //   production_costs     — Production Cost chem line (legacy manual entry)
+  //
+  // We also re-invalidate ['trend-bill-multipliers'] and ['trend-power-config']
+  // because a stale multiplier causes newly-inserted readings to show the raw
+  // delta (e.g. "11") instead of the CT-multiplied value (e.g. "26,400 kWh").
+  const queryClient = useQueryClient();
+  const plantIdsKey = plantIds.join(',');
+  useEffect(() => {
+    if (!plantIds.length) return;
+
+    const powerCh = supabase
+      .channel(`trend-realtime-power-${plantIdsKey}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'power_readings' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['trend-power'] });
+        queryClient.invalidateQueries({ queryKey: ['trend-bill-multipliers'] });
+        queryClient.invalidateQueries({ queryKey: ['trend-power-config'] });
+      })
+      .subscribe();
+
+    const chemCh = supabase
+      .channel(`trend-realtime-chem-${plantIdsKey}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chemical_dosing_logs' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['trend-cost'] });
+      })
+      .subscribe();
+
+    const costCh = supabase
+      .channel(`trend-realtime-cost-${plantIdsKey}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_costs' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['trend-cost'] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(powerCh);
+      supabase.removeChannel(chemCh);
+      supabase.removeChannel(costCh);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plantIdsKey]);
+
   // ── Unified view state (production / nrw) ────────────────────────────────
   // Two independent axes replace the old drillMode + prodDrillSource trio:
   //   viewGran     → time granularity  (daily | monthly)
@@ -1460,7 +1509,10 @@ export function TrendChart({
       return map;
     },
     enabled: plantIds.length > 0 && metric === 'kwh',
-    staleTime: 120_000,
+    // staleTime 0: a stale multiplier causes newly-inserted readings to show
+    // the raw meter delta instead of the CT-multiplied kWh value. Always
+    // revalidate so the chart is correct immediately after any insert.
+    staleTime: 0,
   });
 
   // Per-plant, per-meter CT multiplier arrays from plant_power_config.
@@ -1483,7 +1535,7 @@ export function TrendChart({
       return map;
     },
     enabled: plantIds.length > 0 && metric === 'kwh',
-    staleTime: 120_000,
+    staleTime: 0,
   });
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
