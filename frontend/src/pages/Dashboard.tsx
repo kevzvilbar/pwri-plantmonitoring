@@ -1898,8 +1898,9 @@ export default function Dashboard() {
         supabase.from('chemical_dosing_logs')
           .select('log_datetime,calculated_cost,plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg')
           .in('plant_id', plantIds)
-          .gte('log_datetime', `${todayStr}T00:00:00`)
-          .lte('log_datetime', `${todayStr}T23:59:59`),
+          // FIX: use UTC ISO strings so timestamptz comparisons are correct for UTC+8
+          .gte('log_datetime', new Date(todayStr + 'T00:00:00').toISOString())
+          .lte('log_datetime', new Date(todayStr + 'T23:59:59').toISOString()),
         // Current prices for live fallback when calculated_cost is absent
         supabase.from('chemical_prices')
           .select('chemical_name,unit_price')
