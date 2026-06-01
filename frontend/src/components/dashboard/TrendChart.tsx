@@ -966,8 +966,15 @@ export function TrendChart({
   useEffect(() => {
     if (!plantIds.length) return;
 
+    // Use a per-invocation unique suffix so each effect run always gets a
+    // brand-new Supabase channel instance. Without this, React StrictMode's
+    // double-invoke causes the second run to call .channel(sameName) which
+    // returns the already-subscribed channel from the first run, and then
+    // .on('postgres_changes', ...) throws "cannot add callbacks after subscribe()".
+    const uid = Math.random().toString(36).slice(2, 9);
+
     const powerCh = supabase
-      .channel(`trend-realtime-power-${plantIdsKey}`)
+      .channel(`trend-rt-power-${plantIdsKey}-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'power_readings' }, () => {
         queryClient.invalidateQueries({ queryKey: ['trend-power'] });
         queryClient.invalidateQueries({ queryKey: ['trend-bill-multipliers'] });
@@ -976,14 +983,14 @@ export function TrendChart({
       .subscribe();
 
     const chemCh = supabase
-      .channel(`trend-realtime-chem-${plantIdsKey}`)
+      .channel(`trend-rt-chem-${plantIdsKey}-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chemical_dosing_logs' }, () => {
         queryClient.invalidateQueries({ queryKey: ['trend-cost'] });
       })
       .subscribe();
 
     const costCh = supabase
-      .channel(`trend-realtime-cost-${plantIdsKey}`)
+      .channel(`trend-rt-cost-${plantIdsKey}-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_costs' }, () => {
         queryClient.invalidateQueries({ queryKey: ['trend-cost'] });
       })
