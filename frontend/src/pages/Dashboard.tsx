@@ -2035,15 +2035,17 @@ export default function Dashboard() {
     computePivotFromReadingsNoCache(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
   ), [todayLocators, _todayKey]);
 
-  // Compute daily grid kWh from raw meter readings (same priority order as Plants.tsx fix).
-  // Priority: raw JSONB multi-meter delta × CT multiplier → single-meter delta →
-  //           daily_consumption_kwh fallback → daily_grid_kwh fallback.
-  // ── FIX: computePowerKwh now also returns powerCostPeso when tariffByPlant is
-  // supplied. This aligns the StatCard Power Cost with the chart's computation
-  // (chart: power_readings kWh × power_tariffs.rate_per_kwh / production_m³).
-  // Previously the StatCard read production_costs.power_cost, which is a stale
-  // legacy column that the chart ignores — causing the visible ₱225 vs chart
-  // discrepancy. Now both paths share the same kWh × tariff formula.
+  // Compute daily grid kWh from raw meter readings. Priority order mirrors TrendChart exactly:
+  //   1. Raw JSONB multi-meter delta × per-meter CT multiplier
+  //   2. Single-meter delta × multArr[0]
+  //   3. daily_grid_kwh   (already post-multiplication — use as-is)
+  //   4. daily_consumption_kwh × multArr[0]  (raw delta; mult must be applied)
+  // FIX: Previously priorities 3 & 4 were swapped AND daily_consumption_kwh was used
+  // without the CT multiplier, causing the StatCard to show e.g. 8 kWh / ₱86 when
+  // the chart (which applies the multiplier correctly) shows the actual 19,200 kWh.
+  // Both paths now share identical logic so StatCard and chart always agree.
+  // Also returns powerCostPeso = kWh × tariff (same formula as chart) when
+  // tariffByPlant is supplied.
   function computePowerKwh(
     currentRows: any[],
     prevRows: any[],
@@ -2079,12 +2081,18 @@ export default function Dashboard() {
         if (delta >= 0) kwh = delta * (multArr[0] ?? 1);
       }
 
-      // Priority 3 & 4: stored daily totals — fallback when raw readings are absent
+      // Priority 3 & 4: stored daily totals — fallback when raw readings are absent.
+      // Order mirrors TrendChart (lines 1933-1937):
+      //   • daily_grid_kwh        — stored post-multiplication (already × CT ratio). Use as-is.
+      //   • daily_consumption_kwh — stored as the raw meter delta (NOT multiplied at save time,
+      //                             e.g. Δ = 8 while actual = 8 × 2400 = 19,200 kWh).
+      //                             Must apply multArr[0] to match the chart's computation and
+      //                             the Operations "Last 7 readings" panel.
       if (kwh === 0) {
-        if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
-          kwh = +r.daily_consumption_kwh;
-        else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
+        if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
           kwh = +r.daily_grid_kwh;
+        else if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
+          kwh = +r.daily_consumption_kwh * (multArr[0] ?? 1);
       }
       totalKwh += kwh;
 
@@ -2229,13 +2237,21 @@ export default function Dashboard() {
   // ── Cost aggregates (aligned with TrendChart productionCost computation) ──────
   // Power cost:  kwh × tariff rate (from power_tariffs — same formula as chart)
   //              was: production_costs.power_cost (stale legacy column the chart ignores)
-  // Chemical:    production_costs.chem_cost + today's chemical_dosing_logs
+  // Chemical:    production_costs.chem_cost (today only) + today's chemical_dosing_logs
   //              was: production_costs.chem_cost only (missed dosing log entries)
   // Show '—' when no data has ever been entered (both sources empty) to avoid ₱0 mislead.
+  //
+  // IMPORTANT: When costIsStale (fallback row is from a prior date), we deliberately
+  // skip production_costs.chem_cost because that row's value belongs to a different day.
+  // Today's chemical cost is then sourced from dashDosingPeso (today's dosing logs) only.
+  // This prevents stale/accumulated chem_cost values from inflating the stat card total.
   const hasCostData = todayCosts.length > 0;
 
-  // Chemical cost: legacy rollup + today's dosing logs (mirrors chart's costReadings merge)
-  const prodCostsChem = todayCosts.reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
+  // Chemical cost: only include production_costs.chem_cost when the row is for TODAY.
+  // Stale fallback rows are excluded — their chem_cost belongs to a prior day's total.
+  const prodCostsChem = costIsStale
+    ? 0
+    : todayCosts.reduce((s, r: any) => s + (+r.chem_cost || 0), 0);
   const chemCostTotal = prodCostsChem + dashDosingPeso;
   const chemCost      = (chemCostTotal > 0) ? chemCostTotal
     : hasCostData ? null  // row exists but all-zero — still show '—'
