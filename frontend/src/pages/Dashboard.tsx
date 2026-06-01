@@ -2395,8 +2395,8 @@ export default function Dashboard() {
       {/* ① Plant health strip — per-plant status dots + last reading time */}
       <PlantHealthStrip plantIds={plantIds} />
 
-      {/* Header — stacks vertically on mobile, single row on sm+ */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      {/* Header — always a single row: title left, view-toggle right */}
+      <div className="flex flex-row items-center justify-between gap-2">
 
         {/* Left: title + compliance badge + subtitle */}
         <div className="min-w-0">
@@ -2420,7 +2420,7 @@ export default function Dashboard() {
             On mobile: scrolls horizontally so nothing wraps or overflows.
             Labels are hidden on xs (<640 px) to save space — icons + tooltips
             carry the meaning on narrow screens. */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0 sm:overflow-visible sm:pb-0">
+        <div className="flex items-center gap-2 shrink-0">
 
           {/* View-mode toggle — icon + label on sm+, icon-only on mobile */}
           <ToggleGroup
