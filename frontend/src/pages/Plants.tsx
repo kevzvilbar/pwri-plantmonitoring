@@ -9270,20 +9270,21 @@ function PowerConsumptionEnergyMix({
               const delta = gridCurrent - prevGridMeter;
               if (delta >= 0) gridKwh = delta * (multiplierArr[0] ?? 1);
             }
+          }
 
-            // Priority 3 & 4: fall back to stored daily totals only when raw readings
-            // are unavailable (e.g. very old rows where JSONB was never stored).
-            if (gridKwh === 0) {
-              if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0) {
-                gridKwh = +r.daily_consumption_kwh;
-              } else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0) {
-                gridKwh = +r.daily_grid_kwh;
-              }
+          afterGridRepl = false;
+
+          // Priority 3 & 4: fall back to stored daily totals when raw delta is
+          // unavailable or zero. This runs regardless of afterGridRepl so that
+          // the first reading after a meter replacement (where raw delta is
+          // intentionally skipped) still shows the stored daily_grid_kwh value
+          // instead of producing an empty bar.
+          if (gridKwh === 0) {
+            if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0) {
+              gridKwh = +r.daily_consumption_kwh;
+            } else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0) {
+              gridKwh = +r.daily_grid_kwh;
             }
-
-            afterGridRepl = false;
-          } else {
-            afterGridRepl = false;
           }
 
           prevGridMeter    = gridCurrent;
