@@ -1914,9 +1914,15 @@ export default function Dashboard() {
       }
 
       // Chemical cost from dosing logs (mirrors TrendChart lines 1398–1410)
+      // FIX: Also store the base chemical name without unit suffix so that names
+      // stored as e.g. 'Chlorine (kg)' are found when DOSING_KEYS looks up 'Chlorine'.
+      // This mirrors TrendChart's priceMap logic (same base-stripping) so stat card
+      // and chart always use the same live fallback cost when calculated_cost = 0.
       const priceMap: Record<string, number> = {};
       for (const p of (pricesRes.data ?? []) as any[]) {
         if (!(p.chemical_name in priceMap)) priceMap[p.chemical_name] = +p.unit_price;
+        const base = (p.chemical_name as string).replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(base in priceMap)) priceMap[base] = +p.unit_price;
       }
       const DOSING_KEYS = [
         { key: 'chlorine_kg',    name: 'Chlorine'     },
@@ -2065,9 +2071,18 @@ export default function Dashboard() {
       const rGmr     = r.grid_meter_readings as Record<string, number> | null | undefined;
       const pGmr     = prev?.grid_meter_readings as Record<string, number> | null | undefined;
       let kwh = 0;
+      // FIX: Track whether we had raw meter data to compute a delta from.
+      // When a raw delta IS computable but comes out negative (meter anomaly / rollover),
+      // the chart treats the reading as invalid (gridKwh < 0 → skipped, no fallback).
+      // The stat card must mirror that: only use the stored daily_consumption_kwh fallback
+      // when no raw baseline existed at all, NOT when the delta was computed but negative.
+      // This prevents a stale/partial daily_consumption_kwh from inflating cost when the
+      // operator's cumulative meter reading regressed (e.g. a wrong value entered today).
+      let rawDeltaAttempted = false;
 
       if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
         // Priority 1: multi-meter JSONB delta × per-meter CT multiplier
+        rawDeltaAttempted = true;
         let sum = 0;
         for (const k of Object.keys(rGmr)) {
           const mi    = parseInt(k, 10);
@@ -2077,18 +2092,21 @@ export default function Dashboard() {
         if (sum >= 0) kwh = sum;
       } else if (prev?.meter_reading_kwh != null && r.meter_reading_kwh != null) {
         // Priority 2: single-meter delta × multiplierArr[0]
+        rawDeltaAttempted = true;
         const delta = +r.meter_reading_kwh - +prev.meter_reading_kwh;
         if (delta >= 0) kwh = delta * (multArr[0] ?? 1);
       }
 
-      // Priority 3 & 4: stored daily totals — fallback when raw readings are absent.
+      // Priority 3 & 4: stored daily totals — fallback ONLY when no raw readings were
+      // available (rawDeltaAttempted = false).  Do NOT use when the delta was computable
+      // but negative: that indicates a meter anomaly and must show '—', same as the chart.
       // Order mirrors TrendChart (lines 1933-1937):
       //   • daily_grid_kwh        — stored post-multiplication (already × CT ratio). Use as-is.
       //   • daily_consumption_kwh — stored as the raw meter delta (NOT multiplied at save time,
       //                             e.g. Δ = 8 while actual = 8 × 2400 = 19,200 kWh).
       //                             Must apply multArr[0] to match the chart's computation and
       //                             the Operations "Last 7 readings" panel.
-      if (kwh === 0) {
+      if (kwh === 0 && !rawDeltaAttempted) {
         if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
           kwh = +r.daily_grid_kwh;
         else if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
