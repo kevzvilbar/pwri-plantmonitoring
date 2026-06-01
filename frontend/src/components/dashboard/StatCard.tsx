@@ -216,12 +216,6 @@ export function PerWellSourceCard({
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <span
-            className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-muted/60 text-muted-foreground"
-            title="Raw water characteristics measured at the RO feed manifold (per RO train)"
-          >
-            per well source
-          </span>
           {showBreakdown && (
             <button
               onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
