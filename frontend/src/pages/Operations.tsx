@@ -94,6 +94,12 @@ function invalidateDashboard(qc: QueryClient, entityIds?: string[]) {
   qc.invalidateQueries({ queryKey: ['trend-cost'] });
   qc.invalidateQueries({ queryKey: ['trend-ro'] });
   qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+  // CT multiplier caches — stale multipliers cause newly-inserted power readings
+  // to display the raw meter delta (e.g. "11") instead of the multiplied kWh
+  // value (e.g. "26,400"). Invalidating these forces an immediate re-fetch so
+  // chartData recomputes with the correct multiplier on the very next render.
+  qc.invalidateQueries({ queryKey: ['trend-bill-multipliers'] });
+  qc.invalidateQueries({ queryKey: ['trend-power-config'] });
   // DataSummaryModal — invalidated explicitly so the modal refreshes immediately
   // when open, without waiting for the broad catch-all below.
   qc.invalidateQueries({ queryKey: ['dsm-cons-readings'] });
