@@ -1918,12 +1918,23 @@ export function TrendChart({
             gridKwh = rawDelta * (multArr[0] ?? 1);
           }
 
-          // Priority 3 & 4: stored daily totals — only when no raw readings available
+          // Priority 3 & 4: stored daily totals — only when no raw readings available.
+          //
+          // IMPORTANT multiplier note:
+          //   • daily_grid_kwh   — stored post-multiplication (already × CT ratio).
+          //                        Use as-is.
+          //   • daily_consumption_kwh — stored as the raw meter delta (NOT multiplied)
+          //                        when the reading was first saved (e.g. Δ = 11 while
+          //                        the actual kWh = 11 × 2400 = 26,400). Applying
+          //                        multArr[0] here matches what the Operations history
+          //                        table shows and what the physical meter produces.
+          //
+          // Order: prefer daily_grid_kwh (already correct) → daily_consumption_kwh × mult.
           if (gridKwh === 0) {
-            if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
-              gridKwh = +r.daily_consumption_kwh;
-            else if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
+            if (r.daily_grid_kwh != null && +r.daily_grid_kwh > 0)
               gridKwh = +r.daily_grid_kwh;
+            else if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0)
+              gridKwh = +r.daily_consumption_kwh * (multArr[0] ?? 1);
           }
         }
         afterGridRepl.delete(pid);
