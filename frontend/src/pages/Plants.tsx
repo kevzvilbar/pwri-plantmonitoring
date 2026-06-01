@@ -9217,7 +9217,6 @@ function PowerConsumptionEnergyMix({
 
       let prevGridMeter: number | null = null;
       let prevGridReadings: Record<string, number> | null = null;
-      let afterGridRepl = false;
 
       for (const r of rows) {
         // Fix: use format() (local timezone) instead of slice(0,10) (UTC date).
@@ -9233,10 +9232,10 @@ function PowerConsumptionEnergyMix({
 
         // ── Grid kWh ──
         if (isMeterRepl) {
-          // Replacement row: zero this day, reset baseline for next delta
+          // Replacement row: zero this day's contribution, but update the baseline
+          // so the very next row correctly computes its delta from the new meter start.
           prevGridMeter    = gridCurrent;
           prevGridReadings = rGmr ?? null;
-          afterGridRepl    = true;
         } else {
           let gridKwh = 0;
 
@@ -9252,8 +9251,13 @@ function PowerConsumptionEnergyMix({
           // permanently inflated/deflated — causing chart spikes that disagree with the
           // "Last 7 readings" panel, which always recomputes live from consecutive rows.
           // By computing from raw readings first we stay consistent with that panel.
-
-          if (!afterGridRepl) {
+          //
+          // NOTE: The old `afterGridRepl` guard that skipped raw delta for the row
+          // immediately after a replacement has been removed. The replacement row already
+          // advances prevGridMeter/prevGridReadings to the new meter baseline, so the
+          // next row's (curr − prev) delta is correct and must NOT be skipped — skipping
+          // it caused the bar for that day to be empty when stored daily totals were null.
+          {
             const pGmr = prevGridReadings;
 
             if (rGmr && pGmr && Object.keys(rGmr).length > 0) {
@@ -9272,13 +9276,7 @@ function PowerConsumptionEnergyMix({
             }
           }
 
-          afterGridRepl = false;
-
-          // Priority 3 & 4: fall back to stored daily totals when raw delta is
-          // unavailable or zero. This runs regardless of afterGridRepl so that
-          // the first reading after a meter replacement (where raw delta is
-          // intentionally skipped) still shows the stored daily_grid_kwh value
-          // instead of producing an empty bar.
+          // Priority 3 & 4: fall back to stored daily totals when raw delta is unavailable or zero.
           if (gridKwh === 0) {
             if (r.daily_consumption_kwh != null && +r.daily_consumption_kwh > 0) {
               gridKwh = +r.daily_consumption_kwh;
