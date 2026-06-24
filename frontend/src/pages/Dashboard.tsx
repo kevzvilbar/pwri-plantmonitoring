@@ -1443,7 +1443,7 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
     refetchInterval: 60_000,
   });
 
@@ -1475,7 +1475,7 @@ export default function Dashboard() {
       return (fallback ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
     refetchInterval: 60_000,
   });
   // Production = sum of Product Meter deltas (treated/distributed water)
@@ -1498,7 +1498,7 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
     refetchInterval: 60_000,
   });
 
@@ -1585,7 +1585,7 @@ export default function Dashboard() {
       }));
     },
     enabled: _permeateTrainIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
     refetchInterval: 60_000,
   });
 
@@ -1613,8 +1613,8 @@ export default function Dashboard() {
       }));
     },
     enabled: _permeateTrainIds.length > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 12 * 60 * 60_000,  // yesterday is immutable
+    refetchInterval: false,
   });
   // Power readings — today first, fall back to most-recent per plant if today is empty.
   // powerIsStale is set when the displayed value came from a prior day.
@@ -1655,7 +1655,7 @@ export default function Dashboard() {
       return { rows: Array.from(latestByPlant.values()), prevRows, isStale: true };
     },
     enabled: plantIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,
     refetchInterval: 60_000,
   });
   const todayPower   = todayPowerRaw?.rows ?? [];
@@ -1694,8 +1694,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
+    refetchInterval: false,          // no polling — yesterday never changes
   });
   const { data: yWells } = useQuery({
     queryKey: ['dash-wells-yest', _wellIds, yesterday, today],
@@ -1711,8 +1711,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
+    refetchInterval: false,          // no polling — yesterday never changes
   });
   // Yesterday product meters for production trend delta
   const { data: yProductMeters } = useQuery({
@@ -1732,8 +1732,8 @@ export default function Dashboard() {
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 12 * 60 * 60_000,  // yesterday is immutable — cache for 12 hours
+    refetchInterval: false,          // no polling — yesterday never changes
   });
   const { data: yPower } = useQuery({
     queryKey: ['dash-power-yest', plantIds],
@@ -1833,8 +1833,8 @@ export default function Dashboard() {
       });
     },
     enabled: _qualityTrainIds.length > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
   // ── Permeate fallback for production ─────────────────────────────────────────
   // When the selected plants have no product meter readings today AND are not
@@ -1862,7 +1862,7 @@ export default function Dashboard() {
     // Only fetch when there are no product meter readings — avoids a redundant
     // round-trip when product meters are working correctly.
     enabled: !productMetersHaveData && _qualityTrainIds.length > 0,
-    staleTime: 0,
+    staleTime: 30_000,  // skip re-fetch if invalidated within 30 s
     refetchInterval: 60_000,
   });
   // ── FIX: StatCard cost sources now mirror TrendChart's productionCost computation ──
@@ -1956,8 +1956,8 @@ export default function Dashboard() {
       return { rows, costDataDate: rows[0]?.cost_date ?? null, tariffByPlant, dashDosingPeso };
     },
     enabled: plantIds.length > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 2 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
   const todayCosts       = todayCostsRaw?.rows ?? [];
   const costDataDate     = todayCostsRaw?.costDataDate ?? null;
@@ -1973,8 +1973,8 @@ export default function Dashboard() {
           .order('summary_date', { ascending: false }).limit(plantIds.length * 5)).data ?? []
       : [],
     enabled: plantIds.length > 0,
-    staleTime: 0,
-    refetchInterval: 60_000,
+    staleTime: 2 * 60_000,   // daily summary updated by cron only
+    refetchInterval: 5 * 60_000,  // poll every 5 min
   });
 
   // ── Stat card aggregates ────────────────────────────────────────────────────
