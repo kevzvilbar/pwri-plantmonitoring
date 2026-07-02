@@ -68,6 +68,104 @@ import type { QueryClient } from '@tanstack/react-query';
 // hydrateFromStoredDeltas or the computePivotFromReadings fallback path.
 import { flushDeltaCache } from '@/lib/deltaCache';
 
+// ─── Reading guard helpers (inlined — no external dependency) ────────────────
+// These mirror the DB trigger logic (fn_locator_reading_integrity) so the UI
+// gives immediate feedback before the Supabase round-trip.
+
+const READING_COOLDOWN_MINUTES = 45;
+const SPIKE_MULTIPLIER = 2.0;
+
+type ReadingGuardResult =
+  | { status: 'ok' }
+  | { status: 'pending_review'; reason: 'backward' | 'spike'; detail: string }
+  | { status: 'blocked'; reason: 'cooldown'; minutesLeft: number; availableAt: Date };
+
+async function evaluateReadingGuard(
+  entityType: 'locator' | 'well',
+  entityId: string,
+  plantId: string,
+  userId: string,
+  currentReading: number,
+  readingDatetime: Date,
+  isMeterReplacement = false,
+  isEstimated = false,
+  avgFlowRate: number | null = null,
+): Promise<ReadingGuardResult> {
+  const table = entityType === 'locator' ? 'locator_readings' : 'well_readings';
+  const entityCol = entityType === 'locator' ? 'locator_id' : 'well_id';
+
+  // 1. Cooldown: same user, same entity, within READING_COOLDOWN_MINUTES
+  const { data: recentUser } = await (supabase
+    .from(table as any)
+    .select('reading_datetime')
+    .eq(entityCol, entityId)
+    .eq('plant_id', plantId)
+    .eq('recorded_by', userId)
+    .not('norm_status', 'in', '("retracted")')
+    .order('reading_datetime', { ascending: false })
+    .limit(1) as any);
+
+  if (recentUser?.length) {
+    const lastDt = new Date(recentUser[0].reading_datetime);
+    const elapsed = (readingDatetime.getTime() - lastDt.getTime()) / 60_000;
+    const left = Math.ceil(READING_COOLDOWN_MINUTES - elapsed);
+    if (left > 0) {
+      const availableAt = new Date(lastDt.getTime() + READING_COOLDOWN_MINUTES * 60_000);
+      return { status: 'blocked', reason: 'cooldown', minutesLeft: left, availableAt };
+    }
+  }
+
+  // 2. Last confirmed reading (non-retracted, non-pending_review)
+  const { data: lastGood } = await (supabase
+    .from(table as any)
+    .select('current_reading, reading_datetime')
+    .eq(entityCol, entityId)
+    .eq('plant_id', plantId)
+    .not('norm_status', 'in', '("retracted","pending_review")')
+    .lt('reading_datetime', readingDatetime.toISOString())
+    .order('reading_datetime', { ascending: false })
+    .limit(1) as any);
+
+  const prevReading: number | null = lastGood?.length ? Number(lastGood[0].current_reading) : null;
+  const prevDt: Date | null = lastGood?.length ? new Date(lastGood[0].reading_datetime) : null;
+
+  // 3. Backward reading
+  if (prevReading !== null && currentReading < prevReading && !isMeterReplacement && !isEstimated) {
+    const delta = currentReading - prevReading;
+    return {
+      status: 'pending_review',
+      reason: 'backward',
+      detail: `Reading ${currentReading.toLocaleString()} is ${Math.abs(delta).toLocaleString()} below last confirmed value (${prevReading.toLocaleString()}). Sent for supervisor review.`,
+    };
+  }
+
+  // 4. Spike check
+  if (prevReading !== null && prevDt !== null && avgFlowRate !== null && avgFlowRate > 0) {
+    const volume = currentReading - prevReading;
+    const hours = (readingDatetime.getTime() - prevDt.getTime()) / 3_600_000;
+    if (hours > 0 && volume > 0) {
+      const rate = volume / hours;
+      if (rate > avgFlowRate * SPIKE_MULTIPLIER) {
+        const pct = Math.round((rate / avgFlowRate - 1) * 100);
+        return {
+          status: 'pending_review',
+          reason: 'spike',
+          detail: `Flow rate ${rate.toFixed(1)} m³/hr is ${pct}% above the ${avgFlowRate.toFixed(1)} m³/hr average. Sent for supervisor review.`,
+        };
+      }
+    }
+  }
+
+  return { status: 'ok' };
+}
+
+function formatCooldown(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+}
+
 // ─── Typed dashboard invalidators ────────────────────────────────────────────
 // Each function only invalidates the query keys that its reading type affects.
 // A locator save should not trigger a well/RO/power refetch — that is pure waste.
@@ -2267,7 +2365,6 @@ function LocatorRow({
     // truth; this is a UX convenience only.
     if (!editingId && userId) {
       setSaving(true);
-      const { evaluateReadingGuard, formatCooldown } = await import('@/lib/readingGuards');
       const guard = await evaluateReadingGuard(
         'locator', locator.id, plantId, userId,
         locInputMode === 'direct' ? (previous ?? cur) : cur,
@@ -2972,7 +3069,6 @@ function WellRow({
     // Pre-flight guard: cooldown + backward/spike detection
     if (!editingId && userId) {
       setSaving(true);
-      const { evaluateReadingGuard, formatCooldown } = await import('@/lib/readingGuards');
       const guard = await evaluateReadingGuard(
         'well', well.id, plantId, userId, cur, new Date(customDt),
         false, false, avgVol,
