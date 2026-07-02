@@ -68,55 +68,94 @@ import type { QueryClient } from '@tanstack/react-query';
 // hydrateFromStoredDeltas or the computePivotFromReadings fallback path.
 import { flushDeltaCache } from '@/lib/deltaCache';
 
-function invalidateDashboard(qc: QueryClient, entityIds?: string[]) {
-  // Dashboard stat-card sources
+// ─── Typed dashboard invalidators ────────────────────────────────────────────
+// Each function only invalidates the query keys that its reading type affects.
+// A locator save should not trigger a well/RO/power refetch — that is pure waste.
+// The nuclear qc.invalidateQueries() has been REMOVED from all paths.
+// If a new query key goes stale after a save, add it to the correct typed
+// function below rather than restoring the broadcast.
+
+/** After a locator reading is saved. */
+function invalidateLocatorDash(qc: QueryClient, entityIds?: string[]) {
   qc.invalidateQueries({ queryKey: ['dash-loc-today'] });
   qc.invalidateQueries({ queryKey: ['dash-loc-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+  qc.invalidateQueries({ queryKey: ['trend-loc'] });
+  qc.invalidateQueries({ queryKey: ['trend-loc-ids'] });
+  qc.invalidateQueries({ queryKey: ['dsm-cons-readings'] });
+  qc.invalidateQueries({ queryKey: ['dsm-locators'] });
+  flushDeltaCache(entityIds);
+}
+
+/** After a well reading is saved. */
+function invalidateWellDash(qc: QueryClient, entityIds?: string[]) {
   qc.invalidateQueries({ queryKey: ['dash-wells-today'] });
   qc.invalidateQueries({ queryKey: ['dash-wells-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+  qc.invalidateQueries({ queryKey: ['trend-well'] });
+  qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+  qc.invalidateQueries({ queryKey: ['blending-volume'] });
+  flushDeltaCache(entityIds);
+}
+
+/** After a product meter reading is saved. */
+function invalidateProductMeterDash(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
   qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
-  qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
-  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
-  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['trend-product'] });
+  qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+  qc.invalidateQueries({ queryKey: ['dsm-product-meters'] });
+  qc.invalidateQueries({ queryKey: ['dsm-meter-configs'] });
+}
+
+/** After a power reading is saved. */
+function invalidatePowerDash(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['dash-power-today'] });
   qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
   qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
-  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
-  qc.invalidateQueries({ queryKey: ['dash-chem'] });
-  qc.invalidateQueries({ queryKey: ['alerts-feed'] });
-  // TrendChart series
-  qc.invalidateQueries({ queryKey: ['trend-loc'] });
-  qc.invalidateQueries({ queryKey: ['trend-loc-ids'] });
-  qc.invalidateQueries({ queryKey: ['trend-product'] });
-  qc.invalidateQueries({ queryKey: ['trend-well'] });
   qc.invalidateQueries({ queryKey: ['trend-power'] });
   qc.invalidateQueries({ queryKey: ['trend-cost'] });
-  qc.invalidateQueries({ queryKey: ['trend-ro'] });
-  qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
-  // CT multiplier caches — stale multipliers cause newly-inserted power readings
-  // to display the raw meter delta (e.g. "11") instead of the multiplied kWh
-  // value (e.g. "26,400"). Invalidating these forces an immediate re-fetch so
-  // chartData recomputes with the correct multiplier on the very next render.
   qc.invalidateQueries({ queryKey: ['trend-bill-multipliers'] });
   qc.invalidateQueries({ queryKey: ['trend-power-config'] });
-  // DataSummaryModal — invalidated explicitly so the modal refreshes immediately
-  // when open, without waiting for the broad catch-all below.
-  qc.invalidateQueries({ queryKey: ['dsm-cons-readings'] });
-  qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
+}
+
+/** After an RO train reading is saved. */
+function invalidateRODash(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+  qc.invalidateQueries({ queryKey: ['dash-all-permeate-today'] });
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['trend-ro'] });
+  qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
   qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
   qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
-  qc.invalidateQueries({ queryKey: ['dsm-locators'] });
-  qc.invalidateQueries({ queryKey: ['dsm-product-meters'] });
-  qc.invalidateQueries({ queryKey: ['dsm-meter-configs'] });
-  // ── HYBRID STRATEGY: flush in-memory delta cache ───────────────────────────
-  // Targeted flush for known entity IDs (locators, wells, trains) so the next
-  // render recomputes deltas from fresh DB rows instead of a stale cache entry.
-  // Passing no entityIds performs a full flush as a safety-net — this matches
-  // the existing broad qc.invalidateQueries() behaviour below.
-  flushDeltaCache(entityIds);
-  // Broad safety-net — catches any other mounted queries
-  qc.invalidateQueries();
+}
+
+/** After a chemical dosing entry is saved. */
+function invalidateChemDash(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['dash-chem'] });
+  qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+  qc.invalidateQueries({ queryKey: ['trend-cost'] });
+}
+
+/**
+ * Full invalidation — used only for CSV imports that may touch any table.
+ * Does NOT call qc.invalidateQueries() — the targeted keys above are sufficient.
+ */
+function invalidateDashboard(qc: QueryClient, entityIds?: string[]) {
+  invalidateLocatorDash(qc, entityIds);
+  invalidateWellDash(qc, entityIds);
+  invalidateProductMeterDash(qc);
+  invalidatePowerDash(qc);
+  invalidateRODash(qc);
+  invalidateChemDash(qc);
+  qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+  qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+  // ⚠ DO NOT add qc.invalidateQueries() here — it was the source of egress spike.
 }
 
 // ─── CSV helpers ────────────────────────────────────────────────────────────
@@ -2109,7 +2148,7 @@ function LocatorReadingForm() {
                   todayReadings={todayByLocator[l.id] ?? []}
                   avgVol={avgByLocator[l.id] ?? null}
                   userId={user?.id}
-                  onSaved={() => invalidateDashboard(qc)}
+                  onSaved={() => invalidateLocatorDash(qc)}
                   isManagerOrAdmin={isAdmin || isManager || isDataAnalyst}
                   maxReadingsPerDay={maxLocatorReadings}
                 />
@@ -2211,17 +2250,45 @@ function LocatorRow({
     (+reading < 0 && locInputMode === 'raw') ? 'error' :
     'ok';
 
+  // Tracks whether the last save was auto-quarantined as pending_review
+  const [lastSavePending, setLastSavePending] = useState(false);
+  // Cooldown: minutes left before operator can submit again for this locator
+  const [cooldownMinutes, setCooldownMinutes] = useState(0);
+  const [cooldownAvailableAt, setCooldownAvailableAt] = useState<Date | null>(null);
+
   const save = async () => {
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
-    // Fix #8 — window.confirm is blocked in iframes. The below-prev and high-vol
-    // warnings are already shown as inline alert banners in the UI (the yellow strip
-    // below the input). We now use those banners as the only warning and remove the
-    // blocking confirm dialogs. If the user clicks Save while the banner is visible
-    // they have implicitly acknowledged the warning.
-    if (belowPrev) toast.warning(`${locator.name}: reading below previous — saved anyway`);
-    else if (highVol) toast.warning(`${locator.name}: volume unusually high vs. avg — saved anyway`);
+
+    // ── Pre-flight guard: cooldown + backward/spike detection ────────────────
+    // Mirrors the DB trigger logic (fn_locator_reading_integrity) so the UI can
+    // give instant feedback before the round-trip. The trigger is the source of
+    // truth; this is a UX convenience only.
+    if (!editingId && userId) {
+      setSaving(true);
+      const { evaluateReadingGuard, formatCooldown } = await import('@/lib/readingGuards');
+      const guard = await evaluateReadingGuard(
+        'locator', locator.id, plantId, userId,
+        locInputMode === 'direct' ? (previous ?? cur) : cur,
+        new Date(customDt), false, false, avgVol,
+      );
+      setSaving(false);
+
+      if (guard.status === 'blocked' && guard.reason === 'cooldown') {
+        setCooldownMinutes(guard.minutesLeft);
+        setCooldownAvailableAt(guard.availableAt);
+        toast.error(
+          `${locator.name}: cooldown — next reading available in ${formatCooldown(guard.minutesLeft)}.`,
+          { duration: 6000 },
+        );
+        return;
+      }
+      if (guard.status === 'pending_review') {
+        // Save proceeds — DB trigger will also set pending_review independently.
+        toast.info(`${locator.name}: ${guard.detail}`, { duration: 8000 });
+      }
+    }
 
     setSaving(true);
     let gps_lat = null, gps_lng = null, off = false;
@@ -2232,35 +2299,58 @@ function LocatorRow({
         off = isOffLocation(gps_lat, gps_lng, locator.gps_lat, locator.gps_lng, 100);
     } catch (err) { console.warn('[Operations] geolocation unavailable:', err); }
 
-    // FIX: daily_volume removed — GENERATED ALWAYS column.
-    //      plant_id IS required (NOT NULL) — keep it.
-    //      is_estimated: false — this is an operator-entered real reading;
-    //      clears any regression estimate that may have been written for this slot.
+    // NOTE: previous_reading is intentionally omitted from the payload.
+    // The DB trigger fn_locator_reading_integrity() overwrites it with the last
+    // confirmed (non-retracted, non-pending_review) reading. Sending it from
+    // the client would be ignored by the trigger; omitting it makes the intent explicit
+    // and prevents stale anchor values from leaking through if the trigger is disabled.
     const payload: any = locInputMode === 'direct'
       ? {
           locator_id: locator.id, plant_id: plantId,
           current_reading: previous ?? cur,
-          previous_reading: previous,
-          // daily_volume intentionally omitted — GENERATED ALWAYS column
+          // previous_reading: owned by DB trigger — DO NOT send from client
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
           is_estimated: false,
         }
       : {
           locator_id: locator.id, plant_id: plantId,
-          current_reading: cur, previous_reading: previous,
-          // daily_volume intentionally omitted — GENERATED ALWAYS column
+          current_reading: cur,
+          // previous_reading: owned by DB trigger — DO NOT send from client
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
           is_estimated: false,
         };
-    const { error } = editingId
-      ? await supabase.from('locator_readings').update(payload).eq('id', editingId)
-      : await supabase.from('locator_readings').insert(payload);
+
+    const { data: savedRow, error } = editingId
+      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status').single() as any)
+      : await (supabase.from('locator_readings').insert(payload).select('norm_status').single() as any);
 
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}`);
+
+    if (error) {
+      // 23505 = unique_violation: same user already submitted within this clock hour (SRP double-entry)
+      if (error.code === '23505') {
+        toast.error(
+          `${locator.name}: a reading was already submitted within the last hour. Check the log before resubmitting.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+
+    const isPending = savedRow?.norm_status === 'pending_review';
+    setLastSavePending(isPending);
+    setCooldownMinutes(0);
+    setCooldownAvailableAt(null);
+
+    if (isPending) {
+      toast.info(`${locator.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
+    } else {
+      toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}`);
+    }
     setReading(''); setEditingId(null); onSaved();
   };
 
@@ -2414,20 +2504,31 @@ function LocatorRow({
           onClose={() => setShowHistory(false)}
         />
       )}
-      {reading && (belowPrev || highVol) && (
+      {cooldownMinutes > 0 && cooldownAvailableAt && (
+        <div className="flex items-center gap-1.5 rounded-md bg-destructive/10 border border-destructive/30 px-2.5 py-1.5 text-xs text-destructive">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          Cooldown active — next reading available at{' '}
+          {cooldownAvailableAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}{' '}
+          ({cooldownMinutes} min remaining).
+        </div>
+      )}
+
+      {lastSavePending && !cooldownMinutes && (
+        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          Last reading sent for supervisor review — excluded from totals until approved.
+        </div>
+      )}
+
+      {reading && (belowPrev || highVol) && !lastSavePending && (
         <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
           <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            Verify before saving
+            {belowPrev ? 'Below previous — will go to supervisor review after save.' : `Flow rate ${Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above avg — will go to supervisor review after save.`}
           </span>
           {belowPrev && (
             <span className="text-amber-700 dark:text-amber-400 pl-5">
-              Reading is below the previous value — possible meter rollback or data entry error.
-            </span>
-          )}
-          {highVol && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
-              Flow rate is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the 10-day average — unusually high.
+              If the meter was replaced, use the meter replacement toggle.
             </span>
           )}
         </div>
@@ -2672,7 +2773,7 @@ function WellReadingForm() {
     return { groupedSections: Object.values(groupMap), standaloneWells: standalone };
   }, [wells, wellGroupMap, sharedGroups]);
 
-  const onSaved = () => invalidateDashboard(qc);
+  const onSaved = () => invalidateWellDash(qc);
 
   return (
     <div className="space-y-3">
@@ -2862,11 +2963,33 @@ function WellRow({
     'ok';
 
   // ── Main water (+ optional dedicated power) save ──
+  const [wellLastSavePending, setWellLastSavePending] = useState(false);
+
   const save = async () => {
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
-    if (belowPrev) toast.warning(`${well.name}: meter below previous — saved anyway`);
-    else if (highVol) toast.warning(`${well.name}: flow rate unusually high vs. 10-day average — saved anyway`);
+
+    // Pre-flight guard: cooldown + backward/spike detection
+    if (!editingId && userId) {
+      setSaving(true);
+      const { evaluateReadingGuard, formatCooldown } = await import('@/lib/readingGuards');
+      const guard = await evaluateReadingGuard(
+        'well', well.id, plantId, userId, cur, new Date(customDt),
+        false, false, avgVol,
+      );
+      setSaving(false);
+
+      if (guard.status === 'blocked' && guard.reason === 'cooldown') {
+        toast.error(
+          `${well.name}: cooldown — next reading available in ${formatCooldown(guard.minutesLeft)}.`,
+          { duration: 6000 },
+        );
+        return;
+      }
+      if (guard.status === 'pending_review') {
+        toast.info(`${well.name}: ${guard.detail}`, { duration: 8000 });
+      }
+    }
 
     setSaving(true);
     let gps_lat = null, gps_lng = null;
@@ -2877,27 +3000,43 @@ function WellRow({
 
     const payload: any = {
       well_id: well.id, plant_id: plantId,
-      current_reading: cur, previous_reading: previousMeter,
+      current_reading: cur,
+      // previous_reading: owned by DB trigger fn_well_reading_integrity() — DO NOT send from client
       daily_volume: dailyVol != null ? Math.max(0, dailyVol) : null,
-      // Include dedicated power if not in shared group
       power_meter_reading: showDedicatedPower && powerReading ? +powerReading : null,
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
       reading_datetime: new Date(customDt).toISOString(),
     };
-    // Only include tds_ppm / pressure_psi when non-empty — sending null for a missing
-    // DB column causes Supabase to reject the entire row with a schema cache error
-    // ("relation 'well_readings' does not exist"). Same fix already applied to
-    // solar_meter_reading in the CSV import path.
     if (tdsReading) payload.tds_ppm = +tdsReading;
     if (ntuReading) payload.turbidity_ntu = +ntuReading;
     if (pressureReading) payload.pressure_psi = +pressureReading;
-    const { error } = editingId
-      ? await supabase.from('well_readings').update(payload).eq('id', editingId)
-      : await supabase.from('well_readings').insert(payload);
+
+    const { data: savedRow, error } = editingId
+      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('norm_status').single() as any)
+      : await (supabase.from('well_readings').insert(payload).select('norm_status').single() as any);
 
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
+
+    if (error) {
+      if (error.code === '23505') {
+        toast.error(
+          `${well.name}: a reading was already submitted within the last hour. Check the log before resubmitting.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+
+    const isPending = savedRow?.norm_status === 'pending_review';
+    setWellLastSavePending(isPending);
+
+    if (isPending) {
+      toast.info(`${well.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
+    } else {
+      toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
+    }
     setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setEditingId(null); onSaved();
   };
@@ -3642,7 +3781,7 @@ function BlendingRow({
       setVolume('');
 
       // BUG FIX #4b: invalidate dashboard so stat cards refresh immediately.
-      invalidateDashboard(qc, [well.id]);
+      invalidateWellDash(qc, [well.id]);
       onSaved();
     } catch (e: any) {
       toast.error(`Blending save failed: ${e.message || e}`);
@@ -3955,7 +4094,8 @@ function ProductForm() {
     qc.invalidateQueries({ queryKey: ['trend-power'] });
     qc.invalidateQueries({ queryKey: ['trend-cost'] });
     qc.invalidateQueries({ queryKey: ['trend-ro'] });
-    qc.invalidateQueries();
+    // ⚠ nuclear qc.invalidateQueries() removed — use typed invalidator instead
+    invalidateProductMeterDash(qc);
   };
 
   return (
@@ -4443,7 +4583,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     toast.success('Reading updated');
     setEditRow(null);
     qc.invalidateQueries({ queryKey });
-    qc.invalidateQueries();
+    invalidateProductMeterDash(qc);
   };
 
   // Fix #8 — window.confirm is blocked in iframes. Use a two-click inline confirm
@@ -4459,7 +4599,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     if (error) { toast.error(error.message); return; }
     toast.success('Reading deleted');
     qc.invalidateQueries({ queryKey });
-    qc.invalidateQueries();
+    invalidateProductMeterDash(qc);
   };
 
   return (
@@ -5164,7 +5304,7 @@ function PowerForm() {
       setSolarMeterReadings(prev => { const next = [...prev]; next[idx] = ''; return next; });
       if (idx === 0) setSolarReading('');
     }
-    qc.invalidateQueries();
+    invalidatePowerDash(qc);
   };
 
   // Keep legacy submit for cancel/edit flows
@@ -5230,7 +5370,7 @@ function PowerForm() {
     setReading(''); setSolarReading(''); setEditingId(null);
     setGridMeterReadings(['', '', '', '', '']);
     setSolarMeterReadings(['', '', '', '', '']);
-    qc.invalidateQueries();
+    invalidatePowerDash(qc);
   };
 
   const startEdit = (r: any) => {
@@ -5840,7 +5980,7 @@ function PowerForm() {
           validateRow={validatePowerRow}
           insertRows={(rows, pid) => insertPowerReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}
-          onImported={() => { setImportOpen(false); qc.invalidateQueries(); }}
+          onImported={() => { setImportOpen(false); invalidatePowerDash(qc); }}
         />
       )}
       {powerHistoryOpen && plantId && (
@@ -6182,7 +6322,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
     setSelectedIds(new Set());
     qc.invalidateQueries({ queryKey });
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    qc.invalidateQueries();
+    if (module === 'locator') invalidateLocatorDash(qc);
+    else if (module === 'well') invalidateWellDash(qc);
+    else if (module === 'power') invalidatePowerDash(qc);
+    else if (module === 'ro') invalidateRODash(qc);
+    else if (module === 'blending') invalidateWellDash(qc);
   };
 
   const deleteRow = async (id: string) => {
@@ -6206,9 +6350,11 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
     setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     qc.invalidateQueries({ queryKey });
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-loc-recent'] });
-    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
-    qc.invalidateQueries();
+    if (module === 'locator') { qc.invalidateQueries({ queryKey: ['op-loc-recent'] }); invalidateLocatorDash(qc); }
+    else if (module === 'well') { qc.invalidateQueries({ queryKey: ['op-well-recent'] }); invalidateWellDash(qc); }
+    else if (module === 'power') invalidatePowerDash(qc);
+    else if (module === 'ro') invalidateRODash(qc);
+    else if (module === 'product') invalidateProductMeterDash(qc);
   };
 
   const saveEdit = async () => {
@@ -6321,9 +6467,12 @@ function ReadingHistoryDialog({ entityName, module, entityId, plantId, multiplie
     qc.invalidateQueries({ queryKey });
     // Also invalidate the parent form queries so "Last 7 readings" refreshes
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') qc.invalidateQueries({ queryKey: ['op-loc-recent'] });
-    if (module === 'well') qc.invalidateQueries({ queryKey: ['op-well-recent'] });
-    qc.invalidateQueries();
+    if (module === 'locator') { qc.invalidateQueries({ queryKey: ['op-loc-recent'] }); invalidateLocatorDash(qc); }
+    else if (module === 'well') { qc.invalidateQueries({ queryKey: ['op-well-recent'] }); invalidateWellDash(qc); }
+    else if (module === 'power') invalidatePowerDash(qc);
+    else if (module === 'ro') invalidateRODash(qc);
+    else if (module === 'product') invalidateProductMeterDash(qc);
+    else if (module === 'blending') invalidateWellDash(qc);
   };
 
   const title = module === 'power'
