@@ -1058,7 +1058,10 @@ export type Database = {
           gps_lat: number | null
           gps_lng: number | null
           id: string
+          is_estimated: boolean
+          is_meter_replacement: boolean | null
           locator_id: string
+          norm_status: string | null
           off_location_flag: boolean
           plant_id: string
           previous_reading: number | null
@@ -1073,7 +1076,10 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_estimated?: boolean
+          is_meter_replacement?: boolean | null
           locator_id: string
+          norm_status?: string | null
           off_location_flag?: boolean
           plant_id: string
           previous_reading?: number | null
@@ -1088,7 +1094,10 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_estimated?: boolean
+          is_meter_replacement?: boolean | null
           locator_id?: string
+          norm_status?: string | null
           off_location_flag?: boolean
           plant_id?: string
           previous_reading?: number | null
@@ -1281,37 +1290,55 @@ export type Database = {
       }
       power_readings: {
         Row: {
+          cache_recalculated_at: string | null
           created_at: string
           daily_consumption_kwh: number | null
-          daily_solar_kwh: number | null
           daily_grid_kwh: number | null
+          daily_solar_kwh: number | null
+          grid_meter_readings: Json | null
           id: string
+          is_meter_replacement: boolean | null
+          meter_multiplier: number | null
           meter_reading_kwh: number
+          multiplier: number | null
           plant_id: string
           reading_datetime: string
           recorded_by: string | null
+          solar_meter_reading: number | null
         }
         Insert: {
+          cache_recalculated_at?: string | null
           created_at?: string
           daily_consumption_kwh?: number | null
-          daily_solar_kwh?: number | null
           daily_grid_kwh?: number | null
+          daily_solar_kwh?: number | null
+          grid_meter_readings?: Json | null
           id?: string
+          is_meter_replacement?: boolean | null
+          meter_multiplier?: number | null
           meter_reading_kwh: number
+          multiplier?: number | null
           plant_id: string
           reading_datetime?: string
           recorded_by?: string | null
+          solar_meter_reading?: number | null
         }
         Update: {
+          cache_recalculated_at?: string | null
           created_at?: string
           daily_consumption_kwh?: number | null
-          daily_solar_kwh?: number | null
           daily_grid_kwh?: number | null
+          daily_solar_kwh?: number | null
+          grid_meter_readings?: Json | null
           id?: string
+          is_meter_replacement?: boolean | null
+          meter_multiplier?: number | null
           meter_reading_kwh?: number
+          multiplier?: number | null
           plant_id?: string
           reading_datetime?: string
           recorded_by?: string | null
+          solar_meter_reading?: number | null
         }
         Relationships: [
           {
@@ -1562,87 +1589,135 @@ export type Database = {
       }
       ro_train_readings: {
         Row: {
+          chlorine_residual_mg_l: number | null
           created_at: string
           dp_psi: number | null
           feed_flow: number | null
           feed_meter: number | null
+          feed_meter_delta: number | null
+          feed_meter_prev: number | null
           feed_ph: number | null
           feed_pressure_psi: number | null
           feed_tds: number | null
           id: string
+          is_meter_replacement: boolean | null
+          norm_status: string | null
           permeate_flow: number | null
           permeate_meter: number | null
+          permeate_meter_delta: number | null
+          permeate_meter_prev: number | null
           permeate_ph: number | null
+          permeate_production_date: string | null
           permeate_tds: number | null
           plant_id: string
+          power_avg_kw: number | null
+          power_delta_kwh: number | null
+          power_meter_reading_kwh: number | null
           reading_datetime: string
           recorded_by: string | null
           recovery_pct: number | null
           reject_flow: number | null
           reject_meter: number | null
+          reject_meter_delta: number | null
+          reject_meter_prev: number | null
           reject_ph: number | null
           reject_pressure_psi: number | null
           reject_tds: number | null
           rejection_pct: number | null
+          remarks: string | null
           salt_passage_pct: number | null
+          shared_power_meter_group: string | null
+          specific_energy_kwh_m3: number | null
           suction_pressure_psi: number | null
           temperature_c: number | null
           train_id: string
           turbidity_ntu: number | null
         }
         Insert: {
+          chlorine_residual_mg_l?: number | null
           created_at?: string
           dp_psi?: number | null
           feed_flow?: number | null
           feed_meter?: number | null
+          feed_meter_delta?: number | null
+          feed_meter_prev?: number | null
           feed_ph?: number | null
           feed_pressure_psi?: number | null
           feed_tds?: number | null
           id?: string
+          is_meter_replacement?: boolean | null
+          norm_status?: string | null
           permeate_flow?: number | null
           permeate_meter?: number | null
+          permeate_meter_delta?: number | null
+          permeate_meter_prev?: number | null
           permeate_ph?: number | null
+          permeate_production_date?: string | null
           permeate_tds?: number | null
           plant_id: string
+          power_avg_kw?: number | null
+          power_delta_kwh?: number | null
+          power_meter_reading_kwh?: number | null
           reading_datetime?: string
           recorded_by?: string | null
           recovery_pct?: number | null
           reject_flow?: number | null
           reject_meter?: number | null
+          reject_meter_delta?: number | null
+          reject_meter_prev?: number | null
           reject_ph?: number | null
           reject_pressure_psi?: number | null
           reject_tds?: number | null
           rejection_pct?: number | null
+          remarks?: string | null
           salt_passage_pct?: number | null
+          shared_power_meter_group?: string | null
+          specific_energy_kwh_m3?: number | null
           suction_pressure_psi?: number | null
           temperature_c?: number | null
           train_id: string
           turbidity_ntu?: number | null
         }
         Update: {
+          chlorine_residual_mg_l?: number | null
           created_at?: string
           dp_psi?: number | null
           feed_flow?: number | null
           feed_meter?: number | null
+          feed_meter_delta?: number | null
+          feed_meter_prev?: number | null
           feed_ph?: number | null
           feed_pressure_psi?: number | null
           feed_tds?: number | null
           id?: string
+          is_meter_replacement?: boolean | null
+          norm_status?: string | null
           permeate_flow?: number | null
           permeate_meter?: number | null
+          permeate_meter_delta?: number | null
+          permeate_meter_prev?: number | null
           permeate_ph?: number | null
+          permeate_production_date?: string | null
           permeate_tds?: number | null
           plant_id?: string
+          power_avg_kw?: number | null
+          power_delta_kwh?: number | null
+          power_meter_reading_kwh?: number | null
           reading_datetime?: string
           recorded_by?: string | null
           recovery_pct?: number | null
           reject_flow?: number | null
           reject_meter?: number | null
+          reject_meter_delta?: number | null
+          reject_meter_prev?: number | null
           reject_ph?: number | null
           reject_pressure_psi?: number | null
           reject_tds?: number | null
           rejection_pct?: number | null
+          remarks?: string | null
           salt_passage_pct?: number | null
+          shared_power_meter_group?: string | null
+          specific_energy_kwh_m3?: number | null
           suction_pressure_psi?: number | null
           temperature_c?: number | null
           train_id?: string
@@ -1795,12 +1870,14 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          confirmed: boolean
           created_at: string
           designation: string | null
           first_name: string | null
           id: string
           immediate_head_id: string | null
           last_name: string | null
+          last_seen_at: string | null
           middle_name: string | null
           plant_assignments: string[]
           profile_complete: boolean
@@ -1810,12 +1887,14 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          confirmed?: boolean
           created_at?: string
           designation?: string | null
           first_name?: string | null
           id: string
           immediate_head_id?: string | null
           last_name?: string | null
+          last_seen_at?: string | null
           middle_name?: string | null
           plant_assignments?: string[]
           profile_complete?: boolean
@@ -1825,12 +1904,14 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          confirmed?: boolean
           created_at?: string
           designation?: string | null
           first_name?: string | null
           id?: string
           immediate_head_id?: string | null
           last_name?: string | null
+          last_seen_at?: string | null
           middle_name?: string | null
           plant_assignments?: string[]
           profile_complete?: boolean
@@ -2023,12 +2104,14 @@ export type Database = {
         Row: {
           created_at: string
           current_reading: number | null
+          daily_power_kwh: number | null
           daily_volume: number | null
           gps_lat: number | null
           gps_lng: number | null
           id: string
           /** True when this record marks a meter replacement (resets cumulative volume). */
           is_meter_replacement: boolean
+          norm_status: string | null
           off_location_flag: boolean
           plant_id: string
           power_meter_reading: number | null
@@ -2045,11 +2128,13 @@ export type Database = {
         Insert: {
           created_at?: string
           current_reading?: number | null
+          daily_power_kwh?: number | null
           daily_volume?: number | null
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
           is_meter_replacement?: boolean
+          norm_status?: string | null
           off_location_flag?: boolean
           plant_id: string
           power_meter_reading?: number | null
@@ -2064,11 +2149,13 @@ export type Database = {
         Update: {
           created_at?: string
           current_reading?: number | null
+          daily_power_kwh?: number | null
           daily_volume?: number | null
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
           is_meter_replacement?: boolean
+          norm_status?: string | null
           off_location_flag?: boolean
           plant_id?: string
           power_meter_reading?: number | null
@@ -2201,11 +2288,13 @@ export type Database = {
       product_meter_readings: {
         Row: {
           id: string
+          is_meter_replacement: boolean | null
           meter_id: string
           plant_id: string
           current_reading: number
           previous_reading: number | null
           daily_volume: number | null
+          production_volume: number | null
           reading_datetime: string
           recorded_by: string | null
           norm_status: string | null
@@ -2213,11 +2302,13 @@ export type Database = {
         }
         Insert: {
           id?: string
+          is_meter_replacement?: boolean | null
           meter_id: string
           plant_id: string
           current_reading: number
           previous_reading?: number | null
           daily_volume?: number | null
+          production_volume?: number | null
           reading_datetime?: string
           recorded_by?: string | null
           norm_status?: string | null
@@ -2225,11 +2316,13 @@ export type Database = {
         }
         Update: {
           id?: string
+          is_meter_replacement?: boolean | null
           meter_id?: string
           plant_id?: string
           current_reading?: number
           previous_reading?: number | null
           daily_volume?: number | null
+          production_volume?: number | null
           reading_datetime?: string
           recorded_by?: string | null
           norm_status?: string | null
@@ -2369,6 +2462,138 @@ export type Database = {
         ]
       }
     }
+      plant_assignment_audit: {
+        Row: {
+          id: string
+          user_id: string
+          admin_id: string | null
+          new_plant_ids: string[]
+          justification: string | null
+          changed_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          admin_id?: string | null
+          new_plant_ids: string[]
+          justification?: string | null
+          changed_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          admin_id?: string | null
+          new_plant_ids?: string[]
+          justification?: string | null
+          changed_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      plant_edit_audit_log: {
+        Row: {
+          id: string
+          plant_id: string
+          user_id: string | null
+          field_changed: string
+          old_value: string | null
+          new_value: string | null
+          timestamp: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          plant_id: string
+          user_id?: string | null
+          field_changed: string
+          old_value?: string | null
+          new_value?: string | null
+          timestamp?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          plant_id?: string
+          user_id?: string | null
+          field_changed?: string
+          old_value?: string | null
+          new_value?: string | null
+          timestamp?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      power_meter_changes: {
+        Row: {
+          id: string
+          plant_id: string
+          meter_index: number
+          change_date: string
+          old_multiplier: number
+          new_multiplier: number
+          notes: string | null
+          changed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          plant_id: string
+          meter_index?: number
+          change_date: string
+          old_multiplier: number
+          new_multiplier: number
+          notes?: string | null
+          changed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          plant_id?: string
+          meter_index?: number
+          change_date?: string
+          old_multiplier?: number
+          new_multiplier?: number
+          notes?: string | null
+          changed_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      signup_audit: {
+        Row: {
+          id: string
+          email: string
+          designation: string | null
+          operator_count: number | null
+          plant_ids: string[] | null
+          device_id: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          designation?: string | null
+          operator_count?: number | null
+          plant_ids?: string[] | null
+          device_id?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          designation?: string | null
+          operator_count?: number | null
+          plant_ids?: string[] | null
+          device_id?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     Views: {
       [_ in never]: never
     }
