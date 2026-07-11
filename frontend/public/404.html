@@ -1,10 +1,40 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>PWRI Monitoring</title>
+    <!--
+      GitHub Pages SPA fallback.
+
+      When a user navigates directly to a deep route (e.g. /pwri-plantmonitoring/operations)
+      or hits Reload after the ErrorBoundary triggers a hard refresh, GitHub Pages
+      can't find the file and serves this 404.html instead.
+
+      This script saves the current path to sessionStorage and immediately
+      redirects to the app root. The SPA redirect script in index.html
+      then restores the original path via history.replaceState so the
+      React Router renders the right page.
+
+      Without this, a hard reload on /operations → GitHub Pages 404 →
+      the user sees a blank page instead of the app reloading correctly,
+      which defeats the whole purpose of the ErrorBoundary auto-reload fix.
+    -->
     <script>
-      sessionStorage.redirect = location.href;
+      (function () {
+        var path = window.location.href;
+        // Only redirect if we're not already at the root
+        if (path !== '/' && path !== window.location.origin + '/') {
+          sessionStorage.setItem('redirect', path);
+        }
+        // Redirect to the app root
+        window.location.replace(
+          window.location.origin + '/pwri-plantmonitoring/'
+        );
+      })();
     </script>
-    <meta http-equiv="refresh" content="0;URL='/pwri-plantmonitoring/'" />
   </head>
+  <body></body>
 </html>
