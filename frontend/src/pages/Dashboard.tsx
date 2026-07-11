@@ -319,7 +319,7 @@ function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: DataSummar
     queryFn: async () => {
       if (!locatorIds.length) return [];
       const { data } = await supabase
-        .from('locator_readings')
+        .from('locator_readings_clean' as any)
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', locatorIds)
         .gte('reading_datetime', startISO)
@@ -1434,7 +1434,7 @@ export default function Dashboard() {
       // in the Prod. vs Consum. tab.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await supabase
-        .from('locator_readings')
+        .from('locator_readings_clean' as any)
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
@@ -1457,7 +1457,7 @@ export default function Dashboard() {
       // migration columns that may not exist in all environments yet. Fall back to
       // base columns only if PostgREST returns a schema-cache error.
       const { data, error } = await (supabase
-        .from('well_readings') as any)
+        .from('well_readings_clean' as any) as any)
         .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,tds_ppm,turbidity_ntu')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
@@ -1466,7 +1466,7 @@ export default function Dashboard() {
       if (!error) return (data ?? []) as any[];
       // Fallback: base columns without quality fields
       const { data: fallback } = await supabase
-        .from('well_readings')
+        .from('well_readings_clean' as any)
         .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
@@ -1685,7 +1685,7 @@ export default function Dashboard() {
     queryFn: async () => {
       if (!_locatorIds?.length) return [];
       const { data } = await supabase
-        .from('locator_readings')
+        .from('locator_readings_clean' as any)
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', yesterday)
@@ -1702,7 +1702,7 @@ export default function Dashboard() {
     queryFn: async () => {
       if (!_wellIds?.length) return [];
       const { data } = await supabase
-        .from('well_readings')
+        .from('well_readings_clean' as any)
         .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', yesterday)
