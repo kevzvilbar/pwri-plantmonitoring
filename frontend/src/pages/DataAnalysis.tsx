@@ -556,7 +556,7 @@ function detectGaps(readings: RawReading[], column: string, sourceTable: string)
 // keeping network traffic minimal.
 async function recalculateTrainDeltas(trainId: string): Promise<void> {
   try {
-    const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
+    const { data: rows } = await (supabase.from('ro_train_readings_clean' as any) as any)
       .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: true });
@@ -586,7 +586,7 @@ async function recalculateTrainDeltas(trainId: string): Promise<void> {
       // Skip DB write when value hasn't changed
       const needsUpdate = newDelta !== stored;
       if (needsUpdate) {
-        await (supabase.from('ro_train_readings' as any) as any)
+        await (supabase.from('ro_train_readings_clean' as any) as any)
           .update({ permeate_meter_delta: newDelta })
           .eq('id', row.id);
       }
@@ -1202,7 +1202,7 @@ function RegressionDetail({
         // Queue affected train for full delta cascade after all values are written
         if (row.source_table === 'ro_train_readings' && row.column_name === 'permeate_meter') {
           try {
-            const { data: thisRow } = await (supabase.from('ro_train_readings' as any) as any)
+            const { data: thisRow } = await (supabase.from('ro_train_readings_clean' as any) as any)
               .select('train_id')
               .eq('id', c.reading_id)
               .maybeSingle();
@@ -1625,7 +1625,7 @@ function RawDataTable({
         entityCfg ? entityCfg.fkColumn : null,
       ].filter(Boolean).join(',');
 
-      let q = supabase.from(sourceTable as 'well_readings')
+      let q = supabase.from(sourceTable.replace('well_readings','well_readings_clean').replace('locator_readings','locator_readings_clean') as any)
         .select(selectCols)
         .order('reading_datetime', { ascending: false })
         .limit(200);
@@ -2075,7 +2075,7 @@ export default function DataAnalysis() {
       ].filter(Boolean).join(',');
 
       let q = supabase
-        .from(sourceTable as 'well_readings')
+        .from(sourceTable.replace('well_readings','well_readings_clean').replace('locator_readings','locator_readings_clean') as any)
         .select(selectCols)
         .order('reading_datetime', { ascending: true })
         .limit(2000);
