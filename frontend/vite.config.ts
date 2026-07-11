@@ -64,31 +64,37 @@ export default defineConfig(({ mode }) => ({
          *   tools      — import, AI, misc (standalone utilities)
          */
         manualChunks(id: string) {
+          // Normalize once, up front — every check below uses this, including
+          // the node_modules/vendor checks. Some of those checks (e.g. 'react/')
+          // contain a forward slash, which never matches raw Windows paths
+          // (backslash-separated), silently dumping React into vendor-misc
+          // on Windows dev/build machines. Normalizing once fixes that for
+          // both the vendor and page grouping below.
+          const p = id.replace(/\\/g, '/');
+
           // Vendor: keep large third-party libs in a single stable chunk
-          if (id.includes('node_modules')) {
+          if (p.includes('node_modules')) {
             // Supabase client — large, rarely changes
-            if (id.includes('@supabase')) return 'vendor-supabase';
+            if (p.includes('@supabase')) return 'vendor-supabase';
             // React + react-dom + react-query — core runtime
             if (
-              id.includes('react-dom') ||
-              id.includes('react/') ||
-              id.includes('@tanstack/react-query') ||
-              id.includes('@tanstack/query-core')
+              p.includes('react-dom') ||
+              p.includes('react/') ||
+              p.includes('@tanstack/react-query') ||
+              p.includes('@tanstack/query-core')
             ) return 'vendor-react';
             // Charting libs
             if (
-              id.includes('recharts') ||
-              id.includes('chart.js') ||
-              id.includes('d3-') ||
-              id.includes('victory')
+              p.includes('recharts') ||
+              p.includes('chart.js') ||
+              p.includes('d3-') ||
+              p.includes('victory')
             ) return 'vendor-charts';
             // All other node_modules
             return 'vendor-misc';
           }
 
           // Page chunks — group by usage pattern
-          const p = id.replace(/\\/g, '/');
-
           if (
             p.includes('/pages/Operations') ||
             p.includes('/pages/ROTrains')
@@ -135,6 +141,12 @@ export default defineConfig(({ mode }) => ({
             p.includes('/src/lib/') ||
             p.includes('/src/integrations/')
           ) return 'chunk-shared';
+
+          // Catch-all: any /pages/* file not matched above still gets grouped
+          // instead of silently reverting to its own hashed chunk. Update the
+          // groups above when you add a new page — this is just a safety net,
+          // not a substitute for keeping the list current.
+          if (p.includes('/pages/')) return 'chunk-misc-pages';
         },
       },
     },
