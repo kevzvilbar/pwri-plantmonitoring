@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
   Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
-, ClipboardCheck } from 'lucide-react';
+  ClipboardCheck } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
