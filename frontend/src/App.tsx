@@ -31,6 +31,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // ── NEW ──────────────────────────────────────────────────────────────────────
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
+const DataCorrections = lazy(() => import("./pages/DataCorrections"));
 
 const RouteFallback = () => (
   <div className="flex h-[60vh] w-full items-center justify-center text-sm text-muted-foreground">
@@ -122,6 +123,7 @@ const App = () => (
                 <Route path="/maintenance" element={<Maintenance />} />
                 <Route path="/incidents" element={<Incidents />} />
                 <Route path="/employees" element={<Employees />} />
+              <Route path="/data-corrections" element={<DataCorrections />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/exports" element={<Exports />} />
                 <Route path="/ai" element={<AIAssistant />} />
