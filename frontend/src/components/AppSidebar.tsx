@@ -60,6 +60,7 @@ const adminOnlyGroup: SidebarGroup = {
   label: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 
@@ -81,13 +82,7 @@ const dataGroup: SidebarGroup = {
 const sharedGroup: SidebarGroup = {
   label: 'Team',
   items: [
-    { to: '/employees', label: 'Employees', icon: Users },,
-  {
-    path: '/data-corrections',
-    label: 'Data Corrections',
-    icon: ClipboardCheck,
-    roles: ['Admin', 'Manager', 'Data Analyst'],
-  }
+    { to: '/employees', label: 'Employees', icon: Users },
   ],
 };
 
