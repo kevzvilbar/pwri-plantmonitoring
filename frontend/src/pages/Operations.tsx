@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
+import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -2463,26 +2465,27 @@ function LocatorRow({
 
   // ── Shared action buttons row (edit / cancel / history) ────────────────────
   // Item 2: within 2h = free edit; 2h-7days = correction request sent to pending_review
-  const lastTodayAge = lastToday ? (Date.now() - new Date(lastToday.reading_datetime).getTime()) / 60_000 : Infinity;
-  const canSelfEdit  = lastTodayAge <= 120; // within 2 hours
-  const canRequest   = lastTodayAge > 120 && lastTodayAge < 7 * 24 * 60; // 2h → 7 days
+  // Item 9: locked readings (approved by supervisor) cannot be self-edited regardless of age
+  const lastTodayAge  = lastToday ? (Date.now() - new Date(lastToday.reading_datetime).getTime()) / 60_000 : Infinity;
+  const isLocked      = !!(lastToday as any)?.locked_at;
+  const canSelfEdit   = lastTodayAge <= 120 && !isLocked; // within 2 hours AND not locked
+  const canRequest    = lastTodayAge > 120 && lastTodayAge < 7 * 24 * 60 && !isLocked; // 2h→7d AND not locked
 
-  const handleCorrectionRequest = async () => {
+  // Item 8: correction request target drives the dialog (replaces window.prompt)
+  const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
+
+  const handleCorrectionRequest = () => {
     if (!lastToday) return;
-    const reason = window.prompt('Briefly describe why this reading needs correction:');
-    if (!reason?.trim()) return;
-    const { error } = await (supabase.from('locator_readings').update({
-      norm_status: 'pending_review',
-    }).eq('id', lastToday.id) as any);
-    if (!error) {
-      await (supabase.from('reading_normalizations' as any).insert({
-        source_table: 'locator_readings', source_id: lastToday.id, action: 'tag',
-        original_value: lastToday.current_reading, note: `Operator correction request: ${reason}`,
-        performed_by: userId ?? null, performed_role: 'Operator',
-      }) as any);
-      toast.info(`${locator.name}: correction request sent to supervisor.`);
-      onSaved();
-    } else { toast.error(error.message); }
+    setCorrectionTarget({
+      id:              lastToday.id,
+      sourceTable:     'locator_readings',
+      plantId:         plantId,
+      entityName:      locator.name,
+      currentReading:  lastToday.current_reading,
+      previousReading: lastToday.previous_reading ?? null,
+      dailyVolume:     lastToday.daily_volume ?? null,
+      readingDatetime: lastToday.reading_datetime,
+    });
   };
 
   const ActionButtons = (
@@ -2509,7 +2512,13 @@ function LocatorRow({
           <History className="h-3.5 w-3.5" />
         </Button>
       )}
-      {/* Item 2: Operator correction request — only visible for entries 2h-7d old */}
+      {/* Item 9: locked badge — reading approved by supervisor, cannot be edited */}
+      {isLocked && lastToday && !editingId && (
+        <span className="h-10 px-2 flex items-center text-[10px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg gap-1 shrink-0">
+          🔒 Locked
+        </span>
+      )}
+      {/* Item 8: correction request — visible for entries 2h–7d old that aren't locked */}
       {lastToday && !editingId && canRequest && (
         <Button variant="ghost" size="sm"
           className="h-10 px-2.5 rounded-lg shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-xs font-medium gap-1.5"
@@ -2517,6 +2526,14 @@ function LocatorRow({
           title="Entry is older than 2 hours — submit a correction request for supervisor review">
           ✎ Fix
         </Button>
+      )}
+      {/* Item 8: CorrectionRequestDialog mounts when correctionTarget is set */}
+      {correctionTarget && (
+        <CorrectionRequestDialog
+          target={correctionTarget}
+          onClose={() => setCorrectionTarget(null)}
+          onSubmitted={() => { setCorrectionTarget(null); onSaved(); }}
+        />
       )}
     </>
   );

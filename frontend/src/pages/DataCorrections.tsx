@@ -54,6 +54,23 @@ interface FlaggedRow {
   flag_reason?: string;
 }
 
+interface CorrectionRequest {
+  id: string;
+  source_table: SourceTable;
+  source_id: UUID;
+  entity_name?: string;
+  plant_name?: string;
+  original_value: number;
+  proposed_value: number;
+  reason: string;
+  note: string | null;
+  status: string;
+  submitter_email: string | null;
+  created_at: string;
+}
+
+type UUID = string;
+
 interface ChainEntry {
   id: string;
   reading_datetime: string;
@@ -349,6 +366,32 @@ async function fetchPending(): Promise<FlaggedRow[]> {
   return results.sort((a, b) => new Date(b.reading_datetime).getTime() - new Date(a.reading_datetime).getTime());
 }
 
+async function fetchCorrectionRequests(): Promise<CorrectionRequest[]> {
+  const { data: reqs } = await (supabase
+    .from('correction_requests' as any)
+    .select('id,source_table,source_id,plant_id,original_value,proposed_value,reason,note,status,submitted_by,created_at')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(100) as any);
+  if (!reqs?.length) return [];
+
+  const plantIds = [...new Set(reqs.map((r: any) => r.plant_id))].filter(Boolean);
+  const { data: plants } = await (supabase.from('plants').select('id,name').in('id', plantIds) as any);
+  const plantMap = Object.fromEntries((plants ?? []).map((p: any) => [p.id, p.name]));
+  const userIds = [...new Set(reqs.map((r: any) => r.submitted_by))].filter(Boolean);
+  const { data: profiles } = await (supabase.from('user_profiles').select('id,email').in('id', userIds) as any);
+  const emailMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.email]));
+
+  return reqs.map((r: any) => ({
+    id: r.id, source_table: r.source_table, source_id: r.source_id,
+    plant_name: plantMap[r.plant_id] ?? '—',
+    original_value: r.original_value, proposed_value: r.proposed_value,
+    reason: r.reason, note: r.note, status: r.status,
+    submitter_email: emailMap[r.submitted_by] ?? null,
+    created_at: r.created_at,
+  }));
+}
+
 function PendingReviewTab() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -397,7 +440,50 @@ function PendingReviewTab() {
     qc.invalidateQueries({ queryKey: ['data-corrections-pending'] });
     qc.invalidateQueries({ queryKey: ['pending-readings'] });
     qc.invalidateQueries({ queryKey: ['pending-readings-count'] });
+    qc.invalidateQueries({ queryKey: ['correction-requests-pending'] });
   }, [qc]);
+
+  const { data: corrReqs = [] } = useQuery({
+    queryKey: ['correction-requests-pending'],
+    queryFn: fetchCorrectionRequests,
+    refetchInterval: 60_000,
+  });
+
+  const approveRequest = async (req: CorrectionRequest) => {
+    // 1. Run cascade correction to apply proposed value
+    const { error } = await (supabase.rpc('fn_cascade_reading_correction', {
+      p_table:       req.source_table,
+      p_row_id:      req.source_id,
+      p_new_current: req.proposed_value,
+      p_admin_id:    user?.id ?? null,
+      p_reason:      'Approved correction request: ' + req.reason,
+    }) as any);
+    if (error) { toast.error(error.message); return; }
+    // 2. Mark request as approved (triggers operator notification)
+    await (supabase.from('correction_requests' as any)
+      .update({ status: 'approved', resolved_by: user?.id, resolved_at: new Date().toISOString() })
+      .eq('id', req.id) as any);
+    toast.success('Correction approved and applied');
+    invalidate();
+  };
+
+  const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
+    // Revert to normal without changing value
+    await (supabase.from(req.source_table as any).update({ norm_status: 'normal' }).eq('id', req.source_id) as any);
+    await (supabase.from('correction_requests' as any)
+      .update({ status: 'rejected', resolved_by: user?.id, resolved_at: new Date().toISOString(), resolution_note: resolutionNote || null })
+      .eq('id', req.id) as any);
+    toast.info('Correction request rejected — original value kept');
+    invalidate();
+  };
+
+  const unlockReading = async (row: FlaggedRow) => {
+    await (supabase.from(row.source_table as any)
+      .update({ locked_at: null, locked_by: null })
+      .eq('id', row.id) as any);
+    toast.success(`${row.entity_name}: unlocked`);
+    invalidate();
+  };
 
   const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
     setBusy(p => ({ ...p, [row.id]: true }));
@@ -483,6 +569,54 @@ function PendingReviewTab() {
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelected(new Set())}>Clear</Button>
           </div>
+        </div>
+      )}
+
+      {/* Item 8: Operator correction requests */}
+      {corrReqs.length > 0 && (
+        <div className="space-y-2 pb-1">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
+            Operator correction requests ({corrReqs.length})
+          </p>
+          {corrReqs.map(req => (
+            <Card key={req.id} className="p-4 border-blue-300/40 bg-blue-50/20 dark:bg-blue-950/10">
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium">{tableLabel[req.source_table]}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{req.plant_name}</Badge>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+                        Operator request
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {req.submitter_email} · {fmtDt(req.created_at)}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div><div className="text-muted-foreground">Original</div><div className="font-mono font-medium text-amber-600">{fmtNum(req.original_value)}</div></div>
+                  <div>
+                    <div className="text-muted-foreground flex items-center gap-1"><ArrowRight className="h-2.5 w-2.5" />Proposed</div>
+                    <div className="font-mono font-medium text-emerald-600">{fmtNum(req.proposed_value)}</div>
+                  </div>
+                  <div><div className="text-muted-foreground">Reason</div><div className="text-[11px] leading-tight">{req.reason}</div></div>
+                </div>
+                {req.note && <p className="text-xs text-muted-foreground italic">"{req.note}"</p>}
+                <div className="flex gap-1.5 flex-wrap">
+                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-emerald-400/40 text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => approveRequest(req)}>
+                    <CheckCircle2 className="h-3 w-3" />Apply correction
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-destructive/40 text-destructive hover:bg-destructive/5"
+                    onClick={() => rejectRequest(req, '')}>
+                    <XCircle className="h-3 w-3" />Reject
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
@@ -576,6 +710,14 @@ function PendingReviewTab() {
                         {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                         Reject
                       </Button>
+                      {/* Item 9: unlock button — only shows after supervisor approval locks the row */}
+                      {(row as any).locked_at && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 gap-1 text-xs border-teal-400/40 text-teal-700 hover:bg-teal-50"
+                          disabled={isBusy} onClick={() => unlockReading(row)}>
+                          🔓 Unlock
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
