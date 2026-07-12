@@ -1060,6 +1060,8 @@ export type Database = {
           id: string
           is_estimated: boolean
           is_meter_replacement: boolean | null
+          locked_at: string | null
+          locked_by: string | null
           locator_id: string
           norm_status: string | null
           off_location_flag: boolean
@@ -1078,6 +1080,8 @@ export type Database = {
           id?: string
           is_estimated?: boolean
           is_meter_replacement?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
           locator_id: string
           norm_status?: string | null
           off_location_flag?: boolean
@@ -1096,6 +1100,8 @@ export type Database = {
           id?: string
           is_estimated?: boolean
           is_meter_replacement?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
           locator_id?: string
           norm_status?: string | null
           off_location_flag?: boolean
@@ -2111,6 +2117,8 @@ export type Database = {
           id: string
           /** True when this record marks a meter replacement (resets cumulative volume). */
           is_meter_replacement: boolean
+          locked_at: string | null
+          locked_by: string | null
           norm_status: string | null
           off_location_flag: boolean
           plant_id: string
@@ -2462,6 +2470,57 @@ export type Database = {
         ]
       }
     }
+      correction_requests: {
+        Row: {
+          id: string
+          source_table: string
+          source_id: string
+          plant_id: string
+          submitted_by: string | null
+          original_value: number
+          proposed_value: number
+          reason: string
+          note: string | null
+          status: string
+          resolved_by: string | null
+          resolved_at: string | null
+          resolution_note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          source_table: string
+          source_id: string
+          plant_id: string
+          submitted_by?: string | null
+          original_value: number
+          proposed_value: number
+          reason: string
+          note?: string | null
+          status?: string
+          resolved_by?: string | null
+          resolved_at?: string | null
+          resolution_note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          source_table?: string
+          source_id?: string
+          plant_id?: string
+          submitted_by?: string | null
+          original_value?: number
+          proposed_value?: number
+          reason?: string
+          note?: string | null
+          status?: string
+          resolved_by?: string | null
+          resolved_at?: string | null
+          resolution_note?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       plant_assignment_audit: {
         Row: {
           id: string
