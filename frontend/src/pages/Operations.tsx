@@ -2420,8 +2420,8 @@ function LocatorRow({
         };
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status').single() as any)
-      : await (supabase.from('locator_readings').insert(payload).select('norm_status').single() as any);
+      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('locator_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -2446,15 +2446,48 @@ function LocatorRow({
     if (isPending) {
       toast.info(`${locator.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
     } else {
-      toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}`);
+      // Item 1: delta confirmation — shows operator exactly what was logged
+      const curr = savedRow?.current_reading;
+      const prev = savedRow?.previous_reading;
+      const vol  = savedRow?.daily_volume;
+      const deltaStr = vol != null
+        ? ` · ${vol >= 0 ? '+' : ''}${Number(vol).toLocaleString('en-PH', { maximumFractionDigits: 1 })} m³`
+        : '';
+      const chainStr = prev != null && curr != null
+        ? `  (${Number(prev).toLocaleString('en-PH', { maximumFractionDigits: 0 })} → ${Number(curr).toLocaleString('en-PH', { maximumFractionDigits: 0 })})`
+        : '';
+      toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}${deltaStr}${chainStr}`, { duration: 5000 });
     }
     setReading(''); setEditingId(null); onSaved();
   };
 
   // ── Shared action buttons row (edit / cancel / history) ────────────────────
+  // Item 2: within 2h = free edit; 2h-7days = correction request sent to pending_review
+  const lastTodayAge = lastToday ? (Date.now() - new Date(lastToday.reading_datetime).getTime()) / 60_000 : Infinity;
+  const canSelfEdit  = lastTodayAge <= 120; // within 2 hours
+  const canRequest   = lastTodayAge > 120 && lastTodayAge < 7 * 24 * 60; // 2h → 7 days
+
+  const handleCorrectionRequest = async () => {
+    if (!lastToday) return;
+    const reason = window.prompt('Briefly describe why this reading needs correction:');
+    if (!reason?.trim()) return;
+    const { error } = await (supabase.from('locator_readings').update({
+      norm_status: 'pending_review',
+    }).eq('id', lastToday.id) as any);
+    if (!error) {
+      await (supabase.from('reading_normalizations' as any).insert({
+        source_table: 'locator_readings', source_id: lastToday.id, action: 'tag',
+        original_value: lastToday.current_reading, note: `Operator correction request: ${reason}`,
+        performed_by: userId ?? null, performed_role: 'Operator',
+      }) as any);
+      toast.info(`${locator.name}: correction request sent to supervisor.`);
+      onSaved();
+    } else { toast.error(error.message); }
+  };
+
   const ActionButtons = (
     <>
-      {lastToday && !editingId && (
+      {lastToday && !editingId && canSelfEdit && (
         <Button variant="ghost" size="sm"
           className="h-10 w-10 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => { setEditingId(lastToday.id); setReading(String(lastToday.current_reading)); }}
@@ -2474,6 +2507,15 @@ function LocatorRow({
           className="h-10 w-10 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => setShowHistory(true)} title="View reading history">
           <History className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {/* Item 2: Operator correction request — only visible for entries 2h-7d old */}
+      {lastToday && !editingId && canRequest && (
+        <Button variant="ghost" size="sm"
+          className="h-10 px-2.5 rounded-lg shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-xs font-medium gap-1.5"
+          onClick={handleCorrectionRequest}
+          title="Entry is older than 2 hours — submit a correction request for supervisor review">
+          ✎ Fix
         </Button>
       )}
     </>
@@ -3108,8 +3150,8 @@ function WellRow({
     if (pressureReading) payload.pressure_psi = +pressureReading;
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('norm_status').single() as any)
-      : await (supabase.from('well_readings').insert(payload).select('norm_status').single() as any);
+      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('well_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -3131,7 +3173,16 @@ function WellRow({
     if (isPending) {
       toast.info(`${well.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
     } else {
-      toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}`);
+      const curr = savedRow?.current_reading;
+      const prev = savedRow?.previous_reading;
+      const vol  = savedRow?.daily_volume;
+      const deltaStr = vol != null
+        ? ` · ${vol >= 0 ? '+' : ''}${Number(vol).toLocaleString('en-PH', { maximumFractionDigits: 1 })} m³`
+        : '';
+      const chainStr = prev != null && curr != null
+        ? `  (${Number(prev).toLocaleString('en-PH', { maximumFractionDigits: 0 })} → ${Number(curr).toLocaleString('en-PH', { maximumFractionDigits: 0 })})`
+        : '';
+      toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}${deltaStr}${chainStr}`, { duration: 5000 });
     }
     setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setEditingId(null); onSaved();
