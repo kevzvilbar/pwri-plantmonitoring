@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
   Users, DollarSign, Receipt, Download, Upload, Sparkles, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
-} from 'lucide-react';
+, ClipboardCheck } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -81,7 +81,13 @@ const dataGroup: SidebarGroup = {
 const sharedGroup: SidebarGroup = {
   label: 'Team',
   items: [
-    { to: '/employees', label: 'Employees', icon: Users },
+    { to: '/employees', label: 'Employees', icon: Users },,
+  {
+    path: '/data-corrections',
+    label: 'Data Corrections',
+    icon: ClipboardCheck,
+    roles: ['Admin', 'Manager', 'Data Analyst'],
+  }
   ],
 };
 
