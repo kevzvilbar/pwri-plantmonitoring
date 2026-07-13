@@ -4,7 +4,8 @@ import {
   Building2, Droplet, Cog,
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
   ShieldAlert,
-} , ClipboardCheck } from 'lucide-react';
+  ClipboardCheck,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
