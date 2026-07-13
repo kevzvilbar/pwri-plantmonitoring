@@ -78,6 +78,12 @@ export default function PendingApproval() {
           </Button>
         </div>
       </Card>
+      <p className="text-xs text-muted-foreground text-center mt-4">
+        Supervisor looking for reading corrections?{' '}
+        <a href="/pwri-plantmonitoring/data-corrections" className="underline hover:text-foreground">
+          Go to Data Corrections
+        </a>
+      </p>
     </div>
   );
 }

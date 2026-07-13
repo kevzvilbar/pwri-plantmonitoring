@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useDraft } from '@/hooks/useDraft';
 import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
 import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { useAuth } from '@/hooks/useAuth';
@@ -2460,7 +2461,7 @@ function LocatorRow({
         : '';
       toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}${deltaStr}${chainStr}`, { duration: 5000 });
     }
-    setReading(''); setEditingId(null); onSaved();
+    setReading(''); clearDraftReading(); setEditingId(null); onSaved();
   };
 
   // ── Shared action buttons row (edit / cancel / history) ────────────────────
@@ -2709,6 +2710,11 @@ function SharedPowerMeterRow({
   onSaved: () => void;
 }) {
   const [reading, setReading] = useState('');
+  // Item 9: draft recovery — restores the value if the operator navigates away accidentally
+  const { draft: draftReading, setDraft: setDraftReading, clearDraft: clearDraftReading } =
+    useDraft(`loc-reading-${locator.id}`);
+  // Restore draft on mount if input is empty
+  useState(() => { if (!reading && draftReading) setReading(draftReading); });
   const [saving, setSaving] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
@@ -2786,7 +2792,7 @@ function SharedPowerMeterRow({
         <div className="relative flex-1">
           <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-500 pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={reading}
-            onChange={e => setReading(e.target.value)} placeholder="Shared power kWh"
+            onChange={e => { setReading(e.target.value); setDraftReading(e.target.value); }} placeholder="Shared power kWh"
             className="h-10 pl-8 w-full border-amber-200 dark:border-amber-800/50 focus-visible:ring-amber-400/40 bg-white/70 dark:bg-amber-950/30 placeholder:text-muted-foreground/50"
             data-testid={`shared-power-input-${primaryWellId}`} />
         </div>
@@ -3909,8 +3915,8 @@ function BlendingRow({
       return;
     }
     // Warn on suspicious values (same behaviour as locator / well — save proceeds).
-    if (blendBelowPrev) toast.warning(`${well.name}: reading below previous — saved anyway`);
-    else if (blendHighVol) toast.warning(`${well.name}: blending volume unusually high vs. reference — saved anyway`);
+    if (blendBelowPrev) toast.info(`${well.name}: reading below previous — saved anyway`);
+    else if (blendHighVol) toast.info(`${well.name}: blending volume unusually high vs. reference — saved anyway`);
     setSaving(true);
     try {
       const { data: existing } = await (supabase.from('blending_events' as any) as any)

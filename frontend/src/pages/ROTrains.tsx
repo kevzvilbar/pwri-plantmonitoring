@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fmtSaveToast } from '@/lib/format';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -2181,7 +2182,11 @@ function PretreatmentAndROLog() {
       ...(roValues.chlorine_residual_mg_l !== '' ? { chlorine_residual_mg_l: +roValues.chlorine_residual_mg_l } : {}),
       recorded_by: activeOperator?.id,
     };
-    const { error: roError } = await supabase.from('ro_train_readings').insert(roPayload);
+    const { data: savedRow, error: roError } = await (supabase
+      .from('ro_train_readings')
+      .insert(roPayload)
+      .select('permeate_meter_delta,feed_meter_delta')
+      .single() as any);
     if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
 
     // ── Sync train status in DB only for manual overrides ────────────────────
@@ -2273,7 +2278,10 @@ function PretreatmentAndROLog() {
     });
     if (pretreatError) { toast.error(`Pre-treatment error: ${pretreatError.message}`); return; }
 
-    toast.success('Pre-treatment & RO reading saved');
+    const pmDelta = (savedRow as any)?.permeate_meter_delta;
+      const fmDelta = (savedRow as any)?.feed_meter_delta;
+      const deltaStr = pmDelta != null ? ` · permeate +${Number(pmDelta).toLocaleString('en-PH',{maximumFractionDigits:1})} m³` : '';
+      toast.success(`${train.name}: saved${deltaStr}`);
     setAfmmf({}); setBoosters({}); setHousings({}); setCartridgeHousings({});
     setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
     setSyncMeterStart(''); setSyncMeterEnd('');
