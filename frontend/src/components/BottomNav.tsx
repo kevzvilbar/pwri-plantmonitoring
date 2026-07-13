@@ -4,7 +4,7 @@ import {
   Building2, Droplet, Cog,
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
   ShieldAlert,
-} from 'lucide-react';
+} , ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
@@ -71,6 +71,7 @@ const adminOnlyGroup = {
   title: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
+    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 

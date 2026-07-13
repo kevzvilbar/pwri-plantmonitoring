@@ -1,4 +1,4 @@
-import { Bell, AlertTriangle, Info, Clock, BellOff } from 'lucide-react';
+import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, Info, Clock, BellOff } from 'lucide-react';
 
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
