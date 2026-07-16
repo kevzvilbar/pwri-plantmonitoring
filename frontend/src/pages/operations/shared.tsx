@@ -307,5 +307,3 @@ export function useBlendingWells(plantId: string) {
     retry: false,
   });
 }
-
-const TAB_ALIASES: Record<string, string> = {
