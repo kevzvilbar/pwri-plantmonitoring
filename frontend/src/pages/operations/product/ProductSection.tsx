@@ -943,6 +943,4 @@ function MeterNameList({
   );
 }
 
-// ─── POWER ───────────────────────────────────────────────────────────────────
 
-function PowerForm() {
