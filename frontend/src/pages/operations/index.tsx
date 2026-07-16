@@ -32,6 +32,9 @@ import { BlendingForm }       from './blending/BlendingSection';
 import { ProductForm }        from './product/ProductSection';
 import { PowerForm }          from './power/PowerSection';
 
+// Import shared PlantSelector
+import { PlantSelector } from '@/components/PlantSelector';
+
 const TAB_ALIASES: Record<string, string> = {
   locator: 'locator', locators: 'locator',
   well: 'well', wells: 'well',
@@ -41,28 +44,7 @@ const TAB_ALIASES: Record<string, string> = {
 };
 const VALID_TABS = new Set(['locator', 'well', 'product', 'blending', 'power']);
 
-// ─── PlantSelector ───────────────────────────────────────────────────────────
-function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: plants } = usePlants();
-  const { selectedPlantId } = useAppStore();
-  // Fix: onChange is intentionally excluded from deps. Including it caused an
-  // infinite render loop when parents passed inline arrow functions (new reference
-  // every render → effect fires → onChange(selectedPlantId) → re-render → repeat).
-  // value is kept so the effect re-checks after the first auto-select clears the
-  // empty-string condition. selectedPlantId covers the "global plant changed" case.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value]);
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
-      <SelectContent>
-        {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  );
-}
-
-// ─── Operations page ─────────────────────────────────────────────────────────
+// ─── Operations page ───────────────────────────────────────────────────────
 
 const TAB_CONFIG = [
   { key: 'locator',  label: 'Locator',  icon: MapPin },
@@ -108,7 +90,7 @@ export default function Operations() {
               key={key}
               onClick={() => handleTabChange(key)}
               className={[
-                'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/40',
+                'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 focus-visibl[...],
                 active
                   ? 'bg-white dark:bg-card shadow-sm text-teal-700 dark:text-teal-400 border border-border/60'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50 dark:hover:bg-white/5',
