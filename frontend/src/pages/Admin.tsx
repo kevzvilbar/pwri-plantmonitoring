@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { ShieldAlert, Users, Building2, ClipboardList, Database, RefreshCw } from 'lucide-react';
+import { ShieldAlert, Users, Building2, ClipboardList, Database } from 'lucide-react';
 
 import { UsersPanel } from './admin/UsersPanel';
 import { PlantsPanel } from './admin/PlantsPanel';
@@ -52,22 +52,22 @@ export default function Admin() {
   }
 
   // Count visible tabs to size the grid correctly
-  // Manager sees: Plants, Audit, Normalization (3)
-  // Admin sees:   Users, Plants, Audit, Normalization, Migrations (5)
-  const tabCount = isAdmin ? 5 : 3;
+  // Manager sees: Plants, Audit (2)
+  // Admin sees:   Users, Plants, Audit, Migrations (4)
+  const tabCount = isAdmin ? 4 : 2;
 
   return (
     <div className="space-y-3 animate-fade-in" data-testid="admin-page">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Admin console</h1>
         <p className="text-xs text-muted-foreground">
-          Manage users, plants, normalization, and the deletion audit trail. Soft-delete keeps
+          Manage users, plants, and the deletion audit trail. Soft-delete keeps
           audit history; hard-delete is blocked while dependencies exist (Admin
           can override with explicit confirmation).
         </p>
       </div>
 
-      <Tabs defaultValue={isAdmin ? 'users' : 'normalization'}>
+      <Tabs defaultValue={isAdmin ? 'users' : 'plants'}>
         <TabsList className={`grid grid-cols-${tabCount} w-full`}>
           <TabsTrigger value="users" disabled={!isAdmin} data-testid="admin-tab-users">
             <Users className="h-3 w-3 mr-1" /> Users
@@ -77,9 +77,6 @@ export default function Admin() {
           </TabsTrigger>
           <TabsTrigger value="audit" data-testid="admin-tab-audit">
             <ClipboardList className="h-3 w-3 mr-1" /> Audit log
-          </TabsTrigger>
-          <TabsTrigger value="normalization" data-testid="admin-tab-normalization">
-            <RefreshCw className="h-3 w-3 mr-1" /> Normalization
           </TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="migrations" data-testid="admin-tab-migrations">
@@ -110,7 +107,6 @@ export default function Admin() {
         <TabsContent value="audit" className="mt-3">
           <AuditLogPanel />
         </TabsContent>
-        {/* Normalization moved to Data Corrections page */}
         {isAdmin && (
           <TabsContent value="migrations" className="mt-3">
             <MigrationsPanel />
