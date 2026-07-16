@@ -37,7 +37,6 @@ import {
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
-import { fmtSaveToast } from '@/lib/format';
 
 const WELL_SCHEMA = 'well_name*, current_reading*, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, power_meter_reading, solar_meter_reading';
 const WELL_TEMPLATE_ROW = {
@@ -139,13 +138,6 @@ async function insertWellReadings(
   }
   return { count, errors };
 }
-
-// Blending readings — two input modes (mirrors manual BlendingRow):
-//   Raw meter : supply raw_meter_reading (cumulative); Δ is auto-computed from the
-//               previous reading (from previous_reading column > intra-batch > localStorage).
-//   Direct    : supply volume_m3 (daily m³ already computed).
-// Exactly one of raw_meter_reading / volume_m3 must be present per row.
-const BLENDING_SCHEMA =
 
 export function WellReadingForm() {
   const qc = useQueryClient();
@@ -953,6 +945,4 @@ function WellRow({
   );
 }
 
-// ─── BLENDING ────────────────────────────────────────────────────────────────
 
-function BlendingForm() {
