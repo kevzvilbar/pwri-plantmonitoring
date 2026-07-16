@@ -239,7 +239,7 @@ export function MigrationsPanel() {
       await navigator.clipboard.writeText(sql);
       toast.success(`Copied ${filename} — paste into the Supabase SQL editor that just opened`);
     } catch {
-      toast.message(`Opening Supabase SQL editor — copy ${filename}'s SQL manually from the panel`);
+      toast.info(`Opening Supabase SQL editor — copy ${filename}'s SQL manually from the panel`);
     }
     window.open(supabaseSqlEditorUrl, '_blank', 'noopener,noreferrer');
   };
