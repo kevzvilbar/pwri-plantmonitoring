@@ -274,9 +274,6 @@ async function insertPowerReadings(
   return { count, errors };
 }
 
-// ─── Blending wells list (Mongo-backed with Supabase fallback) ───────────────
-function useBlendingWells(plantId: string) {
-
 export function PowerForm() {
   const qc = useQueryClient();
   const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
