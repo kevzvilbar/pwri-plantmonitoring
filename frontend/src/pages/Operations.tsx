@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
+import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
@@ -2298,6 +2299,14 @@ function LocatorRow({
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt]   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
+  // Draft recovery — persists the reading input so an accidental navigation
+  // or browser crash doesn't lose what the operator was entering.
+  const { draft: draftReading, setDraft: setDraftReading, clearDraft: clearDraftReading } =
+    useDraft(`loc-reading-${locator.id}`);
+  useEffect(() => {
+    if (reading === '' && draftReading) setReading(draftReading);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 'raw'  = user enters cumulative meter reading; delta = cur - prev
   // 'direct' = user enters daily m³ directly; stored as daily_volume
   const [locInputMode, setLocInputMode] = useState<'raw' | 'direct'>('raw');
@@ -2449,17 +2458,10 @@ function LocatorRow({
     if (isPending) {
       toast.info(`${locator.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
     } else {
-      // Item 1: delta confirmation — shows operator exactly what was logged
       const curr = savedRow?.current_reading;
       const prev = savedRow?.previous_reading;
       const vol  = savedRow?.daily_volume;
-      const deltaStr = vol != null
-        ? ` · ${vol >= 0 ? '+' : ''}${Number(vol).toLocaleString('en-PH', { maximumFractionDigits: 1 })} m³`
-        : '';
-      const chainStr = prev != null && curr != null
-        ? `  (${Number(prev).toLocaleString('en-PH', { maximumFractionDigits: 0 })} → ${Number(curr).toLocaleString('en-PH', { maximumFractionDigits: 0 })})`
-        : '';
-      toast.success(`${locator.name}: ${editingId ? 'updated' : 'saved'}${deltaStr}${chainStr}`, { duration: 5000 });
+      toast.success(fmtSaveToast(locator.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
     setReading(''); clearDraftReading(); setEditingId(null); onSaved();
   };
@@ -2599,7 +2601,7 @@ function LocatorRow({
           {/* Drum display */}
           <OdometerRollerInput
             value={reading}
-            onChange={setReading}
+            onChange={(v) => { setReading(v); setDraftReading(v); }}
             alertState={odometerAlert}
             disabled={saving || atLimit}
             testId={`loc-odometer-${locator.id}`}
@@ -2638,7 +2640,7 @@ function LocatorRow({
             <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-500 pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
-              value={reading} onChange={(e) => setReading(e.target.value)}
+              value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading(e.target.value); }}
               placeholder={locInputMode === 'direct' ? 'Daily volume (m³)' : 'Meter reading'}
               className="pl-8 h-10 bg-teal-50/30 dark:bg-teal-950/10 border-teal-200 dark:border-teal-800/50 focus-visible:ring-teal-500/30"
             />
@@ -2710,11 +2712,11 @@ function SharedPowerMeterRow({
   onSaved: () => void;
 }) {
   const [reading, setReading] = useState('');
-  // Item 9: draft recovery — restores the value if the operator navigates away accidentally
+  // Draft recovery — restores the power meter value if the operator navigates away accidentally
   const { draft: draftReading, setDraft: setDraftReading, clearDraft: clearDraftReading } =
-    useDraft(`loc-reading-${locator.id}`);
+    useDraft(`shared-power-${primaryWellId}`);
   // Restore draft on mount if input is empty
-  useState(() => { if (!reading && draftReading) setReading(draftReading); });
+  useEffect(() => { if (!reading && draftReading) setReading(draftReading); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [saving, setSaving] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
@@ -2754,7 +2756,7 @@ function SharedPowerMeterRow({
     }
 
     toast.success(`${groupName}: power meter saved`);
-    setReading('');
+    setReading(''); clearDraftReading();
     onSaved();
   };
 
@@ -3087,6 +3089,13 @@ function WellRow({
   const [showHistory, setShowHistory]           = useState(false);
   const [customDt, setCustomDt]                 = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
+  // Draft recovery — restores the meter reading if the operator navigates away accidentally
+  const { draft: draftWell, setDraft: setDraftWell, clearDraft: clearDraftWell } =
+    useDraft(`well-reading-${well.id}`);
+  useEffect(() => {
+    if (reading === '' && draftWell) setReading(draftWell);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Pre-fill the drum with the latest previous meter reading so the operator
   // starts from the real odometer value and only rolls the changed digits.
   // Race-condition fix: same as LocatorRow — see comment there for full details.
@@ -3199,15 +3208,9 @@ function WellRow({
       const curr = savedRow?.current_reading;
       const prev = savedRow?.previous_reading;
       const vol  = savedRow?.daily_volume;
-      const deltaStr = vol != null
-        ? ` · ${vol >= 0 ? '+' : ''}${Number(vol).toLocaleString('en-PH', { maximumFractionDigits: 1 })} m³`
-        : '';
-      const chainStr = prev != null && curr != null
-        ? `  (${Number(prev).toLocaleString('en-PH', { maximumFractionDigits: 0 })} → ${Number(curr).toLocaleString('en-PH', { maximumFractionDigits: 0 })})`
-        : '';
-      toast.success(`${well.name}: ${editingId ? 'updated' : 'saved'}${deltaStr}${chainStr}`, { duration: 5000 });
+      toast.success(fmtSaveToast(well.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
-    setReading(''); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
+    setReading(''); clearDraftWell(); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setEditingId(null); onSaved();
   };
 
@@ -3424,7 +3427,7 @@ function WellRow({
               <p className="text-[10px] font-medium text-muted-foreground">Water Meter</p>
               <OdometerRollerInput
                 value={reading}
-                onChange={setReading}
+                onChange={(v) => { setReading(v); setDraftWell(v); }}
                 alertState={wellOdometerAlert}
                 disabled={saving || atLimit}
                 testId={`well-meter-input-${well.id}`}
