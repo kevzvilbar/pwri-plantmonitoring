@@ -919,9 +919,9 @@ export default function SmartImportPanel() {
     if (errCount === 0 && warnCount === 0) {
       toast.success(`${rows.length} row(s) imported to ${config.label}`);
     } else if (errCount > 0) {
-      toast.warning(`Import done — ${errCount} batch error(s)`);
+      toast.info(`Import done — ${errCount} batch error(s)`);
     } else {
-      toast.warning(`Import done — ${warnCount} row(s) skipped (entity not found)`);
+      toast.info(`Import done — ${warnCount} row(s) skipped (entity not found)`);
     }
   }, [plantId, parsedRows, skipInvalid, config]);
 

@@ -48,7 +48,7 @@ export function SyncIndicator() {
     if (error === lastToastedErr.current) return;
     lastToastedErr.current = error;
 
-    toast.warning('Sync issue', {
+    toast.info('Sync issue', {
       description: error,
       duration: 6000,
       id: 'bg-sync-err',
