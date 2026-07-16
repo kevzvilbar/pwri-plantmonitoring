@@ -276,7 +276,7 @@ function CategorySection({
     }
     setBulkState('done');
     if (errors.length) {
-      toast.warning(`${category.label}: ${errors.length} table(s) failed`);
+      toast.info(`${category.label}: ${errors.length} table(s) failed`);
     } else {
       toast.success(`${category.label}: exported ${total.toLocaleString()} rows across ${category.tables.length} tables`);
     }
@@ -374,7 +374,7 @@ export default function Exports() {
       }
     }
     setExportAllState('done');
-    if (failed) toast.warning(`Export complete — ${failed} table(s) had errors`);
+    if (failed) toast.info(`Export complete — ${failed} table(s) had errors`);
     else toast.success(`All tables exported — ${total.toLocaleString()} total rows`);
     setTimeout(() => setExportAllState('idle'), 3000);
   }, [plantId, from, to]);
