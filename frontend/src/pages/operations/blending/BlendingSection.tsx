@@ -773,6 +773,4 @@ async function logProductionCalc(entry: {
   } catch { /* silently ignore if table missing */ }
 }
 
-// ─── PRODUCT ─────────────────────────────────────────────────────────────────
 
-function ProductForm() {
