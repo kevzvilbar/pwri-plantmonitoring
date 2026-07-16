@@ -933,5 +933,3 @@ function SharedPowerMeterRow({
     </div>
   );
 }
-
-function WellReadingForm() {
