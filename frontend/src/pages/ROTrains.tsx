@@ -1,0 +1,6436 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { fmtSaveToast } from '@/lib/format';
+import { useAuth } from '@/hooks/useAuth';
+import { useAppStore } from '@/store/appStore';
+import { usePlants } from '@/hooks/usePlants';
+import { usePlantMeterConfig } from './plants/shared';
+// ─── Hybrid Strategy: delta cache invalidation ────────────────────────────────
+// flushDeltaCache is called with the affected train IDs after every successful
+// insert, update, or delete so the frontend's in-memory delta cache is cleared.
+// The next Dashboard or TrendChart render will recompute deltas from fresh DB
+// rows (Tier 2) instead of serving a stale cached value (Tier 1).
+import { flushDeltaCache } from '@/lib/deltaCache';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { StatusPill } from '@/components/StatusPill';
+import { ReasonDialog } from '@/components/ReasonDialog';
+import { reasonCategoryLabel } from '@/lib/reasonCodes';
+import { calc, fmtNum, ALERTS } from '@/lib/calculations';
+import { findExistingReading } from '@/lib/duplicateCheck';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { ComputedInput } from '@/components/ComputedInput';
+import { ExportButton } from '@/components/ExportButton';
+import { Upload, Download, FileText, AlertCircle, Loader2, X, ChevronDown, Pencil, History, Trash2, BarChart2, Calendar, TrendingUp, ChevronLeft, ChevronRight, MessageCircleOff } from 'lucide-react';
+import { downloadCSV } from '@/lib/csv';
+import { cn } from '@/lib/utils';
+
+
+
+// ─── Chemical Dosing constants ────────────────────────────────────────────────
+// HCl, SLS, and Caustic Soda are CIP-only chemicals — they are NOT listed here.
+// They are always used during CIP and are entered exclusively in the CIP tab.
+const KNOWN_CHEMICALS = [
+  { name: 'Chlorine', defaultUnit: 'kg' },
+  { name: 'SMBS', defaultUnit: 'kg' },
+  { name: 'Anti Scalant', defaultUnit: 'L' },
+  { name: 'Soda Ash', defaultUnit: 'kg' },
+];
+const CHEM_UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
+const DOSING_KEYS = [
+  { key: 'chlorine_kg', name: 'Chlorine', unit: 'kg' },
+  { key: 'smbs_kg', name: 'SMBS', unit: 'kg' },
+  { key: 'anti_scalant_l', name: 'Anti Scalant', unit: 'L' },
+  { key: 'soda_ash_kg', name: 'Soda Ash', unit: 'kg' },
+];
+
+// ─── CIP Chemical constants ────────────────────────────────────────────────────
+// These are the default 3 CIP chemicals; plant config (cip_chemicals) can override.
+// "Built-in" chemicals map to dedicated DB columns; custom ones are serialised
+// into the remarks field as __cip_extra:{...} so no migration is needed.
+const DEFAULT_CIP_CHEMICALS: Array<{ name: string; unit: string }> = [
+  { name: 'Caustic Soda', unit: 'kg' },
+  { name: 'HCl',          unit: 'L'  },
+  { name: 'SLS',          unit: 'g'  },
+];
+// Maps CIP chemical name → cip_logs DB column (for the 3 built-ins only).
+const CIP_BUILTIN_DB_MAP: Record<string, string> = {
+  'Caustic Soda': 'caustic_soda_kg',
+  'HCl':          'hcl_l',
+  'SLS':          'sls_g',
+};
+// Accent colours for each CIP chemical card (built-ins first, then fallback palette).
+const CIP_CHEM_ACCENTS: Record<string, { border: string; bg: string; bar: string; badge: string }> = {
+  'Caustic Soda': {
+    border: 'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-teal-500',
+    badge:  'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
+  },
+  'HCl': {
+    border: 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-amber-400',
+    badge:  'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300',
+  },
+  'SLS': {
+    border: 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30',
+    bg:     'border-border bg-muted/20',
+    bar:    'bg-yellow-400',
+    badge:  'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
+  },
+};
+// Fallback accent for custom chemicals
+const CIP_CUSTOM_ACCENT = {
+  border: 'border-purple-400 bg-purple-50/40 dark:bg-purple-950/30',
+  bg:     'border-border bg-muted/20',
+  bar:    'bg-purple-400',
+  badge:  'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
+};
+
+
+// ─── CSV helpers (same pattern as Operations.tsx) ────────────────────────────
+
+function parseROCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  const len = line.length;
+  while (i < len) {
+    if (line[i] === '"') {
+      i++;
+      let val = '';
+      while (i < len) {
+        if (line[i] === '"' && line[i + 1] === '"') { val += '"'; i += 2; }
+        else if (line[i] === '"') { i++; break; }
+        else { val += line[i++]; }
+      }
+      fields.push(val.trim());
+      if (i < len && line[i] === ',') i++;
+    } else {
+      const start = i;
+      while (i < len && line[i] !== ',') i++;
+      fields.push(line.slice(start, i).trim());
+      if (i < len && line[i] === ',') i++;
+    }
+  }
+  if (len > 0 && line[len - 1] === ',') fields.push('');
+  return fields;
+}
+
+function parseROCSVText(text: string): Record<string, string>[] {
+  const clean = text.replace(/^\uFEFF/, '').trim();
+  const lines = clean.split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = parseROCSVLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim());
+  return lines.slice(1).filter((l) => l.trim()).map((line) => {
+    const vals = parseROCSVLine(line);
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+  });
+}
+
+function normalizeRODatetime(raw: string): string {
+  if (!raw?.trim()) return '';
+  let s = raw.trim().replace(' ', 'T');
+  s = s.replace(/T(\d):/, 'T0$1:');
+  return s;
+}
+
+// ─── RO Train Readings CSV schema ────────────────────────────────────────────
+const RO_TRAIN_SCHEMA =
+  'train_number*, reading_datetime (YYYY-MM-DDTHH:mm), feed_pressure_psi, reject_pressure_psi, ' +
+  'feed_flow, permeate_flow, reject_flow, feed_tds, permeate_tds, reject_tds, ' +
+  'feed_ph, permeate_ph, reject_ph, turbidity_ntu, temperature_c, chlorine_residual_mg_l, suction_pressure_psi, ' +
+  'permeate_meter_curr (cumulative m³ — used as production when "Permeate = Production"), ' +
+  'permeate_meter_prev (previous reading — delta computed automatically), remarks';
+
+const RO_TRAIN_TEMPLATE_ROW: Record<string, string> = {
+  train_number: '1',
+  reading_datetime: '2024-06-15T08:30',
+  feed_pressure_psi: '120',
+  reject_pressure_psi: '115',
+  feed_flow: '10.5',
+  permeate_flow: '7.5',
+  reject_flow: '3.0',
+  feed_tds: '800',
+  permeate_tds: '50',
+  reject_tds: '1500',
+  feed_ph: '7.2',
+  permeate_ph: '6.8',
+  reject_ph: '7.5',
+  turbidity_ntu: '0.5',
+  temperature_c: '28',
+  chlorine_residual_mg_l: '',
+  suction_pressure_psi: '10',
+  permeate_meter_curr: '',
+  permeate_meter_prev: '',
+  remarks: '',
+};
+
+function validateROTrainRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.train_number?.trim() || isNaN(Number(r.train_number)))
+    e.push(`Row ${i}: train_number is required and must be a number`);
+  if (r.reading_datetime && isNaN(Date.parse(normalizeRODatetime(r.reading_datetime))))
+    e.push(`Row ${i}: reading_datetime is not a valid date`);
+  const numFields = [
+    'feed_pressure_psi','reject_pressure_psi','feed_flow','permeate_flow','reject_flow',
+    'feed_tds','permeate_tds','reject_tds','feed_ph','permeate_ph','reject_ph',
+    'turbidity_ntu','temperature_c','chlorine_residual_mg_l','suction_pressure_psi',
+  ];
+  for (const f of numFields) {
+    if (r[f]?.trim() && isNaN(Number(r[f])))
+      e.push(`Row ${i}: ${f} must be a number`);
+  }
+  if (r.permeate_meter_curr?.trim() && isNaN(Number(r.permeate_meter_curr)))
+    e.push(`Row ${i}: permeate_meter_curr must be a number`);
+  if (r.permeate_meter_prev?.trim() && isNaN(Number(r.permeate_meter_prev)))
+    e.push(`Row ${i}: permeate_meter_prev must be a number`);
+  if (r.permeate_meter_curr?.trim() && r.permeate_meter_prev?.trim()) {
+    const delta = +r.permeate_meter_curr - +r.permeate_meter_prev;
+    if (delta < 0)
+      e.push(`Row ${i}: permeate_meter_curr (${r.permeate_meter_curr}) is less than permeate_meter_prev (${r.permeate_meter_prev}) — meter rollback`);
+  }
+  return e;
+}
+
+// ─── Permeate date attribution ───────────────────────────────────────────────
+// The 00:20 cutoff rule that previously shifted readings past midnight to the
+// NEXT calendar day has been removed.  All readings are now attributed to the
+// calendar day of their reading_datetime, exactly as entered.
+// A reading recorded at any time on May 1 counts as May 1 production.
+//
+// getPermeateDayLabel is kept as a no-op identity export so any import sites
+// that still reference it compile without changes.
+export function getPermeateDayLabel(isoDatetime: string, _cutoffHHmm?: string): string {
+  // Always return the plain local calendar date of the reading — no shift.
+  const dt = new Date(isoDatetime);
+  const y  = dt.getFullYear();
+  const m  = String(dt.getMonth() + 1).padStart(2, '0');
+  const d  = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// conflictMode controls what happens when a reading already exists for this train+hour:
+//   'skip'      — leave existing row untouched, record as skipped (default / legacy behaviour)
+//   'overwrite' — UPDATE the existing row with the new values
+type ConflictMode = 'skip' | 'overwrite';
+
+async function insertROTrainReadings(
+  rows: Record<string, string>[],
+  plantId: string,
+  userId: string | null,
+  options?: {
+    permeateIsProduction?: boolean;
+    // permeateCutoffTime removed — cutoff rule no longer used; readings attributed
+    // to the calendar day of reading_datetime with no shift.
+    conflictMode?: ConflictMode;
+  },
+): Promise<{ count: number; skipped: number; errors: string[]; affectedTrainIds: string[] }> {
+  const { data: trains } = await supabase
+    .from('ro_trains').select('id, train_number').eq('plant_id', plantId);
+  const numToId: Record<string, string> = {};
+  (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+
+  const conflictMode: ConflictMode = options?.conflictMode ?? 'skip';
+  let count = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  // ── HYBRID STRATEGY: collect train IDs mutated this run ───────────────────
+  const affectedTrainIds = new Set<string>();
+  for (const r of rows) {
+    const trainId = numToId[r.train_number?.trim()];
+    if (!trainId) { errors.push(`Train ${r.train_number} not found in this plant`); continue; }
+
+    const dt = r.reading_datetime
+      ? new Date(normalizeRODatetime(r.reading_datetime)).toISOString()
+      : new Date().toISOString();
+    const dtMin = dt.slice(0, 16);
+
+    // Duplicate check — one per train per hour
+    const { data: existing } = await supabase.from('ro_train_readings')
+      .select('id').eq('train_id', trainId)
+      .gte('reading_datetime', `${dtMin}:00`)
+      .lte('reading_datetime', `${dtMin}:59`).limit(1);
+
+    const existingId: string | null = existing?.[0]?.id ?? null;
+
+    if (existingId && conflictMode === 'skip') {
+      skipped++;
+      continue;
+    }
+
+    const num = (k: string) => r[k]?.trim() ? +r[k] : null;
+
+    // ── Permeate meter delta for production tracking ──────────────────────────
+    const permCurr = r.permeate_meter_curr?.trim() ? +r.permeate_meter_curr : null;
+    const permPrev = r.permeate_meter_prev?.trim() ? +r.permeate_meter_prev : null;
+    const permDelta = permCurr !== null && permPrev !== null ? Math.max(0, permCurr - permPrev) : null;
+
+    // permeate_production_date is no longer computed — all readings are attributed
+    // to the calendar day of reading_datetime with no cutoff-time shift.
+    // The column is kept in the DB for historical reference but is not written
+    // by new inserts and is not used for date bucketing anywhere in the UI.
+
+    // ── Core payload — columns confirmed present in the original schema ──────
+    const corePayload: Record<string, any> = {
+      train_id: trainId,
+      plant_id: plantId,
+      reading_datetime: dt,
+      feed_pressure_psi: num('feed_pressure_psi'),
+      reject_pressure_psi: num('reject_pressure_psi'),
+      feed_flow: num('feed_flow'),
+      permeate_flow: num('permeate_flow'),
+      reject_flow: num('reject_flow'),
+      feed_tds: num('feed_tds'),
+      permeate_tds: num('permeate_tds'),
+      reject_tds: num('reject_tds'),
+      feed_ph: num('feed_ph'),
+      permeate_ph: num('permeate_ph'),
+      reject_ph: num('reject_ph'),
+      turbidity_ntu: num('turbidity_ntu'),
+      temperature_c: num('temperature_c'),
+      suction_pressure_psi: num('suction_pressure_psi'),
+    };
+
+    // ── Optional columns — added by migrations; may not exist in all DBs ─────
+    // Never send null for a missing DB column: Supabase rejects the entire row
+    // with a schema cache error (same bug fixed in insertWellReadings /
+    // insertPowerReadings). Only include each key when it has a real value.
+    const optionalPayload: Record<string, any> = {};
+    const remarksVal = r.remarks?.trim();
+    if (remarksVal)         optionalPayload.remarks                  = remarksVal;
+    if (userId)             optionalPayload.recorded_by              = userId;
+    // New product-quality field — only sent when provided so un-migrated DBs are safe
+    const chlorineVal = r.chlorine_residual_mg_l?.trim() ? +r.chlorine_residual_mg_l : null;
+    if (chlorineVal !== null) optionalPayload.chlorine_residual_mg_l = chlorineVal;
+    // DB column is `permeate_meter` (single cumulative odometer snapshot).
+    // TrendChart computes the delta via computeEntityDeltas (curr - prev per train).
+    if (permCurr !== null)  optionalPayload.permeate_meter           = permCurr;
+    // Also persist prev + delta so the table is self-contained (no join needed).
+    if (permPrev !== null)  optionalPayload.permeate_meter_prev      = permPrev;
+    if (permDelta !== null) optionalPayload.permeate_meter_delta     = permDelta;
+
+    // ── Column-fallback insert: full → core-only on schema-cache miss ─────────
+    // Mirrors insertPowerReadings' doInsert / fallback pattern so un-migrated
+    // DBs degrade gracefully instead of failing every row.
+    const OPTIONAL_KEYS = [
+      'remarks', 'recorded_by',
+      'chlorine_residual_mg_l',
+      'feed_meter', 'feed_meter_prev', 'feed_meter_delta',
+      'permeate_meter', 'permeate_meter_prev', 'permeate_meter_delta',
+      'reject_meter', 'reject_meter_prev', 'reject_meter_delta',
+    ];
+    const isOptionalColError = (msg: string) =>
+      OPTIONAL_KEYS.some(k => msg.includes(`'${k}'`));
+
+    // ── Insert or overwrite ──────────────────────────────────────────────────
+    const doWrite = async (payload: Record<string, any>) => {
+      if (existingId) {
+        // Overwrite: UPDATE the existing row by id
+        const { error } = await supabase
+          .from('ro_train_readings')
+          .update(payload as any)
+          .eq('id', existingId);
+        return error;
+      }
+      // Insert new row
+      const { error } = await supabase
+        .from('ro_train_readings')
+        .insert(payload as any);
+      return error;
+    };
+
+    const error = await doWrite({ ...corePayload, ...optionalPayload });
+
+    if (error) {
+      if (isOptionalColError(error.message)) {
+        // One or more optional columns not yet in DB — retry with core only
+        const e2 = await doWrite(corePayload);
+        if (e2) errors.push(e2.message);
+        else {
+          count++;
+          affectedTrainIds.add(trainId); // ── HYBRID: track for cache invalidation
+        }
+      } else {
+        errors.push(error.message);
+      }
+    } else {
+      count++;
+      affectedTrainIds.add(trainId); // ── HYBRID: track for cache invalidation
+    }
+  }
+  return { count, skipped, errors, affectedTrainIds: Array.from(affectedTrainIds) };
+}
+
+// ─── ImportROReadingsDialog ───────────────────────────────────────────────────
+function ImportROReadingsDialog({
+  plantId,
+  userId,
+  meterConfig,
+  onClose,
+  onImported,
+}: {
+  plantId: string;
+  userId: string | null;
+  meterConfig?: { permeateIsProduction: boolean };
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const { isManager } = useAuth();
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [file, setFile]               = useState<File | null>(null);
+  const [rows, setRows]               = useState<Record<string, string>[]>([]);
+  const [errors, setErrors]           = useState<string[]>([]);
+  const [busy, setBusy]               = useState(false);
+  const [done, setDone]               = useState(false);
+  const [imported, setImported]       = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  // Conflict resolution state
+  // 'pending' → first import ran, found conflicts, waiting for user choice
+  // 'resolved' → user resolved conflicts (skip-all or overwrite-all or per-row)
+  type ConflictState = 'none' | 'pending';
+  const [conflictState, setConflictState] = useState<ConflictState>('none');
+  // Rows that were skipped due to duplicates — kept for targeted overwrite
+  const [conflictRows, setConflictRows] = useState<Record<string, string>[]>([]);
+
+  // cutoff time state removed — the 00:20 rule no longer exists; readings are
+  // attributed to the calendar day of reading_datetime with no shift.
+  const permeateIsProduction = meterConfig?.permeateIsProduction ?? false;
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]); setImportErrors([]);
+    setConflictState('none'); setConflictRows([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseROCSVText(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateROTrainRow(r, i + 2)));
+      setRows(parsed);
+      setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  // Run import with a given conflict mode; collect which rows were skipped for
+  // the conflict UI so the user can choose skip/overwrite per-batch or all-at-once.
+  const runImport = async (targetRows: Record<string, string>[], mode: ConflictMode) => {
+    if (!plantId) { toast.error('Select a plant first'); return; }
+    setBusy(true);
+    const { count, skipped, errors: insertErrs, affectedTrainIds } = await insertROTrainReadings(
+      targetRows, plantId, userId,
+      { permeateIsProduction, conflictMode: mode },
+    );
+    // ── HYBRID STRATEGY: flush delta cache for mutated trains ─────────────────
+    // Clear cached deltas for every train that was inserted or overwritten so the
+    // next Dashboard/TrendChart render recomputes from fresh DB rows (Tier 2)
+    // rather than returning a stale Tier-1 cached value.
+    if (affectedTrainIds.length > 0) flushDeltaCache(affectedTrainIds);
+    setBusy(false);
+    setImported(prev => prev + count);
+    setSkippedCount(skipped);
+    setImportErrors(insertErrs);
+
+    if (skipped > 0 && mode === 'skip') {
+      // Find which rows were skipped so we can offer resolution
+      // A row was skipped if it didn't produce an error and wasn't counted
+      // We re-identify them by re-checking what was not inserted
+      // Simple approach: track skipped rows by collecting them in insertROTrainReadings
+      // For now we know `skipped` count — show the conflict UI
+      setConflictRows(targetRows); // all rows passed; overwrite will re-attempt all
+      setConflictState('pending');
+      setDone(true);
+    } else {
+      setConflictState('none');
+      setDone(true);
+      if (insertErrs.length) toast.error(`${count} imported, ${insertErrs.length} failed`);
+      else if (count === 0 && skipped === 0) toast.info('No rows imported.');
+      else toast.success(`${count} RO reading(s) imported${skipped > 0 ? `, ${skipped} skipped` : ''}`);
+      if (count > 0) onImported();
+    }
+  };
+
+  const doImport = () => runImport(rows, 'skip');
+  const doOverwriteAll = () => { setDone(false); setImported(0); runImport(rows, 'overwrite'); };
+  const doSkipAll = () => {
+    setConflictState('none');
+    toast.info(`${skippedCount} duplicate(s) skipped.`);
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0 && conflictState === 'none' && !done;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Import RO Train Readings from CSV
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* ── Permeate = Production info panel (shown when configured) ── */}
+          {permeateIsProduction && (
+            <div className="rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-950/20 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">💧</span>
+                <p className="text-xs font-semibold text-teal-800 dark:text-teal-200">
+                  Permeate meter = Production
+                </p>
+                <span className="ml-auto text-[10px] text-teal-600 dark:text-teal-400 font-medium uppercase tracking-wide">
+                  Plant config active
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Each row's{' '}
+                <code className="text-[10px] bg-muted px-1 rounded">reading_datetime</code>{' '}
+                is used as-is — a reading recorded on May 1 at any time counts as May 1
+                production. No cutoff-time shift is applied.
+              </p>
+            </div>
+          )}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button
+              size="sm" variant="outline" className="shrink-0 gap-1.5"
+              onClick={() => downloadCSV('ro_train_readings_template.csv', [RO_TRAIN_TEMPLATE_ROW])}
+            >
+              <Download className="h-3.5 w-3.5" /> Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema hint */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{RO_TRAIN_SCHEMA}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required. <code>reading_datetime</code> accepts
+              ISO 8601 (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
+              Leave blank to default to import timestamp. Existing readings at the same hour are skipped.{' '}
+              <strong>permeate_meter_curr</strong> / <strong>permeate_meter_prev</strong> are optional
+              cumulative odometer readings — delta is auto-computed. When "Permeate = Production" is
+              active for this plant, each row is also assigned a production day label using the cut-off time.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm" variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" /> Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0
+                ? 'border-destructive/40 bg-destructive/5'
+                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {Object.keys(rows[0]).map((h) => (
+                        <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((val, j) => (
+                          <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[100px] truncate">{val || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Conflict resolution UI ── */}
+          {done && conflictState === 'pending' && skippedCount > 0 && (
+            <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                    {skippedCount} duplicate{skippedCount !== 1 ? 's' : ''} found
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                    {imported > 0 && <>{imported} new row{imported !== 1 ? 's' : ''} imported. </>}
+                    These readings already exist in the database. What would you like to do?
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                  disabled={busy}
+                  onClick={doSkipAll}
+                >
+                  Skip All
+                </Button>
+                <Button
+                  size="sm"
+                  className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={busy}
+                  onClick={doOverwriteAll}
+                >
+                  {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  Overwrite All
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {done && conflictState === 'none' && (
+            <div className="space-y-2">
+              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {imported} record(s) imported{skippedCount > 0 ? `, ${skippedCount} skipped` : ''}{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}.
+              </p>
+              {importErrors.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
+                  <p className="text-[11px] font-semibold text-destructive mb-1 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Issues (first {Math.min(importErrors.length, 20)}):
+                  </p>
+                  <ul className="text-[10px] text-destructive list-disc ml-3 space-y-0.5">
+                    {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          {conflictState !== 'pending' && (
+            <Button
+              onClick={doImport}
+              disabled={!canSubmit}
+              className="bg-teal-700 text-white hover:bg-teal-800"
+            >
+              {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function ROTrains() {
+  return (
+    <div className="space-y-3 animate-fade-in">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">RO Trains & Pre-Treatment</h1>
+
+        </div>
+      </div>
+      <Tabs defaultValue="overview">
+        <TabsList className="grid grid-cols-4 w-full">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="pretreat-ro" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Pre-Treatment & RO</TabsTrigger>
+          <TabsTrigger value="cip" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-xs sm:text-sm">CIP</TabsTrigger>
+          <TabsTrigger value="chemical-dosing" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none text-[10px] sm:text-sm leading-tight">Chemical Dosing</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="mt-3"><Overview /></TabsContent>
+        <TabsContent value="pretreat-ro" className="mt-3"><PretreatmentAndROLog /></TabsContent>
+        <TabsContent value="cip" className="mt-3"><CIPLog /></TabsContent>
+        <TabsContent value="chemical-dosing" className="mt-3"><ChemicalDosing /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function PlantPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: plants } = usePlants();
+  const { selectedPlantId } = useAppStore();
+  // Fix: onChange excluded from deps — including it causes error #300 when the
+  // parent passes an inline arrow (new reference every render → effect fires →
+  // onChange(selectedPlantId) → re-render → repeat). value is kept so the effect
+  // re-checks once the first auto-select resolves the empty-string condition.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value]);
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
+      <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+    </Select>
+  );
+}
+
+// ─── Sparkline SVG (tiny inline trend line) ──────────────────────────────────
+function Sparkline({ values, color = 'currentColor' }: { values: number[]; color?: string }) {
+  if (values.length < 2) return <span className="text-[10px] text-muted-foreground/40">—</span>;
+  const w = 48; const h = 16;
+  const min = Math.min(...values); const max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block align-middle">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── Effective-status helper ──────────────────────────────────────────────────
+// Rules (in priority order):
+//   1. Operator manually tagged 'Maintenance' → always Maintenance (hard lock)
+//   2. Operator manually tagged 'Offline' → always Offline (hard lock)
+//      This is set when an operator explicitly marks a train offline in the
+//      Pre-Treatment form. It is only cleared back to 'Running' when the
+//      operator submits a reading with trainOnline=true (see save logic).
+//   3. A reading exists within the last 2 hours → Running
+//   4. Otherwise → Offline (no recent data)
+//
+// NOTE: 'Offline' is also the DB default for brand-new trains that have never
+// had a reading submitted. The save logic sets status → 'Running' on the first
+// online submission, after which the 2-hr rule governs automatically.
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+function deriveTrainStatus(train: any, lastReading: any): 'Running' | 'Maintenance' | 'Offline' {
+  if (train.status === 'Maintenance') return 'Maintenance';
+  // Hard lock: operator explicitly marked this train offline in Pre-Treatment.
+  // Recent readings do NOT override this — the train must be brought back online
+  // by the operator (trainOnline=true submission) before Running can apply.
+  if (train.status === 'Offline') return 'Offline';
+  // Data-driven: a reading within the last 2 hours means the train is Running
+  if (lastReading?.reading_datetime) {
+    const age = Date.now() - new Date(lastReading.reading_datetime).getTime();
+    if (age <= TWO_HOURS_MS) return 'Running';
+  }
+  // No recent data → Offline
+  return 'Offline';
+}
+
+// ─── Overview Dashboard ───────────────────────────────────────────────────────
+function Overview() {
+  const qc = useQueryClient();
+  const [plantId, setPlantId] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
+  const [search, setSearch] = useState('');
+  const { selectedPlantId, addAlerts, removeAlerts } = useAppStore();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+
+  const { data: trains } = useQuery({
+    queryKey: ['ro-overview', plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? []
+      : [],
+    enabled: !!plantId,
+  });
+
+  // Fetch last readings for ALL trains at once
+  const trainIds = (trains ?? []).map((t: any) => t.id);
+  // Join IDs into a stable string so React Query doesn't see a new array reference every render
+  const trainIdsKey = trainIds.join(',');
+  const { data: lastReadings } = useQuery({
+    queryKey: ['ro-last-all', trainIdsKey],
+    queryFn: async () => {
+      if (!trainIds.length) return {};
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('*')
+        .in('train_id', trainIds)
+        .order('reading_datetime', { ascending: false });
+      // Keep only the most recent per train
+      const map: Record<string, any> = {};
+      for (const r of data ?? []) {
+        if (!map[r.train_id]) map[r.train_id] = r;
+      }
+      return map;
+    },
+    enabled: trainIds.length > 0,
+    // Re-evaluate the 2-hr window every minute so status flips automatically
+    refetchInterval: 60_000,
+  });
+
+  // Fetch last 5 readings per train for sparklines
+  const { data: sparkData } = useQuery({
+    queryKey: ['ro-spark', trainIdsKey],
+    queryFn: async () => {
+      if (!trainIds.length) return {};
+      const { data } = await supabase
+        .from('ro_train_readings')
+        .select('train_id, recovery_pct, permeate_tds, reading_datetime')
+        .in('train_id', trainIds)
+        .order('reading_datetime', { ascending: false })
+        .limit(trainIds.length * 6);
+      const map: Record<string, any[]> = {};
+      for (const r of data ?? []) {
+        if (!map[r.train_id]) map[r.train_id] = [];
+        if (map[r.train_id].length < 5) map[r.train_id].push(r);
+      }
+      return map;
+    },
+    enabled: trainIds.length > 0,
+    refetchInterval: 60_000,
+  });
+
+  const allReadings = Object.values(lastReadings ?? {});
+
+  // "No reading — why?" gap reasons logged for today, keyed by train ID.
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: gapReasons } = useQuery({
+    queryKey: ['train-gap-reasons', plantId, todayDateStr],
+    enabled: !!plantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reading_gap_reasons' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .eq('entity_type', 'ro_train')
+        .eq('gap_date', todayDateStr);
+      if (error) return [];
+      return (data ?? []) as any[];
+    },
+  });
+  const gapReasonsByTrain = useMemo(() => {
+    const m: Record<string, any> = {};
+    (gapReasons ?? []).forEach((g: any) => { m[g.entity_id] = g; });
+    return m;
+  }, [gapReasons]);
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+
+  // Summary stats — use derived status so the 2-hr rule is reflected in counts
+  const onlineCount  = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
+  const maintCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
+  const offlineCount = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Offline').length;
+  const avgRecovery    = allReadings.filter(r => r.recovery_pct != null).length
+    ? (allReadings.reduce((s, r) => s + (r.recovery_pct ?? 0), 0) / allReadings.filter(r => r.recovery_pct != null).length).toFixed(1)
+    : null;
+  const avgPermTDS     = allReadings.filter(r => r.permeate_tds != null).length
+    ? (allReadings.reduce((s, r) => s + (r.permeate_tds ?? 0), 0) / allReadings.filter(r => r.permeate_tds != null).length).toFixed(0)
+    : null;
+  const totalTrains    = (trains ?? []).length;
+  const healthScore    = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
+
+  const PERM_TDS_LIMIT = 600; // ppm — alert threshold
+  const highTDSTrains  = (trains ?? []).filter((t: any) => {
+    const reading = lastReadings?.[t.id];
+    return reading?.permeate_tds != null && reading.permeate_tds > PERM_TDS_LIMIT;
+  });
+
+  // ── Sync high-TDS trains into the global Plant Alert panel & bell ────────
+  // Runs whenever readings refresh (every 60s). Upserts by stable id so the
+  // bell count and PlantAlertPanel stay in sync without duplicate entries.
+  useEffect(() => {
+    if (!plantId) return;
+    if (highTDSTrains.length === 0) {
+      // Clear any previously-pushed TDS alerts for this plant's trains
+      const ids = (trains ?? []).map((t: any) => `high-tds-${t.id}`);
+      removeAlerts(ids);
+      return;
+    }
+    const alerts = highTDSTrains.map((t: any) => {
+      const tds = lastReadings?.[t.id]?.permeate_tds;
+      return {
+        id: `high-tds-${t.id}`,
+        severity: 'critical' as const,
+        title: 'High Permeate TDS',
+        description: `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}: ${fmtNum(tds, 0)} ppm — above ${PERM_TDS_LIMIT} ppm limit`,
+        source: 'RO Trains',
+        plantId,
+        timestamp: Date.now(),
+      };
+    });
+    addAlerts(alerts);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highTDSTrains.length, plantId]);
+
+  const filtered = (trains ?? []).filter((t: any) => {
+    const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
+    const matchStatus = statusFilter === 'All' || effectiveStatus === statusFilter;
+    const matchSearch = !search || `train ${t.train_number}`.toLowerCase().includes(search.toLowerCase()) || String(t.train_number).includes(search);
+    return matchStatus && matchSearch;
+  });
+
+  const STATUS_FILTERS = ['All', 'Running', 'Maintenance', 'Offline'] as const;
+  const statusColor = (s: string) =>
+    s === 'Running' ? 'text-emerald-500' : s === 'Maintenance' ? 'text-amber-500' : s === 'Offline' ? 'text-red-500' : 'text-foreground';
+
+  return (
+    <div className="space-y-3">
+      {/* ── Controls row ─────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="min-w-[160px] flex-1">
+          <Label className="text-[11px] text-muted-foreground">Plant</Label>
+          <PlantPicker value={plantId} onChange={setPlantId} />
+        </div>
+        {/* Status filter pills */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-muted-foreground mr-1">Show:</span>
+          {STATUS_FILTERS.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors',
+                statusFilter === s
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : cn('border-border bg-muted/50 hover:bg-muted', statusColor(s))
+              )}>
+              {s}
+            </button>
+          ))}
+        </div>
+        {/* Search */}
+        <div className="relative min-w-[160px]">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[12px]">🔍</span>
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search train…"
+            className="w-full h-9 pl-7 pr-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+      </div>
+
+      {/* ── Summary cards ─────────────────────────────────────────────── */}
+      {plantId && (
+        <div className="grid grid-cols-3 gap-2">
+          {/* Plant Health */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Plant Health</p>
+            <div className="flex items-end gap-2">
+              <span className={cn('text-2xl font-bold font-mono-num', healthScore != null && healthScore >= 80 ? 'text-emerald-500' : healthScore != null && healthScore >= 50 ? 'text-amber-500' : 'text-red-500')}>
+                {healthScore != null ? `${healthScore}%` : '—'}
+              </span>
+              <span className={cn('text-[11px] font-medium pb-0.5', healthScore != null && healthScore >= 80 ? 'text-emerald-500' : 'text-amber-500')}>
+                {healthScore != null && healthScore >= 80 ? 'Optimal' : healthScore != null && healthScore >= 50 ? 'Degraded' : 'Critical'}
+              </span>
+            </div>
+            <div className="flex gap-2 text-[10px] text-muted-foreground flex-wrap">
+              <span className="text-emerald-500 font-medium">● {onlineCount} Online</span>
+              <span className="text-amber-500 font-medium">● {maintCount} Maint.</span>
+              <span className="text-red-500 font-medium">● {offlineCount} Offline</span>
+            </div>
+          </Card>
+
+          {/* Production Summary */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Recovery</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-bold font-mono-num text-foreground">
+                {avgRecovery != null ? `${avgRecovery}%` : '—'}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{totalTrains} trains total · {onlineCount} active</p>
+          </Card>
+
+          {/* Product Quality */}
+          <Card className="p-3 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avg Perm TDS</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-bold font-mono-num text-foreground">
+                {avgPermTDS != null ? `${avgPermTDS} ppm` : '—'}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Last readings · all trains</p>
+          </Card>
+        </div>
+      )}
+
+
+      {/* ── Train grid ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {filtered.map((t: any) => (
+          <TrainCard
+            key={t.id}
+            train={t}
+            last={lastReadings?.[t.id] ?? null}
+            spark={sparkData?.[t.id] ?? []}
+            hasReadingToday={!!lastReadings?.[t.id]?.reading_datetime && new Date(lastReadings[t.id].reading_datetime) >= startOfToday}
+            gapReason={gapReasonsByTrain[t.id] ?? null}
+            onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['train-gap-reasons', plantId, todayDateStr] })}
+          />
+        ))}
+      </div>
+      {plantId && !filtered.length && (
+        <Card className="p-4 text-xs text-center text-muted-foreground">No trains match your filter</Card>
+      )}
+      {!plantId && (
+        <Card className="p-4 text-xs text-center text-muted-foreground">Select a plant to view trains</Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Entry-edit permission model ──────────────────────────────────────────────
+// Managers/Admins may edit or delete any reading, at any time.
+// Regular operators may edit/delete only entries they themselves recorded,
+// and only within EDIT_WINDOW_HOURS of when the entry was created — after
+// that window, a correction must go through a manager.
+const EDIT_WINDOW_HOURS = 8;
+
+function canEditEntry(
+  row: { recorded_by?: string | null; created_at?: string | null } | null | undefined,
+  isManager: boolean,
+  activeOperatorId: string | null | undefined,
+): boolean {
+  if (isManager) return true;
+  if (!row || !activeOperatorId || !row.recorded_by) return false;
+  if (row.recorded_by !== activeOperatorId) return false;
+  if (!row.created_at) return false;
+  const ageHours = (Date.now() - new Date(row.created_at).getTime()) / 3_600_000;
+  return ageHours <= EDIT_WINDOW_HOURS;
+}
+
+// ─── Reading edit audit log ────────────────────────────────────────────────────
+// Best-effort: a failed insert here (e.g. migration not yet run) never blocks
+// the actual save/delete — accountability logging should not be able to break
+// the primary workflow.
+function diffFields(before: Record<string, any>, after: Record<string, any>): Record<string, { old: any; new: any }> {
+  const changes: Record<string, { old: any; new: any }> = {};
+  for (const key of Object.keys(after)) {
+    const a = before?.[key] ?? null;
+    const b = after[key] ?? null;
+    if (String(a) !== String(b)) changes[key] = { old: a, new: b };
+  }
+  return changes;
+}
+
+async function logReadingEdit(entry: {
+  table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs';
+  record_id: string;
+  plant_id: string | null;
+  train_id?: string | null;
+  action?: 'update' | 'delete';
+  actor_user_id: string | null;
+  actor_label: string | null;
+  changes?: Record<string, { old: any; new: any }>;
+}) {
+  try {
+    await (supabase.from('reading_edit_audit_log' as any) as any).insert([{
+      table_name: entry.table_name,
+      record_id: entry.record_id,
+      plant_id: entry.plant_id,
+      train_id: entry.train_id ?? null,
+      action: entry.action ?? 'update',
+      actor_user_id: entry.actor_user_id,
+      actor_label: entry.actor_label,
+      changes: entry.changes ?? null,
+    }]);
+  } catch { /* silently ignore if table missing — migration not yet run */ }
+}
+
+// ─── recalculateTrainDeltas ──────────────────────────────────────────────────
+async function recalculateTrainDeltas(trainId: string): Promise<void> {
+  try {
+    const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
+      .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: true });
+    if (!rows?.length) return;
+    let prevMeter: number | null = null;
+    for (const row of rows as any[]) {
+      const isRepl   = !!row.is_meter_replacement;
+      const curMeter = row.permeate_meter != null ? +row.permeate_meter : null;
+      const stored   = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
+      let newDelta: number | null;
+      if (isRepl) { newDelta = 0; }
+      else if (prevMeter != null && curMeter != null) { newDelta = Math.max(0, curMeter - prevMeter); }
+      else { newDelta = null; }
+      if (curMeter != null) prevMeter = curMeter;
+      if (newDelta !== stored) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ permeate_meter_delta: newDelta }).eq('id', row.id);
+      }
+    }
+  } catch { /* non-critical */ }
+}
+
+// ─── TrainLogModal (Overview → per-train operator log) ───────────────────────
+function TrainLogModal({ trainId, trainLabel, onClose }: { trainId: string; trainLabel: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { isManager, activeOperator } = useAuth();
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  // Tab: 'ro' = RO parameters table, 'pretreat' = pre-treatment (AFM/MMF, boosters, housings) table
+  const [logTab, setLogTab] = useState<'ro' | 'pretreat'>('ro');
+  // Row currently open in the edit dialog — null when no dialog is open.
+  const [editingRoRow, setEditingRoRow] = useState<any | null>(null);
+  const [editingPretreatRow, setEditingPretreatRow] = useState<any | null>(null);
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const thirtyAgo = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+  const [dateFrom, setDateFrom] = useState(thirtyAgo);
+  const [dateTo, setDateTo]     = useState(todayStr);
+  const [rangePreset, setRangePreset] = useState<'7'|'30'|'90'|'custom'>('30');
+  const applyPreset = (p: '7'|'30'|'90') => {
+    setDateFrom(format(new Date(Date.now() - parseInt(p)*24*60*60*1000), 'yyyy-MM-dd'));
+    setDateTo(todayStr); setRangePreset(p); setPage(0);
+  };
+  const untilNextDay = dateTo ? (() => {
+    const [y,m,d] = dateTo.split('-').map(Number);
+    const next = new Date(y,m-1,d+1);
+    return `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`;
+  })() : null;
+  const queryKey = ['train-log-overview', trainId, dateFrom, untilNextDay];
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      try {
+        const ALL_COLS = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
+          'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
+          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l',
+          'feed_meter','feed_meter_prev','feed_meter_delta',
+          'permeate_meter','permeate_meter_prev','permeate_meter_delta',
+          'reject_meter','reject_meter_prev','reject_meter_delta','is_meter_replacement','remarks'];
+        // TIER2: drops only the aux prev/delta helper cols added by later migrations
+        // (feed_meter_prev, feed_meter_delta, permeate_meter_prev, reject_meter_prev,
+        //  reject_meter_delta) but KEEPS all core quality fields (feed_ph, permeate_ph,
+        //  turbidity_ntu, chlorine_residual_mg_l, remarks) so the log table never shows
+        //  blank cells for data that is actually saved in the DB.
+        const TIER2 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
+          'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
+          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l','remarks',
+          'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement'];
+        // TIER3: drops migration-added meter snapshot cols (feed_meter, reject_meter,
+        //  is_meter_replacement) but still keeps core quality + remarks columns.
+        const TIER3 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
+          'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
+          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter'];
+        // TIER4: absolute minimum — only columns present since the original schema.
+        const TIER4 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
+          'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
+          'temperature_c','recovery_pct','permeate_meter'];
+        const buildQ = (cols: string[]) => {
+          let q = (supabase.from('ro_train_readings' as any) as any)
+            .select(cols.join(',')).eq('train_id', trainId)
+            .order('reading_datetime', { ascending: false }).limit(2000);
+          if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
+          if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
+          return q;
+        };
+        let readings: any[] | null = null;
+        for (const tier of [ALL_COLS, TIER2, TIER3, TIER4]) {
+          const { data, error } = await buildQ(tier);
+          if (!error) { readings = data ?? []; break; }
+          const isMissingCol = error.message.includes('column') || error.message.includes('does not exist');
+          if (!isMissingCol) break;
+        }
+        if (!readings?.length) return [];
+        const ascReadings = [...readings].reverse();
+        const lastMeter = new Map<string, number>();
+        const lastRejMeter = new Map<string, number>();
+        ascReadings.forEach((r: any) => {
+          if (r.permeate_meter != null) {
+            const prev = lastMeter.get(trainId);
+            r._computed_delta = prev != null ? Math.max(0, +r.permeate_meter - prev) : null;
+            lastMeter.set(trainId, +r.permeate_meter);
+          }
+          if (r.reject_meter != null) {
+            const prev = lastRejMeter.get(trainId);
+            r._computed_rej_delta = prev != null ? Math.max(0, +r.reject_meter - prev) : null;
+            lastRejMeter.set(trainId, +r.reject_meter);
+          }
+        });
+        const uids = [...new Set(readings.map((r: any) => r.recorded_by).filter(Boolean))];
+        let profileMap: Record<string, string> = {};
+        if (uids.length) {
+          for (const table of ['user_profiles','profiles']) {
+            const { data: pdata, error: perr } = await (supabase.from(table as any) as any)
+              .select('id, first_name, last_name, username').in('id', uids);
+            if (!perr && pdata?.length) {
+              profileMap = Object.fromEntries((pdata as any[]).map((p: any) => {
+                const name = `${p.first_name??''} ${p.last_name??''}`.trim() || p.username?.trim() || '';
+                return [p.id, name || null];
+              }).filter(([,n]) => n));
+              if (Object.keys(profileMap).length) break;
+            }
+          }
+        }
+        return readings.map((r: any) => ({ ...r, _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0,8)}` : 'Unknown') }));
+      } catch { return []; }
+    },
+    staleTime: 30_000,
+  });
+
+  // ── Pre-Treatment log query ──────────────────────────────────────────────────
+  const preQueryKey = ['pretreat-log-modal', trainId, dateFrom, untilNextDay];
+  const { data: preLogs = [], isLoading: preLoading } = useQuery({
+    queryKey: preQueryKey,
+    queryFn: async () => {
+      try {
+        let q = (supabase.from('ro_pretreatment_readings' as any) as any)
+          .select('id,reading_datetime,recorded_by,created_at,plant_id,hpp_target_pressure_psi,bag_filters_changed,afm_units,mmf_readings,booster_pumps,filter_housings,cartridge_filter_housings,remarks')
+          .eq('train_id', trainId)
+          .order('reading_datetime', { ascending: false })
+          .limit(2000);
+        if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
+        if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
+        const { data, error } = await q;
+        if (error) return [];
+        // Resolve operator names
+        const uids = [...new Set((data ?? []).map((r: any) => r.recorded_by).filter(Boolean))];
+        let profileMap: Record<string, string> = {};
+        if (uids.length) {
+          for (const table of ['user_profiles','profiles']) {
+            const { data: pd, error: pe } = await (supabase.from(table as any) as any)
+              .select('id, first_name, last_name, username').in('id', uids);
+            if (!pe && pd?.length) {
+              profileMap = Object.fromEntries((pd as any[]).map((p: any) => {
+                const name = `${p.first_name??''} ${p.last_name??''}`.trim() || p.username?.trim() || '';
+                return [p.id, name || null];
+              }).filter(([,n]) => n));
+              if (Object.keys(profileMap).length) break;
+            }
+          }
+        }
+        return (data ?? []).map((r: any) => ({
+          ...r,
+          _operatorName: profileMap[r.recorded_by] ?? (r.recorded_by ? `UID:${String(r.recorded_by).slice(0,8)}` : 'Unknown'),
+        }));
+      } catch { return []; }
+    },
+    staleTime: 30_000,
+  });
+
+  const toggleMeterReplacement = async (r: any) => {
+    if (!isManager) return;
+    setTogglingId(r.id);
+    const next = !r.is_meter_replacement;
+    const { error } = await (supabase.from('ro_train_readings' as any) as any)
+      .update({ is_meter_replacement: next }).eq('id', r.id);
+    setTogglingId(null);
+    if (error) { toast.error('is_meter_replacement column missing — run migration'); return; }
+    await recalculateTrainDeltas(trainId);
+    toast.success(next ? 'Marked as meter replacement' : 'Replacement flag removed');
+    qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries({ queryKey: ['ro-overview'] });
+  };
+
+  const totalPages = Math.ceil(logs.length / PAGE_SIZE);
+  const pageLogs   = logs.slice(page * PAGE_SIZE, (page+1) * PAGE_SIZE);
+
+  // ── Meter-computed permeate flow (m³/hr) per RO reading ─────────────────────
+  // Duration = diff between this reading's datetime and the NEXT reading's datetime
+  // (logs are sorted descending, so "next" in time = [i+1] in the array).
+  // flow_meter = delta_m³ / duration_hr
+  const logsWithMeterFlow = useMemo(() => {
+    return logs.map((r: any, i: number) => {
+      const delta = r._computed_delta ?? r.permeate_meter_delta;
+      if (delta == null || r.is_meter_replacement) return { ...r, _perm_flow_meter: null };
+      const nextR = logs[i + 1];  // next-older reading (array is desc)
+      if (!nextR?.reading_datetime || !r.reading_datetime) return { ...r, _perm_flow_meter: null };
+      const durHr = (new Date(r.reading_datetime).getTime() - new Date(nextR.reading_datetime).getTime()) / 3_600_000;
+      if (durHr <= 0) return { ...r, _perm_flow_meter: null };
+      return { ...r, _perm_flow_meter: +(delta / durHr).toFixed(2) };
+    });
+  }, [logs]);
+  const pageLogsWithMeterFlow = logsWithMeterFlow.slice(page * PAGE_SIZE, (page+1) * PAGE_SIZE);
+
+  const fmtVal = (v: any, unit = '') =>
+    v != null ? <span>{Number(v).toLocaleString(undefined,{maximumFractionDigits:1})}<span className="text-muted-foreground/60 ml-0.5 text-[10px]">{unit}</span></span>
+              : <span className="text-muted-foreground/30">—</span>;
+  const exportCSV = () => {
+    if (!logs.length) { toast.error('No logs to export'); return; }
+    const headers = ['Date/Time','Operator','Repl.','Perm Flow','Feed Flow','Rej Flow','Feed Press','Rej Press','Suction','Feed TDS','Perm TDS','Rej TDS','Temp','Turbidity (NTU)','Feed pH','Perm pH','Cl Residual (mg/L)','Recovery','Feed Meter','Perm Meter','Δ Perm m³','Rej Meter','Δ Rej m³','Remarks'];
+    const rows2 = logs.map((r: any) => [
+      r.reading_datetime ? format(new Date(r.reading_datetime),'yyyy-MM-dd HH:mm') : '',
+      r._operatorName??'Unknown', r.is_meter_replacement?'YES':'',
+      r.permeate_flow??'',r.feed_flow??'',r.reject_flow??'',
+      r.feed_pressure_psi??'',r.reject_pressure_psi??'',r.suction_pressure_psi??'',
+      r.feed_tds??'',r.permeate_tds??'',r.reject_tds??'',r.temperature_c??'',
+      r.turbidity_ntu??'',r.feed_ph??'',r.permeate_ph??'',r.chlorine_residual_mg_l??'',
+      r.recovery_pct??'',
+      r.feed_meter??'',r.permeate_meter??'',r._computed_delta??r.permeate_meter_delta??'',
+      r.reject_meter??'',r._computed_rej_delta??r.reject_meter_delta??'',r.remarks??'',
+    ].map((v: any) => `"${String(v).replace(/"/g,'""')}"`).join(','));
+    const blob = new Blob([[headers.join(','),...rows2].join('\n')],{type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=`${trainLabel.replace(/\s+/g,'_')}_log.csv`; a.click(); URL.revokeObjectURL(url);
+    toast.success('Log exported');
+  };
+
+  return (
+    <>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
+        onInteractOutside={(e) => {
+          // Don't let the parent dialog dismiss itself when the interaction
+          // is actually happening inside a nested Edit dialog (a separate
+          // Radix Dialog instance) — otherwise clicking "Edit" appears to do
+          // nothing, because the log modal (and the edit dialog it renders
+          // conditionally from its own state) closes out from under it.
+          if (editingRoRow || editingPretreatRow) { e.preventDefault(); return; }
+          onClose();
+        }}
+      >
+        <DialogTitle className="sr-only">Operator Log — {trainLabel}</DialogTitle>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
+          <div className="min-w-0">
+            <div className="text-base font-semibold flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-teal-600 shrink-0" />
+              <span className="truncate">Operator Log — {trainLabel}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {logTab === 'ro'
+                ? `All RO train readings · ${isManager ? 'Click orange checkbox to flag meter replacement' : 'Managers can flag meter replacements'}`
+                : 'Pre-Treatment records — AFM/MMF, Booster Pumps, Filter Housings, HPP'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 mr-8">
+            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}><Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span></Button>
+          </div>
+        </div>
+        {/* Tab switcher + filters */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/20 shrink-0 flex-wrap">
+          {/* Tab pills */}
+          <div className="flex rounded-full border border-border overflow-hidden text-xs font-semibold mr-1">
+            <button
+              onClick={() => { setLogTab('ro'); setPage(0); }}
+              className={cn('px-3 py-1 transition-colors', logTab === 'ro' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}
+            >RO</button>
+            <button
+              onClick={() => { setLogTab('pretreat'); setPage(0); }}
+              className={cn('px-3 py-1 transition-colors', logTab === 'pretreat' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}
+            >Pre-Treatment</button>
+          </div>
+          {(['7','30','90'] as const).map(p => (
+            <button key={p} onClick={() => applyPreset(p)} className={['h-6 px-2 rounded text-xs font-medium border transition-colors',rangePreset===p?'bg-teal-700 text-white border-teal-700':'bg-background border-input text-muted-foreground hover:text-foreground'].join(' ')}>{p}d</button>
+          ))}
+          <input type="date" value={dateFrom} max={dateTo||todayStr} onChange={e=>{setDateFrom(e.target.value);setRangePreset('custom');setPage(0);}} className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600" />
+          <span className="text-muted-foreground text-xs">→</span>
+          <input type="date" value={dateTo} min={dateFrom} max={todayStr} onChange={e=>{setDateTo(e.target.value);setRangePreset('custom');setPage(0);}} className="h-6 text-xs px-2 rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-teal-600" />
+          {!isLoading && !preLoading && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              <span className="font-semibold text-foreground">{logTab === 'ro' ? logs.length : preLogs.length}</span> entries
+            </span>
+          )}
+        </div>
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          {/* ── RO Parameters Tab ── */}
+          {logTab === 'ro' && (isLoading ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Calendar className="h-8 w-8 mb-2 opacity-30" /><p className="text-sm font-medium">No logs found</p><p className="text-xs mt-0.5">Try expanding the date range.</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs border-collapse">
+              <thead className="sticky top-0 bg-background border-b z-10">
+                <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
+                  <th className="text-left px-2 py-2 font-semibold w-[100px]">Operator</th>
+                  {/* Perm Flow: two sub-columns — EM reading & meter-calculated */}
+                  <th className="text-right px-0 py-0 font-semibold whitespace-nowrap" colSpan={2}>
+                    <div className="flex flex-col items-end">
+                      <span className="px-2 pt-2 pb-0.5">Perm Flow</span>
+                      <div className="flex border-t border-border/40 w-full">
+                        <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-[9px] text-right border-r border-border/30">EM</span>
+                        <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-[9px] text-right text-teal-600 dark:text-teal-400">Meter</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Flow</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Press.</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Suction</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. TDS</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Temp</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Turbidity</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed pH</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm pH</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Cl Residual</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Recovery</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Feed Meter</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ Perm m³</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Rej. Meter</th>
+                  <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ Rej. m³</th>
+                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[50px]" title="Meter Replacement flag">Repl.</th>
+                  <th className="text-left px-2 py-2 font-semibold">Remarks</th>
+                  <th className="px-2 py-2 font-semibold text-center whitespace-nowrap w-[36px]"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {pageLogsWithMeterFlow.map((r: any, i: number) => {
+                  const isRepl = !!r.is_meter_replacement;
+                  const isToggling = togglingId === r.id;
+                  const opName = r._operatorName ?? 'Unknown';
+                  const initials = opName !== 'Unknown' ? opName.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() : '?';
+                  const delta = r._computed_delta ?? r.permeate_meter_delta;
+                  return (
+                    <tr key={r.id??i} className={['border-t transition-colors',isRepl?'bg-orange-50/40 dark:bg-orange-950/10':'hover:bg-muted/30'].join(' ')}>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                        <div className="text-foreground font-medium">{r.reading_datetime?format(new Date(r.reading_datetime),'MMM d, yyyy'):'—'}</div>
+                        <div className="text-muted-foreground">{r.reading_datetime?format(new Date(r.reading_datetime),'HH:mm'):''}</div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[9px] font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                          <span className="text-[11px] font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                        </div>
+                      </td>
+                      {/* Perm Flow EM */}
+                      <td className="px-2 py-2 text-right border-r border-border/20">{fmtVal(r.permeate_flow,'m³/h')}</td>
+                      {/* Perm Flow Meter-calculated */}
+                      <td className="px-2 py-2 text-right">
+                        {isRepl
+                          ? <span className="text-orange-400 text-[10px]">—</span>
+                          : r._perm_flow_meter != null
+                            ? <span className="text-teal-700 dark:text-teal-400 font-mono text-[11px]">{r._perm_flow_meter}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³/h</span></span>
+                            : <span className="text-muted-foreground/30">—</span>
+                        }
+                      </td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.feed_flow,'m³/h')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.reject_flow,'m³/h')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.feed_pressure_psi,'psi')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.reject_pressure_psi,'psi')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.suction_pressure_psi,'psi')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.feed_tds,'ppm')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.permeate_tds,'ppm')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.reject_tds,'ppm')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.temperature_c,'°C')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.turbidity_ntu,'NTU')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.feed_ph,'')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.permeate_ph,'')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.chlorine_residual_mg_l,'mg/L')}</td>
+                      <td className="px-2 py-2 text-right">{fmtVal(r.recovery_pct,'%')}</td>
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {r.feed_meter != null
+                          ? <span>{Number(r.feed_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {r.permeate_meter != null
+                          ? <span>{Number(r.permeate_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      <td className={['px-2 py-2 text-right font-mono text-[11px]',isRepl?'text-orange-500':''].join(' ')}>
+                        {isRepl
+                          ? <span className="text-orange-500 font-semibold">★ 0</span>
+                          : delta != null
+                            ? <span>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                            : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {r.reject_meter != null
+                          ? <span>{Number(r.reject_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                        {(r._computed_rej_delta ?? r.reject_meter_delta) != null
+                          ? <span>{Number(r._computed_rej_delta ?? r.reject_meter_delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        {isManager?(
+                          <button onClick={()=>toggleMeterReplacement(r)} disabled={isToggling} title="Toggle meter replacement flag"
+                            className={['h-5 w-5 rounded border-2 inline-flex items-center justify-center transition-colors mx-auto',
+                              isRepl?'border-orange-500 bg-orange-500 text-white':'border-border bg-background hover:border-orange-400',
+                              isToggling?'opacity-50 cursor-wait':'cursor-pointer',
+                            ].join(' ')}>
+                            {isToggling?<Loader2 className="h-2.5 w-2.5 animate-spin"/>:isRepl?<span className="text-[9px] font-bold">✓</span>:null}
+                          </button>
+                        ):(isRepl?<span className="text-orange-500 text-[10px]">★</span>:null)}
+                      </td>
+                      <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks||''}</td>
+                      <td className="px-2 py-2 text-center">
+                        {canEditEntry(r, isManager, activeOperator?.id) && (
+                          <button
+                            onClick={() => setEditingRoRow(r)}
+                            title="Edit reading"
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+
+            </table>
+          ))}
+
+          {/* ── Pre-Treatment Tab ── */}
+          {logTab === 'pretreat' && (preLoading ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : preLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Calendar className="h-8 w-8 mb-2 opacity-30" /><p className="text-sm font-medium">No pre-treatment records found</p><p className="text-xs mt-0.5">Try expanding the date range.</p>
+            </div>
+          ) : (() => {
+            const preTotalPages = Math.ceil(preLogs.length / PAGE_SIZE);
+            const pagePreLogs = preLogs.slice(page * PAGE_SIZE, (page+1) * PAGE_SIZE);
+            return (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 bg-background border-b z-10">
+                  <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                    <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
+                    <th className="text-left px-2 py-2 font-semibold w-[100px]">Operator</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">HPP (psi)</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">AFM/MMF Units</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Booster Pumps</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Cart./Bag Housings</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Filter Housings</th>
+                    <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Changed</th>
+                    <th className="text-left px-2 py-2 font-semibold">Remarks</th>
+                    <th className="px-2 py-2 font-semibold text-center whitespace-nowrap w-[36px]"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {pagePreLogs.map((r: any, i: number) => {
+                    const opName = r._operatorName ?? 'Unknown';
+                    const initials = opName !== 'Unknown' ? opName.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() : '?';
+                    const afmUnits: any[] = r.afm_units ?? [];
+                    const mmfReadings: any[] = r.mmf_readings ?? [];
+                    const boosters: any[] = r.booster_pumps ?? [];
+                    const filterH: any[] = r.filter_housings ?? [];
+                    const cartH: any[] = r.cartridge_filter_housings ?? [];
+                    // Helper: render JSONB unit list as compact pressure pills
+                    const pressurePills = (units: any[], getLabel = (u: any) => `U${u.unit}`) =>
+                      units.length === 0
+                        ? <span className="text-muted-foreground/30">—</span>
+                        : <div className="flex flex-wrap gap-0.5 justify-end">
+                            {units.map((u: any, j: number) => {
+                              // Support both legacy key names (inlet_psi/outlet_psi) and current (in_psi/out_psi)
+                              const inP  = u.in_psi  ?? u.inlet_psi  ?? null;
+                              const outP = u.out_psi ?? u.outlet_psi ?? null;
+                              const dp = u.dp_psi != null ? u.dp_psi
+                                : (inP != null && outP != null ? (inP - outP).toFixed(1) : null);
+                              // For backwash units: show "BW" label; optionally show meter delta if available
+                              if (u.backwash_on) {
+                                const mRow = mmfReadings.find((m: any) => m.unit === u.unit);
+                                const mDelta = mRow?.meter_start != null && mRow?.meter_end != null
+                                  ? ` +${(mRow.meter_end - mRow.meter_start).toFixed(0)}` : '';
+                                return (
+                                  <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 font-mono whitespace-nowrap text-amber-700 dark:text-amber-300">
+                                    {getLabel(u)} BW{mDelta}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-muted/50 border border-border/40 font-mono whitespace-nowrap">
+                                  {getLabel(u)}{dp != null ? ` ΔP=${dp}` : inP != null ? ` ${inP}→${outP}` : ''}
+                                </span>
+                              );
+                            })}
+                          </div>;
+                    const boosterPills = (units: any[]) =>
+                      units.length === 0
+                        ? <span className="text-muted-foreground/30">—</span>
+                        : <div className="flex flex-wrap gap-0.5 justify-end">
+                            {units.map((u: any, j: number) => (
+                              <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 font-mono whitespace-nowrap">
+                                P{u.unit} {u.target_pressure_psi != null ? `${u.target_pressure_psi}psi` : u.target_hz != null ? `${u.target_hz}Hz` : '—'}
+                                {u.amperage != null ? ` ${u.amperage}A` : ''}
+                              </span>
+                            ))}
+                          </div>;
+                    return (
+                      <tr key={r.id??i} className="border-t hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                          <div className="text-foreground font-medium">{r.reading_datetime?format(new Date(r.reading_datetime),'MMM d, yyyy'):'—'}</div>
+                          <div className="text-muted-foreground">{r.reading_datetime?format(new Date(r.reading_datetime),'HH:mm'):''}</div>
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[9px] font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                            <span className="text-[11px] font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono text-[11px]">
+                          {r.hpp_target_pressure_psi != null
+                            ? <span>{r.hpp_target_pressure_psi}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">psi</span></span>
+                            : <span className="text-muted-foreground/30">—</span>}
+                        </td>
+                        <td className="px-2 py-2 text-right">{pressurePills(afmUnits, u => `U${u.unit}`)}</td>
+                        <td className="px-2 py-2 text-right">{boosterPills(boosters)}</td>
+                        <td className="px-2 py-2 text-right">{pressurePills(cartH, u => `H${u.unit}`)}</td>
+                        <td className="px-2 py-2 text-right">{pressurePills(filterH, u => `F${u.unit}`)}</td>
+                        <td className="px-2 py-2 text-right font-mono text-[11px]">
+                          {r.bag_filters_changed != null && r.bag_filters_changed > 0
+                            ? <span className="text-amber-600 font-semibold">{r.bag_filters_changed}</span>
+                            : <span className="text-muted-foreground/30">—</span>}
+                        </td>
+                        <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks||''}</td>
+                        <td className="px-2 py-2 text-center">
+                          {canEditEntry(r, isManager, activeOperator?.id) && (
+                            <button
+                              onClick={() => setEditingPretreatRow(r)}
+                              title="Edit reading"
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })())}
+        </div>
+        {/* Pagination */}
+        {(() => {
+          const activeTotal = logTab === 'ro' ? logs.length : preLogs.length;
+          const totalPg = Math.ceil(activeTotal / PAGE_SIZE);
+          return totalPg > 1 ? (
+            <div className="flex items-center justify-between px-4 py-2 border-t bg-muted/20 shrink-0">
+              <span className="text-xs text-muted-foreground">Page {page+1} of {totalPg}</span>
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft className="h-3 w-3"/>Prev</Button>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={page>=totalPg-1} onClick={()=>setPage(p=>p+1)}>Next<ChevronRight className="h-3 w-3"/></Button>
+              </div>
+            </div>
+          ) : null;
+        })()}
+      </DialogContent>
+    </Dialog>
+    {editingRoRow && (
+      <EditRoReadingDialog
+        row={editingRoRow}
+        trainId={trainId}
+        onClose={() => setEditingRoRow(null)}
+        onSaved={() => { setEditingRoRow(null); qc.invalidateQueries({ queryKey }); qc.invalidateQueries({ queryKey: ['ro-overview'] }); }}
+      />
+    )}
+    {editingPretreatRow && (
+      <EditPretreatReadingDialog
+        row={editingPretreatRow}
+        trainId={trainId}
+        onClose={() => setEditingPretreatRow(null)}
+        onSaved={() => { setEditingPretreatRow(null); qc.invalidateQueries({ queryKey: preQueryKey }); qc.invalidateQueries({ queryKey: ['ro-overview'] }); }}
+      />
+    )}
+    </>
+  );
+}
+
+// ─── EditRoReadingDialog ──────────────────────────────────────────────────────
+// Lets an operator (own entry, within EDIT_WINDOW_HOURS) or a manager (any
+// entry, any time) correct a previously-submitted RO reading. Recomputes the
+// same derived fields (ΔP, recovery %, rejection %, salt passage %) the
+// create form computes, then triggers recalculateTrainDeltas so the meter
+// delta chain stays consistent, and writes an audit-log row.
+const RO_EDIT_NUMERIC_FIELDS: { key: string; label: string; unit?: string; step?: string }[] = [
+  { key: 'feed_flow',            label: 'Feed Flow',      unit: 'm³/hr' },
+  { key: 'permeate_flow',        label: 'Permeate Flow',  unit: 'm³/hr' },
+  { key: 'reject_flow',          label: 'Reject Flow',    unit: 'm³/hr' },
+  { key: 'feed_pressure_psi',    label: 'Feed Pressure',  unit: 'psi' },
+  { key: 'reject_pressure_psi',  label: 'Reject Pressure', unit: 'psi' },
+  { key: 'suction_pressure_psi', label: 'Suction Pressure', unit: 'psi' },
+  { key: 'feed_tds',             label: 'Feed TDS',       unit: 'ppm' },
+  { key: 'permeate_tds',         label: 'Permeate TDS',   unit: 'ppm' },
+  { key: 'reject_tds',           label: 'Reject TDS',     unit: 'ppm' },
+  { key: 'feed_ph',              label: 'Feed pH' },
+  { key: 'permeate_ph',          label: 'Permeate pH' },
+  { key: 'temperature_c',        label: 'Temperature',    unit: '°C' },
+  { key: 'turbidity_ntu',        label: 'Turbidity',      unit: 'NTU' },
+  { key: 'chlorine_residual_mg_l', label: 'Cl Residual',  unit: 'mg/L' },
+  { key: 'feed_meter',           label: 'Feed Meter' },
+  { key: 'permeate_meter',       label: 'Permeate Meter' },
+  { key: 'reject_meter',         label: 'Reject Meter' },
+];
+
+function EditRoReadingDialog({ row, trainId, onClose, onSaved }: {
+  row: any; trainId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const { isManager, activeOperator, user } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [dt, setDt] = useState(row.reading_datetime ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
+  const [remarks, setRemarks] = useState(row.remarks ?? '');
+  const [vals, setVals] = useState<Record<string, string>>(() =>
+    Object.fromEntries(RO_EDIT_NUMERIC_FIELDS.map((f) => [f.key, row[f.key] != null ? String(row[f.key]) : ''])),
+  );
+
+  const canSave = canEditEntry(row, isManager, activeOperator?.id);
+
+  const handleSave = async () => {
+    if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
+    setSaving(true);
+    const num = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? +vals[k] : null);
+
+    const payload: Record<string, any> = { reading_datetime: new Date(dt).toISOString(), remarks: remarks || null };
+    for (const f of RO_EDIT_NUMERIC_FIELDS) {
+      // Only write columns that were actually present on the fetched row — a
+      // column absent from `row` means an older DB tier dropped it (schema
+      // drift), so writing it back would just re-null a value we never read.
+      if (f.key in row) payload[f.key] = num(f.key);
+    }
+
+    // ── Recompute derived fields using the exact same formulas as the create form ──
+    const feedP = num('feed_pressure_psi'), rejP = num('reject_pressure_psi');
+    payload.dp_psi = feedP != null && rejP != null ? +(feedP - rejP).toFixed(1) : null;
+
+    const effFeedFlow = num('feed_flow'), effPermFlow = num('permeate_flow');
+    payload.recovery_pct = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
+      ? +Math.min(100, Math.max(0, (effPermFlow / effFeedFlow) * 100)).toFixed(1) : null;
+
+    const feedTds = num('feed_tds'), permTds = num('permeate_tds');
+    payload.rejection_pct = feedTds != null && feedTds > 0 && permTds != null
+      ? +(((feedTds - permTds) / feedTds) * 100).toFixed(2) : null;
+    payload.salt_passage_pct = feedTds != null && feedTds > 0 && permTds != null
+      ? +((permTds / feedTds) * 100).toFixed(2) : null;
+
+    const { error } = await (supabase.from('ro_train_readings' as any) as any)
+      .update(payload).eq('id', row.id);
+
+    if (error) { setSaving(false); toast.error(error.message); return; }
+
+    // Meter values and/or the reading time may have shifted — rebuild the delta chain.
+    await recalculateTrainDeltas(trainId);
+
+    const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+      || activeOperator?.username || null;
+    await logReadingEdit({
+      table_name: 'ro_train_readings',
+      record_id: row.id,
+      plant_id: row.plant_id ?? null,
+      train_id: trainId,
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel,
+      changes: diffFields(row, payload),
+    });
+
+    setSaving(false);
+    toast.success('Reading updated');
+    onSaved();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit RO Reading</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-xs">Date / Time</Label>
+            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {RO_EDIT_NUMERIC_FIELDS.filter((f) => f.key in row).map((f) => (
+              <div key={f.key}>
+                <Label className="text-xs">{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
+                <Input
+                  type="number" step="any"
+                  value={vals[f.key]}
+                  onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+                  className="h-9"
+                />
+              </div>
+            ))}
+          </div>
+          <div>
+            <Label className="text-xs">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !canSave}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── EditPretreatReadingDialog ─────────────────────────────────────────────────
+// Same permission model as EditRoReadingDialog. Scoped to the scalar fields
+// (HPP target pressure, bag filters changed, remarks, date/time) — the nested
+// AFM/MMF/booster/housing arrays are not editable here; correcting one of
+// those still requires a new entry.
+function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: {
+  row: any; trainId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const { isManager, activeOperator, user } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [dt, setDt] = useState(row.reading_datetime ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
+  const [hpp, setHpp] = useState(row.hpp_target_pressure_psi != null ? String(row.hpp_target_pressure_psi) : '');
+  const [bagFilters, setBagFilters] = useState(row.bag_filters_changed != null ? String(row.bag_filters_changed) : '');
+  const [remarks, setRemarks] = useState(row.remarks ?? '');
+
+  const canSave = canEditEntry(row, isManager, activeOperator?.id);
+
+  const handleSave = async () => {
+    if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
+    setSaving(true);
+    const payload = {
+      reading_datetime: new Date(dt).toISOString(),
+      hpp_target_pressure_psi: hpp !== '' ? +hpp : null,
+      bag_filters_changed: bagFilters !== '' ? +bagFilters : null,
+      remarks: remarks || null,
+    };
+    const { error } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      .update(payload).eq('id', row.id);
+    if (error) { setSaving(false); toast.error(error.message); return; }
+
+    const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+      || activeOperator?.username || null;
+    await logReadingEdit({
+      table_name: 'ro_pretreatment_readings',
+      record_id: row.id,
+      plant_id: row.plant_id ?? null,
+      train_id: trainId,
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel,
+      changes: diffFields(row, payload),
+    });
+
+    setSaving(false);
+    toast.success('Reading updated');
+    onSaved();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Pre-Treatment Reading</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-xs">Date / Time</Label>
+            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">HPP Target Pressure (psi)</Label>
+              <Input type="number" step="any" value={hpp} onChange={(e) => setHpp(e.target.value)} className="h-9" />
+            </div>
+            <div>
+              <Label className="text-xs">Bag Filters Changed</Label>
+              <Input type="number" step="1" value={bagFilters} onChange={(e) => setBagFilters(e.target.value)} className="h-9" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            AFM/MMF units, booster pumps, and filter housing readings aren't editable here — submit a new entry to correct those.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !canSave}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TrainCard({ train, last, spark, hasReadingToday, gapReason, onGapReasonSaved }: {
+  train: any; last: any; spark: any[];
+  hasReadingToday?: boolean;
+  gapReason?: any | null;
+  onGapReasonSaved?: () => void;
+}) {
+  const [logOpen, setLogOpen] = useState(false);
+  const [gapDialogOpen, setGapDialogOpen] = useState(false);
+  const [gapSaving, setGapSaving] = useState(false);
+  const { user } = useAuth();
+  const trainLabel = `Train ${train.train_number}${train.name ? ` · ${train.name}` : ''}`;
+  const status: string = deriveTrainStatus(train, last);
+  const statusBadge = {
+    Running:     { label: 'Online',      dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+    Maintenance: { label: 'Maintenance', dot: 'bg-amber-500',   text: 'text-amber-600 dark:text-amber-400',     border: 'border-amber-200 dark:border-amber-800' },
+    Offline:     { label: 'Offline',     dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         border: 'border-red-200 dark:border-red-800' },
+  }[status] ?? { label: status, dot: 'bg-muted-foreground', text: 'text-muted-foreground', border: 'border-border' };
+
+  const recovery   = last?.recovery_pct  != null ? `${fmtNum(last.recovery_pct, 1)}%`  : '—';
+  const permTDS    = last?.permeate_tds  != null ? `${fmtNum(last.permeate_tds, 0)} ppm` : '—';
+  const lastTime   = last?.reading_datetime ? format(new Date(last.reading_datetime), 'hh:mm:ss aa') : '—';
+
+  const recoveryVals = spark.map((r: any) => r.recovery_pct).filter((v: any) => v != null).reverse();
+  const tdsVals      = spark.map((r: any) => r.permeate_tds).filter((v: any) => v != null).reverse();
+
+  const recWarn  = last?.recovery_pct != null && (last.recovery_pct < 65 || last.recovery_pct > 75);
+  const tdsWarn  = last?.permeate_tds != null && last.permeate_tds > 600;
+
+  return (
+    <Card className={cn('p-3 space-y-1.5 border', statusBadge.border)}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base">🌊</span>
+          <span className="text-sm font-semibold">Train {train.train_number}</span>
+        </div>
+        <div className={cn('flex items-center gap-1 text-[11px] font-medium', statusBadge.text)}>
+          <span className={cn('h-1.5 w-1.5 rounded-full', statusBadge.dot)} />
+          {statusBadge.label}
+        </div>
+      </div>
+
+      {!hasReadingToday && (
+        gapReason ? (
+          <button
+            type="button"
+            onClick={() => setGapDialogOpen(true)}
+            title={`No reading today — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors w-fit"
+            data-testid={`train-gap-reason-badge-${train.id}`}
+          >
+            <MessageCircleOff className="h-2.5 w-2.5" />
+            {reasonCategoryLabel(gapReason.reason_category)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setGapDialogOpen(true)}
+            title="No reading today — log why"
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-fit px-1 py-0.5 rounded"
+            data-testid={`train-gap-reason-btn-${train.id}`}
+          >
+            <MessageCircleOff className="h-3 w-3" />
+            No reading today — why?
+          </button>
+        )
+      )}
+
+      {/* Stats row */}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <span>Recovery:</span>
+        <span className={cn('font-mono-num font-semibold', recWarn ? 'text-amber-500' : 'text-foreground')}>
+          {recovery}
+        </span>
+        <Sparkline values={recoveryVals} color={recWarn ? '#f59e0b' : '#6b7280'} />
+        <span className="ml-1">·</span>
+        <span>Perm TDS:</span>
+        <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-red-500' : 'text-foreground')}>
+          {permTDS}
+        </span>
+        <Sparkline values={tdsVals} color={tdsWarn ? '#ef4444' : '#6b7280'} />
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5 border-t border-border/50">
+        <span>Last reading: {lastTime}</span>
+        <div className="flex items-center gap-3">
+          {train.num_afm > 0 && <span className="font-medium">AFM×{train.num_afm}</span>}
+          {train.num_booster_pumps > 0 && <span className="font-medium">BP×{train.num_booster_pumps}</span>}
+          <button
+            onClick={() => setLogOpen(true)}
+            className="text-teal-600 hover:underline font-medium"
+          >
+            Open log →
+          </button>
+        </div>
+      </div>
+      {logOpen && (
+        <TrainLogModal
+          trainId={train.id}
+          trainLabel={trainLabel}
+          onClose={() => setLogOpen(false)}
+        />
+      )}
+
+      <ReasonDialog
+        open={gapDialogOpen}
+        onOpenChange={setGapDialogOpen}
+        title={`No reading today for Train ${train.train_number} — why?`}
+        description="This explains the gap in Data Summary for today. If a reading comes in later today, it takes priority over this note."
+        confirmLabel="Log reason"
+        busy={gapSaving}
+        onConfirm={async (category, detail) => {
+          setGapSaving(true);
+          const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+          const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+            [{
+              entity_type: 'ro_train', entity_id: train.id, plant_id: train.plant_id,
+              gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
+              logged_by: user?.id ?? null,
+            }] as any,
+            { onConflict: 'entity_type,entity_id,gap_date' },
+          );
+          setGapSaving(false);
+          if (error) { toast.error(error.message); return; }
+          toast.success(`Train ${train.train_number}: reason logged`);
+          setGapDialogOpen(false);
+          onGapReasonSaved?.();
+        }}
+      />
+    </Card>
+  );
+}
+
+type AfmRow = {
+  unit: number;
+  bw: boolean;
+  bwStart: string;
+  bwEnd: string;
+  meterStart: string;
+  meterEnd: string;
+  pressureIn: string;
+  pressureOut: string;
+};
+
+function PretreatmentAndROLog() {
+  const qc = useQueryClient();
+  // ── Use activeOperator, not user ──────────────────────────────────────────
+  // On shared-email accounts (e.g. resourcespilipinaswater@gmail.com) user.id
+  // is always the auth-owner (Reynan). activeOperator reflects whoever was
+  // selected on the operator-picker screen or switched via OperatorSwitcher.
+  const { activeOperator, isManager } = useAuth();
+  const [showImport, setShowImport] = useState(false);
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+
+  // Persist plant + train selection across tab switches / browser-focus changes
+  const [plantId, setPlantIdState] = useState<string>(() => {
+    try { return sessionStorage.getItem('pretreat:plantId') ?? ''; } catch { return ''; }
+  });
+  const setPlantId = (v: string) => {
+    try { sessionStorage.setItem('pretreat:plantId', v); } catch { /* ignore */ }
+    setPlantIdState(v);
+  };
+  const [trainId, setTrainIdState] = useState<string>(() => {
+    try { return sessionStorage.getItem('pretreat:trainId') ?? ''; } catch { return ''; }
+  });
+  const setTrainId = (v: string) => {
+    try { sessionStorage.setItem('pretreat:trainId', v); } catch { /* ignore */ }
+    setTrainIdState(v);
+  };
+
+  const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+
+  // Plant-wide synchronized backwash window (only used when plant.backwash_mode = 'synchronized')
+  const [syncBwOn, setSyncBwOn] = useState(false);
+  const [syncBwStart, setSyncBwStart] = useState('');
+  const [syncBwEnd, setSyncBwEnd] = useState('');
+  const [syncMeterStart, setSyncMeterStart] = useState('');
+  const [syncMeterEnd, setSyncMeterEnd] = useState('');
+
+  const [hppTarget, setHppTarget] = useState('');
+  const [bagsChanged, setBagsChanged] = useState('0');
+  const [remarks, setRemarks] = useState('');
+
+  // RO Train online/offline status
+  const [trainOnline, setTrainOnline] = useState(true);
+  const [offlineStart, setOfflineStart] = useState('');
+  const [offlineEnd, setOfflineEnd] = useState('');
+  const [offlineReason, setOfflineReason] = useState('');
+  const [offlineReasonOther, setOfflineReasonOther] = useState('');
+
+  // RO Train readings
+  const [roValues, setRoValues] = useState({
+    feed_pressure_psi: '', reject_pressure_psi: '',
+    feed_flow: '', permeate_flow: '', reject_flow: '',
+    feed_tds: '', permeate_tds: '', reject_tds: '',
+    feed_ph: '', permeate_ph: '', reject_ph: '',
+    turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+    chlorine_residual_mg_l: '',
+    feed_meter_curr: '',
+    permeate_meter_curr: '',
+    reject_meter_curr: '',
+    power_meter_curr: '',
+  });
+
+  // One-shot seed: when the global selectedPlantId resolves and this
+  // page hasn't picked a plant yet, default to it. Re-seeding on
+  // plantId change is undesirable (would clobber the user's choice),
+  // so plantId is intentionally omitted from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+
+  const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
+  const isSynchronized = (plant as any)?.backwash_mode === 'synchronized';
+
+  // ── Meter configuration — controls which inputs are shown to operators ──────
+  // Reads from plant_meter_config (set by managers in Plants → Trains tab).
+  // Safe defaults keep all fields visible if config not yet saved (backwards compat).
+  // Pass selectedPlantId as a fallback so usePlantMeterConfig always receives a
+  // non-null value on the first render (before the auto-select effect fires).
+  // Without this, the hook would be called with null → then a real ID → causing
+  // React error #300 if the hook has conditional logic keyed on the null check.
+  const { config: meterCfg } = usePlantMeterConfig(plantId || selectedPlantId || null);
+  const showFeedMeter      = meterCfg.ro_has_feed_meter;
+  const showPermeateMeter  = meterCfg.ro_has_permeate_meter;
+  const showRejectMeter    = meterCfg.ro_has_reject_meter;
+  const showPowerMeter     = meterCfg.ro_has_per_train_electricity;
+  const productionLabel    = meterCfg.ro_production_source === 'permeate' ? 'Permeate / Production' : 'Permeate / Product';
+
+  // Plant-wide filter housing type — drives labels & which section counts to show.
+  // Falls back to per-train override if set, then plant-wide, then default.
+  const plantFilterHousingType: 'Cartridge Filter' | 'Bag Filter' =
+    (plant as any)?.filter_housing_type ?? 'Cartridge Filter';
+  // Label for the cartridge / bag filter housing section
+  const cartridgeHousingLabel =
+    plantFilterHousingType === 'Bag Filter' ? 'Filter Housing (Pre-filter)' : 'Cartridge Housing (Pre-filter)';
+  // Label for changed-element count (bag = "Bag Filters", cartridge = "Cartridges")
+  const changedElementLabel =
+    plantFilterHousingType === 'Bag Filter' ? 'Bag Filters Changed Today' : 'Cartridges Changed Today';
+
+  const { data: trains } = useQuery({
+    queryKey: ['pretreat-trains', plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? []
+      : [],
+    enabled: !!plantId,
+  });
+  const train = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
+
+  // Pull the most recent pre-treatment reading for this train so we can default
+  // the new form's "Meter Reading Start" to the previous backwash end value.
+  const { data: prevPretreat } = useQuery({
+    queryKey: ['pretreat-prev', trainId],
+    enabled: !!trainId,
+    queryFn: async () => (await supabase.from('ro_pretreatment_readings')
+      .select('mmf_readings').eq('train_id', trainId)
+      .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
+  });
+  const prevMeterEndByUnit: Record<number, number | null> = useMemo(() => {
+    const out: Record<number, number | null> = {};
+    const arr = (prevPretreat?.mmf_readings ?? []) as any[];
+    for (const r of arr) {
+      if (r?.unit != null) out[+r.unit] = r.meter_end ?? null;
+    }
+    return out;
+  }, [prevPretreat]);
+
+  // Pull the most recent RO train reading to auto-fill prev meter readings + duration.
+  // Also fetches power_meter_curr (stored as power_meter_reading_kwh) so the delta can compute.
+  const { data: prevRO } = useQuery({
+    queryKey: ['ro-prev', trainId],
+    enabled: !!trainId,
+    queryFn: async () => (await supabase.from('ro_train_readings')
+      .select('reading_datetime, power_meter_reading_kwh, feed_meter, permeate_meter, permeate_meter_delta, reject_meter')
+      .eq('train_id', trainId)
+      .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
+  });
+
+  // Fetch sibling trains in the same shared power meter group (if any).
+  // Used to warn the operator and to do volume-weighted kWh allocation on save.
+  const sharedPowerGroup: string | null = (train as any)?.shared_power_meter_group ?? null;
+  const { data: siblingTrains } = useQuery({
+    queryKey: ['ro-power-siblings', plantId, sharedPowerGroup],
+    enabled: !!plantId && !!sharedPowerGroup,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ro_trains')
+        .select('id, train_number, name')
+        .eq('plant_id', plantId)
+        .eq('shared_power_meter_group', sharedPowerGroup!)
+        .neq('id', trainId)
+        .order('train_number');
+      return (data ?? []) as any[];
+    },
+  });
+  const isSharedPowerMeter = !!sharedPowerGroup;
+
+  // Auto-compute duration (min) between current reading datetime and last reading datetime
+  const autoDurationMin = useMemo(() => {
+    if (!prevRO?.reading_datetime || !dt) return null;
+    const diff = (new Date(dt).getTime() - new Date(prevRO.reading_datetime).getTime()) / 60000;
+    return diff > 0 ? +diff.toFixed(1) : null;
+  }, [prevRO, dt]);
+
+  // Previous meter readings: feed is local-only (operator enters manually).
+  // Permeate, reject, and power are persisted as odometer snapshots so the next
+  // session auto-fills "previous reading" and delta computes without manual re-entry.
+  // BUG FIX: prevRejMeter was hardcoded null — now reads from last saved DB row,
+  // matching the same pattern as prevPermMeter and prevPowerMeter.
+  const prevFeedMeter:  number | null = prevRO?.feed_meter    ?? null;
+  const prevPermMeter: number | null = prevRO?.permeate_meter ?? null;
+  const prevRejMeter:  number | null = prevRO?.reject_meter   ?? null;
+  const prevPowerMeter: number | null = prevRO?.power_meter_reading_kwh ?? null;
+
+  // ── Section-step gating: AFM/MMF must be opened before Booster Pumps ────────
+  // Operators must interact with (not necessarily complete) AFM/MMF before they
+  // can access Booster Pumps, and Booster Pumps before the rest of the form.
+  // Both flags reset each time a new train is selected.
+  const [afmSectionStarted, setAfmSectionStarted] = useState(false);
+  const [boosterHppSectionStarted, setBoosterHppSectionStarted] = useState(false);
+  const [cartridgeSectionStarted, setCartridgeSectionStarted] = useState(false);
+
+  // Per-AFM/MMF rows: independent backwash + reading + pressure
+  const [afmmf, setAfmmf] = useState<Record<number, AfmRow>>({});
+  const [boosters, setBoosters] = useState<Record<number, { hz: string; target: string; amp: string; psiMode: boolean }>>({});
+
+  // Persisted psi/Hz mode preference — survives page reloads and re-opens.
+  // Defaults to psi (true) on first visit; saved any time the user taps the toggle.
+  const BOOSTER_MODE_KEY = 'pwri_booster_target_psi_mode';
+  const [boosterPrefPsi, setBoosterPrefPsi] = useState<boolean>(() => {
+    try { return localStorage.getItem(BOOSTER_MODE_KEY) !== 'false'; } catch { return true; }
+  });
+  const [housings, setHousings] = useState<Record<number, { inP: string; outP: string }>>({});
+  // Cartridge / Bag Filter Housing (pre-filter) — driven by train.num_cartridge_filters.
+  // Label comes from plant.filter_housing_type: 'Cartridge Filter' | 'Bag Filter'.
+  const [cartridgeHousings, setCartridgeHousings] = useState<Record<number, { inP: string; outP: string }>>({});
+
+  useEffect(() => {
+    // Reset datetime to NOW each time the operator picks a different train.
+    // Without this, dt stays frozen at page-load time, making the auto-computed
+    // duration (now - lastReading) wrong when the page has been open a long time.
+    setDt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    setAfmSectionStarted(false); setBoosterHppSectionStarted(false); setCartridgeSectionStarted(false);
+    setAfmmf({}); setBoosters({}); setHousings({}); setCartridgeHousings({});
+    setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
+    setSyncMeterStart(''); setSyncMeterEnd('');
+
+    // ── Restore offline state from sessionStorage for this train ─────────────
+    // If the operator previously marked this train offline (with a reason and
+    // start date) but hasn't entered an end time yet, those fields are persisted
+    // in sessionStorage so they survive train-switching and page focus changes.
+    // Only cleared when the offline period is formally resolved (offlineEnd saved).
+    let restoredOffline = false;
+    if (trainId) {
+      try {
+        const stored = sessionStorage.getItem(`pretreat:offline:${trainId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setTrainOnline(false);
+          setOfflineStart(parsed.offlineStart ?? '');
+          setOfflineReason(parsed.offlineReason ?? '');
+          setOfflineReasonOther(parsed.offlineReasonOther ?? '');
+          setOfflineEnd('');
+          restoredOffline = true;
+        }
+      } catch { /* ignore storage errors */ }
+    }
+    if (!restoredOffline) {
+      setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
+      setOfflineReason(''); setOfflineReasonOther('');
+    }
+
+    setRoValues({
+      feed_pressure_psi: '', reject_pressure_psi: '',
+      feed_flow: '', permeate_flow: '', reject_flow: '',
+      feed_tds: '', permeate_tds: '', reject_tds: '',
+      feed_ph: '', permeate_ph: '', reject_ph: '',
+      turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+      chlorine_residual_mg_l: '',
+      feed_meter_curr: '',
+      permeate_meter_curr: '',
+      reject_meter_curr: '',
+      power_meter_curr: '',
+    });
+  }, [trainId]);
+
+  // ── Persist offline state to sessionStorage so it survives train-switching ──
+  // Written any time the operator is in offline mode with a start date / reason.
+  // The entry is keyed by trainId so multiple trains can each have their own
+  // pending offline period stored simultaneously.
+  useEffect(() => {
+    if (!trainId) return;
+    if (!trainOnline && offlineStart) {
+      try {
+        sessionStorage.setItem(
+          `pretreat:offline:${trainId}`,
+          JSON.stringify({ offlineStart, offlineReason, offlineReasonOther }),
+        );
+      } catch { /* ignore storage errors */ }
+    }
+  }, [trainId, trainOnline, offlineStart, offlineReason, offlineReasonOther]);
+
+  // ── DB-status awareness — clear stale sessionStorage when train is back online ─
+  // When the train record loads and the DB status is 'Running' or 'Maintenance',
+  // any sessionStorage offline entry for this train is stale (the offline period
+  // was resolved by a previous submission). Clear it and force the form online so
+  // the operator isn't stuck seeing an old "Membrane Replacement / 01/01/2026"
+  // entry for a train that is clearly running.
+  //
+  // Conversely, if the DB status IS 'Offline', we do NOT auto-lock the form —
+  // that was the original bug. The sessionStorage restore (above, in trainId
+  // useEffect) handles in-progress offline periods. A warning banner is shown
+  // in the JSX below so the operator knows the train was last recorded offline.
+  useEffect(() => {
+    if (!train || !trainId) return;
+    if (train.status !== 'Offline') {
+      // Train is Running or Maintenance in the DB — any cached offline state is stale.
+      try { sessionStorage.removeItem(`pretreat:offline:${trainId}`); } catch { /* ignore */ }
+      setTrainOnline(true);
+      setOfflineStart(''); setOfflineEnd('');
+      setOfflineReason(''); setOfflineReasonOther('');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [train?.id, train?.status]);
+
+  // Prefill the synchronized shared meter start when we discover the
+  // previous backwash end value. Intentionally NOT depending on
+  // `syncMeterStart` — re-running when the user types into the field
+  // would overwrite their input. The `syncMeterStart === ''` guard
+  // already prevents over-writes for the initial seed case.
+  useEffect(() => {
+    if (!isSynchronized) return;
+    const firstUnit = Object.keys(prevMeterEndByUnit)[0];
+    const v = firstUnit != null ? prevMeterEndByUnit[+firstUnit] : null;
+    if (v != null && syncMeterStart === '') setSyncMeterStart(String(v));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prevMeterEndByUnit, isSynchronized]);
+
+  const setAfmmfField = (u: number, patch: Partial<AfmRow>) => setAfmmf((p) => ({
+    ...p,
+    [u]: {
+      unit: u, bw: false, bwStart: '', bwEnd: '',
+      meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '',
+      ...(p[u] ?? {}), ...patch,
+    },
+  }));
+
+  // RO calculations
+  const num = (s: string) => s ? +s : NaN;
+  const dp = calc.pressureDiff(num(roValues.feed_pressure_psi), num(roValues.reject_pressure_psi));
+
+  // ── Water meter derived flow rates (m³/hr) ──────────────────────────────
+  // Duration: auto from datetime diff; prev readings: auto from last session's curr
+  const mDur   = autoDurationMin ?? NaN;
+  const mDurHr = !isNaN(mDur) && mDur > 0 ? mDur / 60 : null;
+
+  const feedCurr = num(roValues.feed_meter_curr);
+  const permCurr = num(roValues.permeate_meter_curr);
+  const rejCurr  = num(roValues.reject_meter_curr);
+
+  const feedDelta  = !isNaN(feedCurr) && prevFeedMeter != null ? feedCurr - prevFeedMeter : null;
+  const permDelta  = !isNaN(permCurr) && prevPermMeter != null ? permCurr - prevPermMeter : null;
+  const rejDelta   = !isNaN(rejCurr)  && prevRejMeter  != null ? rejCurr  - prevRejMeter  : null;
+
+  // ── Water meter reading warnings ─────────────────────────────────────────
+  const prevPermDeltaDB: number | null = (prevRO as any)?.permeate_meter_delta ?? null;
+  // Negative: current reading is below the previous odometer snapshot → rollback or typo.
+  const permNegWarn  = prevPermMeter != null && !isNaN(permCurr) && permCurr < prevPermMeter;
+  // High: new delta is more than 3× the last delta and > 1 m³ (ignore noise).
+  const permHighWarn = !permNegWarn
+    && prevPermDeltaDB != null && prevPermDeltaDB > 0
+    && permDelta != null && permDelta > prevPermDeltaDB * 3 && permDelta > 1;
+
+  // Dynamic filling: any one missing = sum/diff of the other two (requires at least two streams entered)
+  const feedVol  = feedDelta  ?? (permDelta !== null && rejDelta  !== null ? +(permDelta  + rejDelta ).toFixed(3) : null);
+  const permVol  = permDelta  ?? (feedDelta !== null && rejDelta  !== null ? +(feedDelta  - rejDelta ).toFixed(3) : null);
+  const rejVol   = rejDelta   ?? (feedDelta !== null && permDelta !== null ? +(feedDelta  - permDelta).toFixed(3) : null);
+
+  const feedFlowMeter  = feedVol  !== null && mDurHr ? +(feedVol  / mDurHr).toFixed(2) : null;
+  const permFlowMeter  = permVol  !== null && mDurHr ? +(permVol  / mDurHr).toFixed(2) : null;
+  const rejFlowMeter   = rejVol   !== null && mDurHr ? +(rejVol   / mDurHr).toFixed(2) : null;
+
+  // True if the volume was inferred (not directly entered)
+  const feedInferred = feedDelta === null && feedVol !== null;
+  const permInferred = permDelta === null && permVol !== null;
+  const rejInferred  = rejDelta  === null && rejVol  !== null;
+
+  // ── Effective flow values: EM 3-way inference ──────────────────────────
+  // Enter any 2 EM values → third is auto-computed. Enter all 3 to override.
+  const emFeedFlow  = roValues.feed_flow     ? num(roValues.feed_flow)     : null;
+  const emPermFlow  = roValues.permeate_flow ? num(roValues.permeate_flow) : null;
+  const emRejFlow   = roValues.reject_flow   ? num(roValues.reject_flow)   : null;
+
+  const emEntered = [emFeedFlow, emPermFlow, emRejFlow].filter(v => v !== null).length;
+
+  // Infer the missing EM value when exactly 2 are entered
+  const effFeedFlow: number | null = (() => {
+    if (emFeedFlow !== null) return emFeedFlow;
+    if (emEntered === 2 && emPermFlow !== null && emRejFlow !== null)
+      return +((emPermFlow + emRejFlow).toFixed(2));
+    return feedFlowMeter;
+  })();
+  const effPermFlow: number | null = (() => {
+    if (emPermFlow !== null) return emPermFlow;
+    if (emEntered === 2 && emFeedFlow !== null && emRejFlow !== null)
+      return +((emFeedFlow - emRejFlow).toFixed(2));
+    return permFlowMeter;
+  })();
+  const effRejFlow: number | null = (() => {
+    if (emRejFlow !== null) return emRejFlow;
+    if (emEntered === 2 && emFeedFlow !== null && emPermFlow !== null)
+      return +((emFeedFlow - emPermFlow).toFixed(2));
+    // BUG FIX #2: Only fall back to meter-derived values when NEITHER EM feed
+    // nor EM permeate is entered (emEntered < 2). Mixing one EM value with one
+    // meter-derived value (emEntered === 1) produces a reject figure from two
+    // incompatible measurement sources and should be avoided.
+    if (emEntered === 0) {
+      if (feedFlowMeter !== null && permFlowMeter !== null)
+        return +((feedFlowMeter - permFlowMeter).toFixed(2));
+      return rejFlowMeter;
+    }
+    return rejFlowMeter;
+  })();
+
+  // Inferred flags (not user-typed, computed from the other two)
+  // Also mark as inferred when the meter is disabled in plant config (always auto-computed).
+  const emFeedInferred = !showFeedMeter || (emFeedFlow === null && emEntered === 2 && emPermFlow !== null && emRejFlow !== null);
+  const emPermInferred = emPermFlow === null && emEntered === 2 && emFeedFlow !== null && emRejFlow !== null;
+  // BUG FIX #3: was `emEntered >= 1` — that fired whenever ANY single EM value was
+  // entered, even though reject is only properly inferred when exactly 2 EM values
+  // are present (the 2-of-3 rule). Changed to `emEntered === 2`.
+  const emRejInferred  = !showRejectMeter || (emRejFlow  === null && emEntered === 2 && effRejFlow !== null && !(emFeedFlow === null && emPermFlow === null));
+
+  // Recovery uses effective flows (EM > meter-derived)
+  // BUG FIX #4: Clamp to [0, 100] — a negative inferred permVol (e.g. operator typo
+  // where permeate > feed) previously produced a negative recovery_pct written to DB.
+  const recovery    = effPermFlow !== null && effFeedFlow !== null && effFeedFlow > 0
+    ? +Math.min(100, Math.max(0, (effPermFlow / effFeedFlow) * 100)).toFixed(1) : null;
+  // Salt Rejection = ((Feed TDS - Permeate TDS) / Feed TDS) x 100%
+  const feedTds = num(roValues.feed_tds);
+  const permTds = num(roValues.permeate_tds);
+  const rejection   = feedTds != null && feedTds > 0 && permTds != null
+    ? +( ((feedTds - permTds) / feedTds) * 100 ).toFixed(2) : null;
+  // Salt Passage = (Permeate TDS / Feed TDS) x 100%
+  const saltPassage = feedTds != null && feedTds > 0 && permTds != null
+    ? +( (permTds / feedTds) * 100 ).toFixed(2) : null;
+  const rejectFlow  = effRejFlow;
+
+  const phWarn = num(roValues.permeate_ph) && (num(roValues.permeate_ph) < 6.5 || num(roValues.permeate_ph) > 8.5);
+  const recWarn = recovery != null && (recovery < 65 || recovery > 75);
+  const dpAlert = dp != null && dp >= ALERTS.dp_max;
+
+  // Train is offline → block all RO parameter inputs until the offline period is
+  // formally resolved by saving a record with a valid end time. Entering an end
+  // time alone is NOT enough — the form stays locked until submit() succeeds and
+  // calls setTrainOnline(true). This enforces "Once saved, Online view is available."
+  const isOfflineBlocked = !trainOnline;
+  const offlineReasonFinal = offlineReason === 'Other' ? offlineReasonOther : offlineReason;
+
+  // ── Power meter ──────────────────────────────────────────────────────────
+  // Duration reuses the same auto-computed interval; prev reading from last session
+  const pwrDurHr = mDurHr;  // same time window as water meter
+  const pwrCurr  = num(roValues.power_meter_curr);
+  const pwrDelta = !isNaN(pwrCurr) && prevPowerMeter != null
+    ? +(pwrCurr - prevPowerMeter).toFixed(3)
+    : null;
+  const pwrKw    = pwrDelta !== null && pwrDurHr ? +(pwrDelta / pwrDurHr).toFixed(2) : null;  // avg kW
+  // Specific energy uses effective permeate volume (meter-derived preferred for volumetric accuracy)
+  // BUG FIX #5: `permVol && permVol > 0` relied on falsy coercion of null/0.
+  // Explicit `permVol !== null && permVol > 0` is unambiguous and safe to refactor around.
+  const secEnergy = pwrDelta !== null && permVol !== null && permVol > 0          // kWh/m³
+    ? +(pwrDelta / permVol).toFixed(3) : null;
+
+  const submit = async () => {
+    if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
+
+    // ── Majority-blank guard (online trains only) ────────────────────────────
+    // Prevent saving if the operator has left most of the key measurement fields
+    // empty — this catches accidental empty submits before any data is entered.
+    // Offline records are exempt: they only require offline reason + start time.
+    if (trainOnline) {
+      const keyFields = [
+        roValues.feed_tds,
+        roValues.permeate_tds,
+        roValues.reject_tds,
+        roValues.feed_ph,
+        roValues.permeate_ph,
+        roValues.reject_ph,
+        roValues.feed_pressure_psi,
+        roValues.reject_pressure_psi,
+        roValues.suction_pressure_psi,
+        roValues.temperature_c,
+        roValues.turbidity_ntu,
+        roValues.feed_flow,
+        roValues.permeate_flow,
+        roValues.reject_flow,
+        // Meter readings count toward filled if any is entered
+        ...(showFeedMeter    ? [roValues.feed_meter_curr]    : []),
+        ...(showPermeateMeter? [roValues.permeate_meter_curr]: []),
+        ...(showRejectMeter  ? [roValues.reject_meter_curr]  : []),
+      ];
+      const filledCount = keyFields.filter((v) => v !== '' && v != null).length;
+      if (filledCount < Math.ceil(keyFields.length / 2)) {
+        toast.error(
+          `Most fields are empty (${filledCount} of ${keyFields.length} filled). Please complete the reading before saving.`,
+        );
+        return;
+      }
+    }
+
+    // Offline validation
+    if (!trainOnline) {
+      if (!offlineStart) { toast.error('Please enter the time the train went offline.'); return; }
+      if (!offlineReason) { toast.error('Please select a reason for the offline event.'); return; }
+      if (offlineReason === 'Other' && !offlineReasonOther.trim()) { toast.error('Please specify the reason for offline.'); return; }
+      // End time (if provided) must be in the past — can't mark a train as back online in the future
+      if (offlineEnd && new Date(offlineEnd) > new Date()) {
+        toast.error('"Back Online At" must be in the past. The train cannot come back online at a future time.');
+        return;
+      }
+    }
+
+    // (1-hour-per-train duplicate rule removed — operators may log multiple readings per hour)
+
+    // Save RO Train reading.
+    // Confirmed DB columns in ro_train_readings (from original working code):
+    //   feed_pressure_psi, reject_pressure_psi, feed_flow, permeate_flow, reject_flow,
+    //   feed_tds, permeate_tds, reject_tds, feed_ph, permeate_ph, reject_ph,
+    //   turbidity_ntu, temperature_c, suction_pressure_psi,
+    //   dp_psi, recovery_pct, rejection_pct, salt_passage_pct, recorded_by.
+    // Excluded (local-only, no DB column): feed_meter_curr, permeate_meter_curr,
+    //   reject_meter_curr, power_meter_curr.
+    // To save volume/power data, first confirm exact column names in your Supabase schema.
+    // feed_meter_curr / permeate_meter_curr / reject_meter_curr are local-only calc helpers —
+    // the DB stores computed delta volumes, not raw odometer readings.
+    // power_meter_curr IS persisted as power_meter_reading_kwh so the next session can
+    // auto-fill the "previous reading" and the delta can be computed without manual re-entry.
+    const EXCLUDED_KEYS = new Set([
+      'feed_meter_curr', 'permeate_meter_curr', 'reject_meter_curr', 'power_meter_curr',
+      // New optional columns — excluded from generic spread and added conditionally below
+      // so un-migrated DBs receive no null for an unknown column (Supabase schema-cache error).
+      'chlorine_residual_mg_l',
+    ]);
+    // Note: permeate_meter_curr stays excluded from the generic roValues spread —
+    // we persist it explicitly as permeate_meter below (the real DB column name).
+
+    // ── Volume-weighted power allocation for shared meters ───────────────────
+    // When this train shares a physical power meter with sibling trains
+    // (shared_power_meter_group is set), we cannot attribute the full kWh delta
+    // to this train — that would multiply-count the same consumption.
+    // Instead we store the FULL meter delta + the raw reading on this train's
+    // row and leave kWh attribution (÷ by number of running sibling trains) to
+    // the reporting layer, which has access to all trains' permeate volumes.
+    // The per-train secEnergy (kWh/m³) shown in the form is therefore an ESTIMATE
+    // (full delta / this train's permeate) and is flagged as such in the UI.
+    const roPayload: any = {
+      train_id: trainId, plant_id: plantId, reading_datetime: new Date(dt).toISOString(),
+      ...Object.fromEntries(
+        Object.entries(roValues)
+          .filter(([k]) => !EXCLUDED_KEYS.has(k))
+          .map(([k, val]) => [k, val ? +val : null])
+      ),
+      // BUG FIX #1: roValues.feed_flow / permeate_flow are raw input strings — they are ''
+      // when the value was inferred (not typed). The generic spread above maps '' → null,
+      // silently discarding inferred values. Override with effFeedFlow / effPermFlow so
+      // inferred values (from 2-of-3 EM logic or meter fallback) are always persisted.
+      feed_flow:     effFeedFlow  ?? (roValues.feed_flow     ? +roValues.feed_flow     : null),
+      permeate_flow: effPermFlow  ?? (roValues.permeate_flow ? +roValues.permeate_flow : null),
+      reject_flow:   rejectFlow   ?? (roValues.reject_flow   ? +roValues.reject_flow   : null),
+      dp_psi: dp,
+      recovery_pct: recovery,
+      rejection_pct: rejection,
+      salt_passage_pct: saltPassage,
+      // ── Meter odometer snapshots — only included when operator entered a value.
+      // Conditional spread prevents Supabase schema-cache errors on un-migrated DBs
+      // that don't yet have these columns (same pattern as chlorine_residual_mg_l).
+      // When a value IS present we also persist prev + delta so the log table is
+      // self-contained (no join or re-computation needed for display).
+      ...(feedCurr && !isNaN(feedCurr) ? {
+        feed_meter:       feedCurr,
+        feed_meter_prev:  prevFeedMeter ?? null,
+        feed_meter_delta: feedDelta     ?? null,
+      } : {}),
+      ...(permCurr && !isNaN(permCurr) ? {
+        permeate_meter:       permCurr,
+        permeate_meter_prev:  prevPermMeter ?? null,
+        permeate_meter_delta: permDelta     ?? null,
+      } : {}),
+      ...(rejCurr && !isNaN(rejCurr) ? {
+        reject_meter:       rejCurr,
+        reject_meter_prev:  prevRejMeter ?? null,
+        reject_meter_delta: rejDelta     ?? null,
+      } : {}),
+      // permeate_production_date is no longer written — the 00:20 cutoff rule has
+      // been removed. Date attribution uses reading_datetime directly everywhere.
+      // Power meter — persist raw reading so next session can auto-fill prevPowerMeter
+      power_meter_reading_kwh: pwrCurr && !isNaN(pwrCurr) ? pwrCurr : null,
+      // Delta & derived — null when prevPowerMeter not yet established (first reading)
+      power_delta_kwh: pwrDelta,
+      power_avg_kw: pwrKw,
+      // kWh/m³ stored as-is; for shared meters this is the full-meter estimate,
+      // not the train-allocated value. Attribution happens in reporting queries.
+      specific_energy_kwh_m3: secEnergy,
+      // Flag for reporting layer: if non-null, this train shares a power meter
+      shared_power_meter_group: sharedPowerGroup ?? null,
+      // ── New optional product-quality fields ──────────────────────────────────
+      // Only included when the operator entered a value so un-migrated DBs that
+      // don't yet have the column receive no null and no schema-cache error.
+      ...(roValues.chlorine_residual_mg_l !== '' ? { chlorine_residual_mg_l: +roValues.chlorine_residual_mg_l } : {}),
+      recorded_by: activeOperator?.id,
+    };
+    const { data: savedRow, error: roError } = await (supabase
+      .from('ro_train_readings')
+      .insert(roPayload)
+      .select('permeate_meter_delta,feed_meter_delta')
+      .single() as any);
+    if (roError) { toast.error(`RO reading error: ${roError.message}`); return; }
+
+    // ── Sync train status in DB only for manual overrides ────────────────────
+    // Submitting a reading as Offline writes 'Offline' to the DB (hard lock).
+    // Submitting as Online (trainOnline=true) when the DB still holds 'Offline'
+    // clears it back to 'Running' so deriveTrainStatus's hard-lock rule no
+    // longer applies and the 2-hr window governs automatically from here on.
+    //
+    // We do NOT gate the Running write on offlineEnd being set — the operator's
+    // intent (toggling back to online and submitting) is sufficient authority to
+    // resolve the offline period. offlineEnd is recorded for audit purposes only.
+    if (!trainOnline) {
+      await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', trainId);
+    } else if (train?.status === 'Offline') {
+      // Clear the offline hard-lock. Covers two cases:
+      //   a) Operator explicitly resolves an offline period (entered offlineEnd).
+      //   b) Brand-new train (default status='Offline') gets its first online reading.
+      await supabase.from('ro_trains').update({ status: 'Running' }).eq('id', trainId);
+    }
+
+    // Save pre-treatment reading
+    // mmf_readings keeps per-unit meter start/end (synchronized = shared values across all units)
+    const rowsArr = Object.values(afmmf);
+    const mmf_readings = isSynchronized
+      ? (syncBwOn && (syncMeterStart || syncMeterEnd)
+          ? Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => ({
+              unit: u,
+              meter_start: syncMeterStart ? +syncMeterStart : null,
+              meter_end: syncMeterEnd ? +syncMeterEnd : null,
+            }))
+          : [])
+      : rowsArr.filter((r) => r.bw && (r.meterStart || r.meterEnd))
+          .map((r) => ({
+            unit: r.unit,
+            meter_start: r.meterStart ? +r.meterStart : null,
+            meter_end: r.meterEnd ? +r.meterEnd : null,
+          }));
+
+    // Merge backwash + inlet/outlet pressures into the single afm_units jsonb column
+    const afm_units = rowsArr
+      .filter((r) => r.bw || r.pressureIn || r.pressureOut)
+      .map((r) => {
+        const pIn = r.pressureIn ? +r.pressureIn : null;
+        const pOut = r.pressureOut ? +r.pressureOut : null;
+        const dp_psi = pIn !== null && pOut !== null ? +(pIn - pOut).toFixed(2) : null;
+        const bwOngoing = isSynchronized ? syncBwOn : r.bw;
+        return {
+          unit: r.unit,
+          backwash_start: bwOngoing
+            ? (isSynchronized
+                ? (syncBwStart ? new Date(syncBwStart).toISOString() : null)
+                : (r.bwStart ? new Date(r.bwStart).toISOString() : null))
+            : null,
+          backwash_end: bwOngoing
+            ? (isSynchronized
+                ? (syncBwEnd ? new Date(syncBwEnd).toISOString() : null)
+                : (r.bwEnd ? new Date(r.bwEnd).toISOString() : null))
+            : null,
+          in_psi: bwOngoing ? null : pIn,
+          out_psi: bwOngoing ? null : pOut,
+          dp_psi: bwOngoing ? null : dp_psi,
+        };
+      });
+
+    const booster_pumps = Object.entries(boosters).filter(([, v]) => v.hz || v.target || v.amp)
+      .map(([k, v]) => ({
+        unit: +k,
+        target_pressure_psi: (!v.psiMode || v.psiMode === undefined) ? null : (v.target ? +v.target : null),
+        target_hz: v.psiMode ? null : (v.hz ? +v.hz : null),
+        hz_mode: !v.psiMode,
+        amperage: v.amp ? +v.amp : null,
+      }));
+    const filter_housings = Object.entries(housings).filter(([, v]) => v.inP || v.outP)
+      .map(([k, v]) => ({ unit: +k, in_psi: v.inP ? +v.inP : null, out_psi: v.outP ? +v.outP : null }));
+    // Cartridge / Bag filter housings (pre-filter) — stored separately from AFM/MMF filter housings
+    const cartridge_filter_housings = Object.entries(cartridgeHousings).filter(([, v]) => v.inP || v.outP)
+      .map(([k, v]) => ({ unit: +k, in_psi: v.inP ? +v.inP : null, out_psi: v.outP ? +v.outP : null }));
+
+    const { error: pretreatError } = await supabase.from('ro_pretreatment_readings').insert({
+      plant_id: plantId, train_id: trainId,
+      reading_datetime: new Date(dt).toISOString(),
+      backwash_start: isSynchronized && syncBwOn && syncBwStart ? new Date(syncBwStart).toISOString() : null,
+      backwash_end: isSynchronized && syncBwOn && syncBwEnd ? new Date(syncBwEnd).toISOString() : null,
+      mmf_readings, booster_pumps, afm_units, filter_housings, cartridge_filter_housings,
+      hpp_target_pressure_psi: hppTarget ? +hppTarget : null,
+      bag_filters_changed: +bagsChanged || 0,
+      remarks: remarks || null,
+      recorded_by: activeOperator?.id,
+    } as any);
+    if (pretreatError) { toast.error(`Pre-treatment error: ${pretreatError.message}`); return; }
+
+    const pmDelta = (savedRow as any)?.permeate_meter_delta;
+      const fmDelta = (savedRow as any)?.feed_meter_delta;
+      const deltaStr = pmDelta != null ? ` · permeate +${Number(pmDelta).toLocaleString('en-PH',{maximumFractionDigits:1})} m³` : '';
+      toast.success(`${train.name}: saved${deltaStr}`);
+    setAfmmf({}); setBoosters({}); setHousings({}); setCartridgeHousings({});
+    setSyncBwOn(false); setSyncBwStart(''); setSyncBwEnd('');
+    setSyncMeterStart(''); setSyncMeterEnd('');
+    setHppTarget(''); setBagsChanged('0'); setRemarks('');
+    // Offline state reset — only bring the train back online when the offline
+    // period was formally resolved (an end time was entered). If offlineEnd is
+    // blank the period is still open: keep trainOnline=false so the next
+    // reading cannot accidentally flip the DB status back to Running.
+    if (offlineEnd) {
+      setTrainOnline(true); setOfflineStart(''); setOfflineEnd('');
+      setOfflineReason(''); setOfflineReasonOther('');
+      // Clear persisted offline state now that the period is formally resolved.
+      try { sessionStorage.removeItem(`pretreat:offline:${trainId}`); } catch { /* ignore */ }
+    }
+    // When still offline (no end time), preserve offlineStart + reason so the
+    // operator can see context for the ongoing downtime in subsequent readings.
+    setRoValues({
+      feed_pressure_psi: '', reject_pressure_psi: '',
+      feed_flow: '', permeate_flow: '', reject_flow: '',
+      feed_tds: '', permeate_tds: '', reject_tds: '',
+      feed_ph: '', permeate_ph: '', reject_ph: '',
+      turbidity_ntu: '', temperature_c: '', suction_pressure_psi: '',
+      chlorine_residual_mg_l: '',
+      feed_meter_curr: '',
+      permeate_meter_curr: '',
+      reject_meter_curr: '',
+      power_meter_curr: '',
+    });
+    // Invalidate in specific order: targeted keys first so mounted Dashboard/TrendChart/Overview
+    // queries are individually marked stale, then a broad catch-all as a safety net for any
+    // other mounted queries (e.g. future features). This also triggers the new permeate-
+    // as-production queries added to Dashboard so the Production stat updates immediately.
+    // RO Overview / spark
+    qc.invalidateQueries({ queryKey: ['ro-overview'] });
+    qc.invalidateQueries({ queryKey: ['ro-last-all'] });
+    qc.invalidateQueries({ queryKey: ['ro-spark'] });
+    qc.invalidateQueries({ queryKey: ['ro-prev'] });
+    // Dashboard stat-cards
+    qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
+    qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+    qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+    qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+    // TrendChart series
+    qc.invalidateQueries({ queryKey: ['trend-ro'] });
+    qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+    qc.invalidateQueries({ queryKey: ['trend-product'] });
+    qc.invalidateQueries({ queryKey: ['trend-power'] });
+    qc.invalidateQueries({ queryKey: ['trend-cost'] });
+    // DataSummaryModal — explicit so the open modal refreshes immediately
+    qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+    qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
+    // Broad catch-all — safety net for any other mounted queries
+    qc.invalidateQueries();
+  };
+
+  const f = (k: keyof typeof roValues) => ({ value: roValues[k], onChange: (e: any) => setRoValues({ ...roValues, [k]: e.target.value }) });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-end justify-between gap-2">
+        <p className="text-sm text-muted-foreground">AFM/MMF, Boosters, Filter Housings & RO Vessel</p>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 text-xs"
+            onClick={() => setShowImport(true)}
+          >
+            <Upload className="h-3.5 w-3.5" /> Import CSV
+          </Button>
+          <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
+        </div>
+        {showImport && (
+          <ImportROReadingsDialog
+            plantId={plantId}
+            userId={activeOperator?.id ?? null}
+            meterConfig={{
+              permeateIsProduction: meterCfg.permeate_is_production ?? false,
+              // permeateCutoffTime removed — no longer used
+            }}
+            onClose={() => setShowImport(false)}
+            onImported={() => {
+              setShowImport(false);
+              // Mirror the same invalidation set as manual submit() so the Dashboard,
+              // TrendChart, and RO Overview all refresh after a CSV import.
+              qc.invalidateQueries({ queryKey: ['ro-overview'] });
+              qc.invalidateQueries({ queryKey: ['ro-last-all'] });
+              qc.invalidateQueries({ queryKey: ['ro-spark'] });
+              qc.invalidateQueries({ queryKey: ['ro-prev'] });
+              // Dashboard stat-cards
+              qc.invalidateQueries({ queryKey: ['dash-ro-recent'] });
+              qc.invalidateQueries({ queryKey: ['dash-ro-permeate-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-ro-permeate-yest'] });
+              qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
+              qc.invalidateQueries({ queryKey: ['dash-power-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-power-yest'] });
+              qc.invalidateQueries({ queryKey: ['dash-costs-today'] });
+              qc.invalidateQueries({ queryKey: ['dash-summary-recent'] });
+              qc.invalidateQueries({ queryKey: ['dash-chem'] });
+              qc.invalidateQueries({ queryKey: ['alerts-feed'] });
+              // TrendChart series
+              qc.invalidateQueries({ queryKey: ['trend-ro'] });
+              qc.invalidateQueries({ queryKey: ['trend-ro-train-ids'] });
+              qc.invalidateQueries({ queryKey: ['trend-product'] });
+              qc.invalidateQueries({ queryKey: ['trend-power'] });
+              qc.invalidateQueries({ queryKey: ['trend-cost'] });
+              // DataSummaryModal
+              qc.invalidateQueries({ queryKey: ['dsm-ro-readings'] });
+              qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
+              qc.invalidateQueries();
+            }}
+          />
+        )}
+      </div>
+
+      <Card className="p-3 space-y-3">
+        {/* Plant + Train row — with online/offline toggle */}
+        <div className="grid grid-cols-2 gap-2 max-w-md">
+          <div>
+            <Label>Plant</Label>
+            <Select value={plantId} onValueChange={(v) => { setPlantId(v); setTrainId(''); }}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select Plant" /></SelectTrigger>
+              <SelectContent>{plants?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Train</Label>
+            <Select value={trainId} onValueChange={setTrainId} disabled={!plantId}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select Train" /></SelectTrigger>
+              <SelectContent>{trains?.map((t: any) => (
+                <SelectItem key={t.id} value={t.id}>{t.name ?? `Train ${t.train_number}`}</SelectItem>
+              ))}</SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Online / Offline toggle — shown once a train is picked */}
+        {train && (
+          <div className={cn(
+            'rounded-md border px-3 py-2.5 flex items-center gap-3 transition-colors',
+            trainOnline
+              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
+              : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
+          )}>
+            <Checkbox
+              id="train-online"
+              checked={trainOnline}
+              onCheckedChange={(c) => {
+                if (!!c && !trainOnline) {
+                  // Going from Offline → Online: end date is mandatory
+                  if (!offlineEnd) {
+                    toast.error('Please enter a "Back Online At" time before marking the train as Online.');
+                    return;
+                  }
+                }
+                setTrainOnline(!!c);
+                if (!!c) { setOfflineStart(''); setOfflineEnd(''); setOfflineReason(''); setOfflineReasonOther(''); }
+              }}
+              className={cn('shrink-0 h-4 w-4', trainOnline ? 'data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600' : '')}
+            />
+            <div className="flex-1 min-w-0">
+              <label htmlFor="train-online" className={cn(
+                'text-sm font-semibold cursor-pointer select-none',
+                trainOnline ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-400'
+              )}>
+                {trainOnline ? '● Online / Running' : '○ Offline / Not Running'}
+              </label>
+              {!trainOnline && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                  RO parameters locked until offline period is resolved or train comes back online
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Warning banner: DB says this train is Offline but form is in online mode.
+            Operator must explicitly uncheck Online + fill reason/start to log offline. */}
+        {train && trainOnline && train.status === 'Offline' && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Train last recorded as Offline</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                The database shows this train was previously offline. If it has resumed, submit a reading as Online and it will clear automatically. If it is still offline, uncheck "Online / Running" above and fill in the offline details.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Offline details — shown when train is marked offline */}
+        {train && !trainOnline && (
+          <div className="space-y-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Offline Details</p>
+
+            {/* Reason dropdown */}
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Reason for Offline <span className="text-red-500">*</span></Label>
+              <Select value={offlineReason} onValueChange={setOfflineReason}>
+                <SelectTrigger className="h-9 mt-0.5 border-red-200 dark:border-red-700">
+                  <SelectValue placeholder="Select reason…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Scheduled Maintenance">Scheduled Maintenance</SelectItem>
+                  <SelectItem value="Membrane Replacement">Membrane Replacement</SelectItem>
+                  <SelectItem value="CIP In Progress">CIP In Progress</SelectItem>
+                  <SelectItem value="Power Outage">Power Outage</SelectItem>
+                  <SelectItem value="High Pressure Trip">High Pressure Trip</SelectItem>
+                  <SelectItem value="Low Feed Flow">Low Feed Flow</SelectItem>
+                  <SelectItem value="Instrumentation Fault">Instrumentation Fault</SelectItem>
+                  <SelectItem value="Pump Failure">Pump Failure</SelectItem>
+                  <SelectItem value="Feedwater Quality Issue">Feedwater Quality Issue</SelectItem>
+                  <SelectItem value="Operator Shutdown">Operator Shutdown</SelectItem>
+                  <SelectItem value="Peak/Off-Peak Program">Peak/Off-Peak Program</SelectItem>
+                  <SelectItem value="Other">Other (specify below)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Free-text for Other */}
+            {offlineReason === 'Other' && (
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Specify reason <span className="text-red-500">*</span></Label>
+                <Input
+                  value={offlineReasonOther}
+                  onChange={e => setOfflineReasonOther(e.target.value)}
+                  placeholder="Describe the reason…"
+                  className="mt-0.5 border-red-200 dark:border-red-700"
+                />
+              </div>
+            )}
+
+            {/* Offline start / end times */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">
+                  Offline Since <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="datetime-local"
+                  value={offlineStart}
+                  onChange={e => setOfflineStart(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">
+                  Back Online At
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">(leave blank if still offline)</span>
+                </Label>
+                <Input
+                  type="datetime-local"
+                  value={offlineEnd}
+                  onChange={e => setOfflineEnd(e.target.value)}
+                  className="mt-0.5 w-full min-w-[200px] border-red-200 dark:border-red-700"
+                />
+              </div>
+            </div>
+
+            {/* Status banner */}
+            {!offlineEnd && offlineStart && (
+              <div className="flex items-center gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                Train is currently offline — RO parameters cannot be logged until it comes back online.
+              </div>
+            )}
+            {offlineEnd && offlineStart && (
+              <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded px-2.5 py-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                Offline period recorded — you may now log RO parameters for the resumed period.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div>
+          <Label>Reading Date &amp; Time</Label>
+          <Input type="datetime-local" value={dt}
+            onChange={isManager ? (e) => setDt(e.target.value) : undefined}
+            readOnly={!isManager}
+            className={cn(
+              "h-10 w-full sm:max-w-[260px] min-w-[220px]",
+              !isManager && "cursor-not-allowed opacity-60 bg-muted pointer-events-none"
+            )} />
+        </div>
+        {plant && (
+          <div className="text-[11px] text-muted-foreground">
+            Backwash mode: <span className="font-semibold">{isSynchronized ? 'Synchronized (Whole Train at Once)' : 'Independent (Per Unit)'}</span>
+          </div>
+        )}
+      </Card>
+
+      {train && (
+        <>
+          {/* ── Offline gate: lock all parameter inputs when train is offline with no end time ── */}
+          {isOfflineBlocked && (
+            <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl leading-none mt-0.5">🔒</span>
+                <div>
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Train is currently offline</p>
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    No RO parameters can be logged while the train is offline and no "Back Online At" time has been entered.
+                    Enter the time the train came back online above, or mark the train as Online to continue logging.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {!isOfflineBlocked && (
+          <>
+          {isSynchronized && (
+            <Card className="p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="sync-bw" checked={syncBwOn} onCheckedChange={(c) => setSyncBwOn(!!c)} className="shrink-0 h-4 w-4" />
+                <Label htmlFor="sync-bw" className="text-sm font-semibold cursor-pointer">Train Backwash Performed?</Label>
+              </div>
+              {syncBwOn && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Started</Label>
+                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full min-w-[220px]" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Ended</Label>
+                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full min-w-[220px]" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Meter Reading Start</Label>
+                      <Input type="number" step="any" value={syncMeterStart}
+                        onChange={(e) => setSyncMeterStart(e.target.value)}
+                        placeholder="From Previous Backwash End" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Meter Reading End</Label>
+                      <Input type="number" step="any" value={syncMeterEnd} onChange={(e) => setSyncMeterEnd(e.target.value)} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">All AFM/MMF Units Share These Values During Backwash. Start Value Pre-Filled From Previous Backwash End — Edit If Needed.</p>
+                </>
+              )}
+            </Card>
+          )}
+
+          {train.num_afm > 0 && (
+            <Card className="p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">AFM/MMF Units ({train.num_afm})</h4>
+              <div className="space-y-2">
+                {Array.from({ length: train.num_afm }, (_, i) => i + 1).map((u) => {
+                  const row = afmmf[u] ?? { unit: u, bw: false, bwStart: '', bwEnd: '', meterStart: '', meterEnd: '', pressureIn: '', pressureOut: '' };
+                  const pIn = row.pressureIn ? +row.pressureIn : null;
+                  const pOut = row.pressureOut ? +row.pressureOut : null;
+                  const afmDp = pIn !== null && pOut !== null ? (pIn - pOut).toFixed(2) : '';
+                  const dpWarn = afmDp && +afmDp >= 40;
+                  // backwash ongoing? in synchronized mode it's the train-wide checkbox; in independent it's per-unit
+                  const bwOngoing = isSynchronized ? syncBwOn : row.bw;
+                  const prevEnd = prevMeterEndByUnit[u];
+                  const meterStartValue = row.meterStart !== '' ? row.meterStart : (prevEnd != null ? String(prevEnd) : '');
+                  return (
+                    <div key={u} className="border rounded-md p-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium">AFM/MMF {u}</div>
+                        {!isSynchronized && (
+                          <div className="flex items-center gap-2">
+                            <Checkbox id={`bw-${u}`} checked={row.bw} onCheckedChange={(c) => setAfmmfField(u, { bw: !!c })} className="shrink-0 h-4 w-4" />
+                            <Label htmlFor={`bw-${u}`} className="text-xs cursor-pointer">Backwash On</Label>
+                          </div>
+                        )}
+                      </div>
+
+                      {bwOngoing ? (
+                        // Backwash ongoing → show meter start/end (+ time for independent mode); pressure hidden
+                        <div className="space-y-2 bg-muted/30 rounded p-2">
+                          {!isSynchronized && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-[11px] text-muted-foreground">Started</Label>
+                                <Input type="datetime-local" value={row.bwStart}
+                                  onChange={(e) => setAfmmfField(u, { bwStart: e.target.value })}
+                                  className="w-full min-w-[220px]" />
+                              </div>
+                              <div>
+                                <Label className="text-[11px] text-muted-foreground">Ended</Label>
+                                <Input type="datetime-local" value={row.bwEnd}
+                                  onChange={(e) => setAfmmfField(u, { bwEnd: e.target.value })}
+                                  className="w-full min-w-[220px]" />
+                              </div>
+                            </div>
+                          )}
+                          {isSynchronized ? (
+                            <p className="text-[10px] text-muted-foreground">
+                              Train-Wide Backwash {syncBwStart || '—'} → {syncBwEnd || '—'} · Meter {syncMeterStart || '—'} → {syncMeterEnd || '—'}
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-[11px] text-muted-foreground">Meter Reading Start</Label>
+                                <Input type="number" step="any" value={meterStartValue}
+                                  onChange={(e) => setAfmmfField(u, { meterStart: e.target.value })}
+                                  placeholder={prevEnd != null ? String(prevEnd) : 'From Previous Backwash End'} />
+                                {prevEnd != null && (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">Previous End: {prevEnd} (Editable)</p>
+                                )}
+                              </div>
+                              <div>
+                                <Label className="text-[11px] text-muted-foreground">Meter Reading End</Label>
+                                <Input type="number" step="any" value={row.meterEnd}
+                                  onChange={(e) => setAfmmfField(u, { meterEnd: e.target.value })} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        // No backwash → always-visible pressure In/Out (per unit)
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Pressure In (psi)</Label>
+                            <Input type="number" step="any" value={row.pressureIn}
+                              onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">Pressure Out (psi)</Label>
+                            <Input type="number" step="any" value={row.pressureOut}
+                              onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground">ΔPressure</Label>
+                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* ── Step gate: AFM/MMF must be acknowledged before Booster Pump + HPP section unlocks ── */}
+              {!afmSectionStarted && (
+                <div className="pt-1 border-t border-border/40">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full bg-teal-700 hover:bg-teal-800 text-white gap-2"
+                    onClick={() => {
+                      // Guard: majority of configured AFM/MMF units must have at least one field filled
+                      if (train.num_afm > 0) {
+                        const filledUnits = Array.from({ length: train.num_afm }, (_, i) => i + 1).filter((u) => {
+                          const row = afmmf[u];
+                          if (!row) return false;
+                          const bwOn = isSynchronized ? syncBwOn : row.bw;
+                          return bwOn
+                            ? (row.meterStart || row.meterEnd || syncMeterStart || syncMeterEnd)
+                            : (row.pressureIn || row.pressureOut);
+                        }).length;
+                        if (filledUnits < Math.ceil(train.num_afm / 2)) {
+                          toast.error(`Please fill in at least ${Math.ceil(train.num_afm / 2)} of ${train.num_afm} AFM/MMF unit(s) before proceeding.`);
+                          return;
+                        }
+                      }
+                      setAfmSectionStarted(true);
+                    }}
+                  >
+                    Proceed to Booster Pump and HPP →
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center mt-1">
+                    Fill in majority of AFM/MMF units above, or click to proceed if none apply.
+                  </p>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── Booster Pumps + HPP — visible once AFM/MMF section has been acknowledged (or skipped) ── */}
+          {(afmSectionStarted || train.num_afm === 0) && (() => {
+            // Shared psi/Hz mode toggle — applies to all pumps at once
+            const anyPsi = Object.values(boosters).some(b => b.psiMode !== false);
+            const globalPsiMode = Object.keys(boosters).length === 0 ? boosterPrefPsi : anyPsi;
+            const setGlobalMode = (psi: boolean) => {
+              // Persist preference so the next page open starts in the same mode
+              setBoosterPrefPsi(psi);
+              try { localStorage.setItem(BOOSTER_MODE_KEY, String(psi)); } catch {}
+              const next: typeof boosters = {};
+              Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach(u => {
+                const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: boosterPrefPsi };
+                next[u] = { ...b, psiMode: psi, hz: '', target: '' };
+              });
+              setBoosters(next);
+            };
+            return (
+              <>
+              {train.num_booster_pumps > 0 && (
+              <Card className="p-3 space-y-2.5">
+                {/* Header row: title left, psi/Hz toggle right */}
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Booster Pumps ({train.num_booster_pumps})
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Target</span>
+                    <div className="flex rounded-full border border-border overflow-hidden text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setGlobalMode(true)}
+                        className={cn(
+                          'px-3 py-1 transition-colors',
+                          globalPsiMode
+                            ? 'bg-teal-700 text-white'
+                            : 'bg-background text-muted-foreground hover:bg-muted'
+                        )}
+                      >psi</button>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalMode(false)}
+                        className={cn(
+                          'px-3 py-1 transition-colors',
+                          !globalPsiMode
+                            ? 'bg-teal-700 text-white'
+                            : 'bg-background text-muted-foreground hover:bg-muted'
+                        )}
+                      >Hz</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Column headers */}
+                <div className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 gap-y-0 items-end">
+                  <div />
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">psi</div>
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">Hz</div>
+                  <div className="text-[11px] text-muted-foreground font-medium text-center">Amperage (A)</div>
+                </div>
+
+                {/* Pump rows */}
+                <div className="space-y-2">
+                  {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
+                    const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: boosterPrefPsi };
+                    const psiMode = b.psiMode !== false;
+                    const setB = (patch: Partial<typeof b>) =>
+                      setBoosters({ ...boosters, [u]: { ...b, ...patch } });
+                    return (
+                      <div key={u} className="grid grid-cols-[72px_1fr_1fr_1fr] gap-x-3 items-center">
+                        <span className="text-sm font-semibold text-foreground">Pump {u}</span>
+                        {/* psi input */}
+                        <Input
+                          type="number" step="any"
+                          value={psiMode ? b.target : ''}
+                          disabled={!psiMode}
+                          placeholder={psiMode ? 'Enter psi' : '—'}
+                          className={cn(
+                            'text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg',
+                            !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                          )}
+                          onChange={(e) => setB({ target: e.target.value })}
+                        />
+                        {/* Hz input */}
+                        <Input
+                          type="number" step="any"
+                          value={!psiMode ? b.hz : ''}
+                          disabled={psiMode}
+                          placeholder={!psiMode ? 'Enter Hz' : '—'}
+                          className={cn(
+                            'text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg',
+                            psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                          )}
+                          onChange={(e) => setB({ hz: e.target.value })}
+                        />
+                        {/* Amperage */}
+                        <Input
+                          type="number" step="any"
+                          value={b.amp}
+                          placeholder="Enter A"
+                          className="text-center placeholder:text-[10px] placeholder:text-muted-foreground/40 rounded-lg"
+                          onChange={(e) => setB({ amp: e.target.value })}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Mode hint */}
+                <p className="text-[9px] text-muted-foreground/50 italic">
+                  {globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
+                </p>
+              </Card>
+              )}
+
+              {/* HPP card — always shown in this section */}
+              <Card className="p-3 space-y-2">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">HPP Target Pressure (psi)</Label>
+                  <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
+                </div>
+              </Card>
+
+              {/* ── Step gate: Booster + HPP must be acknowledged before Cartridge Housing unlocks ── */}
+              {!boosterHppSectionStarted && (
+                <Card className="p-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full bg-teal-700 hover:bg-teal-800 text-white gap-2"
+                    onClick={() => {
+                      // Guard: majority of Booster Pump + HPP fields must be filled
+                      const totalFields = 1 + train.num_booster_pumps * 2; // HPP + (target + amp) per pump
+                      let filledCount = hppTarget ? 1 : 0;
+                      Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).forEach((u) => {
+                        const b = boosters[u];
+                        if (b?.target || b?.hz) filledCount++;
+                        if (b?.amp) filledCount++;
+                      });
+                      if (totalFields > 1 && filledCount < Math.ceil(totalFields / 2)) {
+                        toast.error(`Please fill in at least ${Math.ceil(totalFields / 2)} of ${totalFields} Booster Pump & HPP field(s) before proceeding.`);
+                        return;
+                      }
+                      setBoosterHppSectionStarted(true);
+                    }}
+                  >
+                    Proceed to Cartridge Housing / Bag Filter →
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center mt-1">
+                    Fill in majority of Booster Pump & HPP fields above, or click to proceed if none apply.
+                  </p>
+                </Card>
+              )}
+              </>
+            );
+          })()}
+
+          {/* ── Section 3: Cartridge / Bag Filter Housings ─────────────────────────
+              Visible once Booster Pumps + HPP section has been acknowledged.
+              Contains Cartridge/Bag Filter pre-filter housings and AFM Filter Housings. */}
+          {boosterHppSectionStarted && (
+          <>
+          {/* ── Cartridge / Bag Filter Housing (Pre-filter) ──────────────────
+              Driven by train.num_cartridge_filters; label by plant.filter_housing_type.
+              These are the pre-filter housings before the HPP/RO membrane — distinct from
+              the AFM/MMF multi-media Filter Housings below. */}
+          {(train.num_cartridge_filters ?? 0) > 0 && (
+            <Card className="p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+                {cartridgeHousingLabel} ({train.num_cartridge_filters})
+              </h4>
+              {Array.from({ length: train.num_cartridge_filters }, (_, i) => i + 1).map((u) => {
+                const inP  = +(cartridgeHousings[u]?.inP  ?? '');
+                const outP = +(cartridgeHousings[u]?.outP ?? '');
+                const cfDp = cartridgeHousings[u]?.inP && cartridgeHousings[u]?.outP
+                  ? (inP - outP).toFixed(2) : '';
+                const cfDpWarn = cfDp !== '' && +cfDp >= 25; // 25 psi DP = typical cartridge/bag replacement threshold
+                return (
+                  <div key={u} className="grid grid-cols-4 gap-2 items-end">
+                    <div className="text-xs font-medium pb-2">Housing {u}</div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Pressure In (psi)</Label>
+                      <Input
+                        type="number" step="any"
+                        value={cartridgeHousings[u]?.inP ?? ''}
+                        onChange={(e) => setCartridgeHousings({
+                          ...cartridgeHousings,
+                          [u]: { ...(cartridgeHousings[u] || { outP: '' }), inP: e.target.value },
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Pressure Out (psi)</Label>
+                      <Input
+                        type="number" step="any"
+                        value={cartridgeHousings[u]?.outP ?? ''}
+                        onChange={(e) => setCartridgeHousings({
+                          ...cartridgeHousings,
+                          [u]: { ...(cartridgeHousings[u] || { inP: '' }), outP: e.target.value },
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <Label className={cn('text-[11px]', cfDpWarn ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                        ΔPressure{cfDpWarn ? ' ⚠' : ''}
+                      </Label>
+                      <ComputedInput value={cfDp} className={cfDpWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="pt-1">
+                <Label className="text-[11px] text-muted-foreground">{changedElementLabel}</Label>
+                <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} />
+              </div>
+            </Card>
+          )}
+
+          {/* ── AFM/MMF Filter Housings ── secondary filter housings (Cartridge Filter plants only) */}
+          {(train.num_filter_housings ?? 0) > 0 && (
+            <Card className="p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Filter Housings ({train.num_filter_housings})</h4>
+              {Array.from({ length: train.num_filter_housings }, (_, i) => i + 1).map((u) => {
+                const inP = +(housings[u]?.inP ?? '');
+                const outP = +(housings[u]?.outP ?? '');
+                const housingDp = housings[u]?.inP && housings[u]?.outP ? (inP - outP).toFixed(2) : '';
+                return (
+                  <div key={u} className="grid grid-cols-4 gap-2 items-center">
+                    <div className="text-xs font-medium self-center">Housing {u}</div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">In (psi)</Label>
+                      <Input type="number" step="any" value={housings[u]?.inP ?? ''}
+                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Out (psi)</Label>
+                      <Input type="number" step="any" value={housings[u]?.outP ?? ''}
+                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">ΔPressure</Label>
+                      <ComputedInput value={housingDp} className="text-foreground font-medium" />
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Only show changed-element field here when there are no cartridge/bag filter housings
+                  (avoids duplicate input when both sections are visible). */}
+              {!(train.num_cartridge_filters > 0) && (
+                <div className="pt-2">
+                  <Label className="text-[11px] text-muted-foreground">{changedElementLabel}</Label>
+                  <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} />
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── Step gate: Cartridge / Filter Housing must be acknowledged before RO Vessels unlocks ── */}
+          {!cartridgeSectionStarted && (
+            <Card className="p-3">
+              <Button
+                type="button"
+                size="sm"
+                className="w-full bg-teal-700 hover:bg-teal-800 text-white gap-2"
+                onClick={() => {
+                  // Guard: majority of configured housing fields must be filled
+                  const totalHousings = (train.num_cartridge_filters ?? 0) + (train.num_filter_housings ?? 0);
+                  if (totalHousings > 0) {
+                    let filledHousings = 0;
+                    Array.from({ length: train.num_cartridge_filters ?? 0 }, (_, i) => i + 1).forEach((u) => {
+                      if (cartridgeHousings[u]?.inP || cartridgeHousings[u]?.outP) filledHousings++;
+                    });
+                    Array.from({ length: train.num_filter_housings ?? 0 }, (_, i) => i + 1).forEach((u) => {
+                      if (housings[u]?.inP || housings[u]?.outP) filledHousings++;
+                    });
+                    if (filledHousings < Math.ceil(totalHousings / 2)) {
+                      toast.error(`Please fill in at least ${Math.ceil(totalHousings / 2)} of ${totalHousings} housing(s) before proceeding.`);
+                      return;
+                    }
+                  }
+                  setCartridgeSectionStarted(true);
+                }}
+              >
+                Proceed to RO Vessels →
+              </Button>
+              <p className="text-[10px] text-muted-foreground text-center mt-1">
+                {(train.num_cartridge_filters ?? 0) + (train.num_filter_housings ?? 0) === 0
+                  ? 'No housings configured — click to proceed to RO Vessels.'
+                  : 'Fill in majority of housing fields above, or click to proceed if none apply.'}
+              </p>
+            </Card>
+          )}
+          </>
+          )}
+
+          {/* ── Section 4: RO Vessel — visible once Cartridge Housing section has been acknowledged ── */}
+          {cartridgeSectionStarted && (
+          <>
+          <Card className="p-3 space-y-3">
+            <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">RO Vessel</h4>
+
+            {/* Column headers */}
+            <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {showFeedMeter && (
+              <div className="flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Feed / Raw</span>
+              </div>
+              )}
+              {showPermeateMeter && (
+              <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{productionLabel}</span>
+              </div>
+              )}
+              {showRejectMeter && (
+              <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Reject / Concentrate</span>
+              </div>
+              )}
+            </div>
+
+            {/* ── Water Meter ─────────────────────────────────────────────── */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Water Meter</p>
+                <p className="text-[10px] text-muted-foreground/60 italic">
+                  {(!showFeedMeter || !showRejectMeter) ? 'Missing meter auto-inferred' : 'Leave one stream blank — it will be inferred'}
+                </p>
+              </div>
+              {/* Auto-computed duration from datetime diff */}
+              <div className="flex items-center gap-2 mb-1">
+                <Label className="text-[11px] text-muted-foreground shrink-0">Duration (min)</Label>
+                <ComputedInput
+                  value={autoDurationMin != null ? String(autoDurationMin) : ''}
+                  className="h-7 text-xs w-28"
+                />
+                {autoDurationMin == null && (
+                  <span className="text-[10px] text-muted-foreground/60 italic">— no prior reading found</span>
+                )}
+              </div>
+              {/* Inferred-meter notice banner */}
+              {(!showFeedMeter || !showRejectMeter) && (
+                <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 text-[10px] text-blue-700 dark:text-blue-300 mb-1">
+                  {!showFeedMeter && showPermeateMeter && showRejectMeter && 'Feed meter disabled — feed volume auto-inferred as permeate + reject.'}
+                  {showFeedMeter && !showRejectMeter && 'Reject meter disabled — reject volume auto-inferred as feed − permeate.'}
+                  {!showFeedMeter && !showRejectMeter && 'Feed and reject meters disabled — only permeate logged.'}
+                </div>
+              )}
+              {/* current / prev (auto) / Δ / flow columns — only configured meters */}
+              <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {/* Feed */}
+                {showFeedMeter && (
+                <div className="space-y-1">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Previous Feed Meter Reading</Label>
+                    {prevFeedMeter != null
+                      ? <ComputedInput value={String(prevFeedMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Feed Meter Reading</Label>
+                    <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
+                  <div>
+                    <Label className={cn('text-[11px]', feedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      Feed Volume{feedInferred ? ' (inferred)' : ''} (m³)
+                    </Label>
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Feed Flowrate (m³/hr)</Label>
+                    <ComputedInput value={feedFlowMeter != null ? String(feedFlowMeter) : ''} className="text-foreground font-medium" />
+                  </div>
+                </div>
+                )}
+                {/* Permeate */}
+                {showPermeateMeter && (
+                <div className="space-y-1">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Previous Permeate Meter Reading</Label>
+                    {prevPermMeter != null
+                      ? <ComputedInput value={String(prevPermMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Permeate Meter Reading</Label>
+                    <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className={cn(
+                      "placeholder:text-[10px] placeholder:text-muted-foreground/50",
+                      permNegWarn && "border-red-500 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 focus-visible:ring-red-400",
+                      permHighWarn && "border-amber-400 bg-amber-50 dark:bg-amber-950/20 focus-visible:ring-amber-400"
+                    )} />
+                    {permNegWarn && (
+                      <p className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Reading ({permCurr}) is below previous ({prevPermMeter}) — meter rollback or typo.
+                      </p>
+                    )}
+                    {permHighWarn && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Delta of {permDelta?.toFixed(1)} m³ is unusually high (last period was {prevPermDeltaDB?.toFixed(1)} m³). Verify before saving.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className={cn('text-[11px]', permInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      {meterCfg.ro_production_source === 'permeate' ? 'Production (Permeate)' : 'Permeate Volume'}{permInferred ? ' (inferred)' : ''} (m³)
+                    </Label>
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
+                    <ComputedInput value={permFlowMeter != null ? String(permFlowMeter) : ''} className="text-foreground font-medium" />
+                  </div>
+                </div>
+                )}
+                {/* Reject */}
+                {showRejectMeter && (
+                <div className="space-y-1">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Previous Reject Meter Reading</Label>
+                    {prevRejMeter != null
+                      ? <ComputedInput value={String(prevRejMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
+                          <span className="text-[11px] text-muted-foreground/50 italic">No prior reading</span>
+                        </div>
+                    }
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Reject Meter Reading</Label>
+                    <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
+                  <div>
+                    <Label className={cn('text-[11px]', rejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                      Reject Volume{rejInferred ? ' (inferred)' : ''} (m³)
+                    </Label>
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-medium' : 'text-foreground font-medium'} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Reject Flowrate (m³/hr)</Label>
+                    <ComputedInput value={rejFlowMeter != null ? String(rejFlowMeter) : ''} className="text-foreground font-medium" />
+                  </div>
+                </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Pressure row ────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Pressure (psi)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Suction</Label>
+                    <Input type="number" step="any" {...f('suction_pressure_psi')}
+                      placeholder="Suction pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Feed</Label>
+                    <Input type="number" step="any" {...f('feed_pressure_psi')}
+                      placeholder="Feed pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  </div>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <Label className="text-[11px] text-muted-foreground">ΔP (feed − reject)</Label>
+                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <Label className="text-[11px] text-muted-foreground">Reject</Label>
+                  <Input type="number" step="any" {...f('reject_pressure_psi')}
+                    placeholder="Reject pressure" className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                </div>
+              </div>
+            </div>
+
+            {/* ── EM flow override ────────────────────────────────────────── */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">
+                  Electromagnetic Flowmeter (m³/hr)
+                </p>
+                <p className="text-[10px] text-muted-foreground/60 italic">
+                  {emEntered === 0 && 'Enter any two — third auto-computes'}
+                  {emEntered === 1 && 'Enter one more — third will be computed'}
+                  {emEntered === 2 && 'One value computed from the other two'}
+                  {emEntered === 3 && 'All three manually entered'}
+                </p>
+              </div>
+              <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {/* Feed EM */}
+                {showFeedMeter && (
+                <div className="space-y-1">
+                  <Label className={cn('text-[11px]', emFeedInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                    Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
+                  </Label>
+                  {emFeedInferred ? (
+                    <ComputedInput
+                      value={effFeedFlow != null ? String(effFeedFlow) : ''}
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
+                    />
+                  ) : (
+                    <Input type="number" step="any" {...f('feed_flow')}
+                      placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'}
+                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  )}
+                </div>
+                )}
+                {/* Permeate EM */}
+                {showPermeateMeter && (
+                <div className="space-y-1">
+                  <Label className={cn('text-[11px]', emPermInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                    {meterCfg.ro_production_source === 'permeate' ? 'Production Flowrate' : 'Permeate Flowrate'}{emPermInferred ? ' (computed)' : ''}
+                  </Label>
+                  {emPermInferred ? (
+                    <ComputedInput
+                      value={effPermFlow != null ? String(effPermFlow) : ''}
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
+                    />
+                  ) : (
+                    <Input type="number" step="any" {...f('permeate_flow')}
+                      placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'}
+                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  )}
+                  <div className="mt-1">
+                    <Label className={cn('text-[11px]', recWarn ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                      Recovery %{recWarn ? ' ⚠' : ''}
+                    </Label>
+                    <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
+                  </div>
+                </div>
+                )}
+                {/* Reject EM */}
+                {showRejectMeter && (
+                <div className="space-y-1">
+                  <Label className={cn('text-[11px]', emRejInferred ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground')}>
+                    Reject Flowrate{emRejInferred ? ' (computed)' : ''}
+                  </Label>
+                  {emRejInferred ? (
+                    <ComputedInput
+                      value={effRejFlow != null ? String(effRejFlow) : ''}
+                      className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold"
+                    />
+                  ) : (
+                    <Input type="number" step="any" {...f('reject_flow')}
+                      placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM reading'}
+                      className="placeholder:text-[10px] placeholder:text-muted-foreground/50" />
+                  )}
+                </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── TDS row ──────────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">TDS (ppm)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
+              </div>
+              {/* Rejection + Salt Passage in their own row below TDS inputs */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Salt Rejection %</Label>
+                  <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" />
+                </div>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Salt Passage %</Label>
+                  <ComputedInput value={saltPassage ?? ''} className="text-foreground font-medium" />
+                </div>
+              </div>
+            </div>
+
+            {/* ── pH row ───────────────────────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">pH</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
+              </div>
+            </div>
+
+            {/* ── Product quality / ambient ────────────────────────────────── */}
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Product Quality</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-[11px] text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Product Chlorine Residual (mg/L)</Label><Input type="number" step="any" min="0" {...f('chlorine_residual_mg_l')} /></div>
+              </div>
+            </div>
+          </Card>
+
+          {/* ── Power Meter ──────────────────────────────────────────────────── */}
+          {/* Show when per-train electricity meter is enabled in meter config.
+              When disabled, plant-level power is tracked via Operations → Power tab instead. */}
+          {showPowerMeter && (
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Power Meter (per train)</h4>
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                <span>Duration:</span>
+                <span className="font-mono font-medium">{autoDurationMin != null ? `${autoDurationMin} min` : '—'}</span>
+              </div>
+            </div>
+
+            {/* Shared meter warning banner */}
+            {isSharedPowerMeter && (
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>⚡ Shared power meter</span>
+                  <span className="font-mono text-[10px] bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">
+                    group: {sharedPowerGroup}
+                  </span>
+                </div>
+                <p className="opacity-80">
+                  This train shares one physical meter with{' '}
+                  {siblingTrains?.length
+                    ? siblingTrains.map((t: any) => `Train ${t.train_number}${t.name ? ` (${t.name})` : ''}`).join(', ')
+                    : 'other trains in this group'}.
+                  Enter the <strong>same meter reading</strong> on each train.
+                  The full kWh delta is saved here — volume-weighted allocation happens in reports.
+                </p>
+                <p className="opacity-60 italic">
+                  Specific energy shown below is an estimate (full meter ÷ this train's permeate only).
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">
+                  Prev reading (kWh){prevPowerMeter != null ? ' — auto' : ' — enter manually (first reading)'}
+                </Label>
+                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current reading (kWh)</Label>
+                <Input type="number" step="any" {...f('power_meter_curr')} placeholder="e.g. 12456.8" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Δ Consumption (kWh)</Label>
+                <ComputedInput value={pwrDelta ?? ''} className="text-foreground font-medium" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Avg power (kW)</Label>
+                <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" />
+              </div>
+              <div>
+                <Label className={cn('text-[11px]', isSharedPowerMeter ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                  Specific energy (kWh/m³){isSharedPowerMeter ? ' ≈ est.' : ''}
+                </Label>
+                <ComputedInput
+                  value={secEnergy ?? ''}
+                  className={isSharedPowerMeter ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-medium' : 'text-foreground font-medium'}
+                />
+              </div>
+            </div>
+          </Card>
+          )}
+          {!showPowerMeter && (
+          <div className="rounded-md border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
+            ⚡ Per-train power meter not configured for this plant — energy consumption is tracked plant-wide in the <strong className="font-medium">Power tab</strong>.
+          </div>
+          )}
+
+          <Card className="p-3 space-y-2">
+            <Label className="text-[11px] text-muted-foreground">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any observations..." />
+          </Card>
+          </>
+          )}
+
+        </>
+        )}
+
+        {/* ── Save button ────────────────────────────────────────────────────────
+            Shown in two situations:
+            1. Train is offline — operator has filled reason + start time and wants
+               to record the offline event (no RO parameters needed).
+            2. Train is online and all step sections have been acknowledged —
+               normal end-of-form save.
+            Placed outside both the isOfflineBlocked gate and the step gate so it
+            is always reachable regardless of which path the operator took. */}
+        {train && (!trainOnline || cartridgeSectionStarted) && (
+          <Button onClick={submit} className="w-full h-12 text-base font-semibold">
+            {!trainOnline ? 'Save Offline Record' : 'Save Pre-Treatment & RO Reading'}
+          </Button>
+        )}
+      </>
+      )}
+
+      {!train && plantId && (
+        <Card className="p-4 text-center text-xs text-muted-foreground">Select a train to log pre-treatment and RO data</Card>
+      )}
+    </div>
+  );
+}
+
+// ─── CIP Volumetric & Analytics ───────────────────────────────────────────────
+// Per-vessel flow rate — two methods:
+//   A) Water Meter Delta:  Q = ΔV / Δt   (ΔV = curr−prev m³, Δt in hr)
+//   B) Manual Bucket Test: Q = V_bucket / t_fill  (e.g. 20 L ÷ seconds → L/min → m³/hr)
+// Comparative analytics: Δ volume recovery, Δ TDS, Δ cost/efficiency (pre vs post CIP)
+
+// ─── Per-vessel flow row ──────────────────────────────────────────────────────
+type VesselFlowMethod = 'meter' | 'manual';
+type VesselFlowRow = {
+  id: number;
+  method: VesselFlowMethod;
+  // meter delta
+  prevMeter: string; currMeter: string;
+  prevTime: string;  currTime: string;
+  // manual bucket
+  bucketVol: string;   // L
+  fillTimeSec: string; // seconds
+};
+
+function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange: (patch: Partial<VesselFlowRow>) => void }) {
+  // ── Meter method calcs ────────────────────────────────────────────────────
+  const deltaV_m3 = (row.currMeter !== '' && row.prevMeter !== '')
+    ? +((+row.currMeter) - (+row.prevMeter)).toFixed(4) : null;
+  const deltaT_hr = useMemo(() => {
+    if (!row.prevTime || !row.currTime) return null;
+    const diff = (new Date(row.currTime).getTime() - new Date(row.prevTime).getTime()) / 3600000;
+    return diff > 0 ? +diff.toFixed(4) : null;
+  }, [row.prevTime, row.currTime]);
+  const qMeter = (deltaV_m3 !== null && deltaT_hr !== null && deltaT_hr > 0)
+    ? +((deltaV_m3) / deltaT_hr).toFixed(4) : null;
+
+  // ── Manual bucket calcs ───────────────────────────────────────────────────
+  // Q (L/min) = bucketVol(L) / fillTime(s) × 60
+  // Q (m³/hr) = Q(L/min) / 1000 × 60
+  const bVol = +row.bucketVol || 0;
+  const bSec = +row.fillTimeSec || 0;
+  const qLperMin  = (bVol > 0 && bSec > 0) ? +((bVol / bSec) * 60).toFixed(3) : null;
+  const qManual   = qLperMin !== null ? +((qLperMin / 1000) * 60).toFixed(4) : null;
+
+  const Q = row.method === 'meter' ? qMeter : qManual;
+  const hasResult = Q !== null;
+
+  return (
+    <div className={cn(
+      'rounded-xl border-2 p-3 space-y-2.5 transition-colors',
+      hasResult ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-border bg-muted/10'
+    )}>
+      {/* Vessel label + method toggle */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-xs font-bold text-foreground">Vessel {row.id}</span>
+        <div className="flex rounded-full border border-border overflow-hidden text-[10px] font-semibold">
+          <button type="button" onClick={() => onChange({ method: 'meter' })}
+            className={cn('px-2.5 py-0.5 transition-colors',
+              row.method === 'meter' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+            📟 Meter
+          </button>
+          <button type="button" onClick={() => onChange({ method: 'manual' })}
+            className={cn('px-2.5 py-0.5 transition-colors',
+              row.method === 'manual' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+            🪣 Bucket
+          </button>
+        </div>
+      </div>
+
+      {/* ── Method A: Water Meter Delta ─────────────────────────────── */}
+      {row.method === 'meter' && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Prev meter (m³)</Label>
+              <Input type="number" step="any" value={row.prevMeter}
+                onChange={e => onChange({ prevMeter: e.target.value })}
+                placeholder="e.g. 102.40" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Curr meter (m³)</Label>
+              <Input type="number" step="any" value={row.currMeter}
+                onChange={e => onChange({ currMeter: e.target.value })}
+                placeholder="e.g. 108.75" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Prev date & time</Label>
+              <Input type="datetime-local" value={row.prevTime}
+                onChange={e => onChange({ prevTime: e.target.value })}
+                className="h-8 text-[10px]" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Curr date & time</Label>
+              <Input type="datetime-local" value={row.currTime}
+                onChange={e => onChange({ currTime: e.target.value })}
+                className="h-8 text-[10px]" />
+            </div>
+          </div>
+          {/* ΔV + Δt inline chips */}
+          <div className="flex gap-1.5 flex-wrap">
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-mono-num',
+              deltaV_m3 !== null ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                 : 'border-border bg-muted/30 text-muted-foreground')}>
+              ΔV = {deltaV_m3 !== null ? `${deltaV_m3} m³` : '—'}
+            </span>
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-mono-num',
+              deltaT_hr !== null ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                                 : 'border-border bg-muted/30 text-muted-foreground')}>
+              Δt = {deltaT_hr !== null ? `${deltaT_hr} hr` : '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Method B: Manual Bucket Test ────────────────────────────── */}
+      {row.method === 'manual' && (
+        <div className="space-y-2">
+          <div className="rounded-md bg-muted/40 border border-border px-2.5 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
+            Fill a container to a known volume (e.g. 20 L), measure the time in seconds.
+            <span className="font-mono ml-1 text-foreground">Q = V ÷ t × 60 (L/min)</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Container volume (L)</Label>
+              <Input type="number" step="any" value={row.bucketVol}
+                onChange={e => onChange({ bucketVol: e.target.value })}
+                placeholder="20" className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Fill time (seconds)</Label>
+              <Input type="number" step="any" value={row.fillTimeSec}
+                onChange={e => onChange({ fillTimeSec: e.target.value })}
+                placeholder="e.g. 45" className="h-8 text-xs" />
+            </div>
+          </div>
+          {/* Intermediate L/min chip */}
+          {qLperMin !== null && (
+            <span className="inline-block text-[10px] px-2 py-0.5 rounded-full border border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-mono-num">
+              {qLperMin} L/min
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Q result strip ───────────────────────────────────────────── */}
+      <div className={cn(
+        'rounded-lg px-3 py-2 flex items-center justify-between',
+        hasResult
+          ? 'bg-emerald-100 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700'
+          : 'bg-muted/20 border border-dashed border-border'
+      )}>
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Flow Rate Q</p>
+          <p className="text-[9px] text-muted-foreground font-mono">
+            {row.method === 'meter' ? 'Q = ΔV ÷ Δt' : 'Q = V ÷ t × 60 ÷ 1000 × 60'}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className={cn('text-lg font-bold font-mono-num leading-none',
+            hasResult ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/30')}>
+            {hasResult ? Q : '—'}
+          </p>
+          {hasResult && <p className="text-[9px] text-muted-foreground">m³/hr</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
+  // ── Vessel count — user can override before generating the list ──────────
+  const [vesselCount, setVesselCount] = useState(numVessels);
+  const [vesselCountInput, setVesselCountInput] = useState(String(numVessels));
+  const [listGenerated, setListGenerated] = useState(false);
+  const [vesselListOpen, setVesselListOpen] = useState(true);
+
+  // ── Per-vessel flow state ─────────────────────────────────────────────────
+  const makeRow = (id: number): VesselFlowRow => ({
+    id, method: 'meter',
+    prevMeter: '', currMeter: '', prevTime: '', currTime: '',
+    bucketVol: '20', fillTimeSec: '',
+  });
+  const [vesselRows, setVesselRows] = useState<VesselFlowRow[]>(
+    Array.from({ length: vesselCount }, (_, i) => makeRow(i + 1))
+  );
+  const [expandedVessel, setExpandedVessel] = useState<number | null>(null);
+  const [globalMethod, setGlobalMethod] = useState<VesselFlowMethod>('meter');
+
+  const generateList = () => {
+    const n = Math.max(1, Math.min(50, +vesselCountInput || vesselCount));
+    setVesselCount(n);
+    setVesselRows(Array.from({ length: n }, (_, i) => makeRow(i + 1)));
+    setListGenerated(true);
+    setVesselListOpen(true);
+    setSavedVessels(new Set());
+    setEditingVessel(null);
+  };
+
+  const patchRow = (id: number, patch: Partial<VesselFlowRow>) =>
+    setVesselRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
+
+  // ── Per-vessel save / edit / delete ─────────────────────────────────────
+  // "saved" vessels show a green lock icon and are read-only until Edited.
+  const [savedVessels, setSavedVessels] = useState<Set<number>>(new Set());
+  const [editingVessel, setEditingVessel] = useState<number | null>(null);
+
+  const saveVessel = (id: number) => {
+    setSavedVessels(prev => new Set([...prev, id]));
+    setEditingVessel(null);
+    setExpandedVessel(null);
+  };
+  const editVessel = (id: number) => {
+    setSavedVessels(prev => { const n = new Set(prev); n.delete(id); return n; });
+    setEditingVessel(id);
+    setExpandedVessel(id);
+  };
+  const deleteVessel = (id: number) => {
+    setVesselRows(rows => rows.filter(r => r.id !== id));
+    setSavedVessels(prev => { const n = new Set(prev); n.delete(id); return n; });
+    if (expandedVessel === id) setExpandedVessel(null);
+  };
+
+  const applyGlobalMethod = (m: VesselFlowMethod) => {
+    setGlobalMethod(m);
+    setVesselRows(rows => rows.map(r => ({ ...r, method: m })));
+  };
+
+  // ── Volumetric flow Q = ΔV / Δt state (Tab 2 — global) ──────────────────
+  const [qPrevMeter, setQPrevMeter] = useState('');
+  const [qCurrMeter, setQCurrMeter] = useState('');
+  const [qPrevTime,  setQPrevTime]  = useState('');
+  const [qCurrTime,  setQCurrTime]  = useState('');
+
+  // ── Comparative analytics state ──────────────────────────────────────────
+  const [preCipVol,  setPreCipVol]  = useState('');
+  const [postCipVol, setPostCipVol] = useState('');
+  const [preCipTds,  setPreCipTds]  = useState('');
+  const [postCipTds, setPostCipTds] = useState('');
+  const [preCipKpi,  setPreCipKpi]  = useState('');
+  const [postCipKpi, setPostCipKpi] = useState('');
+
+  // ── Active section tab ────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'vessel' | 'flow' | 'compare'>('vessel');
+
+  // ── Q = ΔV / Δt calc (Tab 2) ─────────────────────────────────────────────
+  const deltaV = (qCurrMeter !== '' && qPrevMeter !== '')
+    ? +((+qCurrMeter) - (+qPrevMeter)).toFixed(4) : null;
+  const deltaT_hr = useMemo(() => {
+    if (!qPrevTime || !qCurrTime) return null;
+    const diff = (new Date(qCurrTime).getTime() - new Date(qPrevTime).getTime()) / 3600000;
+    return diff > 0 ? +diff.toFixed(4) : null;
+  }, [qPrevTime, qCurrTime]);
+  const flowQ = (deltaV !== null && deltaT_hr !== null && deltaT_hr > 0)
+    ? +((deltaV) / deltaT_hr).toFixed(4) : null;
+
+  // ── Comparative analytics calc ────────────────────────────────────────────
+  const deltaVolRecovery = (postCipVol !== '' && preCipVol !== '')
+    ? +((+postCipVol) - (+preCipVol)).toFixed(4) : null;
+  const deltaTds = (postCipTds !== '' && preCipTds !== '')
+    ? +((+postCipTds) - (+preCipTds)).toFixed(2) : null;
+  const deltaKpi = (postCipKpi !== '' && preCipKpi !== '')
+    ? +((+postCipKpi) - (+preCipKpi)).toFixed(2) : null;
+
+  const deltaColor = (val: number | null, lowerIsBetter = false) => {
+    if (val === null) return 'text-muted-foreground';
+    const good = lowerIsBetter ? val < 0 : val > 0;
+    return good ? 'text-emerald-600 dark:text-emerald-400' : val === 0 ? 'text-muted-foreground' : 'text-red-500 dark:text-red-400';
+  };
+  const deltaSign = (val: number | null) => val === null ? '—' : val > 0 ? `+${val}` : `${val}`;
+
+  const TABS = [
+    { key: 'vessel',  label: 'Per-Vessel Flow' },
+    { key: 'flow',    label: 'Flow Q=ΔV/Δt'    },
+    { key: 'compare', label: 'Comparative'      },
+  ] as const;
+
+  return (
+    <Card className="p-3 space-y-3">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Volumetric & Analytics</h4>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Per-vessel flow rate · Global Q=ΔV/Δt · Pre/Post CIP comparison</p>
+      </div>
+
+      {/* ── Section tab pills ────────────────────────────────────────── */}
+      <div className="flex gap-1.5 flex-wrap">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={cn(
+              'text-[11px] px-3 py-1 rounded-full border font-medium transition-colors',
+              activeTab === t.key
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+            )}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ TAB 1 — Per-Vessel Flow Rate ════════════════════════════ */}
+      {activeTab === 'vessel' && (
+        <div className="space-y-3">
+
+          {/* ── Vessel count prompt ──────────────────────────────── */}
+          <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+            <span className="text-xs font-semibold text-foreground shrink-0">Vessels per train:</span>
+            <Input
+              type="number" min="1" max="50"
+              value={vesselCountInput}
+              onChange={e => setVesselCountInput(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && generateList()}
+              className="h-7 w-16 text-sm text-center font-mono"
+            />
+            <Button
+              size="sm"
+              onClick={generateList}
+              className="h-7 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+            >
+              Generate List
+            </Button>
+            {listGenerated && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                ✓ {vesselCount} vessel{vesselCount !== 1 ? 's' : ''} ready
+              </span>
+            )}
+          </div>
+
+          {listGenerated && (<>
+
+          {/* Global method switcher */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-muted-foreground font-medium">All vessels:</span>
+            <div className="flex rounded-full border border-border overflow-hidden text-[11px] font-semibold">
+              <button type="button" onClick={() => applyGlobalMethod('meter')}
+                className={cn('px-3 py-1 transition-colors',
+                  globalMethod === 'meter' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                📟 Water Meter
+              </button>
+              <button type="button" onClick={() => applyGlobalMethod('manual')}
+                className={cn('px-3 py-1 transition-colors',
+                  globalMethod === 'manual' ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                🪣 Bucket Test
+              </button>
+            </div>
+            <span className="text-[10px] text-muted-foreground/60 italic">or switch per vessel ↓</span>
+          </div>
+
+          {/* Formula hint */}
+          <div className="rounded-md bg-muted/30 border border-border px-3 py-1.5 text-[10px] text-muted-foreground font-mono space-y-0.5">
+            {globalMethod === 'meter'
+              ? <><span className="text-foreground font-semibold">Q = ΔV ÷ Δt</span>  ·  ΔV = curr − prev meter (m³)  ·  Δt = elapsed time (hr)</>
+              : <><span className="text-foreground font-semibold">Q = V_bucket ÷ t_fill</span>  ·  e.g. 20 L ÷ 45 s → L/min → m³/hr</>
+            }
+          </div>
+
+          {/* Vessel list — foldable ──────────────────────────────── */}
+          <div className="rounded-xl border border-border overflow-hidden">
+            {/* Fold/unfold header */}
+            <button
+              type="button"
+              onClick={() => setVesselListOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors"
+            >
+              <span className="text-xs font-semibold text-foreground">
+                Vessel List ({vesselCount} vessel{vesselCount !== 1 ? 's' : ''})
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground">
+                  {vesselRows.filter(r => {
+                    if (r.method === 'meter') {
+                      const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+                      const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+                      return dV !== null && dT !== null && dT > 0;
+                    }
+                    return +r.bucketVol > 0 && +r.fillTimeSec > 0;
+                  }).length} / {vesselCount} filled
+                </span>
+                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform duration-200', vesselListOpen ? 'rotate-180' : '')} />
+              </div>
+            </button>
+
+            {vesselListOpen && (
+            <div className="divide-y divide-border">
+            {vesselRows.map(row => {
+              const isOpen = expandedVessel === row.id;
+              // Quick Q preview for collapsed state
+              const prevM = +row.prevMeter, currM = +row.currMeter;
+              const dV = (row.currMeter && row.prevMeter) ? currM - prevM : null;
+              const dT = (row.prevTime && row.currTime)
+                ? (new Date(row.currTime).getTime() - new Date(row.prevTime).getTime()) / 3600000 : null;
+              const qPreview_meter = (dV !== null && dT !== null && dT > 0) ? +(dV / dT).toFixed(3) : null;
+              const bV = +row.bucketVol, bT = +row.fillTimeSec;
+              const qPreview_manual = (bV > 0 && bT > 0) ? +((bV / bT * 60 / 1000 * 60)).toFixed(3) : null;
+              const qPreview = row.method === 'meter' ? qPreview_meter : qPreview_manual;
+
+              const isSaved = savedVessels.has(row.id);
+              const isEditing = editingVessel === row.id;
+
+              return (
+                <div key={row.id} className={cn(
+                  'rounded-xl border transition-colors overflow-hidden',
+                  isSaved
+                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50/30 dark:bg-emerald-950/10'
+                    : isOpen ? 'border-emerald-300 dark:border-emerald-700' : 'border-border'
+                )}>
+                  {/* Accordion header */}
+                  <div className="flex items-center px-3 py-2.5 hover:bg-muted/20 transition-colors">
+                    {/* Clickable label area (expands/collapses) */}
+                    <button
+                      type="button"
+                      onClick={() => !isSaved && setExpandedVessel(isOpen ? null : row.id)}
+                      className="flex-1 flex items-center gap-2 text-left min-w-0"
+                      disabled={isSaved}
+                    >
+                      <span className="text-xs font-bold text-foreground">Vessel {row.id}</span>
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0',
+                        row.method === 'meter'
+                          ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
+                          : 'border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300')}>
+                        {row.method === 'meter' ? '📟 Meter' : '🪣 Bucket'}
+                      </span>
+                      {isSaved && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">✓ saved</span>
+                      )}
+                    </button>
+
+                    {/* Right side: Q preview + action buttons */}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {qPreview !== null ? (
+                        <span className="text-xs font-bold font-mono-num text-emerald-600 dark:text-emerald-400">
+                          {qPreview} m³/hr
+                        </span>
+                      ) : (
+                        !isSaved && <span className="text-[10px] text-muted-foreground/50">not set</span>
+                      )}
+
+                      {/* Save button — shown when open and not yet saved */}
+                      {isOpen && !isSaved && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); saveVessel(row.id); }}
+                          className="h-6 px-2 rounded text-[10px] font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
+                          title="Save this vessel"
+                        >
+                          Save
+                        </button>
+                      )}
+
+                      {/* Edit button — shown when saved */}
+                      {isSaved && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); editVessel(row.id); }}
+                          className="h-6 px-2 rounded text-[10px] font-semibold border border-border bg-background hover:bg-muted transition-colors text-foreground"
+                          title="Edit this vessel"
+                        >
+                          Edit
+                        </button>
+                      )}
+
+                      {/* Delete button — always visible */}
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); deleteVessel(row.id); }}
+                        className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remove this vessel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+
+                      {/* Expand chevron — hidden when saved */}
+                      {!isSaved && (
+                        <span
+                          className="text-muted-foreground/50 text-xs cursor-pointer"
+                          onClick={() => setExpandedVessel(isOpen ? null : row.id)}
+                        >
+                          {isOpen ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded vessel card — shown when open and not saved */}
+                  {isOpen && !isSaved && (
+                    <div className="px-2 pb-2">
+                      <VesselFlowCard row={row} onChange={patch => patchRow(row.id, patch)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            </div>
+            )}
+          </div>
+
+          {/* All-vessel Q summary strip */}
+          {vesselRows.some(r => {
+            if (r.method === 'meter') {
+              const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+              const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+              return dV !== null && dT !== null && dT > 0;
+            }
+            return +r.bucketVol > 0 && +r.fillTimeSec > 0;
+          }) && (
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5">
+              <p className="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wide mb-1.5">Flow Summary — All Vessels</p>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                {vesselRows.map(r => {
+                  let q: number | null = null;
+                  if (r.method === 'meter') {
+                    const dV = r.currMeter && r.prevMeter ? +r.currMeter - +r.prevMeter : null;
+                    const dT = r.prevTime && r.currTime ? (new Date(r.currTime).getTime() - new Date(r.prevTime).getTime()) / 3600000 : null;
+                    q = (dV !== null && dT !== null && dT > 0) ? +(dV / dT).toFixed(3) : null;
+                  } else {
+                    const bV = +r.bucketVol, bT = +r.fillTimeSec;
+                    q = (bV > 0 && bT > 0) ? +((bV / bT * 60 / 1000 * 60)).toFixed(3) : null;
+                  }
+                  return (
+                    <div key={r.id} className="text-center">
+                      <p className="text-[9px] text-muted-foreground">V{r.id}</p>
+                      <p className={cn('text-xs font-bold font-mono-num',
+                        q !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/40')}>
+                        {q !== null ? q : '—'}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] text-muted-foreground/50 mt-1.5">m³/hr per vessel</p>
+            </div>
+          )}
+          </>)}
+        </div>
+      )}
+
+      {/* ══ TAB 2 — Volumetric Flow Q = ΔV / Δt ════════════════════ */}
+      {activeTab === 'flow' && (
+        <div className="space-y-3">
+          {/* Formula card */}
+          <div className="rounded-lg bg-muted/40 border border-border px-3 py-2 space-y-0.5">
+            <p className="text-[11px] font-semibold text-foreground font-mono">Q = ΔV ÷ Δt</p>
+            <p className="text-[10px] text-muted-foreground">ΔV = Curr meter − Prev meter (m³) &nbsp;·&nbsp; Δt = elapsed time (hr)</p>
+          </div>
+
+          {/* Meter readings */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Meter Readings (m³)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Previous reading</Label>
+                <Input type="number" step="any" value={qPrevMeter} onChange={e => setQPrevMeter(e.target.value)}
+                  placeholder="e.g. 1024.50" className="h-9 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current reading</Label>
+                <Input type="number" step="any" value={qCurrMeter} onChange={e => setQCurrMeter(e.target.value)}
+                  placeholder="e.g. 1087.30" className="h-9 text-sm" />
+              </div>
+            </div>
+            {/* ΔV result */}
+            <div className={cn('rounded-md border px-3 py-2 flex items-center justify-between',
+              deltaV !== null ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                             : 'bg-muted/30 border-border')}>
+              <span className="text-[11px] text-muted-foreground font-medium">ΔV (volume produced)</span>
+              <span className={cn('text-sm font-bold font-mono-num', deltaV !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                {deltaV !== null ? `${deltaV} m³` : '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Time interval */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Time Interval</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Previous date & time</Label>
+                <Input type="datetime-local" value={qPrevTime} onChange={e => setQPrevTime(e.target.value)} className="h-9 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Current date & time</Label>
+                <Input type="datetime-local" value={qCurrTime} onChange={e => setQCurrTime(e.target.value)} className="h-9 text-xs" />
+              </div>
+            </div>
+            {/* Δt result */}
+            <div className={cn('rounded-md border px-3 py-2 flex items-center justify-between',
+              deltaT_hr !== null ? 'bg-muted/40 border-border' : 'bg-muted/20 border-border')}>
+              <span className="text-[11px] text-muted-foreground font-medium">Δt (elapsed)</span>
+              <span className="text-sm font-bold font-mono-num text-foreground">
+                {deltaT_hr !== null ? `${deltaT_hr} hr` : '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Q result — hero strip */}
+          <div className={cn(
+            'rounded-xl border-2 p-3 flex items-center justify-between gap-3',
+            flowQ !== null
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+              : 'bg-muted/20 border-dashed border-border'
+          )}>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                Volumetric Flow Rate
+              </p>
+              <p className="text-[9px] text-muted-foreground font-mono">Q = ΔV ÷ Δt</p>
+            </div>
+            <div className="text-right">
+              <p className={cn('text-2xl font-bold font-mono-num leading-none',
+                flowQ !== null ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/40')}>
+                {flowQ !== null ? flowQ : '—'}
+              </p>
+              {flowQ !== null && <p className="text-[10px] text-muted-foreground mt-0.5">m³/hr</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TAB 3 — Comparative Analytics ═══════════════════════════ */}
+      {activeTab === 'compare' && (
+        <div className="space-y-3">
+          <p className="text-[10px] text-muted-foreground">Enter pre‑CIP and post‑CIP values — deltas compute automatically.</p>
+
+          {/* ── Δ Volume Recovery ─────────────────────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Volume Recovery</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Volume − Pre‑CIP Volume (m³)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP Volume (m³)</Label>
+                <Input type="number" step="any" value={preCipVol} onChange={e => setPreCipVol(e.target.value)}
+                  placeholder="e.g. 180.5" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Post-CIP Volume (m³)</Label>
+                <Input type="number" step="any" value={postCipVol} onChange={e => setPostCipVol(e.target.value)}
+                  placeholder="e.g. 215.0" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ Volume Recovery</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaVolRecovery))}>
+                {deltaSign(deltaVolRecovery)}{deltaVolRecovery !== null ? ' m³' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Δ Water Quality (TDS) ─────────────────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Water Quality</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Product TDS − Pre‑CIP Product TDS (ppm) — lower is better</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP TDS (ppm)</Label>
+                <Input type="number" step="any" value={preCipTds} onChange={e => setPreCipTds(e.target.value)}
+                  placeholder="e.g. 45" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Post-CIP TDS (ppm)</Label>
+                <Input type="number" step="any" value={postCipTds} onChange={e => setPostCipTds(e.target.value)}
+                  placeholder="e.g. 28" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ TDS</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaTds, true))}>
+                {deltaSign(deltaTds)}{deltaTds !== null ? ' ppm' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Δ Cost Impact / Efficiency KPI ───────────────────── */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">Δ Cost Impact</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground -mt-1">Post‑CIP Efficiency KPI − Pre‑CIP Efficiency KPI (kWh/m³)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Pre-CIP KPI (kWh/m³)</Label>
+                <Input type="number" step="any" value={preCipKpi} onChange={e => setPreCipKpi(e.target.value)}
+                  placeholder="e.g. 0.85" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Post-CIP KPI (kWh/m³)</Label>
+                <Input type="number" step="any" value={postCipKpi} onChange={e => setPostCipKpi(e.target.value)}
+                  placeholder="e.g. 0.62" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Δ Efficiency KPI</span>
+              <span className={cn('text-base font-bold font-mono-num', deltaColor(deltaKpi, true))}>
+                {deltaSign(deltaKpi)}{deltaKpi !== null ? ' kWh/m³' : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Summary strip ────────────────────────────────────── */}
+          {(deltaVolRecovery !== null || deltaTds !== null || deltaKpi !== null) && (
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">CIP Impact Summary</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ Volume</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaVolRecovery))}>
+                    {deltaSign(deltaVolRecovery)}{deltaVolRecovery !== null ? ' m³' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ TDS</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaTds, true))}>
+                    {deltaSign(deltaTds)}{deltaTds !== null ? ' ppm' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Δ KPI</p>
+                  <p className={cn('text-sm font-bold font-mono-num', deltaColor(deltaKpi, true))}>
+                    {deltaSign(deltaKpi)}{deltaKpi !== null ? '' : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── CIPSummaryContent ── lifted out of CIPLog to avoid remount on every render ─
+function CIPSummaryContent({
+  liveCost,
+  totalMassKg,
+  totalVolumeL,
+  comparisonPct,
+}: {
+  liveCost: number;
+  totalMassKg: number;
+  totalVolumeL: number;
+  comparisonPct: string | null;
+}) {
+  return (
+    <>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Chemical Cost:</p>
+        <p className="text-xl font-bold font-mono-num leading-tight">₱ {fmtNum(liveCost, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Mass:</p>
+        <p className="text-sm font-semibold font-mono-num">{fmtNum(totalMassKg, 3)} kg</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Dosed Volume:</p>
+        <p className="text-sm font-semibold font-mono-num">{fmtNum(totalVolumeL, 2)} L</p>
+      </div>
+      {comparisonPct != null && (
+        <div>
+          <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">vs Last CIP:</p>
+          <p className={cn('text-sm font-semibold', +comparisonPct <= 0 ? 'text-emerald-400' : 'text-amber-400')}>
+            {+comparisonPct > 0 ? '+' : ''}{comparisonPct}% Chemical Use
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CIPLog() {
+  const qc = useQueryClient();
+  // ── Use activeOperator, not user — same shared-email fix as PretreatmentAndROLog
+  const { activeOperator } = useAuth();
+  const [plantId, setPlantId] = useState('');
+  const [trainId, setTrainId] = useState('');
+  // Stable callback — prevents PlantPicker's useEffect from re-firing on every render
+  // because an inline `(p) => { setPlantId(p); setTrainId(''); }` would be a new
+  // function reference each render, triggering the picker's effect in a loop.
+  const handleCIPPlantChange = useCallback((p: string) => {
+    setPlantId(p);
+    setTrainId('');
+  }, []);
+
+  // ── Load plant meter config to get CIP chemical list ──────────────────────
+  const { config: plantConfig } = usePlantMeterConfig(plantId || null);
+  // Use plant-configured chemicals; fall back to the 3 built-in defaults.
+  const cipChemicals: Array<{ name: string; unit: string }> =
+    plantConfig?.cip_chemicals?.length
+      ? plantConfig.cip_chemicals
+      : DEFAULT_CIP_CHEMICALS;
+
+  const { data: trains } = useQuery({
+    queryKey: ['cip-trains', plantId],
+    queryFn: async () => plantId ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId)).data ?? [] : [],
+    enabled: !!plantId,
+  });
+  const { data: history } = useQuery({
+    queryKey: ['cip-history', trainId, plantId],
+    queryFn: async () => plantId
+      ? (await supabase.from('cip_logs')
+          .select('*,ro_trains(train_number)')
+          .eq('plant_id', plantId)
+          .order('start_datetime', { ascending: false })
+          .limit(10)).data ?? []
+      : [],
+    enabled: !!plantId,
+  });
+  const { data: cipPrices } = useQuery({
+    queryKey: ['chem-current-prices-cip'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
+      return map;
+    },
+  });
+
+  const selectedTrain = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
+  const numVessels = (selectedTrain as any)?.num_vessels ?? 15;
+
+  // ── Form state: dynamic chemicals map + timing/remarks ────────────────────
+  // chemicals: Record<chemicalName, inputValue>
+  const [v, setV] = useState<{ start: string; end: string; remarks: string; chemicals: Record<string, string> }>({
+    start: '', end: '', remarks: '', chemicals: {},
+  });
+
+  const setChemVal = (name: string, val: string) =>
+    setV(prev => ({ ...prev, chemicals: { ...prev.chemicals, [name]: val } }));
+
+  // ── Live computed values (built-ins drive the cost/mass summary) ──────────
+  const causticKg = +(v.chemicals['Caustic Soda'] || '') || 0;
+  const hclL      = +(v.chemicals['HCl']          || '') || 0;
+  const slsG      = +(v.chemicals['SLS']           || '') || 0;
+  const totalMassKg   = causticKg + slsG / 1000;
+  const totalVolumeL  = hclL;
+  const liveCost =
+    causticKg * (cipPrices?.['Caustic Soda'] ?? 0) +
+    hclL      * (cipPrices?.['HCl']          ?? 0) +
+    (slsG / 1000) * (cipPrices?.['SLS']      ?? 0);
+
+  const formDuration = v.start && v.end
+    ? Math.round((new Date(v.end).getTime() - new Date(v.start).getTime()) / 60000)
+    : null;
+
+  const getHistoryCost = (c: any) =>
+    (c.caustic_soda_kg || 0) * (cipPrices?.['Caustic Soda'] ?? 0) +
+    (c.hcl_l           || 0) * (cipPrices?.['HCl']          ?? 0) +
+    ((c.sls_g || 0) / 1000)  * (cipPrices?.['SLS']          ?? 0);
+
+  const getChemType = (c: any) => {
+    const parts: string[] = [];
+    if (c.caustic_soda_kg > 0) parts.push('Caustic Alkaline');
+    if (c.hcl_l > 0)           parts.push('Acid HCl');
+    if (c.sls_g > 0)           parts.push('Anti Scalant');
+    // Custom chemicals stored as JSON in remarks
+    try {
+      const match = (c.remarks ?? '').match(/__cip_extra:(\{[^}]+\})/);
+      if (match) {
+        const extra = JSON.parse(match[1]) as Record<string, { value: string }>;
+        Object.entries(extra).forEach(([name, { value }]) => {
+          if (+value > 0) parts.push(name);
+        });
+      }
+    } catch { /* ignore bad JSON */ }
+    return parts.join(' + ') || '—';
+  };
+
+  const lastCip = history?.[0];
+  const lastCipCost = lastCip ? getHistoryCost(lastCip) : null;
+  const comparisonPct = lastCipCost && liveCost
+    ? (((liveCost - lastCipCost) / lastCipCost) * 100).toFixed(0)
+    : null;
+
+  const submit = async () => {
+    if (!trainId) { toast.error('Select a train'); return; }
+
+    // Build payload for built-in DB columns
+    const payload: Record<string, any> = {
+      train_id: trainId, plant_id: plantId,
+      start_datetime: v.start ? new Date(v.start).toISOString() : null,
+      end_datetime:   v.end   ? new Date(v.end).toISOString()   : null,
+      conducted_by: activeOperator?.id,
+    };
+
+    // Map built-in chemicals to their DB columns
+    cipChemicals.forEach(chem => {
+      const col = CIP_BUILTIN_DB_MAP[chem.name];
+      const val = v.chemicals[chem.name];
+      if (col) payload[col] = val ? +val : null;
+    });
+    // Ensure null for any built-in columns not in cipChemicals
+    if (!('caustic_soda_kg' in payload)) payload.caustic_soda_kg = null;
+    if (!('hcl_l'           in payload)) payload.hcl_l           = null;
+    if (!('sls_g'           in payload)) payload.sls_g           = null;
+
+    // Serialize custom chemicals into remarks
+    const customChems = cipChemicals.filter(c => !CIP_BUILTIN_DB_MAP[c.name]);
+    let remarksOut = v.remarks || null;
+    if (customChems.length > 0) {
+      const extra: Record<string, { value: string; unit: string }> = {};
+      customChems.forEach(c => {
+        const val = v.chemicals[c.name];
+        if (val) extra[c.name] = { value: val, unit: c.unit };
+      });
+      if (Object.keys(extra).length > 0) {
+        const suffix = `__cip_extra:${JSON.stringify(extra)}`;
+        remarksOut = remarksOut ? `${remarksOut} ${suffix}` : suffix;
+      }
+    }
+    payload.remarks = remarksOut;
+
+    const { error } = await supabase.from('cip_logs').insert(payload as any);
+    if (error) { toast.error(error.message); return; }
+    toast.success('CIP logged'); qc.invalidateQueries();
+    clearForm();
+  };
+  const clearForm = () => setV({ start: '', end: '', remarks: '', chemicals: {} });
+
+  const trainStatusLabel = selectedTrain?.status === 'Running'
+    ? 'Online - Optimal Health'
+    : selectedTrain?.status ?? '';
+  const trainStatusColor = selectedTrain?.status === 'Running'
+    ? 'text-emerald-500'
+    : selectedTrain?.status === 'Maintenance'
+    ? 'text-amber-500'
+    : 'text-red-500';
+
+  return (
+    <div className="space-y-2.5">
+      {/* ── Plant + Train row ──────────────────────────────────────────── */}
+      <Card className="p-3 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Plant</Label>
+            <PlantPicker value={plantId} onChange={handleCIPPlantChange} />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Train</Label>
+            <Select value={trainId} onValueChange={setTrainId}>
+              <SelectTrigger><SelectValue placeholder="Select train" /></SelectTrigger>
+              <SelectContent>
+                {trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {selectedTrain && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <span className="text-sm font-bold">Train {selectedTrain.train_number}</span>
+            <span className={cn('text-xs font-medium', trainStatusColor)}>({trainStatusLabel})</span>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Main + Sidebar layout: stacked on mobile, side-by-side on md+ ─ */}
+      <div className="flex flex-col md:flex-row gap-2.5 items-start">
+
+        {/* Main content */}
+        <div className="flex-1 min-w-0 space-y-2.5">
+
+          {/* ── Dosing & Time (dynamic chemical cards) ─────────────────── */}
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Dosing & Time</h4>
+              {cipChemicals.length > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {cipChemicals.length} chemical{cipChemicals.length !== 1 ? 's' : ''} configured
+                </span>
+              )}
+            </div>
+
+            {/* Chemical input cards — one per configured CIP chemical */}
+            <div className="grid grid-cols-2 gap-2">
+              {cipChemicals.map(chem => {
+                const val = v.chemicals[chem.name] ?? '';
+                const accent = CIP_CHEM_ACCENTS[chem.name] ?? CIP_CUSTOM_ACCENT;
+                const isBuiltin = !!CIP_BUILTIN_DB_MAP[chem.name];
+                return (
+                  <div
+                    key={chem.name}
+                    className={cn(
+                      'rounded-lg border-2 p-2 space-y-1.5 transition-colors',
+                      val ? accent.border : 'border-border bg-muted/20',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn(
+                        'inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold',
+                        accent.badge,
+                      )}>
+                        {isBuiltin ? chem.name.slice(0, 2).toUpperCase() : '✦'}
+                      </span>
+                      <span className="text-xs font-semibold">{chem.name} ({chem.unit})</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={val}
+                        onChange={e => setChemVal(chem.name, e.target.value)}
+                        className="h-7 text-sm flex-1"
+                        placeholder="0"
+                      />
+                      <span className="text-[11px] text-muted-foreground shrink-0">{chem.unit}</span>
+                    </div>
+                    <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                      <div className={cn('h-full rounded-full transition-all', accent.bar, val ? 'w-1/2' : 'w-0')} />
+                    </div>
+                  </div>
+                );
+              })}
+
+              {cipChemicals.length === 0 && (
+                <div className="col-span-2 rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center text-xs text-muted-foreground">
+                  No CIP chemicals configured for this plant.
+                  Go to <strong>Plant Configuration → CIP Chemicals</strong> to add them.
+                </div>
+              )}
+            </div>
+
+            {/* Datetime pickers */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Start D&T</Label>
+                <Input type="datetime-local" value={v.start}
+                  onChange={e => setV({ ...v, start: e.target.value })}
+                  className="w-full text-xs h-8" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">End D&T</Label>
+                <Input type="datetime-local" value={v.end}
+                  onChange={e => setV({ ...v, end: e.target.value })}
+                  className="w-full text-xs h-8" />
+              </div>
+            </div>
+            {formDuration != null && formDuration > 0 && (
+              <p className="text-[10px] text-muted-foreground">
+                Duration: <span className="font-semibold text-foreground">{formDuration} min</span>
+              </p>
+            )}
+          </Card>
+
+          {/* Remarks & Prediction */}
+          <Card className="p-3 space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Remarks & Prediction</h4>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Remarks</Label>
+              <Textarea value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })}
+                placeholder="Any observations..." className="text-xs min-h-[60px] resize-none" />
+            </div>
+            <div className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 p-2 space-y-0.5">
+              <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                Predicted Recovery Post-CIP:
+              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">+3% est.</span>
+                <span className="text-emerald-500 text-base">↑</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Volumetric Calculator */}
+          <CIPVolumetric numVessels={numVessels} />
+
+          {/* CIP History table */}
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                CIP History {selectedTrain ? `— Train ${selectedTrain.train_number}` : ''}
+              </h4>
+              <ExportButton table="cip_logs" label="Export" />
+            </div>
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b border-border">
+                    <th className="text-left py-1.5 pr-2 font-semibold">Date</th>
+                    <th className="text-left py-1.5 pr-2 font-semibold">Duration</th>
+                    <th className="text-left py-1.5 pr-2 font-semibold">Chemical Type</th>
+                    <th className="text-right py-1.5 font-semibold">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history?.map((c: any) => {
+                    const dur = c.start_datetime && c.end_datetime
+                      ? Math.round((new Date(c.end_datetime).getTime() - new Date(c.start_datetime).getTime()) / 60000)
+                      : null;
+                    const hCost = getHistoryCost(c);
+                    return (
+                      <tr key={c.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                        <td className="py-1.5 pr-2 font-mono-num text-[11px]">
+                          {c.start_datetime ? format(new Date(c.start_datetime), 'MM/dd/yy') : '—'}
+                        </td>
+                        <td className="py-1.5 pr-2 text-muted-foreground">
+                          {dur != null && dur > 0 ? `${dur} min` : '—'}
+                        </td>
+                        <td className="py-1.5 pr-2">{getChemType(c)}</td>
+                        <td className="py-1.5 text-right font-mono-num">
+                          {cipPrices ? `₱ ${fmtNum(hCost, 2)}` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!history?.length && (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center text-muted-foreground">No CIP records yet</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+
+        {/* ── Sidebar: hidden on mobile (shown below instead), visible md+ ── */}
+        <div className="hidden md:block w-48 shrink-0">
+          <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary</p>
+              <p className="text-[9px] text-teal-400">(Live Calc)</p>
+            </div>
+            <div className="space-y-2.5"><CIPSummaryContent liveCost={liveCost} totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} comparisonPct={comparisonPct} /></div>
+            <div className="border-t border-teal-700/60 pt-2.5 space-y-2">
+              <Button onClick={submit} className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save CIP</Button>
+              <Button variant="ghost" onClick={clearForm} className="w-full h-8 text-xs text-teal-300 hover:text-white hover:bg-teal-800">Clear Form</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Mobile summary bar (visible only on mobile) ─────────────────── */}
+      <div className="md:hidden rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-2.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">CIP Summary <span className="text-teal-400 font-normal">(Live)</span></p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <CIPSummaryContent liveCost={liveCost} totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} comparisonPct={comparisonPct} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <Button variant="ghost" onClick={clearForm} className="h-9 text-xs text-teal-300 hover:text-white hover:bg-teal-800 border border-teal-700">Clear Form</Button>
+          <Button onClick={submit} className="h-9 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save CIP</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Chemical Dosing Tab ──────────────────────────────────────────────────────
+
+// ─── DosingMobileSummary ── lifted out of ChemicalDosing to avoid remount on every render ─
+function DosingMobileSummary({
+  totalMassKg,
+  totalVolumeL,
+  freePcs,
+  cost,
+}: {
+  totalMassKg: number;
+  totalVolumeL: number;
+  freePcs: number;
+  cost: number;
+}) {
+  return (
+    <>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Mass (kg):</p>
+        <p className="text-xl font-bold font-mono-num leading-tight">{fmtNum(totalMassKg, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Total Volume (L):</p>
+        <p className="text-base font-bold font-mono-num">{fmtNum(totalVolumeL, 2)}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Free Cl Test PCS:</p>
+        <p className="text-base font-bold font-mono-num">{freePcs}</p>
+      </div>
+      <div>
+        <p className="text-[9px] text-teal-300 uppercase tracking-wide font-medium">Calculated Cost:</p>
+        <p className="text-xl font-bold leading-tight">₱ {fmtNum(cost, 2)}</p>
+      </div>
+    </>
+  );
+}
+
+function ToggleSwitch({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-1.5 focus-visible:outline-none group">
+      <div className={cn(
+        'relative w-9 h-5 rounded-full transition-colors duration-200',
+        active ? 'bg-teal-600' : 'bg-muted-foreground/30'
+      )}>
+        <div className={cn(
+          'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
+          active ? 'translate-x-4' : 'translate-x-0.5'
+        )} />
+      </div>
+      <span className={cn('text-sm font-medium transition-colors', active ? 'text-teal-700 dark:text-teal-400' : 'text-muted-foreground group-hover:text-foreground')}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function ChemicalDosing() {
+  const [active, setActive] = useState<'dosing' | 'inventory' | 'history'>('dosing');
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-end gap-4">
+        <ToggleSwitch label="Dosing"    active={active === 'dosing'}    onClick={() => setActive('dosing')} />
+        <ToggleSwitch label="Inventory" active={active === 'inventory'} onClick={() => setActive('inventory')} />
+        <ToggleSwitch label="History"   active={active === 'history'}   onClick={() => setActive('history')} />
+      </div>
+      <div>
+        {active === 'dosing'    && <ChemDosingForm />}
+        {active === 'inventory' && <ChemInventory />}
+        {active === 'history'   && <DosingHistoryLog />}
+      </div>
+    </div>
+  );
+}
+
+function ChemPlantPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: plants } = usePlants();
+  const { selectedPlantId } = useAppStore();
+  // Fix: onChange excluded from deps — same error #300 root cause as PlantPicker.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value]);
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger><SelectValue placeholder="Plant" /></SelectTrigger>
+      <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+    </Select>
+  );
+}
+
+// ── Chemical card helper ─────────────────────────────────────────────────────
+function ChemCard({
+  name, icon, value, onChange, unit, accent = 'default', inputProps = {},
+}: {
+  name: string; icon: React.ReactNode; value: string;
+  onChange: (v: string) => void; unit: string;
+  accent?: 'teal' | 'amber' | 'olive' | 'default';
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
+}) {
+  const hasVal = value !== '' && +value !== 0;
+  const borders: Record<string, string> = {
+    teal:    'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30',
+    amber:   'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30',
+    olive:   'border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/30',
+    default: 'border-primary/30 bg-primary/5',
+  };
+  const bars: Record<string, string> = {
+    teal: 'bg-teal-400', amber: 'bg-amber-400', olive: 'bg-yellow-400', default: 'bg-primary/60',
+  };
+  return (
+    <div className={cn('rounded-lg border-2 p-2 space-y-1.5 transition-colors', hasVal ? borders[accent] : 'border-border bg-muted/10')}>
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <span className="text-xs font-semibold leading-tight">{name}</span>
+      </div>
+      <div className="relative">
+        <Input type="number" step="any" value={value} onChange={e => onChange(e.target.value)}
+          placeholder="Inputs" className="h-8 text-sm pr-7 placeholder:text-[10px] placeholder:text-muted-foreground/50"
+          {...inputProps} />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">{unit}</span>
+      </div>
+      <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all duration-300', bars[accent], hasVal ? 'w-1/2' : 'w-0')} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Chemical Dosing CSV Import ──────────────────────────────────────────────
+const DOSING_CSV_SCHEMA =
+  'plant_name*, log_datetime (YYYY-MM-DDTHH:mm), chlorine_kg, smbs_kg, anti_scalant_l, ' +
+  'soda_ash_kg, free_chlorine_reagent_pcs, remarks';
+
+const DOSING_TEMPLATE_ROW: Record<string, string> = {
+  plant_name: 'Umapad',
+  log_datetime: '2024-06-15T08:30',
+  chlorine_kg: '1.5',
+  smbs_kg: '',
+  anti_scalant_l: '2.0',
+  soda_ash_kg: '',
+  free_chlorine_reagent_pcs: '2',
+  remarks: '',
+};
+
+function validateDosingRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.plant_name?.trim())
+    e.push(`Row ${i}: plant_name is required`);
+  if (r.log_datetime && isNaN(Date.parse(r.log_datetime.trim().replace(' ', 'T'))))
+    e.push(`Row ${i}: log_datetime is not a valid date`);
+  const numFields = ['chlorine_kg', 'smbs_kg', 'anti_scalant_l', 'soda_ash_kg', 'free_chlorine_reagent_pcs'];
+  for (const f of numFields) {
+    if (r[f]?.trim() && isNaN(Number(r[f])))
+      e.push(`Row ${i}: ${f} must be a number`);
+  }
+  return e;
+}
+
+// Module-level resolver hooks (same pattern as Operations.tsx)
+let _dosingDupPromptResolver: ((decision: 'overwrite' | 'skip') => void) | null = null;
+let _dosingDupShowPrompt: ((label: string) => void) | null = null;
+let _dosingBulkDecision: 'overwrite' | 'skip' | null = null;
+const _dosingDupDecisions: Map<string, 'overwrite' | 'skip'> = new Map();
+
+async function resolveDosingDuplicate(key: string, label: string): Promise<'overwrite' | 'skip'> {
+  if (_dosingDupDecisions.has(key)) return _dosingDupDecisions.get(key)!;
+  if (_dosingBulkDecision) { _dosingDupDecisions.set(key, _dosingBulkDecision); return _dosingBulkDecision; }
+  const decision = await new Promise<'overwrite' | 'skip'>((resolve) => {
+    _dosingDupPromptResolver = resolve;
+    _dosingDupShowPrompt?.(label);
+  });
+  _dosingDupDecisions.set(key, decision);
+  return decision;
+}
+
+function ImportDosingDialog({
+  plantId,
+  userId,
+  onClose,
+  onImported,
+}: {
+  plantId: string;
+  userId: string | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [file, setFile]           = useState<File | null>(null);
+  const [rows, setRows]           = useState<Record<string, string>[]>([]);
+  const [errors, setErrors]       = useState<string[]>([]);
+  const [busy, setBusy]           = useState(false);
+  const [done, setDone]           = useState(false);
+  const [imported, setImported]   = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [dupConfirm, setDupConfirm] = useState<string | null>(null);
+  const [dupResolved, setDupResolved] = useState(false);
+
+  const { data: plants } = usePlants();
+
+  useEffect(() => {
+    _dosingDupShowPrompt = (label) => setDupConfirm(label);
+    return () => { _dosingDupShowPrompt = null; _dosingDupPromptResolver = null; };
+  }, []);
+
+  const handleDupDecision = (decision: 'overwrite' | 'skip', applyAll = false) => {
+    if (applyAll) _dosingBulkDecision = decision;
+    setDupConfirm(null);
+    _dosingDupPromptResolver?.(decision);
+    _dosingDupPromptResolver = null;
+  };
+
+  const parseFile = (text: string) => {
+    const clean = text.replace(/^\uFEFF/, '').trim();
+    const lines = clean.split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const parseL = (line: string): string[] => {
+      const fields: string[] = []; let i = 0; const len = line.length;
+      while (i < len) {
+        if (line[i] === '"') {
+          i++; let val = '';
+          while (i < len) {
+            if (line[i] === '"' && line[i+1] === '"') { val += '"'; i += 2; }
+            else if (line[i] === '"') { i++; break; }
+            else { val += line[i++]; }
+          }
+          fields.push(val.trim());
+          if (i < len && line[i] === ',') i++;
+        } else {
+          const start = i;
+          while (i < len && line[i] !== ',') i++;
+          fields.push(line.slice(start, i).trim());
+          if (i < len && line[i] === ',') i++;
+        }
+      }
+      if (len > 0 && line[len-1] === ',') fields.push('');
+      return fields;
+    };
+    const headers = parseL(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+    return lines.slice(1).filter(l => l.trim()).map(line => {
+      const vals = parseL(line);
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    });
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setDone(false); setErrors([]); setRows([]); setDupResolved(false); setImportErrors([]);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseFile(ev.target?.result as string);
+      const errs: string[] = [];
+      parsed.forEach((r, i) => errs.push(...validateDosingRow(r, i + 2)));
+      setRows(parsed); setErrors(errs);
+    };
+    reader.readAsText(f);
+  };
+
+  const doImport = async () => {
+    if (!file || rows.length === 0 || errors.length > 0) return;
+    setBusy(true);
+    _dosingDupDecisions.clear(); _dosingBulkDecision = null;
+
+    // Intra-file duplicate detection by plant+datetime
+    const seenKeys = new Map<string, number>();
+    const intraDups: number[] = [];
+    rows.forEach((r, i) => {
+      const key = `${r.plant_name?.trim().toLowerCase()}|${r.log_datetime?.trim()}`;
+      if (seenKeys.has(key)) intraDups.push(i);
+      else seenKeys.set(key, i);
+    });
+    if (intraDups.length > 0 && !dupResolved) {
+      setRows(rows.filter((_, i) => !intraDups.includes(i)));
+      setDupResolved(true); setBusy(false); return;
+    }
+
+    let count = 0; const errs: string[] = [];
+    for (const r of rows) {
+      // Resolve plant_name → plant_id
+      const plant = plants?.find(p => p.name.toLowerCase() === r.plant_name?.trim().toLowerCase());
+      if (!plant) { errs.push(`Plant not found: "${r.plant_name}"`); continue; }
+      const pid = plant.id;
+
+      const dt = r.log_datetime?.trim()
+        ? new Date(r.log_datetime.replace(' ', 'T')).toISOString()
+        : new Date().toISOString();
+      const dtMin = dt.slice(0, 16);
+
+      // Duplicate check
+      const { data: existing } = await supabase
+        .from('chemical_dosing_logs')
+        .select('id')
+        .eq('plant_id', pid)
+        .gte('log_datetime', `${dtMin}:00`)
+        .lte('log_datetime', `${dtMin}:59`)
+        .limit(1);
+      const existingId = existing?.[0]?.id ?? null;
+
+      if (existingId) {
+        const key = `${pid}|${dtMin}`;
+        const decision = await resolveDosingDuplicate(key, `${r.plant_name} @ ${r.log_datetime}`);
+        if (decision === 'skip') continue;
+      }
+
+      const num = (k: string) => r[k]?.trim() ? +r[k] : 0;
+      const payload: Record<string, any> = {
+        plant_id: pid,
+        log_datetime: dt,
+        chlorine_kg: num('chlorine_kg'),
+        smbs_kg: num('smbs_kg'),
+        anti_scalant_l: num('anti_scalant_l'),
+        soda_ash_kg: num('soda_ash_kg'),
+        free_chlorine_reagent_pcs: num('free_chlorine_reagent_pcs'),
+        recorded_by: userId,
+      };
+      if (r.remarks?.trim()) payload.remarks = r.remarks.trim();
+
+      let opError: any;
+      if (existingId) {
+        const { error } = await supabase.from('chemical_dosing_logs').update(payload as any).eq('id', existingId);
+        opError = error;
+      } else {
+        const { error } = await supabase.from('chemical_dosing_logs').insert(payload as any);
+        opError = error;
+      }
+      if (opError) errs.push(opError.message); else count++;
+    }
+
+    setBusy(false); setImported(count); setDone(true); setImportErrors(errs);
+    if (errs.length) toast.error(`${count} imported, ${errs.length} failed`);
+    else if (count === 0) toast.info('No rows imported — all duplicates were skipped.');
+    else { toast.success(`${count} dosing record(s) imported`); onImported(); }
+  };
+
+  const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
+
+  return (
+    <Dialog open onOpenChange={o => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" /> Import Chemical Dosing
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+
+          {/* Download template */}
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5"
+              onClick={() => {
+                const headers = Object.keys(DOSING_TEMPLATE_ROW);
+                const row = Object.values(DOSING_TEMPLATE_ROW);
+                const csv = [headers.join(','), row.join(',')].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                a.download = 'chemical_dosing_template.csv'; a.click();
+              }}>
+              <Download className="h-3.5 w-3.5" /> Download Template
+            </Button>
+            <span className="text-xs text-muted-foreground">Fill in the template then upload below</span>
+          </div>
+
+          {/* Schema hint */}
+          <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Expected columns:
+            </p>
+            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{DOSING_CSV_SCHEMA}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Columns marked <strong>*</strong> are required. <code>log_datetime</code> accepts
+              ISO 8601 (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
+              CIP-only chemicals (SLS, HCl, Caustic Soda) are <strong>not</strong> included — log those in the CIP tab.
+            </p>
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline"
+                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                onClick={() => fileRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5" /> Choose File
+              </Button>
+              <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </div>
+
+          {/* Validation feedback */}
+          {file && rows.length > 0 && (
+            <div className={`rounded-md border p-3 space-y-2 ${
+              errors.length > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+            }`}>
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                {errors.length === 0
+                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) — schema valid</>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                }
+              </p>
+              {errors.length > 0 && (
+                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                  {errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {file && rows.length === 0 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> No data rows found — check the file format.
+            </p>
+          )}
+
+          {/* Row preview */}
+          {rows.length > 0 && errors.length === 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
+              </p>
+              <div className="overflow-x-auto rounded-md border text-[10px]">
+                <table className="min-w-full">
+                  <thead className="bg-muted/50">
+                    <tr>{Object.keys(rows[0]).map(h => <th key={h} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        {Object.values(r).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap text-foreground max-w-[120px] truncate">{v || '—'}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {done && (
+            <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}.
+            </p>
+          )}
+
+          {/* Intra-file dup notice */}
+          {dupResolved && !done && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Duplicate rows within the file were removed. Click <strong>Import Rows</strong> to proceed.</span>
+            </div>
+          )}
+
+          {/* DB-level dup confirm */}
+          {dupConfirm && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" /> Duplicate detected
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                A dosing record for <strong>"{dupConfirm}"</strong> already exists at this date & time.
+                Overwrite it, or skip this row?
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip')}>Skip</Button>
+                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)}>Overwrite All</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip', true)}>Skip All</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button onClick={doImport} disabled={!canSubmit} className="bg-teal-700 text-white hover:bg-teal-800">
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ChemDosingForm() {
+  const qc = useQueryClient();
+  // ── Use activeOperator, not user — same shared-email fix as PretreatmentAndROLog
+  const { activeOperator } = useAuth();
+  const { data: plants } = usePlants();
+  const { selectedPlantId } = useAppStore();
+  const [plantId, setPlantId] = useState('');
+  const [dt, setDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [v, setV] = useState({
+    chlorine_kg: '', smbs_kg: '', anti_scalant_l: '', soda_ash_kg: '',
+    free_chlorine_reagent_pcs: '0',
+  });
+  const [samples, setSamples] = useState<Array<{ id: string; point: string; ppm: string }>>([]);
+  const [showImport, setShowImport] = useState(false);
+
+  // ── Load per-plant chemical config — filters which chemicals are shown ──────
+  // Pass selectedPlantId as a fallback so usePlantMeterConfig always receives a
+  // non-null value on the first render (before ChemPlantPick's auto-select effect
+  // fires). Without this, the null → real-ID transition causes React error #300
+  // if usePlantMeterConfig has conditional hook logic keyed on the null check.
+  const { config: plantConfig } = usePlantMeterConfig(plantId || selectedPlantId || null);
+  // empty enabled_chemicals = all chemicals visible (backwards compat with existing plants)
+  const enabledChemicals: string[] = plantConfig.enabled_chemicals ?? [];
+  const isChemEnabled = (name: string) =>
+    enabledChemicals.length === 0 || enabledChemicals.includes(name);
+
+  useEffect(() => {
+    const n = Math.max(0, Math.min(20, +v.free_chlorine_reagent_pcs || 0));
+    setSamples((prev) => {
+      const next = [...prev];
+      while (next.length < n) {
+        next.push({
+          id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+            ? crypto.randomUUID()
+            : `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          point: '', ppm: '',
+        });
+      }
+      while (next.length > n) next.pop();
+      return next;
+    });
+  }, [v.free_chlorine_reagent_pcs]);
+
+  const { data: prices } = useQuery({
+    queryKey: ['chem-current-prices'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
+      return map;
+    },
+  });
+
+  const cost = DOSING_KEYS.reduce((s, c) => {
+    const qty = +(v as any)[c.key] || 0;
+    const price = prices?.[c.name] ?? 0;
+    return s + qty * price;
+  }, 0);
+
+  // Sidebar live sums
+  const totalMassKg  = (+v.chlorine_kg || 0) + (+v.smbs_kg || 0) + (+v.soda_ash_kg || 0);
+  const totalVolumeL = +v.anti_scalant_l || 0;
+  const freePcs      = +v.free_chlorine_reagent_pcs || 0;
+
+  const plantName = plants?.find(p => p.id === plantId)?.name ?? '';
+
+  const clearAll = () => setV({ chlorine_kg: '', smbs_kg: '', anti_scalant_l: '', soda_ash_kg: '', free_chlorine_reagent_pcs: '0' });
+
+  const submit = async () => {
+    if (!plantId) { toast.error('Select plant'); return; }
+    const validResiduals = samples.filter((s) => s.ppm !== '').map((s) => +s.ppm);
+    const avgResidual = validResiduals.length ? validResiduals.reduce((a, b) => a + b, 0) / validResiduals.length : null;
+    const { data: inserted, error } = await supabase.from('chemical_dosing_logs').insert({
+      plant_id: plantId, log_datetime: new Date(dt).toISOString(),
+      chlorine_kg: +v.chlorine_kg || 0, smbs_kg: +v.smbs_kg || 0,
+      anti_scalant_l: +v.anti_scalant_l || 0, soda_ash_kg: +v.soda_ash_kg || 0,
+      free_chlorine_reagent_pcs: +v.free_chlorine_reagent_pcs || 0,
+      product_water_free_cl_ppm: avgResidual,
+      calculated_cost: +cost.toFixed(2), recorded_by: activeOperator?.id,
+    }).select('id').single();
+    if (error || !inserted) { toast.error(error?.message ?? 'Save failed'); return; }
+    if (samples.length > 0) {
+      const sampleRows = samples.map((s, i) => ({
+        dosing_log_id: inserted.id, plant_id: plantId, sample_index: i + 1,
+        sampling_point: s.point || null, residual_ppm: s.ppm ? +s.ppm : null,
+      }));
+      await supabase.from('chemical_residual_samples').insert(sampleRows);
+    }
+    toast.success('Dosing logged');
+    clearAll(); setSamples([]);
+    qc.invalidateQueries();
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* Import dialog */}
+      {showImport && (
+        <ImportDosingDialog
+          plantId={plantId}
+          userId={activeOperator?.id ?? null}
+          onClose={() => setShowImport(false)}
+          onImported={() => { setShowImport(false); qc.invalidateQueries(); }}
+        />
+      )}
+
+      {/* ── Main + Sidebar: stacked mobile, side-by-side md+ ─────────── */}
+      <div className="flex flex-col md:flex-row gap-2.5 items-start">
+
+        {/* ── Main Content ─────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-3">
+
+          {/* Plant header card */}
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              {plantName && (
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🏭</span>
+                  <h3 className="text-sm font-bold uppercase tracking-wide">{plantName} — RO Operations Plant</h3>
+                </div>
+              )}
+              {/* Import CSV button */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 shrink-0 ml-auto h-7 text-xs"
+                onClick={() => setShowImport(true)}
+              >
+                <Upload className="h-3 w-3" /> Import
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Plant</Label>
+                <ChemPlantPick value={plantId} onChange={setPlantId} />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Date & time</Label>
+                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
+              </div>
+            </div>
+            {/* Show a notice when some chemicals are hidden for this plant */}
+            {plantId && enabledChemicals.length > 0 && enabledChemicals.length < KNOWN_CHEMICALS.length && (
+              <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-2 mt-1">
+                Showing {enabledChemicals.length} of {KNOWN_CHEMICALS.length} chemicals configured for this plant.{' '}
+                Managers can update this in <strong>Plants → Configuration</strong>.
+              </p>
+            )}
+          </Card>
+
+          {/* Mass-Based Dosing Group */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Mass-Based Dosing Group</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {isChemEnabled('Chlorine') && (
+                <ChemCard
+                  name="Chlorine (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[9px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
+                  value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
+                  unit="kg" accent="teal"
+                />
+              )}
+              {isChemEnabled('SMBS') && (
+                <ChemCard
+                  name="SMBS (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[8px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
+                  value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
+                  unit="kg" accent="default"
+                />
+              )}
+              {isChemEnabled('Soda Ash') && (
+                <ChemCard
+                  name="Soda Ash (kg)"
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-[7px] font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
+                  value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
+                  unit="kg" accent="default"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Volume-Based + Ancillary row */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">Volume-Based & Ancillary</p>
+            <div className="grid grid-cols-2 gap-2">
+              {isChemEnabled('Anti Scalant') && (
+                <ChemCard
+                  name="Anti Scalant (L)"
+                  icon={<span className="text-base leading-none">🚛</span>}
+                  value={v.anti_scalant_l} onChange={val => setV({ ...v, anti_scalant_l: val })}
+                  unit="L" accent="olive"
+                />
+              )}
+              <ChemCard
+                name="Free Cl Reagent (pcs)"
+                icon={<span className="text-base leading-none">🧪</span>}
+                value={v.free_chlorine_reagent_pcs}
+                onChange={val => setV({ ...v, free_chlorine_reagent_pcs: val })}
+                unit="pcs" accent="default"
+                inputProps={{ min: '0', max: '20' }}
+              />
+            </div>
+          </div>
+
+          {/* Residual samples */}
+          {samples.length > 0 && (
+            <Card className="p-3 space-y-2 border-t">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground">Product Cl Residual Samples</h4>
+              {samples.map((s, i) => (
+                <div key={s.id} className="grid grid-cols-[20px_1fr_80px] gap-2 items-end">
+                  <div className="text-xs font-mono-num pt-2 text-muted-foreground">#{i + 1}</div>
+                  <div>
+                    <Label className="text-xs">Sampling point</Label>
+                    <Input value={s.point} placeholder="e.g. Tank outlet"
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">ppm</Label>
+                    <Input type="number" step="any" value={s.ppm}
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+
+        {/* ── Right Sidebar — hidden on mobile ─────────────────────────── */}
+        <div className="hidden md:block w-48 shrink-0">
+          <div className="rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-3 sticky top-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary</p>
+            <div className="space-y-2.5"><DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} /></div>
+            <div className="border-t border-teal-700/60 pt-2 space-y-2">
+              <button onClick={clearAll} className="w-full text-xs text-teal-300 hover:text-white underline underline-offset-2 transition-colors">Clear All</button>
+              <Button onClick={submit} className="w-full h-8 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save Dosing</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Mobile summary bar — visible only on mobile ───────────────── */}
+      <div className="md:hidden rounded-xl bg-teal-900 dark:bg-teal-950 text-white p-3 space-y-2.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">Dosing Summary <span className="text-teal-400 font-normal">(Live)</span></p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <DosingMobileSummary totalMassKg={totalMassKg} totalVolumeL={totalVolumeL} freePcs={freePcs} cost={cost} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button onClick={clearAll} className="h-9 text-xs text-teal-300 hover:text-white border border-teal-700 rounded-md transition-colors">Clear All</button>
+          <Button onClick={submit} className="h-9 text-xs bg-white text-teal-900 hover:bg-teal-50 font-semibold shadow-none border-0">Save Dosing</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Chemical Dosing Historical Log ──────────────────────────────────────────
+function DosingHistoryLog() {
+  const qc = useQueryClient();
+  const { isManager, activeOperator, user } = useAuth();
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+
+  // ── Filters ────────────────────────────────────────────────────────────────
+  const [filterPlantId, setFilterPlantId] = useState(selectedPlantId ?? '');
+  const [days, setDays] = useState<'7' | '30' | '90' | 'custom'>('30');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo]   = useState('');
+
+  // Sync global plant selector
+  useEffect(() => {
+    if (selectedPlantId && !filterPlantId) setFilterPlantId(selectedPlantId);
+  }, [selectedPlantId]);
+
+  const { from, to } = useMemo(() => {
+    if (days === 'custom') return { from: customFrom, to: customTo };
+    const now  = new Date();
+    const past = new Date(now); past.setDate(past.getDate() - +days);
+    return { from: past.toISOString(), to: now.toISOString() };
+  }, [days, customFrom, customTo]);
+
+  // ── Data fetch ─────────────────────────────────────────────────────────────
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ['dosing-history', filterPlantId, from, to],
+    queryFn: async () => {
+      let q = supabase
+        .from('chemical_dosing_logs')
+        .select('id, plant_id, log_datetime, chlorine_kg, smbs_kg, anti_scalant_l, soda_ash_kg, free_chlorine_reagent_pcs, product_water_free_cl_ppm, calculated_cost, recorded_by, created_at')
+        .order('log_datetime', { ascending: false })
+        .limit(200);
+      if (filterPlantId) q = q.eq('plant_id', filterPlantId);
+      if (from) q = q.gte('log_datetime', from);
+      if (to)   q = q.lte('log_datetime', to);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const plantName = (id: string) => plants?.find(p => p.id === id)?.name ?? id;
+
+  // ── Prices for cost display ────────────────────────────────────────────────
+  const { data: prices } = useQuery({
+    queryKey: ['chem-current-prices'],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data } = await supabase.from('chemical_prices').select('*').lte('effective_date', today).order('effective_date', { ascending: false });
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        const fullName = p.chemical_name as string;
+        if (!(fullName in map)) map[fullName] = p.unit_price;
+        // Prices are stored as "Chemical (unit)" — also index by base name for plain-name lookups
+        const baseName = fullName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        if (!(baseName in map)) map[baseName] = p.unit_price;
+      });
+      return map;
+    },
+  });
+
+  // ── Edit state ─────────────────────────────────────────────────────────────
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editRow, setEditRow] = useState<any | null>(null);
+  const [editV, setEditV]   = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (row: any) => {
+    if (!canEditEntry(row, isManager, activeOperator?.id)) {
+      toast.error('You can only edit your own entries, within 8 hours of submitting them.');
+      return;
+    }
+    setEditId(row.id);
+    setEditRow(row);
+    setEditV({
+      log_datetime: row.log_datetime ? format(new Date(row.log_datetime), "yyyy-MM-dd'T'HH:mm") : '',
+      chlorine_kg:               String(row.chlorine_kg    ?? ''),
+      smbs_kg:                   String(row.smbs_kg        ?? ''),
+      anti_scalant_l:            String(row.anti_scalant_l ?? ''),
+      soda_ash_kg:               String(row.soda_ash_kg    ?? ''),
+      free_chlorine_reagent_pcs: String(row.free_chlorine_reagent_pcs ?? ''),
+      product_water_free_cl_ppm: String(row.product_water_free_cl_ppm ?? ''),
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editId || !editRow) return;
+    if (!canEditEntry(editRow, isManager, activeOperator?.id)) {
+      toast.error('You no longer have permission to edit this entry.');
+      return;
+    }
+    setSaving(true);
+    const num = (k: string) => editV[k] !== '' ? +editV[k] : null;
+    const costCalc = DOSING_KEYS.reduce((s, c) => {
+      const qty = num(c.key) ?? 0;
+      return s + qty * (prices?.[c.name] ?? 0);
+    }, 0);
+    const payload = {
+      log_datetime:               new Date(editV.log_datetime).toISOString(),
+      chlorine_kg:                num('chlorine_kg')               ?? 0,
+      smbs_kg:                    num('smbs_kg')                   ?? 0,
+      anti_scalant_l:             num('anti_scalant_l')            ?? 0,
+      soda_ash_kg:                num('soda_ash_kg')               ?? 0,
+      free_chlorine_reagent_pcs:  num('free_chlorine_reagent_pcs') ?? 0,
+      product_water_free_cl_ppm:  num('product_water_free_cl_ppm'),
+      calculated_cost:            +costCalc.toFixed(2),
+    };
+    const { error } = await supabase.from('chemical_dosing_logs').update(payload).eq('id', editId);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+
+    const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+      || activeOperator?.username || null;
+    await logReadingEdit({
+      table_name: 'chemical_dosing_logs',
+      record_id: editId,
+      plant_id: editRow.plant_id ?? null,
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel,
+      changes: diffFields(editRow, payload),
+    });
+
+    toast.success('Dosing record updated');
+    setEditId(null);
+    setEditRow(null);
+    qc.invalidateQueries({ queryKey: ['dosing-history'] });
+    qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
+  };
+
+  // ── Delete state ───────────────────────────────────────────────────────────
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteRow = async (row: any) => {
+    if (!canEditEntry(row, isManager, activeOperator?.id)) {
+      toast.error('You can only delete your own entries, within 8 hours of submitting them.');
+      return;
+    }
+    setDeleting(true);
+    const { error } = await supabase.from('chemical_dosing_logs').delete().eq('id', row.id);
+    setDeleting(false);
+    setPendingDeleteId(null);
+    if (error) { toast.error(error.message); return; }
+
+    const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+      || activeOperator?.username || null;
+    await logReadingEdit({
+      table_name: 'chemical_dosing_logs',
+      record_id: row.id,
+      plant_id: row.plant_id ?? null,
+      action: 'delete',
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel,
+    });
+
+    toast.success('Record deleted');
+    qc.invalidateQueries({ queryKey: ['dosing-history'] });
+    qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
+  };
+
+  // ── Aggregate totals strip ─────────────────────────────────────────────────
+  // `calculated_cost` on old records is 0 (saved before prices were configured).
+  // Fall back to live qty × price computation whenever the stored value is zero.
+  const totals = useMemo(() => {
+    if (!logs?.length) return null;
+    return logs.reduce((acc: any, r: any) => {
+      const storedCost = +r.calculated_cost || 0;
+      const liveCost   = DOSING_KEYS.reduce(
+        (s, c) => s + (+r[c.key] || 0) * (prices?.[c.name] ?? 0), 0,
+      );
+      return {
+        chlorine_kg:    acc.chlorine_kg    + (+r.chlorine_kg    || 0),
+        smbs_kg:        acc.smbs_kg        + (+r.smbs_kg        || 0),
+        anti_scalant_l: acc.anti_scalant_l + (+r.anti_scalant_l || 0),
+        soda_ash_kg:    acc.soda_ash_kg    + (+r.soda_ash_kg    || 0),
+        cost:           acc.cost           + (storedCost > 0 ? storedCost : liveCost),
+      };
+    }, { chlorine_kg: 0, smbs_kg: 0, anti_scalant_l: 0, soda_ash_kg: 0, cost: 0 });
+  }, [logs, prices]);
+
+  const FIELD_LABELS: { key: string; label: string; unit: string }[] = [
+    { key: 'chlorine_kg',               label: 'Chlorine',    unit: 'kg' },
+    { key: 'smbs_kg',                   label: 'SMBS',        unit: 'kg' },
+    { key: 'anti_scalant_l',            label: 'Anti Scalant',unit: 'L'  },
+    { key: 'soda_ash_kg',               label: 'Soda Ash',    unit: 'kg' },
+    { key: 'free_chlorine_reagent_pcs', label: 'Free Cl',     unit: 'pcs'},
+    { key: 'product_water_free_cl_ppm', label: 'Avg Cl ppm',  unit: 'ppm'},
+  ];
+
+  return (
+    <div className="space-y-3">
+
+      {/* ── Filter bar ──────────────────────────────────────────────────────── */}
+      <Card className="p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <History className="h-4 w-4 text-teal-600 shrink-0" />
+          <h4 className="text-sm font-semibold text-foreground">Dosing History</h4>
+          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+            <ExportButton table="chemical_dosing_logs" label="Export" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {/* Plant filter */}
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Plant</Label>
+            <Select value={filterPlantId || '__all__'} onValueChange={(v) => setFilterPlantId(v === '__all__' ? '' : v)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All plants" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All plants</SelectItem>
+                {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Period filter */}
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Period</Label>
+            <Select value={days} onValueChange={(v: any) => setDays(v)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Custom date range */}
+        {days === 'custom' && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[11px] text-muted-foreground">From</Label>
+              <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">To</Label>
+              <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-8 text-xs" />
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Aggregate totals ────────────────────────────────────────────────── */}
+      {totals && (
+        <div className="rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 p-3 space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
+            Period Totals — {logs?.length ?? 0} record{logs?.length !== 1 ? 's' : ''}
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
+            {totals.chlorine_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Chlorine</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.chlorine_kg, 2)} kg</p>
+              </div>
+            )}
+            {totals.smbs_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">SMBS</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.smbs_kg, 2)} kg</p>
+              </div>
+            )}
+            {totals.anti_scalant_l > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Anti Scalant</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.anti_scalant_l, 2)} L</p>
+              </div>
+            )}
+            {totals.soda_ash_kg > 0 && (
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Soda Ash</p>
+                <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">{fmtNum(totals.soda_ash_kg, 2)} kg</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total Cost</p>
+              <p className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-300">₱ {fmtNum(totals.cost, 2)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Log table ───────────────────────────────────────────────────────── */}
+      {isLoading && (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading records…
+        </div>
+      )}
+
+      {!isLoading && !logs?.length && (
+        <Card className="p-6 text-center text-sm text-muted-foreground">
+          No dosing records found for this period.
+        </Card>
+      )}
+
+      {!isLoading && !!logs?.length && (
+        <div className="space-y-2">
+          {logs.map((row: any) => {
+            const isEditing = editId === row.id;
+            const isPendingDelete = pendingDeleteId === row.id;
+            const rowCost = DOSING_KEYS.reduce((s, c) => s + (+row[c.key] || 0) * (prices?.[c.name] ?? 0), 0);
+
+            return (
+              <Card key={row.id} className={cn(
+                'p-3 space-y-2 transition-colors',
+                isEditing && 'border-teal-400 dark:border-teal-600 bg-teal-50/30 dark:bg-teal-950/10',
+              )}>
+                {/* ── Row header ── */}
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="space-y-0.5">
+                    {/* Date & plant */}
+                    {isEditing ? (
+                      <Input
+                        type="datetime-local"
+                        value={editV.log_datetime}
+                        onChange={e => setEditV({ ...editV, log_datetime: e.target.value })}
+                        className="h-7 text-xs w-48"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-foreground font-mono-num">
+                        {row.log_datetime ? format(new Date(row.log_datetime), 'MMM dd, yyyy  HH:mm') : '—'}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">{plantName(row.plant_id)}</p>
+                  </div>
+
+                  {/* Cost badge + action buttons */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isEditing && (
+                      <span className="text-xs font-bold font-mono-num text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded px-1.5 py-0.5">
+                        ₱ {fmtNum(+row.calculated_cost > 0 ? row.calculated_cost : rowCost, 2)}
+                      </span>
+                    )}
+
+                    {/* Edit / Save / Cancel */}
+                    {canEditEntry(row, isManager, activeOperator?.id) && !isEditing && !isPendingDelete && (
+                      <button
+                        onClick={() => startEdit(row)}
+                        disabled={!!editId || deleting}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                        title="Edit record"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                    {isEditing && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-[10px] bg-teal-700 text-white hover:bg-teal-800"
+                          onClick={saveEdit}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => { setEditId(null); setEditRow(null); }}
+                          disabled={saving}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+
+                    {/* Delete confirm */}
+                    {canEditEntry(row, isManager, activeOperator?.id) && !isEditing && (
+                      isPendingDelete ? (
+                        <>
+                          <button
+                            onClick={() => deleteRow(row)}
+                            disabled={deleting}
+                            className="px-1.5 py-0.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-[10px] font-semibold"
+                          >
+                            {deleting ? <Loader2 className="h-2.5 w-2.5 animate-spin inline" /> : 'Yes'}
+                          </button>
+                          <button
+                            onClick={() => setPendingDeleteId(null)}
+                            className="px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground text-[10px]"
+                          >
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setPendingDeleteId(row.id)}
+                          disabled={!!editId || deleting}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                          title="Delete record"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Chemical values grid ── */}
+                {isEditing ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/40">
+                    {FIELD_LABELS.map(({ key, label, unit }) => (
+                      <div key={key}>
+                        <Label className="text-[10px] text-muted-foreground">{label}</Label>
+                        <div className="relative">
+                          <Input
+                            type="number" step="any"
+                            value={editV[key] ?? ''}
+                            onChange={e => setEditV({ ...editV, [key]: e.target.value })}
+                            className="h-7 text-xs pr-7"
+                            placeholder="0"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">{unit}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {DOSING_KEYS.map(({ key, name, unit }) => {
+                      const val = +row[key] || 0;
+                      if (!val) return null;
+                      return (
+                        <span key={key} className="text-[11px] text-foreground font-mono-num">
+                          <span className="text-muted-foreground">{name}: </span>
+                          {fmtNum(val, 2)} {unit}
+                        </span>
+                      );
+                    })}
+                    {(+row.free_chlorine_reagent_pcs || 0) > 0 && (
+                      <span className="text-[11px] text-foreground font-mono-num">
+                        <span className="text-muted-foreground">Free Cl: </span>
+                        {row.free_chlorine_reagent_pcs} pcs
+                      </span>
+                    )}
+                    {row.product_water_free_cl_ppm != null && (
+                      <span className="text-[11px] text-foreground font-mono-num">
+                        <span className="text-muted-foreground">Avg ppm: </span>
+                        {fmtNum(+row.product_water_free_cl_ppm, 2)}
+                      </span>
+                    )}
+                    {/* Show empty state if no chemicals were entered */}
+                    {DOSING_KEYS.every(({ key }) => !+row[key]) && (
+                      <span className="text-[11px] text-muted-foreground italic">No chemicals logged</span>
+                    )}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChemInventory() {
+  const { isManager } = useAuth();
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+  const ids = useMemo(
+    () => selectedPlantId ? [selectedPlantId] : plants?.map(p => p.id) ?? [],
+    [selectedPlantId, plants],
+  );
+
+  const { data: stockRows } = useQuery({
+    queryKey: ['chem-stock-computed', ids],
+    queryFn: async () => {
+      if (!ids.length) return [];
+      const [{ data: deliveries }, { data: dosing }, { data: plantsData }] = await Promise.all([
+        supabase.from('chemical_deliveries').select('plant_id,chemical_name,quantity,unit').in('plant_id', ids),
+        supabase.from('chemical_dosing_logs').select('plant_id,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg').in('plant_id', ids),
+        supabase.from('plants').select('id,name').in('id', ids),
+      ]);
+      const plantName = new Map((plantsData ?? []).map((p: any) => [p.id, p.name]));
+      const map = new Map<string, { plant_id: string; plant_name: string; chemical_name: string; unit: string; received: number; used: number }>();
+      const key = (p: string, c: string) => `${p}::${c}`;
+      (deliveries ?? []).forEach((d: any) => {
+        const k = key(d.plant_id, d.chemical_name);
+        const cur = map.get(k) ?? { plant_id: d.plant_id, plant_name: plantName.get(d.plant_id) ?? '', chemical_name: d.chemical_name, unit: d.unit, received: 0, used: 0 };
+        cur.received += +d.quantity || 0;
+        map.set(k, cur);
+      });
+      const dosingMap: Array<[string, string]> = [['Chlorine', 'kg'], ['SMBS', 'kg'], ['Anti Scalant', 'L'], ['Soda Ash', 'kg']];
+      const dosingKeyMap: Record<string, string> = { 'Chlorine': 'chlorine_kg', 'SMBS': 'smbs_kg', 'Anti Scalant': 'anti_scalant_l', 'Soda Ash': 'soda_ash_kg' };
+      (dosing ?? []).forEach((row: any) => {
+        for (const [name, unit] of dosingMap) {
+          const usedQty = +row[dosingKeyMap[name]] || 0;
+          if (!usedQty) continue;
+          const k = key(row.plant_id, name);
+          const cur = map.get(k) ?? { plant_id: row.plant_id, plant_name: plantName.get(row.plant_id) ?? '', chemical_name: name, unit, received: 0, used: 0 };
+          cur.used += usedQty;
+          map.set(k, cur);
+        }
+      });
+      return Array.from(map.values()).map((r) => ({ ...r, current: r.received - r.used }));
+    },
+    enabled: ids.length > 0,
+  });
+
+  const { data: thresholds } = useQuery({
+    queryKey: ['chem-thresholds', ids],
+    queryFn: async () => ids.length
+      ? (await supabase.from('chemical_inventory').select('plant_id,chemical_name,low_stock_threshold').in('plant_id', ids)).data ?? []
+      : [],
+    enabled: ids.length > 0,
+  });
+
+  const thresholdMap = useMemo(() => {
+    const m = new Map<string, number>();
+    (thresholds ?? []).forEach((t: any) => m.set(`${t.plant_id}::${t.chemical_name}`, +t.low_stock_threshold || 0));
+    return m;
+  }, [thresholds]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">Stock = Deliveries − Dosing usage</p>
+        <div className="flex gap-2">
+          <ExportButton table="chemical_deliveries" label="Deliveries" />
+          <ExportButton table="chemical_dosing_logs" label="Dosing" />
+          {isManager && <AddStockDialog />}
+        </div>
+      </div>
+      {stockRows?.map((c) => {
+        const threshold = thresholdMap.get(`${c.plant_id}::${c.chemical_name}`) ?? 10;
+        const ratio = threshold ? (c.current / (threshold * 4)) * 100 : 0;
+        return (
+          <Card key={`${c.plant_id}::${c.chemical_name}`} className="p-3">
+            <div className="flex justify-between text-sm">
+              <div>
+                <div className="font-medium">{c.chemical_name}</div>
+                <div className="text-xs text-muted-foreground">{c.plant_name}</div>
+                <div className="text-[10px] text-muted-foreground font-mono-num">
+                  +{fmtNum(c.received, 1)} / -{fmtNum(c.used, 1)} {c.unit}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono-num text-base">{fmtNum(c.current, 1)} {c.unit}</div>
+                {c.current < threshold && <StatusPill tone="danger">Low stock</StatusPill>}
+              </div>
+            </div>
+            <Progress value={Math.max(0, Math.min(100, ratio))} className="mt-2 h-1.5" />
+          </Card>
+        );
+      })}
+      {!stockRows?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No stock yet — log a delivery to begin tracking.</Card>}
+    </div>
+  );
+}
+
+function AddStockDialog() {
+  const qc = useQueryClient();
+  // ── Use activeOperator, not user — same shared-email fix
+  const { activeOperator } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [plantId, setPlantId] = useState('');
+  const [name, setName] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [unit, setUnit] = useState('kg');
+  const [customUnit, setCustomUnit] = useState('');
+  const [qty, setQty] = useState('');
+  const [supplier, setSupplier] = useState('');
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [remarks, setRemarks] = useState('');
+
+  const submit = async () => {
+    const finalName = name === '__custom__' ? customName.trim() : name;
+    const finalUnit = unit === '__custom__' ? customUnit.trim() : unit;
+    if (!plantId || !finalName || !qty || !finalUnit) { toast.error('Plant, chemical, unit and quantity required'); return; }
+    const { error } = await supabase.from('chemical_deliveries').insert({
+      plant_id: plantId, chemical_name: finalName, quantity: +qty, unit: finalUnit,
+      supplier: supplier || null, delivery_date: date, remarks: remarks || null, recorded_by: activeOperator?.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    const { data: existing } = await supabase.from('chemical_inventory')
+      .select('id').eq('plant_id', plantId).eq('chemical_name', finalName).maybeSingle();
+    if (!existing) {
+      await supabase.from('chemical_inventory').insert({
+        plant_id: plantId, chemical_name: finalName, unit: finalUnit, current_stock: 0, low_stock_threshold: 10,
+      });
+    }
+    toast.success('Stock received'); setOpen(false);
+    setName(''); setCustomName(''); setQty(''); setSupplier(''); setRemarks(''); setCustomUnit('');
+    qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">+ Add stock</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Receive chemical delivery</DialogTitle></DialogHeader>
+        <div className="space-y-2">
+          <div><Label>Plant</Label><ChemPlantPick value={plantId} onChange={setPlantId} /></div>
+          <div>
+            <Label>Chemical</Label>
+            <Select value={name} onValueChange={(v) => { setName(v); const k = KNOWN_CHEMICALS.find((x) => x.name === v); if (k) setUnit(k.defaultUnit); }}>
+              <SelectTrigger><SelectValue placeholder="Pick chemical" /></SelectTrigger>
+              <SelectContent>
+                {KNOWN_CHEMICALS.map((c) => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+                <SelectItem value="__custom__">+ Custom…</SelectItem>
+              </SelectContent>
+            </Select>
+            {name === '__custom__' && (
+              <Input className="mt-2" placeholder="Custom chemical name" value={customName} onChange={(e) => setCustomName(e.target.value)} />
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Quantity</Label>
+              <Input type="number" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Unit</Label>
+              <Select value={unit} onValueChange={setUnit}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CHEM_UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                  <SelectItem value="__custom__">+ Custom…</SelectItem>
+                </SelectContent>
+              </Select>
+              {unit === '__custom__' && (
+                <Input className="mt-2" placeholder="e.g. drum" value={customUnit} onChange={(e) => setCustomUnit(e.target.value)} />
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} /></div>
+            <div><Label className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          </div>
+          <div><Label className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={submit}>Save delivery</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
