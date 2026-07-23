@@ -617,6 +617,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
   const [editRow, setEditRow] = useState<{ id: string; datetime: string; value: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const WINDOWS = [{ label: '7D', days: 7 }, { label: '14D', days: 14 }, { label: '30D', days: 30 }, { label: '60D', days: 60 }] as const;
 
   const localMidnight = (dateStr: string) => {
@@ -642,14 +643,24 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
         sinceIso = since.toISOString();
         untilIso = new Date().toISOString();
       }
-      const { data } = await supabase
+      const { data, error } = await supabase
+        .from('product_meter_readings' as any)
+        .select('id, current_reading, previous_reading, reading_datetime, is_meter_replacement')
+        .eq('meter_id', meter.id)
+        .gte('reading_datetime', sinceIso)
+        .lte('reading_datetime', untilIso)
+        .order('reading_datetime', { ascending: false });
+      if (!error) return (data ?? []) as any[];
+      // is_meter_replacement may not exist yet (pending migration) — fall back
+      // to the base columns so the dialog still loads.
+      const { data: fallback } = await supabase
         .from('product_meter_readings' as any)
         .select('id, current_reading, previous_reading, reading_datetime')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
         .order('reading_datetime', { ascending: false });
-      return (data ?? []) as any[];
+      return (fallback ?? []) as any[];
     },
   });
 
@@ -672,6 +683,26 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Reading updated');
     setEditRow(null);
+    qc.invalidateQueries({ queryKey });
+    invalidateProductMeterDash(qc);
+  };
+
+  // One-click toggle for meter replacement — mirrors the same pattern used
+  // by locator/well/blending history dialogs (ReadingHistoryDialog.tsx).
+  const toggleMeterReplacement = async (r: any) => {
+    setTogglingId(r.id);
+    const next = !r.is_meter_replacement;
+    const { error } = await (supabase.from('product_meter_readings' as any) as any)
+      .update({ is_meter_replacement: next }).eq('id', r.id);
+    setTogglingId(null);
+    if (error) {
+      // Column may not exist yet (pending migration) — skip silently rather
+      // than surfacing the misleading PostgREST schema-cache error.
+      if (error.message?.includes('does not exist') || error.message?.includes('is_meter_replacement')) return;
+      toast.error(friendlyError(error));
+      return;
+    }
+    toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
     qc.invalidateQueries({ queryKey });
     invalidateProductMeterDash(qc);
   };
@@ -772,6 +803,7 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
                   <th className="px-3 py-2 font-medium">Date & Time</th>
                   <th className="px-3 py-2 font-medium text-right">Reading</th>
                   <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
+                  <th className="px-2 py-2 font-medium text-center">Repl.</th>
                   <th className="px-2 py-2 font-medium text-center w-16">Actions</th>
                 </tr>
               </thead>
@@ -780,14 +812,51 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
                   const vol = r.previous_reading != null ? r.current_reading - r.previous_reading : null;
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
+                  const isToggling = togglingId === r.id;
+                  const isMeterReplacement = !!r.is_meter_replacement;
                   return (
-                    <tr key={r.id ?? i} className={['border-t', isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20' : 'hover:bg-muted/40'].join(' ')}>
+                    <tr key={r.id ?? i} className={[
+                      'border-t',
+                      isEditing            ? 'bg-teal-50/60 dark:bg-teal-950/20'
+                      : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                      : 'hover:bg-muted/40',
+                    ].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
-                        {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
+                        <span className="flex items-center gap-1.5">
+                          {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
+                          {isMeterReplacement && (
+                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
+                              repl.
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                       <td className="px-3 py-1.5 text-right font-mono-num text-teal-600">
-                        {vol != null ? fmtNum(vol) : '—'}
+                        {isMeterReplacement
+                          ? <span className="text-orange-500 font-medium">0</span>
+                          : vol != null ? fmtNum(vol) : '—'
+                        }
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button
+                          title={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes production)'}
+                          aria-label={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes production)'}
+                          disabled={isDeleting || isToggling}
+                          onClick={() => toggleMeterReplacement(r)}
+                          className={[
+                            'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
+                            'disabled:opacity-40 disabled:cursor-not-allowed',
+                            isMeterReplacement
+                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                          ].join(' ')}
+                        >
+                          {isToggling
+                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            : isMeterReplacement ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                          }
+                        </button>
                       </td>
                       <td className="px-2 py-1 text-center">
                         <div className="flex items-center justify-center gap-0.5">
