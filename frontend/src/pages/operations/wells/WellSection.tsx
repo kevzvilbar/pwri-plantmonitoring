@@ -874,7 +874,7 @@ function WellRow({
           {/* Date picker — hidden native input behind styled label */}
           <label className="cursor-pointer relative shrink-0">
             <span
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-background border border-border/70 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-background border border-border/70 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors"
               onClick={(e) => {
                 // A click landing inside the input's own box only focuses it
                 // in most browsers — it won't open the calendar overlay.
@@ -889,8 +889,8 @@ function WellRow({
                 }
               }}
             >
-              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             </span>
             <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10" title="Reading date & time" />

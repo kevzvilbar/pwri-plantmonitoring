@@ -773,7 +773,7 @@ function LocatorRow({
         {/* Date picker always visible, not fighting for space with the name */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               // Clicking inside the input's own box only focuses/places the
               // cursor in most browsers — it does not open the picker
@@ -790,8 +790,8 @@ function LocatorRow({
               }
             }}
           >
-            <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             {customDt ? new Date(customDt).toLocaleString([], { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}
+            <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
           </span>
           <Input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />
@@ -1038,7 +1038,7 @@ function SharedPowerMeterRow({
         {/* Date picker */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               e.preventDefault();
               const el = dtInputRef.current;
@@ -1050,8 +1050,8 @@ function SharedPowerMeterRow({
               }
             }}
           >
-            <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
           </span>
           <Input ref={dtInputRef} type="datetime-local" value={customDt}
             onChange={e => setCustomDt(e.target.value)}

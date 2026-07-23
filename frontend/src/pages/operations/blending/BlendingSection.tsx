@@ -454,6 +454,8 @@ function BlendingRow({
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const dtInputRef = useRef<HTMLInputElement>(null);
+
+  // BUG FIX #2: initialise from localStorage so the mode survives remounts/navigation.
   const [inputMode, setInputMode] = useState<'raw' | 'direct'>(() => readPersistedMode(well.id));
 
   // BUG FIX #3: the previous *cumulative* meter reading is not stored in the DB
@@ -609,7 +611,7 @@ function BlendingRow({
           )}
           <label className="cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -621,8 +623,8 @@ function BlendingRow({
                 }
               }}
             >
-              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             </span>
             <Input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />

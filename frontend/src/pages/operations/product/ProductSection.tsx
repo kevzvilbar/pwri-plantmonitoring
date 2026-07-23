@@ -483,7 +483,7 @@ function ProductMeterRow({
           </div>
           <label className="shrink-0 cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -495,8 +495,8 @@ function ProductMeterRow({
                 }
               }}
             >
-              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             </span>
             <Input ref={dtInputRef} type="datetime-local" value={customDt}
               onChange={e => setCustomDt(e.target.value)}
