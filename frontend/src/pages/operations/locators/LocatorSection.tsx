@@ -486,6 +486,7 @@ function LocatorRow({
   const [saving, setSaving]       = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt]   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const dtInputRef = useRef<HTMLInputElement>(null);
   const [gapDialogOpen, setGapDialogOpen] = useState(false);
   const [gapSaving, setGapSaving] = useState(false);
 
@@ -771,10 +772,27 @@ function LocatorRow({
         </div>
         {/* Date picker always visible, not fighting for space with the name */}
         <label className="shrink-0 cursor-pointer relative">
-          <span className="text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors">
+          <span
+            className="text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            onClick={(e) => {
+              // Clicking inside the input's own box only focuses/places the
+              // cursor in most browsers — it does not open the picker
+              // overlay. Explicitly request it so a single click/tap always
+              // pops it up (falls back to focus() where showPicker() isn't
+              // supported, e.g. Firefox).
+              e.preventDefault();
+              const el = dtInputRef.current;
+              if (!el) return;
+              if (typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch { el.focus(); }
+              } else {
+                el.focus();
+              }
+            }}
+          >
             {customDt ? new Date(customDt).toLocaleString([], { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}
           </span>
-          <Input type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+          <Input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />
         </label>
       </div>
@@ -960,6 +978,7 @@ function SharedPowerMeterRow({
   useEffect(() => { if (!reading && draftReading.value) setReading(draftReading.value); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [saving, setSaving] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const dtInputRef = useRef<HTMLInputElement>(null);
 
   const save = async () => {
     if (!reading) { toast.error(`${groupName}: enter a power meter reading`); return; }
@@ -1017,10 +1036,22 @@ function SharedPowerMeterRow({
         </div>
         {/* Date picker */}
         <label className="shrink-0 cursor-pointer relative">
-          <span className="text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors">
+          <span
+            className="text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-2.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              const el = dtInputRef.current;
+              if (!el) return;
+              if (typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch { el.focus(); }
+              } else {
+                el.focus();
+              }
+            }}
+          >
             {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
           </span>
-          <Input type="datetime-local" value={customDt}
+          <Input ref={dtInputRef} type="datetime-local" value={customDt}
             onChange={e => setCustomDt(e.target.value)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
             title="Reading date & time" />
