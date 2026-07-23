@@ -418,6 +418,8 @@ function ProductMeterRow({
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const dtInputRef = useRef<HTMLInputElement>(null);
+
+  const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
   const productionVolume = previous != null && reading ? cur - previous : null;
   const highVol = avgVol != null && productionVolume != null && productionVolume > avgVol * ALERTS.avg_multiplier_warn;
