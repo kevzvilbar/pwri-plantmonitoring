@@ -1,0 +1,110 @@
+name: CI
+
+# §4 item 8 — Gate every PR and push to main with lint + type-check + tests.
+# This is the control that would have caught the Python/TypeScript regression
+# divergence before it became a live bug: two implementations that disagreed
+# on D2 (retract not restoring original values) for weeks before being caught
+# manually.  A green CI badge is required before any branch can merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Python backend ─────────────────────────────────────────────────────────────
+jobs:
+  python:
+    name: Python — lint + tests
+    runs-on: ubuntu-latest
+
+    env:
+      # CI stubs — real Supabase creds not needed for the mock-based test suite
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      EMERGENT_LLM_KEY: placeholder-llm-key
+      CRON_SECRET: placeholder-cron-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Lint (flake8)
+        working-directory: backend
+        # E501 (line too long) and W503 (line break before binary op) are
+        # pre-existing style choices — ignore them to avoid noise, fix others.
+        run: flake8 . --max-line-length=120 --extend-ignore=E501,W503 --exclude=_retired_regression_service.py
+
+      - name: Type-check (mypy)
+        working-directory: backend
+        # --ignore-missing-imports because several deps lack stubs
+        run: mypy . --ignore-missing-imports --exclude _retired_regression_service.py || true
+        # `|| true` makes mypy non-blocking for now; remove once stubs are added
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -v --tb=short
+
+# ── TypeScript frontend ────────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript — type-check + build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check (tsc --noEmit)
+        working-directory: frontend
+        run: npx tsc -p tsconfig.app.json --noEmit
+        # Runs the full type-checker without emitting files — catches the class
+        # of type error that Vite's build (which uses esbuild, not tsc) misses.
+        # NOTE: must point at tsconfig.app.json — the root tsconfig.json has
+        # `files: []` and only references sub-projects, so a bare
+        # `tsc --noEmit` silently checks nothing and always exits 0.
+
+      - name: Lint (ESLint)
+        working-directory: frontend
+        run: npm run lint -- --max-warnings=1400
+        # --max-warnings=1400 tracks today's baseline (~1,376 warnings, almost
+        # all pre-existing @typescript-eslint/no-explicit-any) with a little
+        # headroom, per the note below. Lower this number as the any-backlog
+        # is paid down so it acts as a ratchet — new warnings above this count
+        # still fail the build. Re-baseline (lower the number) whenever a
+        # cleanup PR meaningfully reduces the count, don't let it drift up.
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+        env:
+          # Build needs VITE_ vars to exist even if fake — they're not
+          # embedded into the output for the CI check, only used at Vite
+          # config resolution time.
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
+          VITE_BACKEND_URL: https://placeholder.example.com

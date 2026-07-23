@@ -1,0 +1,11 @@
+project_id = "lreqxclzoxmswglvdstv"
+
+# ── Edge Functions ─────────────────────────────────────────────────────────────
+# Moved from frontend/supabase/config.toml (§4 item 3 — migrations consolidation).
+# The frontend/supabase/ directory has been removed; this is now the single
+# canonical Supabase project config.
+
+[functions.poly-regression-fill]
+enabled = true
+verify_jwt = false
+schedule = "0 6 * * *"
