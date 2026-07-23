@@ -56,18 +56,21 @@ const groups: SidebarGroup[] = [
   },
 ];
 
+// Admin Console stays Admin-only.
 const adminOnlyGroup: SidebarGroup = {
   label: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 
+// Data Analysis & Review + Data Corrections — visible to Admin, Manager, and
+// Data Analyst (both pages gate access to isAdmin || isManager || isDataAnalyst).
 const dataAnalysisGroup: SidebarGroup = {
   label: 'Analysis',
   items: [
     { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
+    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 

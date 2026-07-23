@@ -70,11 +70,11 @@ const sideSheetGroups = [
   },
 ];
 
+// Admin Console stays Admin-only.
 const adminOnlyGroup = {
   title: 'Admin',
   items: [
     { to: '/admin', label: 'Admin Console', icon: ShieldAlert },
-    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 
@@ -87,12 +87,14 @@ const dataGroup = {
   ],
 };
 
-// Data Analysis & Review — visible to Admins, Data Analysts, and Managers
-// (page itself gates canView to isAdmin || isDataAnalyst || isManager).
+// Data Analysis & Review + Data Corrections — visible to Admins, Data
+// Analysts, and Managers (both pages gate canView to isAdmin || isDataAnalyst
+// || isManager).
 const dataAnalysisGroup = {
   title: 'Analysis',
   items: [
     { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
+    { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
   ],
 };
 
