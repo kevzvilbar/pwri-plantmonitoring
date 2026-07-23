@@ -24,7 +24,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -417,8 +417,7 @@ function ProductMeterRow({
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-
-  const previous = latest?.current_reading ?? null;
+  const dtInputRef = useRef<HTMLInputElement>(null);
   const cur = +reading || 0;
   const productionVolume = previous != null && reading ? cur - previous : null;
   const highVol = avgVol != null && productionVolume != null && productionVolume > avgVol * ALERTS.avg_multiplier_warn;
@@ -481,10 +480,23 @@ function ProductMeterRow({
             <span className="truncate">{meter.name}</span>
           </div>
           <label className="shrink-0 cursor-pointer relative">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <span
+              className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                const el = dtInputRef.current;
+                if (!el) return;
+                if (typeof el.showPicker === 'function') {
+                  try { el.showPicker(); } catch { el.focus(); }
+                } else {
+                  el.focus();
+                }
+              }}
+            >
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
             </span>
-            <Input type="datetime-local" value={customDt}
+            <Input ref={dtInputRef} type="datetime-local" value={customDt}
               onChange={e => setCustomDt(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
               title="Reading date & time" />

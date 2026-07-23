@@ -24,7 +24,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -453,8 +453,7 @@ function BlendingRow({
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-
-  // BUG FIX #2: initialise from localStorage so the mode survives remounts/navigation.
+  const dtInputRef = useRef<HTMLInputElement>(null);
   const [inputMode, setInputMode] = useState<'raw' | 'direct'>(() => readPersistedMode(well.id));
 
   // BUG FIX #3: the previous *cumulative* meter reading is not stored in the DB
@@ -609,10 +608,23 @@ function BlendingRow({
             </Button>
           )}
           <label className="cursor-pointer relative">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <span
+              className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                const el = dtInputRef.current;
+                if (!el) return;
+                if (typeof el.showPicker === 'function') {
+                  try { el.showPicker(); } catch { el.focus(); }
+                } else {
+                  el.focus();
+                }
+              }}
+            >
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {customDt ? new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
             </span>
-            <Input type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+            <Input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />
           </label>
         </div>

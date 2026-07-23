@@ -26,7 +26,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -521,6 +521,7 @@ function WellRow({
   const [savingSharedPower, setSavingSharedPower]   = useState(false);
   const [showHistory, setShowHistory]           = useState(false);
   const [customDt, setCustomDt]                 = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const dtInputRef = useRef<HTMLInputElement>(null);
   const [gapDialogOpen, setGapDialogOpen]       = useState(false);
   const [gapSaving, setGapSaving]               = useState(false);
   // D4 fix: lets the operator mark a backward reading as a genuine meter
@@ -872,10 +873,26 @@ function WellRow({
           )}
           {/* Date picker — hidden native input behind styled label */}
           <label className="cursor-pointer relative shrink-0">
-            <span className="text-[11px] text-muted-foreground bg-background border border-border/70 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors">
+            <span
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-background border border-border/70 rounded px-2 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors"
+              onClick={(e) => {
+                // A click landing inside the input's own box only focuses it
+                // in most browsers — it won't open the calendar overlay.
+                // Request it explicitly so the badge is reliably editable.
+                e.preventDefault();
+                const el = dtInputRef.current;
+                if (!el) return;
+                if (typeof el.showPicker === 'function') {
+                  try { el.showPicker(); } catch { el.focus(); }
+                } else {
+                  el.focus();
+                }
+              }}
+            >
+              <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
               {new Date(customDt).toLocaleString([], { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </span>
-            <input type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
+            <input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10" title="Reading date & time" />
           </label>
           {/* Edit today's record */}
