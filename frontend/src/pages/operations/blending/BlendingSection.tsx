@@ -627,7 +627,7 @@ function BlendingRow({
               <CalendarClock className="h-3 w-3 shrink-0 opacity-70" />
             </span>
             <Input ref={dtInputRef} type="datetime-local" value={customDt} onChange={e => setCustomDt(e.target.value)}
-              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" title="Reading date & time" />
+              className="absolute inset-0 opacity-0 w-full h-full pointer-events-none" title="Reading date & time" tabIndex={-1} />
           </label>
         </div>
       </div>
