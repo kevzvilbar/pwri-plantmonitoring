@@ -664,6 +664,46 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     },
   });
 
+  // Re-derive previous_reading/daily_volume for EVERY reading of this meter, in
+  // chronological order, and persist any that drifted from what's actually stored.
+  //
+  // Root cause this guards against: previous_reading is written once at insert
+  // time and nothing used to keep it in sync afterwards. Editing an older
+  // reading's value, deleting a reading, or retroactively flagging one as a
+  // meter replacement all change who a downstream row's "predecessor" really
+  // is — but the downstream row's stored previous_reading was never told. It
+  // keeps pointing at an orphaned, often much larger, cumulative reading, so
+  // current − previous_reading can produce a huge bogus (often deeply
+  // negative) "Production" figure instead of the correct day-to-day delta.
+  // Re-walking the whole chain after every mutation keeps the stored columns
+  // honest for anything that reads them directly (e.g. Dashboard/TrendChart
+  // fallback paths), not just this dialog's own (now self-computed) display.
+  const resyncMeterChain = async (meterId: string) => {
+    const { data: all, error } = await supabase
+      .from('product_meter_readings' as any)
+      .select('id, current_reading, previous_reading, daily_volume, reading_datetime')
+      .eq('meter_id', meterId)
+      .order('reading_datetime', { ascending: true });
+    if (error || !all) return;
+
+    let last: number | null = null;
+    const updates: { id: string; previous_reading: number | null; daily_volume: number | null }[] = [];
+    for (const row of all as any[]) {
+      const newPrev = last;
+      const newVol = newPrev != null ? Math.max(0, +row.current_reading - newPrev) : null;
+      if (row.previous_reading !== newPrev || row.daily_volume !== newVol) {
+        updates.push({ id: row.id, previous_reading: newPrev, daily_volume: newVol });
+      }
+      last = +row.current_reading;
+    }
+    if (updates.length) {
+      await Promise.all(updates.map(u => supabase
+        .from('product_meter_readings' as any)
+        .update({ previous_reading: u.previous_reading, daily_volume: u.daily_volume } as any)
+        .eq('id', u.id)));
+    }
+  };
+
   const saveEdit = async () => {
     if (!editRow) return;
     setSaving(true);
@@ -679,8 +719,13 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
       reading_datetime: new Date(editRow.datetime).toISOString(),
       daily_volume: newDailyVol,
     } as any).eq('id', editRow.id);
+    if (error) { setSaving(false); toast.error(friendlyError(error)); return; }
+    // The edit may have changed this row's value and/or its position in the
+    // date order — resync the full chain so any downstream row's stale
+    // previous_reading (the bug behind the huge negative "Production"
+    // figures) gets corrected too, not just this row.
+    await resyncMeterChain(meter.id);
     setSaving(false);
-    if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Reading updated');
     setEditRow(null);
     qc.invalidateQueries({ queryKey });
@@ -694,14 +739,20 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     const next = !r.is_meter_replacement;
     const { error } = await (supabase.from('product_meter_readings' as any) as any)
       .update({ is_meter_replacement: next }).eq('id', r.id);
-    setTogglingId(null);
     if (error) {
+      setTogglingId(null);
       // Column may not exist yet (pending migration) — skip silently rather
       // than surfacing the misleading PostgREST schema-cache error.
       if (error.message?.includes('does not exist') || error.message?.includes('is_meter_replacement')) return;
       toast.error(friendlyError(error));
       return;
     }
+    // A replacement flag doesn't change previous_reading values in the chain
+    // (that's still just "whatever the prior reading was"), but resyncing
+    // here also cleans up any stale links left over from before this flag
+    // existed — cheap enough to just always do it.
+    await resyncMeterChain(meter.id);
+    setTogglingId(null);
     toast.success(next ? 'Marked as meter replacement — Δ zeroed' : 'Meter replacement flag removed');
     qc.invalidateQueries({ queryKey });
     invalidateProductMeterDash(qc);
@@ -715,8 +766,12 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
     setPendingDeleteId(null);
     setDeletingId(id);
     const { error } = await supabase.from('product_meter_readings' as any).delete().eq('id', id);
+    if (error) { setDeletingId(null); toast.error(friendlyError(error)); return; }
+    // Removing a row closes a gap in the chain — the reading that came right
+    // after it now needs to point its previous_reading at whatever came
+    // right before it instead.
+    await resyncMeterChain(meter.id);
     setDeletingId(null);
-    if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Reading deleted');
     qc.invalidateQueries({ queryKey });
     invalidateProductMeterDash(qc);
@@ -809,7 +864,21 @@ function ProductMeterHistoryDialog({ meter, onClose }: { meter: any; onClose: ()
               </thead>
               <tbody>
                 {rows.map((r: any, i: number) => {
-                  const vol = r.previous_reading != null ? r.current_reading - r.previous_reading : null;
+                  // Compute the delta from the adjacent row in this sorted result set
+                  // (rows are ordered reading_datetime DESC, so the predecessor is the
+                  // next array element) rather than trusting the row's stored
+                  // `previous_reading` column.
+                  //
+                  // `previous_reading` is written once, at insert time, and nothing
+                  // cascades an update to it afterwards. If an earlier reading is later
+                  // edited/deleted, or a reading gets retroactively flagged as a meter
+                  // replacement (as with the "Repl." toggle below), any row that was
+                  // inserted pointing at the old chain becomes stale — it keeps
+                  // subtracting from a now-orphaned, much larger cumulative reading and
+                  // produces a huge negative "Production" figure. Recomputing live from
+                  // the adjacent row self-heals regardless of what's stored in the DB.
+                  const predecessor: any = rows[i + 1] ?? null;
+                  const vol = predecessor != null ? r.current_reading - predecessor.current_reading : null;
                   const isEditing = editRow?.id === r.id;
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
