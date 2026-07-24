@@ -27,8 +27,10 @@ import { reasonCategoryLabel, reasonEntityPrefix } from '@/lib/reasonCodes';
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 type DrillMode = 'default' | 'drilldown' | 'drillup';
 
-// Palette for per-locator lines in drill views (cycles if more locators than colors)
-const DRILL_COLORS = [
+// Palette for per-locator lines in drill views (cycles if more locators than colors).
+// Also reused by ComplianceRadarCard (per-plant polygons) and CostSunburst (arc fills)
+// so every chart on the dashboard draws from the same color set.
+export const DRILL_COLORS = [
   'hsl(var(--chart-1))',
   'hsl(var(--chart-2))',
   'hsl(var(--chart-3))',

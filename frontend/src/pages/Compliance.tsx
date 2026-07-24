@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 // Shared types
 // -----------------------------------------------------------------------
 
-type Thresholds = {
+export type Thresholds = {
   nrw_pct_max: number;
   downtime_hrs_per_day_max: number;
   permeate_tds_max: number;
@@ -40,7 +40,7 @@ type Thresholds = {
   chem_low_stock_days_min: number;
 };
 
-type Violation = {
+export type Violation = {
   code: string;
   severity: 'low' | 'medium' | 'high' | string;
   metric: string;
@@ -387,7 +387,7 @@ function MetricPreview({
 // Deterministic violation-check engine
 // -----------------------------------------------------------------------
 
-function computeViolations(
+export function computeViolations(
   metrics: Record<string, number | undefined>,
   t: Thresholds,
 ): Violation[] {
@@ -540,7 +540,7 @@ async function fetchPreviousPeriodMetrics(
 // Threshold persistence via Supabase (with localStorage fallback)
 // -----------------------------------------------------------------------
 
-async function loadThresholds(scope: string): Promise<Thresholds> {
+export async function loadThresholds(scope: string): Promise<Thresholds> {
   try {
     const { data, error } = await supabase
       .from('compliance_thresholds')
@@ -700,7 +700,7 @@ export default function Compliance() {
 
       setResult(evalResult);
       setLocal(thresholds);
-    } catch (e) {
+    } catch (e: any) {
       toast.error(friendlyError(e));
     } finally {
       setEvaluating(false);
@@ -716,7 +716,7 @@ export default function Compliance() {
       toast.success('Thresholds saved');
       setEditing(false);
       refetchThresholds();
-    } catch (e) {
+    } catch (e: any) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);

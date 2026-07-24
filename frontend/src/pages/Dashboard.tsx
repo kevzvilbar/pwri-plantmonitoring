@@ -50,6 +50,8 @@ import { NRWGaugeCard }        from '@/components/dashboard/NRWGaugeCard';
 import { ReadingCoverageCard } from '@/components/dashboard/ReadingCoverageCard';
 import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
+import { ComplianceRadarCard } from '@/components/dashboard/ComplianceRadarCard';
+import { CostSunburst }        from '@/components/dashboard/CostSunburst';
 
 
 import { DataSummaryModal, computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal';
@@ -1449,6 +1451,7 @@ export default function Dashboard() {
           onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
       </div>
       <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
+      <ComplianceRadarCard plantIds={plantIds} />
 
       {/* ─── Cluster 3: Production Cost (Power + Chemical) ─── */}
       {/* Spec order: Power Cost · Chemical Cost · Power kWh · PV Ratio.
@@ -1502,6 +1505,7 @@ export default function Dashboard() {
         plantIds={plantIds}
         clusterId="cost"
       />
+      <CostSunburst plantIds={plantIds} />
 
       {/* ─── Cluster 4: Plant Health + Blending Volume ───────────────────── */}
       <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-emerald-500" subtitle="RO trains" />

@@ -32,6 +32,18 @@ export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = {
   '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90,
 };
 
+// Resolves the shared dashboard chart range (appStore.chartRange/From/To)
+// into a plain day count. Used by any card that needs a `days` window but
+// doesn't render its own range picker (ComplianceRadarCard, CostSunburst) —
+// they just follow whatever range the rest of the dashboard's charts are on.
+export function rangeKeyToDays(range: RangeKey, from: string, to: string): number {
+  if (range === 'CUSTOM') {
+    const ms = new Date(to).getTime() - new Date(from).getTime();
+    return Math.max(1, Math.round(ms / 86_400_000));
+  }
+  return RANGE_DAYS[range];
+}
+
 export const TREND_Y_LABEL: Record<string, string> = {
   production: 'Volume (m³)',
   rawwater: 'Raw Water (m³)',
