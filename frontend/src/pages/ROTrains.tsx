@@ -1051,7 +1051,7 @@ function PretreatmentAndROLog() {
             className="gap-1.5 h-8 text-xs"
             onClick={() => setShowImport(true)}
           >
-            <Upload className="h-3.5 w-3.5" /> Import CSV
+            <Upload className="h-3.5 w-3.5" /> Import RO CSV
           </Button>
           <ExportButton table="ro_pretreatment_readings" filters={plantId ? { plant_id: plantId } : undefined} />
         </div>

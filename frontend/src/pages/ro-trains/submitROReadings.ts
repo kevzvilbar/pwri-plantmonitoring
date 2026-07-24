@@ -41,14 +41,31 @@ export async function insertROTrainReadings(
   options?: {
     permeateIsProduction?: boolean;
     conflictMode?: ConflictMode;
+    /**
+     * When provided (called from TrainLogModal), all rows are attributed to
+     * this train ID and the per-row train_number lookup is skipped entirely.
+     * This prevents wrong-train imports when the importer is opened from a
+     * specific train's log modal.
+     */
+    trainIdOverride?: string;
+    /**
+     * When provided, rows whose reading_datetime falls outside this window are
+     * rejected with a descriptive error rather than silently accepted.
+     * Used by the gap-scoped import path to prevent overwriting adjacent
+     * legitimate readings with an over-wide CSV.
+     */
+    dateRange?: { start: string; end: string };
   },
 ): Promise<{ count: number; skipped: number; errors: string[]; affectedTrainIds: string[] }> {
-  const { data: trains } = await supabase
-    .from('ro_trains')
-    .select('id, train_number')
-    .eq('plant_id', plantId);
+  // Skip the DB train lookup when the caller already knows the target train.
   const numToId: Record<string, string> = {};
-  (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+  if (!options?.trainIdOverride) {
+    const { data: trains } = await supabase
+      .from('ro_trains')
+      .select('id, train_number')
+      .eq('plant_id', plantId);
+    (trains ?? []).forEach((t: any) => { numToId[String(t.train_number)] = t.id; });
+  }
 
   const conflictMode: ConflictMode = options?.conflictMode ?? 'skip';
   let count = 0;
@@ -57,13 +74,29 @@ export async function insertROTrainReadings(
   const affectedTrainIds = new Set<string>();
 
   for (const r of rows) {
-    const trainId = numToId[r.train_number?.trim()];
+    const trainId = options?.trainIdOverride ?? numToId[r.train_number?.trim()];
     if (!trainId) { errors.push(`Train ${r.train_number} not found in this plant`); continue; }
 
     const dt    = r.reading_datetime
       ? new Date(normalizeRODatetime(r.reading_datetime)).toISOString()
       : new Date().toISOString();
     const dtMin = dt.slice(0, 16);
+
+    // Date-range gate — reject rows outside the accepted gap window.
+    // This prevents an over-wide CSV from clobbering valid adjacent readings
+    // when the importer is opened from a specific flagged gap.
+    if (options?.dateRange) {
+      const dtMs   = new Date(dt).getTime();
+      const fromMs = new Date(options.dateRange.start).getTime();
+      const toMs   = new Date(options.dateRange.end).getTime();
+      if (dtMs < fromMs || dtMs > toMs) {
+        errors.push(
+          `Skipped (out of range): ${dt} is outside accepted window ` +
+          `${options.dateRange.start} → ${options.dateRange.end}`,
+        );
+        continue;
+      }
+    }
 
     // Duplicate check — one per train per hour
     const { data: existing } = await supabase

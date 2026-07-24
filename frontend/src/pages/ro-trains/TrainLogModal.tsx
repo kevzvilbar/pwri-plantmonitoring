@@ -9,7 +9,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
-  Loader2, BarChart2, Download, Pencil, MessageSquarePlus,
+  Loader2, BarChart2, Download, Upload, Pencil, MessageSquarePlus,
   Calendar, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,14 +24,18 @@ import { cn } from '@/lib/utils';
 import { canEditEntry, recalculateTrainDeltas } from './helpers';
 import { EditRoReadingDialog } from './EditRoReadingDialog';
 import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
+import { ImportROReadingsDialog } from './ImportROReadingsDialog';
+import { ImportPretreatReadingsDialog } from './ImportPretreatReadingsDialog';
 
 interface TrainLogModalProps {
   trainId: string;
   trainLabel: string;
+  /** Required for CSV import dialogs. Passed from TrainCard (train.plant_id). */
+  plantId: string;
   onClose: () => void;
 }
 
-export function TrainLogModal({ trainId, trainLabel, onClose }: TrainLogModalProps) {
+export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLogModalProps) {
   const qc = useQueryClient();
   const { isManager, activeOperator } = useAuth();
   const [page, setPage]               = useState(0);
@@ -41,6 +45,9 @@ export function TrainLogModal({ trainId, trainLabel, onClose }: TrainLogModalPro
   const [editingRoRow, setEditingRoRow]           = useState<any | null>(null);
   const [editingPretreatRow, setEditingPretreatRow] = useState<any | null>(null);
   const [correctionTarget, setCorrectionTarget]   = useState<CorrectionTarget | null>(null);
+  // Piece 3+4: gap-scoped import dialogs
+  const [showImportRO, setShowImportRO]           = useState(false);
+  const [showImportPretreat, setShowImportPretreat] = useState(false);
 
   const todayStr  = format(new Date(), 'yyyy-MM-dd');
   const thirtyAgo = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -261,6 +268,26 @@ export function TrainLogModal({ trainId, trainLabel, onClose }: TrainLogModalPro
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 mr-8">
+              {/* Piece 3: Import RO CSV — only shown on the RO tab */}
+              {logTab === 'ro' && (
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 px-2.5 text-xs gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 dark:text-teal-300 dark:border-teal-700 dark:hover:bg-teal-950/30"
+                  onClick={() => setShowImportRO(true)}
+                >
+                  <Upload className="h-3 w-3" /><span className="hidden sm:inline">Import RO CSV</span>
+                </Button>
+              )}
+              {/* Piece 4: Import Pre-Treatment CSV — only shown on the Pre-Treatment tab */}
+              {logTab === 'pretreat' && (
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 px-2.5 text-xs gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 dark:text-teal-300 dark:border-teal-700 dark:hover:bg-teal-950/30"
+                  onClick={() => setShowImportPretreat(true)}
+                >
+                  <Upload className="h-3 w-3" /><span className="hidden sm:inline">Import Pre-Treatment CSV</span>
+                </Button>
+              )}
               <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={exportCSV}>
                 <Download className="h-3 w-3" /><span className="hidden sm:inline">Export CSV</span>
               </Button>
@@ -551,6 +578,41 @@ export function TrainLogModal({ trainId, trainLabel, onClose }: TrainLogModalPro
         </DialogContent>
       </Dialog>
 
+      {/* Piece 3: RO import — pre-scoped to this train.
+          NOTE: dateRange is intentionally not passed here — there is no
+          detected-gap data source yet (see ro-train-gap-correction-plan-v2.md
+          §5, ro_train_data_gaps) for this modal to read a window from. This is
+          a train-scoped import today, not yet a gap-scoped one. Once a gap
+          table/detection job exists, thread its window through here. */}
+      {showImportRO && (
+        <ImportROReadingsDialog
+          plantId={plantId}
+          userId={activeOperator?.id ?? null}
+          trainId={trainId}
+          trainLabel={trainLabel}
+          onClose={() => setShowImportRO(false)}
+          onImported={() => {
+            setShowImportRO(false);
+            qc.invalidateQueries({ queryKey });
+            qc.invalidateQueries({ queryKey: ['ro-overview'] });
+          }}
+        />
+      )}
+      {/* Piece 4: Pre-Treatment import — pre-scoped to this train */}
+      {showImportPretreat && (
+        <ImportPretreatReadingsDialog
+          plantId={plantId}
+          userId={activeOperator?.id ?? null}
+          trainId={trainId}
+          trainLabel={trainLabel}
+          onClose={() => setShowImportPretreat(false)}
+          onImported={() => {
+            setShowImportPretreat(false);
+            qc.invalidateQueries({ queryKey: preQueryKey });
+            qc.invalidateQueries({ queryKey: ['ro-overview'] });
+          }}
+        />
+      )}
       {editingRoRow && (
         <EditRoReadingDialog
           row={editingRoRow} trainId={trainId}

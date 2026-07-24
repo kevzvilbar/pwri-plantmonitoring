@@ -106,13 +106,15 @@ export function diffFields(
 
 export async function logReadingEdit(entry: {
   table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs';
-  record_id: string;
+  /** Nullable for 'import' action — a CSV batch covers N records, not one. */
+  record_id?: string | null;
   plant_id: string | null;
   train_id?: string | null;
-  action?: 'update' | 'delete';
+  action?: 'update' | 'delete' | 'import';
   actor_user_id: string | null;
   actor_label: string | null;
-  changes?: Record<string, { old: any; new: any }>;
+  /** For update/delete: { field: { old, new } }. For import: metadata blob. */
+  changes?: Record<string, any>;
 }) {
   try {
     await (supabase.from('reading_edit_audit_log' as any) as any).insert([{

@@ -135,6 +135,7 @@ export function TrainCard({
         <TrainLogModal
           trainId={train.id}
           trainLabel={trainLabel}
+          plantId={train.plant_id}
           onClose={() => setLogOpen(false)}
         />
       )}
