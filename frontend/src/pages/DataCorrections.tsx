@@ -236,7 +236,7 @@ function EditValueModal({
       if (error) throw error;
       toast.success(`Corrected: ${fmtNum(row.current_reading)} → ${fmtNum(parsed)}${data?.cascade_id ? ' · next row updated' : ''}`);
       onDone();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally { setBusy(false); }
   };

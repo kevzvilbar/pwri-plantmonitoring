@@ -711,7 +711,7 @@ function WellRow({
       if (error) throw new Error(error.message);
       toast.success(`${well.name}: TDS saved`);
       setTdsReading(''); onSaved();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
       console.error('saveTds error:', e);
     } finally { setSavingTds(false); }
@@ -737,7 +737,7 @@ function WellRow({
       if (error) throw new Error(error.message);
       toast.success(`${well.name}: NTU saved`);
       setNtuReading(''); onSaved();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
       console.error('saveNtu error:', e);
     } finally { setSavingNtu(false); }
@@ -763,7 +763,7 @@ function WellRow({
       if (error) throw new Error(error.message);
       toast.success(`${well.name}: pressure saved`);
       setPressureReading(''); onSaved();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(`Pressure save failed: ${friendlyError(e)}`);
       console.error('savePressure error:', e);
     } finally { setSavingPressure(false); }

@@ -146,7 +146,7 @@ export function MigrationsPanel() {
       setCopied(filename);
       toast.success(`Copied ${filename} — paste into Supabase SQL editor.`);
       setTimeout(() => setCopied((c) => (c === filename ? null : c)), 2500);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     }
   };
@@ -293,7 +293,7 @@ export function MigrationsPanel() {
           pendingFiles.length === 1 ? '' : 's'
         } (${bundle.sizeKb} KB).`,
       );
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     }
   };
@@ -339,7 +339,7 @@ export function MigrationsPanel() {
       toast.success(
         `Exported ${count} apply-history entr${count === 1 ? 'y' : 'ies'} → ${filename}`,
       );
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     }
   };
@@ -412,7 +412,7 @@ export function MigrationsPanel() {
       else toast.info(`Nothing new imported: ${parts || 'all entries were already present'}`);
       // Refetch so the new "applied locally" pills appear immediately.
       await refetch();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setImporting(false);
@@ -447,7 +447,7 @@ export function MigrationsPanel() {
           pendingFiles.length === 1 ? '' : 's'
         }, ${bundle.sizeKb} KB).`,
       );
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     }
   };
@@ -478,7 +478,7 @@ export function MigrationsPanel() {
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
       toast.success(`Marked ${filename} as applied.`);
       await refetch();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(null);
@@ -502,7 +502,7 @@ export function MigrationsPanel() {
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
       toast.success(`Cleared mark for ${filename}.`);
       await refetch();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(null);

@@ -69,7 +69,7 @@ export function BackwashModeCard({ plant }: { plant: any }) {
           dependencies: { type: 'backwash_mode_change', from: prev, to: next },
         } as any);
       if (auditErr) console.warn('[audit] backwash_mode_change insert failed:', auditErr.message);
-    } catch (e: any) {
+    } catch (e) {
       console.warn('[audit] backwash_mode_change threw:', e?.message ?? e);
     }
     toast.success(`Backwash mode set to ${next}`);

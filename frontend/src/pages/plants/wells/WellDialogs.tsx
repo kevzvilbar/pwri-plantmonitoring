@@ -118,7 +118,7 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
         gps_lng: pos.coords.longitude.toFixed(6),
       }));
       toast.success('Location Captured');
-    } catch (e: any) {
+    } catch (e) {
       toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
     } finally {
       setLocating(false);

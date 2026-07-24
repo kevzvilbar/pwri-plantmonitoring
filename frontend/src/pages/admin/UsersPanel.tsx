@@ -178,7 +178,7 @@ function CreateUserDialog({ open, onClose, onCreated }: {
       }
       toast.success(`${form.first_name} ${form.last_name} created — click Approve to activate.`);
       setBusy(false); onCreated(); handleClose();
-    } catch (err: any) {
+    } catch (err) {
       toast.error(friendlyError(err)); setBusy(false);
     }
   };

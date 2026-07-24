@@ -292,7 +292,7 @@ export function WellsList({ plantId }: { plantId: string }) {
         ? `${w.name}: marked as blending — its meter feeds product line separately`
         : `${w.name}: blending cleared`);
       qc.invalidateQueries({ queryKey: ['blending-wells', plantId] });
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBlendingBusy((prev) => { const s = new Set(prev); s.delete(w.id); return s; });

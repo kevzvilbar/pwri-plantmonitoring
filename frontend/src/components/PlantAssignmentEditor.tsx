@@ -66,7 +66,7 @@ export function PlantAssignmentEditor({
         qc.invalidateQueries({ queryKey: k })
       );
       setOpen(false);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);

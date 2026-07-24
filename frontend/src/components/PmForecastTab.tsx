@@ -110,7 +110,7 @@ export function PmForecastTab() {
       const json: ForecastResponse = await res.json();
       setResult(json);
       toast.success('Forecast generated');
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setLoading(false);

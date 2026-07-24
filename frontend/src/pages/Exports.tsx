@@ -197,7 +197,7 @@ function ExportRow({
         toast.success(`Exported ${res.count.toLocaleString()} rows from ${table.label}`);
         setTimeout(() => setState('idle'), 3000);
       }
-    } catch (e: any) {
+    } catch (e) {
       setState('idle');
       toast.error(friendlyError(e));
     }
@@ -271,7 +271,7 @@ function CategorySection({
       try {
         const res = await runExport(table, plantId, from, to);
         if (res) total += res.count;
-      } catch (e: any) {
+      } catch (e) {
         errors.push(`${table.label}: ${e.message}`);
       }
     }

@@ -116,7 +116,7 @@ export function BadImportCleanupCard() {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
       setSelected(new Set());
       setConfirmOpen(false);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);

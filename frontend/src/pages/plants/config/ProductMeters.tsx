@@ -222,7 +222,7 @@ export function AssignLocatorsDialog({
 
       toast.success('Locator assignments saved');
       onSaved();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);
@@ -412,7 +412,7 @@ export function AddProductMeterDialog({
         gps_lng: pos.coords.longitude.toFixed(6),
       }));
       toast.success('Location Captured');
-    } catch (e: any) {
+    } catch (e) {
       toast.error(`Location Failed: ${e.message || 'Permission Denied'}`);
     } finally {
       setLocating(false);

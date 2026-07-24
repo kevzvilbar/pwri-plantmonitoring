@@ -362,7 +362,7 @@ function ChecklistDialog({ item, onClose }: { item: DueItem; onClose: () => void
       qc.invalidateQueries({ queryKey: ['pms-executions'] });
       qc.invalidateQueries({ queryKey: ['pms-exec-for', item.template.id, dateKey] });
       onClose();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);

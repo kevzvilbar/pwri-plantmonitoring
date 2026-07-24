@@ -118,7 +118,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
         { duration: 7000 },
       );
       onSubmitted();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);

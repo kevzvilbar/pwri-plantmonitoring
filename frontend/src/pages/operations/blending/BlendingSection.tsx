@@ -225,7 +225,7 @@ async function insertBlendingReadings(
       }
       if (insErr) throw new Error(insErr.message);
       count++;
-    } catch (e: any) {
+    } catch (e) {
       errors.push(e.message);
     }
   }
@@ -586,7 +586,7 @@ function BlendingRow({
       // BUG FIX #4b: invalidate dashboard so stat cards refresh immediately.
       invalidateWellDash(qc, [well.id]);
       onSaved();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally { setSaving(false); }
   };

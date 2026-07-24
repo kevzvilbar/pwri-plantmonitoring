@@ -128,7 +128,7 @@ function AddTemplate() {
       if (error) throw error;
       toast.success(`Generated ${rows.length} standard PMS schedules`);
       qc.invalidateQueries({ queryKey: ['pms-templates'] });
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally { setGenerating(false); }
   };

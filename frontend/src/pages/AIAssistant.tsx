@@ -212,7 +212,7 @@ export default function AIAssistant() {
         setSessions(prev => [newSession, ...prev]);
         setActiveSessionId(newId);
       }
-    } catch (e: any) {
+    } catch (e) {
       const friendly = e.message.includes('fetch') || e.message.includes('network')
         ? 'Could not reach the AI. Check your connection.'
         : e.message;
@@ -285,7 +285,7 @@ export default function AIAssistant() {
       const res = await callClaudeForAnomalies(readings);
       setScanResult(res);
       toast.success(`Found ${res.anomalies.length} anomaly(ies)`);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setScanning(false);

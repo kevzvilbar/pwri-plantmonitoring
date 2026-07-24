@@ -700,7 +700,7 @@ export default function Compliance() {
 
       setResult(evalResult);
       setLocal(thresholds);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setEvaluating(false);
@@ -716,7 +716,7 @@ export default function Compliance() {
       toast.success('Thresholds saved');
       setEditing(false);
       refetchThresholds();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);

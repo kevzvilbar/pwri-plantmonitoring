@@ -156,7 +156,7 @@ export function DeleteEntityMenu({
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       resetAndClose();
       onDeleted?.();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);
@@ -168,7 +168,7 @@ export function DeleteEntityMenu({
     try {
       const snap = kind === 'user' ? await fetchUserDeps(id) : await fetchPlantDeps(id);
       setDeps(snap);
-    } catch (e: any) {
+    } catch (e) {
       setDeps({ blocking: false, total_references: 0, references: [] });
     } finally {
       setLoadingDeps(false);
@@ -204,7 +204,7 @@ export function DeleteEntityMenu({
       invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       resetAndClose();
       onDeleted?.();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);

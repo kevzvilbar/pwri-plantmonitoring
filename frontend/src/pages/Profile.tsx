@@ -82,7 +82,7 @@ export default function Profile() {
       toast.success('Profile updated');
       await refreshProfile();
       setEditing(false);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setSaving(false);

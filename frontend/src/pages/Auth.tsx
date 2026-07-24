@@ -676,7 +676,7 @@ function SignUpForm() {
       setOperatorCount(1); setOperators([blankOperator()]); setPlantId('');
       setSingle({ username: '', first_name: '', last_name: '', middle_name: '', suffix: '' });
       setPlantIds([]);
-    } catch (err: any) {
+    } catch (err) {
       toast.error(friendlyError(err));
       setBusy(false);
     }

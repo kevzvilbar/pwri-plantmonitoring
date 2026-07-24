@@ -30,7 +30,7 @@ export function ExportButton({ table, filename, filters, label = 'Export CSV', s
       if (!data?.length) { toast.info('No rows to export'); return; }
       downloadCSV(filename ?? `${table}-${new Date().toISOString().slice(0, 10)}.csv`, data as any[]);
       toast.success(`Exported ${data.length} rows`);
-    } catch (e: any) {
+    } catch (e) {
       toast.error(friendlyError(e));
     } finally {
       setBusy(false);
