@@ -66,18 +66,24 @@ export function deriveTrainStatus(
 }
 
 // ─── Entry-edit permission model ──────────────────────────────────────────────
-// Managers/Admins may edit or delete any reading, at any time.
-// Regular operators may only edit entries they themselves recorded within
-// EDIT_WINDOW_HOURS of creation; after that window, use CorrectionRequestDialog.
+// Managers, Admins, and Data Analysts may edit or delete any reading, at any
+// time. Regular operators may only edit entries they themselves recorded
+// within EDIT_WINDOW_HOURS of creation; after that window, use
+// CorrectionRequestDialog.
+//
+// This function is role-agnostic on purpose — it just takes a single
+// "can bypass the edit window" boolean. Callers compute that from useAuth(),
+// e.g. `const hasFullAccess = isManager || isDataAnalyst;`, so this helper
+// doesn't need to know about the app's specific role names.
 
 export const EDIT_WINDOW_HOURS = 8;
 
 export function canEditEntry(
   row: { recorded_by?: string | null; created_at?: string | null } | null | undefined,
-  isManager: boolean,
+  hasFullAccess: boolean,
   activeOperatorId: string | null | undefined,
 ): boolean {
-  if (isManager) return true;
+  if (hasFullAccess) return true;
   if (!row || !activeOperatorId || !row.recorded_by) return false;
   if (row.recorded_by !== activeOperatorId) return false;
   if (!row.created_at) return false;
@@ -86,6 +92,23 @@ export function canEditEntry(
 }
 
 // ─── Diff helper ──────────────────────────────────────────────────────────────
+// Recursively sorts object keys so two logically-identical JSONB values (e.g.
+// afm_units, booster_pumps) always serialize the same way regardless of key
+// order — otherwise `String(a) !== String(b)` on an array of objects just
+// compares "[object Object],[object Object]" and silently misses real edits.
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce((acc, k) => {
+        acc[k] = canonicalize((value as Record<string, unknown>)[k]);
+        return acc;
+      }, {} as Record<string, unknown>);
+  }
+  return value;
+}
 
 export function diffFields(
   before: Record<string, any>,
@@ -95,7 +118,9 @@ export function diffFields(
   for (const key of Object.keys(after)) {
     const a = before?.[key] ?? null;
     const b = after[key] ?? null;
-    if (String(a) !== String(b)) changes[key] = { old: a, new: b };
+    if (JSON.stringify(canonicalize(a)) !== JSON.stringify(canonicalize(b))) {
+      changes[key] = { old: a, new: b };
+    }
   }
   return changes;
 }

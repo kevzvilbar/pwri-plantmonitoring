@@ -45,7 +45,8 @@ interface Props {
 }
 
 export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
-  const { isManager, activeOperator, user } = useAuth();
+  const { isManager, isDataAnalyst, activeOperator, user } = useAuth();
+  const hasFullAccess = isManager || isDataAnalyst;
   const [saving, setSaving] = useState(false);
   const [dt, setDt]         = useState(row.reading_datetime
     ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
@@ -56,7 +57,7 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     ),
   );
 
-  const canSave = canEditEntry(row, isManager, activeOperator?.id);
+  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id);
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }

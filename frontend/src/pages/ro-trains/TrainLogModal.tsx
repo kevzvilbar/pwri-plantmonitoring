@@ -37,7 +37,12 @@ interface TrainLogModalProps {
 
 export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLogModalProps) {
   const qc = useQueryClient();
-  const { isManager, activeOperator } = useAuth();
+  const { isManager, isDataAnalyst, activeOperator } = useAuth();
+  // Managers, Admins, and Data Analysts can edit any reading at any time;
+  // Operators are limited to their own entries within EDIT_WINDOW_HOURS
+  // (see helpers.ts canEditEntry). isManager alone used to gate this, which
+  // excluded Data Analysts — broadened per the pretreatment-edit request.
+  const hasFullAccess = isManager || isDataAnalyst;
   const [page, setPage]               = useState(0);
   const PAGE_SIZE = 20;
   const [togglingId, setTogglingId]   = useState<string | null>(null);
@@ -433,12 +438,12 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                         </td>
                         <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                         <td className="px-2 py-2 text-center">
-                          {canEditEntry(r, isManager, activeOperator?.id) ? (
+                          {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
                             <button onClick={() => setEditingRoRow(r)} title="Edit reading" aria-label="Edit reading"
                               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                               <Pencil className="h-3 w-3" />
                             </button>
-                          ) : !isManager && activeOperator?.id && r.permeate_meter != null && (
+                          ) : !hasFullAccess && activeOperator?.id && r.permeate_meter != null && (
                             <button
                               onClick={() => setCorrectionTarget({
                                 id: r.id, sourceTable: 'ro_train_readings',
@@ -536,12 +541,12 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                           </td>
                           <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                           <td className="px-2 py-2 text-center">
-                            {canEditEntry(r, isManager, activeOperator?.id) ? (
+                            {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
                               <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
                                 className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                                 <Pencil className="h-3 w-3" />
                               </button>
-                            ) : !isManager && activeOperator?.id && (
+                            ) : !hasFullAccess && activeOperator?.id && (
                               <button
                                 onClick={() => setCorrectionTarget({
                                   id: r.id, sourceTable: 'ro_train_readings',
