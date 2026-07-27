@@ -1,0 +1,102 @@
+// Shared types and constants for the Dashboard cluster components.
+// These pieces are factored out of Dashboard.tsx so the page file
+// stays focused on data orchestration. Changing a constant or type
+// here ripples to StatCard, TrendChart, PowerChart, and the page
+// itself.
+
+// View-mode preference for how trend graphs surface on the dashboard.
+// Persists to localStorage so a user's "I prefer the popup view" choice
+// survives a page reload. Three modes:
+//   • inline   — every trend chart is rendered directly below its
+//                cluster (no clicks needed; just scroll). Default.
+//   • sections — clicking a chart-bearing KPI card folds its trend
+//                chart open inline below the cluster. Single-open:
+//                clicking another KPI auto-collapses the previous.
+//   • popup    — clicking a chart-bearing KPI card opens its trend
+//                chart inside a modal Dialog (legacy behaviour).
+export type DashboardViewMode = 'inline' | 'sections' | 'popup';
+
+export const VIEW_MODE_KEY = 'pwri:dashboard-view-mode';
+
+// Stored value is a non-sensitive UI preference enum
+// ('inline' | 'sections' | 'popup') — no auth/PII goes through this key,
+// so localStorage is appropriate. Audit tools may flag this; it's safe.
+export function readSavedViewMode(): DashboardViewMode {
+  if (typeof window === 'undefined') return 'inline';
+  const raw = window.localStorage.getItem(VIEW_MODE_KEY);
+  return raw === 'sections' || raw === 'popup' ? raw : 'inline';
+}
+
+export type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
+export const RANGE_DAYS: Record<Exclude<RangeKey, 'CUSTOM'>, number> = {
+  '7D': 7, '14D': 14, '30D': 30, '60D': 60, '90D': 90,
+};
+
+// Resolves the shared dashboard chart range (appStore.chartRange/From/To)
+// into a plain day count. Used by any card that needs a `days` window but
+// doesn't render its own range picker (ComplianceRadarCard, CostSunburst) —
+// they just follow whatever range the rest of the dashboard's charts are on.
+export function rangeKeyToDays(range: RangeKey, from: string, to: string): number {
+  if (range === 'CUSTOM') {
+    const ms = new Date(to).getTime() - new Date(from).getTime();
+    return Math.max(1, Math.round(ms / 86_400_000));
+  }
+  return RANGE_DAYS[range];
+}
+
+export const TREND_Y_LABEL: Record<string, string> = {
+  production: 'Volume (m³)',
+  rawwater: 'Raw Water (m³)',
+  recovery: 'Recovery (%)',
+  tds: 'Permeate TDS (ppm)',
+  pv: 'kWh · m³',
+  productionCost: 'Cost (₱)',
+};
+
+export type StatTone = 'accent' | 'warn' | 'danger' | undefined;
+
+// Token-driven tone surfaces. Each semantic color (--accent/--warn/--danger)
+// already has its own light/dark values in index.css, so referencing the
+// token here means dark mode and any future theme swap are inherited for
+// free — no per-tone dark: overrides to keep in sync by hand.
+export const TONE_BG: Record<NonNullable<StatTone>, string> = {
+  accent: 'bg-gradient-to-br from-accent-soft/60 to-transparent border-accent/20',
+  warn:   'bg-gradient-to-br from-warn-soft/70 to-transparent border-warn/20',
+  danger: 'bg-gradient-to-br from-danger-soft/70 to-transparent border-danger/20',
+};
+
+export const TONE_ICON: Record<NonNullable<StatTone>, string> = {
+  accent: 'text-accent',
+  warn:   'text-warn',
+  danger: 'text-danger',
+};
+
+// Trend metrics that have an associated chart. Used by ClusterCharts
+// to render the inline / collapsed-section views, and to drive the
+// click handler on each chart-bearing StatCard. Keys here must match
+// the `metric` strings handled inside <TrendChart>.
+export type ChartMetric = { metric: string; title: string };
+
+export const OVERVIEW_CHART_METRICS: ChartMetric[] = [
+  { metric: 'production', title: 'Production vs Consumption' },
+  { metric: 'nrw',        title: 'NRW Trend' },
+  { metric: 'rawwater',   title: 'Raw Water (m³)' },
+];
+
+export const QUALITY_CHART_METRICS: ChartMetric[] = [
+  { metric: 'tds',      title: 'Permeate TDS Trend' },
+  { metric: 'recovery', title: 'Recovery Trendline' },
+];
+
+export const COST_CHART_METRICS: ChartMetric[] = [
+  { metric: 'productionCost', title: 'Production Cost (Power + Chemical)' },
+  { metric: 'pv', title: 'PV Ratio Trend' },
+];
+
+// Percent delta helper used by trend badges. Returns null when either
+// value is non-finite, or when prev === 0 with today != 0 (undefined %).
+export function pctDelta(today: number, prev: number): number | null {
+  if (!Number.isFinite(today) || !Number.isFinite(prev)) return null;
+  if (prev === 0) return today === 0 ? 0 : null;
+  return ((today - prev) / prev) * 100;
+}

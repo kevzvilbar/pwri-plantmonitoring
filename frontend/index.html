@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PWRI Monitoring</title>
+
+    <!--
+      CACHE-BUSTING: Tell browsers never to cache this HTML file.
+      GitHub Pages serves index.html with Cache-Control: max-age=600 by default.
+      Without this, browsers hold onto the old index.html after a new deployment,
+      which references chunk filenames that no longer exist (causing the
+      "Failed to fetch dynamically imported module" error on Operations/Costs/etc).
+
+      These meta tags override the HTTP header at the browser level.
+    -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <meta
+      name="description"
+      content="PWRI Monitoring — production, water quality, and compliance dashboard for water-treatment plants."
+    />
+    <meta name="author" content="PWRI" />
+
+    <!-- GitHub Pages SPA redirect fix -->
+    <script>
+      (function () {
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        if (redirect && redirect !== location.href) {
+          history.replaceState(null, null, redirect);
+        }
+      })();
+    </script>
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="any" href="%BASE_URL%favicon.png" />
+    <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%apple-touch-icon.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="PWRI Monitoring" />
+    <meta
+      property="og:description"
+      content="Production, water-quality, and compliance dashboard for water-treatment plants."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="%BASE_URL%og-image.png" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="PWRI Monitoring" />
+    <meta
+      name="twitter:description"
+      content="Production, water-quality, and compliance dashboard for water-treatment plants."
+    />
+    <meta name="twitter:image" content="%BASE_URL%og-image.png" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
