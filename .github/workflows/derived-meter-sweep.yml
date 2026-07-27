@@ -1,0 +1,80 @@
+name: Derived-Meter Sweep
+
+# Recomputes residual volume (mother meter − sibling locators) for every
+# is_derived locator (e.g. Mambaling/Hamas at SRP — see
+# supabase/migrations/20260722_mother_meter_derived.sql and
+# 20260727_hamas_phase2_sweep_function.sql, which is what actually creates
+# fn_sweep_derived_meters()) and mirrors it into any linked product_meters
+# row.
+#
+# Runs every 8 hours — 00:00 / 08:00 / 16:00 PHT — so a sibling correction
+# made during the day shows up in Hamas within 8h instead of waiting for the
+# next midnight run. The 00:00 PHT run is kept at exactly 16:00 UTC, 5
+# minutes BEFORE nightly-summary.yml (00:05 PHT), so fn_compute_daily_plant_summary
+# still picks up the derived locator's volume in that same day's NRW.
+#
+# For same-day, on-demand recomputes (rather than waiting up to 8h), Managers
+# / Data Analysts / Admins also have a "Recalculate now" button in
+# Operations > Locator, which calls fn_sweep_derived_meters directly via
+# Supabase RPC — it does not go through this workflow.
+#
+# Also has a manual dispatch so you can trigger a backfill for any date /
+# lookback window.
+
+on:
+  schedule:
+    - cron: '0 16 * * *'   # 16:00 UTC = 00:00 PHT next day (kept 5 min ahead of nightly-summary.yml)
+    - cron: '0 0 * * *'    # 00:00 UTC = 08:00 PHT
+    - cron: '0 8 * * *'    # 08:00 UTC = 16:00 PHT
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Latest date to sweep (YYYY-MM-DD). Defaults to yesterday PHT.'
+        required: false
+        type: string
+      lookback_days:
+        description: 'How many days back from "date" to recompute (catches late corrections). Default 3.'
+        required: false
+        type: string
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call fn_sweep_derived_meters via Supabase REST
+        env:
+          SUPABASE_URL:  ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TARGET_DATE:   ${{ inputs.date }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days }}
+        run: |
+          # Determine which date to sweep up to (same "yesterday PHT" default as nightly-summary.yml)
+          if [ -z "$TARGET_DATE" ]; then
+            TARGET_DATE=$(TZ='Asia/Manila' date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null \
+              || TZ='Asia/Manila' date -v-1d '+%Y-%m-%d')
+          fi
+          if [ -z "$LOOKBACK_DAYS" ]; then
+            LOOKBACK_DAYS=3
+          fi
+
+          echo "Sweeping derived meters through: $TARGET_DATE (lookback ${LOOKBACK_DAYS}d)"
+
+          # Call the Postgres function via Supabase REST API /rpc endpoint
+          RESPONSE=$(curl -sf \
+            -X POST \
+            "${SUPABASE_URL}/rest/v1/rpc/fn_sweep_derived_meters" \
+            -H "apikey: ${SUPABASE_ANON}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON}" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_date\": \"${TARGET_DATE}\", \"p_lookback_days\": ${LOOKBACK_DAYS}}")
+
+          echo "Response: $RESPONSE"
+
+          OK=$(echo "$RESPONSE" | grep -o '"ok":[a-z]*' | grep -o '[a-z]*$' || echo "false")
+
+          if [ "$OK" != "true" ]; then
+            echo "WARNING: sweep did not report ok:true — check the response above."
+            exit 1
+          fi
+
+          echo "Derived-meter sweep completed through $TARGET_DATE (lookback ${LOOKBACK_DAYS}d)."

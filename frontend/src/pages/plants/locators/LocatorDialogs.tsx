@@ -74,6 +74,7 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
     meter_brand: locator.meter_brand ?? '', meter_size: locator.meter_size ?? '', meter_serial: locator.meter_serial ?? '',
     meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
     product_meter_id: locator.product_meter_id ?? '',
+    default_input_mode: (locator.default_input_mode === 'direct' ? 'direct' : 'raw') as 'raw' | 'direct',
   });
   const [locating, setLocating] = useState(false);
 
@@ -113,6 +114,7 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
       meter_installed_date: form.meter_installed_date || null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
+      default_input_mode: form.default_input_mode,
     };
     // Mirror the Add form pattern: only include product_meter_id when setting a value,
     // or when the original row had one (so the user can intentionally clear it to null).
@@ -168,6 +170,26 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               </Select>
             </div>
           )}
+
+          {/* Reading entry mode — moved here from Operations (2026-07-27).
+              Operators used to see a clickable Raw/Direct toggle per entry
+              with no server-side persistence (Locator tab) or a
+              localStorage-per-device one (Blending tab), so the same meter
+              could look like it was in a different mode depending on who was
+              entering data and on which device. This is now a deliberate,
+              plant-config-owned choice a Manager/Admin makes once. */}
+          <div>
+            <Label>Reading entry mode</Label>
+            <Select value={form.default_input_mode} onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="raw">Raw meter — operator enters the cumulative reading</SelectItem>
+                <SelectItem value="direct">Direct m³ — operator enters the day's volume</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* GPS row — editable inputs + clickable map link + use-my-location */}
           <div>

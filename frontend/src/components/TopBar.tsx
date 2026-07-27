@@ -33,21 +33,46 @@ interface Notification {
 const EMPTY_NOTIFICATIONS: Notification[] = [];
 const EMPTY_PLANTS: Array<{ id: string; name: string }> = [];
 
+// BUG FIX (2026-07-27): notifications.severity is the public.severity_level
+// enum — 'Low' | 'Medium' | 'High' | 'Critical' (see
+// supabase/migrations/20260419_initial_schema_enums_and_roles.sql) — but
+// every comparison below checked for lowercase 'critical' | 'warning' |
+// 'info', which never matches any real enum value. In practice nothing that
+// has ever been written to `notifications` rendered with its intended
+// color/icon; everything silently fell through to the default (info) case.
+// One normalizer, reused everywhere severity is compared, so there's a
+// single place that knows how DB values fold into the 3 visual tiers this
+// component supports.
+type SevTier = 'critical' | 'warning' | 'info';
+const sevTier = (severity: string): SevTier => {
+  switch (severity) {
+    case 'Critical': return 'critical';
+    case 'High':     return 'critical'; // urgent enough to read as critical
+    case 'Medium':   return 'warning';
+    case 'Low':      return 'info';
+    // Tolerate legacy/lowercase values too, in case anything already wrote
+    // pre-fix rows (or a future caller passes them directly).
+    case 'critical': return 'critical';
+    case 'warning':  return 'warning';
+    default:         return 'info';
+  }
+};
+
 const sevIcon = (severity: string) =>
-  severity === 'critical' ? AlertTriangle :
-  severity === 'warning'  ? AlertTriangle : Info;
+  sevTier(severity) === 'critical' ? AlertTriangle :
+  sevTier(severity) === 'warning'  ? AlertTriangle : Info;
 
 const sevDotCls = (severity: string) =>
-  severity === 'critical' ? 'bg-danger' :
-  severity === 'warning'  ? 'bg-warn'   : 'bg-info';
+  sevTier(severity) === 'critical' ? 'bg-danger' :
+  sevTier(severity) === 'warning'  ? 'bg-warn'   : 'bg-info';
 
 const sevTextCls = (severity: string) =>
-  severity === 'critical' ? 'text-danger'  :
-  severity === 'warning'  ? 'text-warn-foreground' : 'text-info';
+  sevTier(severity) === 'critical' ? 'text-danger'  :
+  sevTier(severity) === 'warning'  ? 'text-warn-foreground' : 'text-info';
 
 const sevBgCls = (severity: string) =>
-  severity === 'critical' ? 'bg-danger-soft dark:bg-danger/10' :
-  severity === 'warning'  ? 'bg-warn-soft dark:bg-warn/10'     : '';
+  sevTier(severity) === 'critical' ? 'bg-danger-soft dark:bg-danger/10' :
+  sevTier(severity) === 'warning'  ? 'bg-warn-soft dark:bg-warn/10'     : '';
 
 export function TopBar() {
   const { user, profile } = useAuth();
@@ -118,12 +143,12 @@ export function TopBar() {
 
   const sortedAlerts = useMemo(() =>
     [...plantAlerts].sort((a, b) => {
-      const order: Record<string, number> = { critical: 0, warning: 1, info: 2 };
-      return (order[a.severity] ?? 9) - (order[b.severity] ?? 9) || b.timestamp - a.timestamp;
+      const order: Record<SevTier, number> = { critical: 0, warning: 1, info: 2 };
+      return (order[sevTier(a.severity)] - order[sevTier(b.severity)]) || (b.timestamp - a.timestamp);
     }),
   [plantAlerts]);
 
-  const hasCritical = plantAlerts.some((a) => a.severity === 'critical');
+  const hasCritical = plantAlerts.some((a) => sevTier(a.severity) === 'critical');
 
   return (
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">

@@ -24,7 +24,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -42,6 +42,8 @@ import {
 } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
+import { DerivedMeterOverrideDialog } from '@/components/DerivedMeterOverrideDialog';
+import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 
 const LOCATOR_SCHEMA = 'locator_name*, current_reading, reading_datetime (YYYY-MM-DDTHH:mm), previous_reading, input_mode (raw|direct), daily_volume';
 const LOCATOR_TEMPLATE_ROW = {
@@ -491,6 +493,7 @@ function LocatorRow({
   onGapReasonSaved?: () => void;
 }) {
   const isMobile = useIsMobile();
+  const qc = useQueryClient();
 
   const [reading, setReading]     = useState('');
   const lastPrefilledLoc = useRef<string | null>(null);
@@ -512,7 +515,16 @@ function LocatorRow({
 
   // 'raw'  = user enters cumulative meter reading; delta = cur - prev
   // 'direct' = user enters daily m³ directly; stored as daily_volume
-  const [locInputMode, setLocInputMode] = useState<'raw' | 'direct'>('raw');
+  //
+  // CHANGED: this used to be a local useState hardcoded to 'raw' with NO
+  // persistence at all (reset every remount/navigation — worse than the
+  // localStorage-per-device version BlendingSection.tsx has). It's now
+  // sourced from locators.default_input_mode, set once per locator by a
+  // Manager/Admin in Plant config (Locators tab), so every operator on every
+  // device sees the same, deliberately-chosen mode for a given meter.
+  // Operators can no longer flip it ad hoc — see the read-only badge below
+  // instead of the old clickable Raw/Direct toggle.
+  const locInputMode: 'raw' | 'direct' = locator.default_input_mode === 'direct' ? 'direct' : 'raw';
 
   // Pre-fill the drum with the latest previous reading so the operator
   // starts from the real odometer value and rolls only the changed digits.
@@ -591,7 +603,12 @@ function LocatorRow({
       setSaving(true);
       const guard = await evaluateReadingGuard(
         'locator', locator.id, plantId, userId,
-        locInputMode === 'direct' ? (previous ?? cur) : cur,
+        // BUG FIX (2026-07-27): this used to be `previous ?? cur`, which for
+        // direct mode passed the *unchanged* previous cumulative value —
+        // guaranteed to look like a zero-volume day to spike/backward
+        // detection, so it silently never fired for direct-mode entries.
+        // The projected new cumulative is previous + the typed volume.
+        locInputMode === 'direct' ? (previous ?? 0) + cur : cur,
         new Date(customDt), false, false, avgVol,
       );
       setSaving(false);
@@ -628,7 +645,15 @@ function LocatorRow({
     const payload: any = locInputMode === 'direct'
       ? {
           locator_id: locator.id, plant_id: plantId,
-          current_reading: previous ?? cur,
+          // BUG FIX (2026-07-27): this used to be `previous ?? cur`, which for
+          // any locator with reading history resubmitted the OLD cumulative
+          // value unchanged — the DB trigger then sets previous_reading to
+          // that same value, so the generated daily_volume computed to 0,
+          // silently discarding whatever volume the operator typed. The
+          // stored current_reading must be previous + the typed volume so
+          // daily_volume = current_reading - previous_reading = the typed
+          // value, same as it would if 0 for a first-ever reading.
+          current_reading: (previous ?? 0) + cur,
           // previous_reading: owned by DB trigger — DO NOT send from client
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
@@ -690,6 +715,89 @@ function LocatorRow({
   // Replace the entry UI with a read-only status row instead; history is
   // still viewable for Managers/Admins so they can see what the sweep has
   // computed so far.
+  const { user } = useAuth();
+  const actorLabel = user?.email ?? 'Unknown user';
+
+  // ── Derived-locator (Hamas-style) review/override state ────────────────
+  // Hooks must stay unconditional (see the HOISTED note above `correctionTarget`),
+  // so these live here even though only the is_derived branch below uses them.
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [recalcSaving, setRecalcSaving] = useState(false);
+
+  const { data: reviewFlag } = useQuery({
+    queryKey: ['derived-review-flag', locator.id],
+    queryFn: async () => {
+      const { data } = await (supabase.from('locator_derived_review_flags' as any) as any)
+        .select('id, date_key, flagged_at')
+        .eq('locator_id', locator.id)
+        .is('resolved_at', null)
+        .order('flagged_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as { id: string; date_key: string; flagged_at: string } | null;
+    },
+    enabled: !!locator.is_derived,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const recalcNow = async () => {
+    setRecalcSaving(true);
+    try {
+      const p_date = format(new Date(), 'yyyy-MM-dd');
+      const { error } = await (supabase.rpc as any)('fn_sweep_derived_meters', { p_date, p_lookback_days: 3 });
+      if (error) throw error;
+      toast.success(`${locator.name}: recalculated.`);
+      qc.invalidateQueries({ queryKey: ['op-loc-latest'] });
+      qc.invalidateQueries({ queryKey: ['derived-review-flag', locator.id] });
+    } catch (err: any) {
+      toast.error(friendlyError(err));
+    } finally {
+      setRecalcSaving(false);
+    }
+  };
+
+  const saveOverride = async (value: number, reason: string) => {
+    setOverrideSaving(true);
+    try {
+      const before = latestReading
+        ? { current_reading: latestReading.current_reading, is_estimated: latestReading.is_estimated }
+        : {};
+      const payload: any = {
+        locator_id: locator.id, plant_id: plantId,
+        current_reading: value, previous_reading: 0, is_estimated: false,
+        recorded_by: userId,
+      };
+      // Editing the existing row (if the sweep already wrote one) keeps the
+      // same reading_datetime, so the override lands on the date it's meant
+      // to correct rather than shifting to "now".
+      const { data: savedRow, error } = latestReading?.id
+        ? await supabase.from('locator_readings').update(payload).eq('id', latestReading.id).select().single()
+        : await supabase.from('locator_readings').insert({ ...payload, reading_datetime: new Date().toISOString() }).select().single();
+      if (error) throw error;
+
+      await logReadingEdit({
+        table_name: 'locator_readings',
+        record_id: (savedRow as any)?.id ?? null,
+        plant_id: plantId,
+        actor_user_id: userId ?? null,
+        actor_label: actorLabel,
+        changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
+      });
+
+      toast.success(`${locator.name}: override saved.`);
+      setOverrideOpen(false);
+      qc.invalidateQueries({ queryKey: ['op-loc-latest'] });
+      qc.invalidateQueries({ queryKey: ['derived-review-flag', locator.id] });
+      onSaved();
+    } catch (err: any) {
+      toast.error(friendlyError(err));
+    } finally {
+      setOverrideSaving(false);
+    }
+  };
+
   if (locator.is_derived) {
     return (
       <div className="px-4 py-3 space-y-2">
@@ -708,6 +816,16 @@ function LocatorRow({
             </Button>
           )}
         </div>
+
+        {reviewFlag && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 rounded-lg px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              Needs review — a sibling locator or the mother meter changed for {new Date(reviewFlag.date_key).toLocaleDateString()} since this was last computed.
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
           <Gauge className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span>
@@ -720,18 +838,48 @@ function LocatorRow({
                 running. latestReading (the dedicated latest-per-locator query,
                 unscoped by date) is what actually reflects the sweep's output. */}
             {latestReading ? (
-              <> Last computed: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latestReading.daily_volume)} m³</span> on {new Date(latestReading.reading_datetime).toLocaleDateString()}.</>
+              latestReading.is_estimated === false ? (
+                <> Manually overridden: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latestReading.daily_volume)} m³</span> on {new Date(latestReading.reading_datetime).toLocaleDateString()}.</>
+              ) : (
+                <> Last computed: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latestReading.daily_volume)} m³</span> on {new Date(latestReading.reading_datetime).toLocaleDateString()}.</>
+              )
             ) : (
-              <> Not yet computed — waiting on the next sweep.</>
+              <> Not yet computed — waiting on the next sweep (runs every 8h), or recalculate now below.</>
             )}
           </span>
         </div>
+
+        {isManagerOrAdmin && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" disabled={recalcSaving} onClick={recalcNow}>
+              {recalcSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Recalculate now
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setOverrideOpen(true)}>
+              <PencilLine className="h-3.5 w-3.5" />
+              Override
+            </Button>
+          </div>
+        )}
+
         {showHistory && (
           <ReadingHistoryDialog
             entityName={locator.name}
             module="locator"
             entityId={locator.id}
+            plantId={plantId}
+            assetMeterSerial={locator.meter_serial}
             onClose={() => setShowHistory(false)}
+          />
+        )}
+        {overrideOpen && (
+          <DerivedMeterOverrideDialog
+            open={overrideOpen}
+            onOpenChange={setOverrideOpen}
+            locatorName={locator.name}
+            currentValue={latestReading?.daily_volume ?? null}
+            busy={overrideSaving}
+            onConfirm={saveOverride}
           />
         )}
       </div>
@@ -876,17 +1024,15 @@ function LocatorRow({
         </label>
       </div>
 
-      {/* Row 2: input mode toggle + status */}
+      {/* Row 2: input mode (read-only — set in Plant config > Locators by a Manager/Admin) + status */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center rounded-lg border border-border overflow-hidden text-[10px] font-semibold shrink-0">
-          <button type="button"
-            onClick={() => { setLocInputMode('raw'); setReading(''); }}
-            className={`px-2.5 py-1.5 transition-colors ${locInputMode === 'raw' ? 'bg-teal-700 text-white' : 'bg-transparent text-muted-foreground hover:bg-muted'}`}
-            title="Cumulative meter reading — Δ auto-computed">Raw</button>
-          <button type="button"
-            onClick={() => { setLocInputMode('direct'); setReading(''); }}
-            className={`px-2.5 py-1.5 transition-colors border-l border-border ${locInputMode === 'direct' ? 'bg-teal-700 text-white' : 'bg-transparent text-muted-foreground hover:bg-muted'}`}
-            title="Enter daily m³ directly">Direct m³</button>
+        <div
+          className="flex items-center rounded-lg border border-border overflow-hidden text-[10px] font-semibold shrink-0 px-2.5 py-1.5 bg-teal-700 text-white"
+          title={locInputMode === 'raw'
+            ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
+            : 'Daily m³ entered directly. Set in Plant config > Locators.'}
+        >
+          {locInputMode === 'raw' ? 'Raw' : 'Direct m³'}
         </div>
         <div className="text-xs text-muted-foreground truncate">
           {locInputMode === 'raw' ? (
