@@ -221,6 +221,130 @@ async function insertLocatorReadings(
   return { count, errors, affectedIds: Array.from(affectedIds) };
 }
 
+// ─── Derived-locator (Hamas-style) bulk override via CSV ─────────────────────
+// Bulk sibling of the single-value "Override" dialog (DerivedMeterOverrideDialog
+// + saveOverride() in LocatorRow below) — same is_estimated=false + audit-log
+// semantics as that dialog, just looped over N (date, value, reason) rows from
+// a CSV instead of one value typed into a form. This is what lets a Manager /
+// Data Analyst / Admin backfill several days of corrected Hamas values in one
+// upload instead of one "Override" click per day.
+//
+// Scoped to a single locator — the "Import CSV" button lives inside that
+// locator's own row (mirroring "Override"), so unlike LOCATOR_SCHEMA above
+// there's no locator_name column; the target locator is fixed by the caller
+// (see insertRows={(rows, pid) => insertDerivedOverrideRows(rows, pid, locator.id, ...)}).
+//
+// No new RLS or audit migration is needed: this writes to locator_readings via
+// the same supabase-js calls saveOverride() already uses, so it's already
+// gated by the Phase 4 RESTRICTIVE policies (is_manager_or_analyst_or_admin),
+// and reading_edit_audit_log already accepts table_name='locator_readings'
+// (Phase 0). The generic ImportReadingsDialog wrapper also logs file-level
+// metadata (file name, row count, schema errors) to import_audit_log for
+// every import, this one included.
+const HAMAS_OVERRIDE_SCHEMA = 'date* (YYYY-MM-DD), value* (m3), reason*';
+const HAMAS_OVERRIDE_TEMPLATE_ROW = {
+  date: '2026-07-27',
+  value: '250.00',
+  reason: 'Corrected from field notebook — sibling meter was misread on this date.',
+};
+
+export function validateDerivedOverrideRow(r: Record<string, string>, i: number): string[] {
+  const e: string[] = [];
+  if (!r.date?.trim() || isNaN(Date.parse(r.date.trim())))
+    e.push(`Row ${i}: date must be a valid date (YYYY-MM-DD)`);
+  if (!r.value?.trim() || isNaN(Number(r.value)))
+    e.push(`Row ${i}: value must be a number`);
+  if (!r.reason?.trim())
+    e.push(`Row ${i}: reason is required — it's written to the audit log so the override is explained, not just a changed number`);
+  return e;
+}
+
+async function insertDerivedOverrideRows(
+  rows: Record<string, string>[],
+  plantId: string,
+  locatorId: string,
+  userId: string | null,
+  actorLabel: string,
+): Promise<{ count: number; errors: string[] }> {
+  const errors: string[] = [];
+
+  // Rows sharing a date: keep only the LAST occurrence — re-listing a date is
+  // treated the same as re-clicking "Override" for it, not as two separate
+  // edits. Every earlier occurrence is reported below rather than silently
+  // dropped, so a mistakenly-duplicated row in the file doesn't look like it
+  // was applied when it wasn't.
+  const lastIndexForDate = new Map<string, number>();
+  rows.forEach((r, i) => { const d = r.date?.trim(); if (d) lastIndexForDate.set(d, i); });
+  rows.forEach((r, i) => {
+    const d = r.date?.trim();
+    if (d && lastIndexForDate.get(d) !== i)
+      errors.push(`Row ${i + 2} (${d}): superseded by a later row in this file for the same date — only the last row per date is applied.`);
+  });
+  const byDate = new Map<string, { row: Record<string, string>; line: number }>();
+  rows.forEach((r, i) => {
+    const d = r.date?.trim();
+    if (d && lastIndexForDate.get(d) === i) byDate.set(d, { row: r, line: i + 2 });
+  });
+
+  // Existing readings for this locator, bucketed by Asia/Manila calendar date
+  // — the same bucketing fn_sweep_derived_meters() uses — so a CSV row lands
+  // on the reading the sweep considers "that day's" rather than drifting by a
+  // UTC-offset mismatch. (latestReading in LocatorRow only tracks the single
+  // most-recent row, which isn't enough here since a bulk override can target
+  // several different past dates in one file.)
+  const { data: existing } = await supabase
+    .from('locator_readings')
+    .select('id, reading_datetime, current_reading, is_estimated')
+    .eq('locator_id', locatorId);
+  const existingByDate: Record<string, any> = {};
+  (existing ?? []).forEach((row: any) => {
+    const dKey = new Date(row.reading_datetime).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    if (!existingByDate[dKey] || new Date(row.reading_datetime) > new Date(existingByDate[dKey].reading_datetime)) {
+      existingByDate[dKey] = row;
+    }
+  });
+
+  let count = 0;
+  for (const [dateKey, { row, line }] of byDate) {
+    try {
+      const value = Number(row.value);
+      const reason = row.reason.trim();
+      const existingRow = existingByDate[dateKey];
+      const before = existingRow
+        ? { current_reading: existingRow.current_reading, is_estimated: existingRow.is_estimated }
+        : {};
+      const payload: any = {
+        locator_id: locatorId, plant_id: plantId,
+        current_reading: value, previous_reading: 0, is_estimated: false,
+        recorded_by: userId,
+      };
+      // Editing an existing row (already computed by the sweep, or a prior
+      // override) keeps its stored reading_datetime — same as saveOverride().
+      // A brand-new row is dated 23:59 Asia/Manila on the CSV's date, matching
+      // fn_sweep_derived_meters()'s own v_reading_dt convention.
+      const { data: savedRow, error } = existingRow?.id
+        ? await supabase.from('locator_readings').update(payload).eq('id', existingRow.id).select().single()
+        : await supabase.from('locator_readings')
+            .insert({ ...payload, reading_datetime: new Date(`${dateKey}T23:59:00+08:00`).toISOString() })
+            .select().single();
+      if (error) throw error;
+
+      await logReadingEdit({
+        table_name: 'locator_readings',
+        record_id: (savedRow as any)?.id ?? null,
+        plant_id: plantId,
+        actor_user_id: userId,
+        actor_label: actorLabel,
+        changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
+      });
+      count++;
+    } catch (err: any) {
+      errors.push(`Row ${line} (${row.date}): ${friendlyError(err)}`);
+    }
+  }
+  return { count, errors };
+}
+
 // Well readings:
 // well_name*, current_reading*, reading_datetime, previous_reading, power_meter_reading, solar_meter_reading
 
@@ -724,6 +848,7 @@ function LocatorRow({
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [recalcSaving, setRecalcSaving] = useState(false);
+  const [importOverrideOpen, setImportOverrideOpen] = useState(false);
 
   const { data: reviewFlag } = useQuery({
     queryKey: ['derived-review-flag', locator.id],
@@ -859,6 +984,10 @@ function LocatorRow({
               <PencilLine className="h-3.5 w-3.5" />
               Override
             </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setImportOverrideOpen(true)}>
+              <Upload className="h-3.5 w-3.5" />
+              Import CSV
+            </Button>
           </div>
         )}
 
@@ -880,6 +1009,26 @@ function LocatorRow({
             currentValue={latestReading?.daily_volume ?? null}
             busy={overrideSaving}
             onConfirm={saveOverride}
+          />
+        )}
+        {importOverrideOpen && (
+          <ImportReadingsDialog
+            title={`Bulk Override ${locator.name} from CSV`}
+            module="Derived Meter Override"
+            plantId={plantId}
+            userId={userId ?? null}
+            schemaHint={HAMAS_OVERRIDE_SCHEMA}
+            templateFilename={`${locator.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_override_template.csv`}
+            templateRow={HAMAS_OVERRIDE_TEMPLATE_ROW}
+            validateRow={validateDerivedOverrideRow}
+            insertRows={(rows, pid) => insertDerivedOverrideRows(rows, pid, locator.id, userId ?? null, actorLabel)}
+            onClose={() => setImportOverrideOpen(false)}
+            onImported={() => {
+              setImportOverrideOpen(false);
+              qc.invalidateQueries({ queryKey: ['op-loc-latest'] });
+              qc.invalidateQueries({ queryKey: ['derived-review-flag', locator.id] });
+              onSaved();
+            }}
           />
         )}
       </div>
