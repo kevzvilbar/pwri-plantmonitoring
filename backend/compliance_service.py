@@ -140,7 +140,7 @@ def evaluate(t: Thresholds, metrics: dict[str, Any]) -> list[Violation]:
         if value is None:
             return
         if value > threshold:
-            ratio = (value / threshold) if threshold else 2.0
+            ratio = (value / threshold) if threshold > 0 else 2.0
             out.append(Violation(
                 code=f"{metric}_over",
                 severity=_sev_for_ratio(ratio),
@@ -155,7 +155,7 @@ def evaluate(t: Thresholds, metrics: dict[str, Any]) -> list[Violation]:
         if value is None:
             return
         if value < threshold:
-            ratio = (threshold / value) if value else 2.0
+            ratio = (threshold / value) if value > 0 else 2.0
             out.append(Violation(
                 code=f"{metric}_under",
                 severity=_sev_for_ratio(ratio),

@@ -213,35 +213,33 @@ async def chat_with_tools(
         log.exception("answerer failed")
         reply_text = f"⚠ Could not produce an answer: {e}"
 
-    # Persist to Mongo
+    # Persist to Supabase (same pattern as ai_service.chat_turn)
     now = datetime.utcnow()
     try:
-        await db.ai_conversations.update_one(
-            {"session_id": session_id},
-            {
-                "$setOnInsert": {
-                    "_id": str(uuid.uuid4()),
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "created_at": now,
-                    "mode": "tools",
-                },
-                "$set": {"updated_at": datetime.utcnow()},
-                "$push": {
-                    "messages": {
-                        "$each": [
-                            {"role": "user", "content": req.message, "created_at": now},
-                            {"role": "assistant", "content": reply_text,
-                             "created_at": datetime.utcnow(),
-                             "meta": {"plan": plan, "rows": len(fetched), "error": error}},
-                        ]
-                    }
-                },
-            },
-            upsert=True,
-        )
+        from ai_service import _supa_client as _ai_supa_client
+        sb = _ai_supa_client()
+        if sb:
+            existing = []
+            try:
+                res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybeSingle().execute()
+                if res.data:
+                    existing = res.data.get("messages") or []
+            except Exception:
+                pass
+
+            new_msgs = existing + [
+                {"role": "user", "content": req.message, "created_at": now.isoformat()},
+                {"role": "assistant", "content": reply_text, "created_at": datetime.utcnow().isoformat(),
+                 "meta": {"plan": plan, "rows": len(fetched), "error": error}},
+            ]
+            sb.table("ai_chat_sessions").upsert({
+                "session_id": session_id,
+                "user_id": user_id,
+                "messages": new_msgs,
+                "updated_at": datetime.utcnow().isoformat(),
+            }, on_conflict="session_id").execute()
     except Exception:
-        log.exception("Mongo persist failed (non-fatal)")
+        log.exception("Supabase persist failed (non-fatal)")
 
     took_ms = int((datetime.utcnow() - t0).total_seconds() * 1000)
 

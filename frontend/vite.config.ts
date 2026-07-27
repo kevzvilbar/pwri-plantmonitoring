@@ -11,7 +11,6 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: true,
     hmr: {
       overlay: false,
-      clientPort: 443,
     },
     proxy: {
       "/api": {

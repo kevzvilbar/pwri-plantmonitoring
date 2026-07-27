@@ -5,7 +5,7 @@ project_id = "lreqxclzoxmswglvdstv"
 # The frontend/supabase/ directory has been removed; this is now the single
 # canonical Supabase project config.
 
-[functions.poly-regression-fill]
+[functions.data-analysis]
 enabled = true
 verify_jwt = false
 schedule = "0 6 * * *"

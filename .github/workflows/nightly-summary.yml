@@ -1,0 +1,56 @@
+name: Nightly daily_plant_summary
+
+# Runs at 00:05 PHT (16:05 UTC previous day) every day
+# Calls fn_compute_daily_plant_summary() in Supabase for yesterday's data
+# Also has a manual dispatch so you can trigger a backfill for any date
+
+on:
+  schedule:
+    - cron: '5 16 * * *'   # 16:05 UTC = 00:05 PHT next day
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to compute (YYYY-MM-DD). Defaults to yesterday PHT.'
+        required: false
+        type: string
+
+jobs:
+  compute-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call fn_compute_daily_plant_summary via Supabase REST
+        env:
+          SUPABASE_URL:    ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON:   ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TARGET_DATE:     ${{ inputs.date }}
+        run: |
+          # Determine which date to compute
+          if [ -z "$TARGET_DATE" ]; then
+            # Yesterday in PHT (UTC+8)
+            TARGET_DATE=$(TZ='Asia/Manila' date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null \
+              || TZ='Asia/Manila' date -v-1d '+%Y-%m-%d')
+          fi
+
+          echo "Computing daily summary for: $TARGET_DATE"
+
+          # Call the Postgres function via Supabase REST API /rpc endpoint
+          RESPONSE=$(curl -sf \
+            -X POST \
+            "${SUPABASE_URL}/rest/v1/rpc/fn_compute_daily_plant_summary" \
+            -H "apikey: ${SUPABASE_ANON}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON}" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_date\": \"${TARGET_DATE}\"}")
+
+          echo "Response: $RESPONSE"
+
+          # Check it returned plants_processed > 0
+          PLANTS=$(echo "$RESPONSE" | grep -o '"plants_processed":[0-9]*' | grep -o '[0-9]*' || echo "0")
+          echo "Plants processed: $PLANTS"
+
+          if [ "$PLANTS" -eq "0" ]; then
+            echo "WARNING: No plants were processed. Check that plants have status='Active'."
+            exit 1
+          fi
+
+          echo "Daily summary computed successfully for $TARGET_DATE ($PLANTS plants)"
