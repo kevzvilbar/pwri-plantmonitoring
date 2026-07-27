@@ -1945,7 +1945,18 @@ export function TrainOperatorLogModal({
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
         className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
-        onInteractOutside={() => onClose()}
+        onInteractOutside={(e) => {
+          // ReplaceTrainMeterDialog is a Radix Dialog.Portal — its content
+          // mounts as a sibling of this DialogContent's node, not a
+          // descendant, so any pointerdown inside it looks "outside" this
+          // layer. Without this guard, opening it via the Repl. checkbox and
+          // then clicking anything inside it (a field, the meter-type
+          // Select) closes this whole Operator Log modal — and takes the
+          // just-opened replace dialog down with it — before the swap can
+          // be saved.
+          if (replaceReadingId) { e.preventDefault(); return; }
+          onClose();
+        }}
       >
         <DialogTitle className="sr-only">Operator Log — {trainLabel}</DialogTitle>
 

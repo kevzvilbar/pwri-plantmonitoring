@@ -275,7 +275,20 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
         <DialogContent
           className="max-w-[95vw] w-full max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden"
           onInteractOutside={(e) => {
-            if (editingRoRow || editingPretreatRow) { e.preventDefault(); return; }
+            // Every nested dialog rendered below (ReplaceTrainMeterDialog,
+            // CorrectionRequestDialog, the two Import dialogs, plus the two
+            // row-edit dialogs) is itself a Radix Dialog.Portal — its content
+            // mounts as a *sibling* of this DialogContent's node, not a
+            // descendant. So a pointerdown inside any of them is, from this
+            // outer layer's point of view, "outside," and would otherwise
+            // call onClose() here and unmount this whole modal (and the
+            // nested dialog with it) before the user can finish using it.
+            // Must guard on every nested-dialog state, not just the two
+            // row-edit ones this check used to cover.
+            if (editingRoRow || editingPretreatRow || replaceReadingId || correctionTarget || showImportRO || showImportPretreat) {
+              e.preventDefault();
+              return;
+            }
             onClose();
           }}
         >
