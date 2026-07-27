@@ -1,0 +1,1 @@
+import{aq as a,au as r}from"./index-C5k-QG0O.js";function f(n,t){const e=a(n);if(isNaN(t))return r(n,NaN);if(!t)return e;const o=e.getDate(),s=r(n,e.getTime());s.setMonth(e.getMonth()+t+1,0);const u=s.getDate();return o>=u?s:(e.setFullYear(s.getFullYear(),s.getMonth(),o),e)}function i(n){const t=a(n);return t.setDate(1),t.setHours(0,0,0,0),t}export{f as a,i as s};

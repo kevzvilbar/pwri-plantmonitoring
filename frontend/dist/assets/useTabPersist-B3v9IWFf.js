@@ -1,0 +1,1 @@
+import{r}from"./index-C5k-QG0O.js";function u(t,e){const[o,a]=r.useState(()=>{try{return sessionStorage.getItem(t)??e}catch{return e}}),c=r.useCallback(s=>{try{sessionStorage.setItem(t,s)}catch{}a(s)},[t]);return[o,c]}export{u};
