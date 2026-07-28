@@ -45,7 +45,6 @@ import { MeterDetailButton } from '../charts/EntityHistoryChart';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 import { parseCsv, downloadTemplate, CsvPreviewTable, CollapsibleSection, logStatusChange } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
-import type { ReasonCategory } from '@/lib/reasonCodes';
 import { ReasonField } from '../locators/LocatorDialogs';
 
 export function TrainsList({ plantId }: { plantId: string }) {
@@ -168,7 +167,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
   const [trainOfflineTarget, setTrainOfflineTarget] = useState<{ train: any; newStatus: 'Offline' | 'Maintenance' } | null>(null);
   const [trainOfflineBusy, setTrainOfflineBusy] = useState(false);
 
-  const applyTrainStatusChange = async (t: any, newStatus: 'Running' | 'Offline' | 'Maintenance', reasonCategory?: ReasonCategory, reasonDetail?: string) => {
+  const applyTrainStatusChange = async (t: any, newStatus: 'Running' | 'Offline' | 'Maintenance', reasonCategory?: string, reasonDetail?: string) => {
     const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
     if (error) { toast.error(friendlyError(error)); return; }
     await logStatusChange({

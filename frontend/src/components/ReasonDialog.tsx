@@ -6,7 +6,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { REASON_CATEGORIES, type ReasonCategory } from '@/lib/reasonCodes';
+import { REASON_CATEGORIES } from '@/lib/reasonCodes';
 
 // Shared "why" dialog used by:
 //  - marking a Well/Locator/RO Train Offline or Inactive (category required)
@@ -16,6 +16,7 @@ import { REASON_CATEGORIES, type ReasonCategory } from '@/lib/reasonCodes';
 
 export function ReasonDialog({
   open, onOpenChange, title, description, confirmLabel = 'Confirm', busy, onConfirm,
+  categories = REASON_CATEGORIES,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,9 +24,14 @@ export function ReasonDialog({
   description?: string;
   confirmLabel?: string;
   busy?: boolean;
-  onConfirm: (category: ReasonCategory, detail: string) => void | Promise<void>;
+  onConfirm: (category: string, detail: string) => void | Promise<void>;
+  /** Defaults to REASON_CATEGORIES. Pass LOCK_REASON_CATEGORIES (or any other
+   * { value, label }[] list) for a dialog that needs a different reason set —
+   * e.g. meter-lock reasons are account/utility causes, not the equipment-
+   * failure reasons this dialog was originally built for. */
+  categories?: readonly { value: string; label: string }[];
 }) {
-  const [category, setCategory] = useState<ReasonCategory | ''>('');
+  const [category, setCategory] = useState<string>('');
   const [detail, setDetail] = useState('');
 
   const reset = () => { setCategory(''); setDetail(''); };
@@ -46,12 +52,12 @@ export function ReasonDialog({
             <Label className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
             </Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as ReasonCategory)}>
+            <Select value={category} onValueChange={setCategory}>
               <SelectTrigger data-testid="reason-category-select">
                 <SelectValue placeholder="Select a reason" />
               </SelectTrigger>
               <SelectContent>
-                {REASON_CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                 ))}
               </SelectContent>

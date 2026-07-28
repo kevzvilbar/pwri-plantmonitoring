@@ -45,7 +45,6 @@ import { ReplaceMeterDialog, ReasonField } from '../locators/LocatorDialogs';
 import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryChart';
 import { CollapsibleSection, GridPylonIcon, usePlantMeterConfig, logStatusChange } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
-import type { ReasonCategory } from '@/lib/reasonCodes';
 
 export function WellsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
@@ -80,7 +79,7 @@ export function WellsList({ plantId }: { plantId: string }) {
   const [wellOfflineTarget, setWellOfflineTarget] = useState<any>(null);
   const [wellOfflineBusy, setWellOfflineBusy] = useState(false);
 
-  const applyWellStatusChange = async (w: any, newStatus: 'Active' | 'Inactive', reasonCategory?: ReasonCategory, reasonDetail?: string) => {
+  const applyWellStatusChange = async (w: any, newStatus: 'Active' | 'Inactive', reasonCategory?: string, reasonDetail?: string) => {
     const { error } = await supabase.from('wells').update({ status: newStatus }).eq('id', w.id);
     if (error) { toast.error(friendlyError(error)); return; }
     await logStatusChange({

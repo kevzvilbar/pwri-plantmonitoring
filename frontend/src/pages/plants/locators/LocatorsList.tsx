@@ -44,7 +44,8 @@ import {
 import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryChart';
 import { CollapsibleSection, GridPylonIcon, logStatusChange } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
-import type { ReasonCategory } from '@/lib/reasonCodes';
+import type { ReasonCategory, LockReasonCategory } from '@/lib/reasonCodes';
+import { LOCK_REASON_CATEGORIES } from '@/lib/reasonCodes';
 
 export function LocatorsList({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
@@ -80,7 +81,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
   const [locatorOfflineTarget, setLocatorOfflineTarget] = useState<any>(null);
   const [locatorOfflineBusy, setLocatorOfflineBusy] = useState(false);
 
-  const applyLocatorStatusChange = async (l: any, newStatus: 'Active' | 'Inactive', reasonCategory?: ReasonCategory, reasonDetail?: string) => {
+  const applyLocatorStatusChange = async (l: any, newStatus: 'Active' | 'Inactive', reasonCategory?: string, reasonDetail?: string) => {
     const { error } = await supabase.from('locators').update({ status: newStatus }).eq('id', l.id);
     if (error) { toast.error(friendlyError(error)); return; }
     await logStatusChange({
@@ -120,7 +121,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
   const applyLocatorLockStatus = async (
     l: any,
     newIsLocked: boolean,
-    reasonCategory?: ReasonCategory,
+    reasonCategory?: LockReasonCategory,
     reasonDetail?: string,
   ) => {
     // payload typed `any` — is_locked isn't in the generated Supabase types
@@ -448,10 +449,11 @@ export function LocatorsList({ plantId }: { plantId: string }) {
         description="Reading entry stays open for this locator — any meaningful volume movement while it's marked locked will be flagged for review, not blocked."
         confirmLabel="Mark Locked"
         busy={locatorLockBusy}
+        categories={LOCK_REASON_CATEGORIES}
         onConfirm={async (category, detail) => {
           if (!locatorLockTarget) return;
           setLocatorLockBusy(true);
-          await applyLocatorLockStatus(locatorLockTarget, true, category, detail);
+          await applyLocatorLockStatus(locatorLockTarget, true, category as LockReasonCategory, detail);
           setLocatorLockBusy(false);
           setLocatorLockTarget(null);
         }}
