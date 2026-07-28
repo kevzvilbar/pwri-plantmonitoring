@@ -43,15 +43,24 @@ export function EntityHistoryChart({
   entityId,
   entityType,
   entityName,
+  defaultInputMode = 'raw',
 }: {
   entityId: string;
   entityType: 'locator' | 'well' | 'product_meter';
   entityName: string;
+  /** From locator.default_input_mode / well.default_input_mode. 'direct' means
+   *  current_reading already IS the period's volume (e.g. HAMAS) — chart that
+   *  value directly instead of Math.max(0, current - previous), which clamps
+   *  every ordinary day-to-day dip to zero and silently discards it from the
+   *  Total/Avg stats. Defaults to 'raw' (existing behavior) for every other
+   *  caller, including all product_meter usage. */
+  defaultInputMode?: 'raw' | 'direct';
 }) {
+  const isDirectMode = (entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct';
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
   const { data: rows = [], isLoading } = useQuery<HistoryRow[]>({
-    queryKey: ['entity-history', entityType, entityId, range],
+    queryKey: ['entity-history', entityType, entityId, range, defaultInputMode],
     queryFn: async () => {
       const days = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
@@ -88,7 +97,12 @@ export function EntityHistoryChart({
       return raw.map((r: any) => {
         const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
         let consumption = 0;
-        if (r.daily_volume != null && +r.daily_volume > 0) {
+        if (isDirectMode) {
+          // current_reading already IS the period's volume — no diff, no
+          // clamping. (daily_volume / previous_reading aren't meaningful
+          // here and are ignored.)
+          consumption = r.current_reading != null ? +r.current_reading : 0;
+        } else if (r.daily_volume != null && +r.daily_volume > 0) {
           consumption = +r.daily_volume;
         } else if (r.current_reading != null && r.previous_reading != null) {
           consumption = Math.max(0, +r.current_reading - +r.previous_reading);
@@ -150,7 +164,7 @@ export function EntityHistoryChart({
       {/* Header row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-primary" />
+          <TrendingUp className="h-4 w-4 text-teal-600" />
           <span className="text-sm font-semibold">Historical Consumption</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -160,8 +174,8 @@ export function EntityHistoryChart({
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
-                  range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >{r === 'all' ? 'All' : `${r}d`}</button>
             ))}
@@ -182,18 +196,18 @@ export function EntityHistoryChart({
       {aggregated.length > 0 && (
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Readings</div>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Readings</div>
             <div className="font-mono font-semibold text-base">{aggregated.length}</div>
           </div>
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Total</div>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Total</div>
             <div className="font-mono font-semibold text-base">{fmtNum(totalConsumption)}</div>
-            <div className="text-muted-foreground text-3xs">m³</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
           </div>
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Avg/day</div>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg/day</div>
             <div className="font-mono font-semibold text-base">{fmtNum(avgConsumption)}</div>
-            <div className="text-muted-foreground text-3xs">m³</div>
+            <div className="text-muted-foreground text-[9px]">m³</div>
           </div>
         </div>
       )}
@@ -265,7 +279,7 @@ export function MeterDetailButton({
           {icon && <span className="text-muted-foreground">{icon}</span>}
           <span className="text-sm font-medium truncate">{label}</span>
           {filledCount > 0 && (
-            <span className="text-2xs px-1.5 py-0.5 rounded-full bg-primary-soft text-primary font-medium shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
               {filledCount} field{filledCount !== 1 ? 's' : ''}
             </span>
           )}
@@ -285,7 +299,7 @@ export function MeterDetailButton({
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               {fields.map((f, i) => (
                 <div key={i} className={f.label === 'Installed' ? 'col-span-2' : ''}>
-                  <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
                   <div className="font-mono-num font-medium">{f.value || '—'}</div>
                 </div>
               ))}
