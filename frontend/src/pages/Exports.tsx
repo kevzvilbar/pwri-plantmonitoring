@@ -44,8 +44,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Plant Overview',
     icon: Building2,
-    color: 'text-teal-700 dark:text-teal-300',
-    accent: 'bg-teal-100 dark:bg-teal-900/40',
+    color: 'text-primary',
+    accent: 'bg-primary-soft',
     tables: [
       { id: 'daily_plant_summary',   label: 'Daily Plant Summary',     description: 'Aggregated daily production, NRW and consumption totals', dateCol: 'summary_date' },
       { id: 'production_costs',      label: 'Production Costs',         description: 'Per-m³ cost records: energy, chemical, labour, other',    dateCol: 'cost_date' },
@@ -54,8 +54,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Operations',
     icon: MapPin,
-    color: 'text-sky-700 dark:text-sky-300',
-    accent: 'bg-sky-100 dark:bg-sky-900/40',
+    color: 'text-info',
+    accent: 'bg-info-soft',
     tables: [
       { id: 'locator_readings',      label: 'Locator Readings',         description: 'Water supply locator / meter daily cumulative readings',   dateCol: 'reading_datetime' },
       { id: 'well_readings',         label: 'Well Readings',             description: 'Groundwater well meter readings with power/solar data',    dateCol: 'reading_datetime' },
@@ -66,8 +66,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'RO Trains',
     icon: Waves,
-    color: 'text-cyan-700 dark:text-cyan-300',
-    accent: 'bg-cyan-100 dark:bg-cyan-900/40',
+    color: 'text-highlight',
+    accent: 'bg-highlight-soft',
     tables: [
       { id: 'ro_train_readings',        label: 'RO Train Readings',      description: 'TDS, pH, flow, pressure and quality readings per train', dateCol: 'reading_datetime' },
       { id: 'ro_pretreatment_readings', label: 'Pre-Treatment Readings', description: 'AFM/MMF pre-treatment sensor and flow data',             dateCol: 'reading_datetime' },
@@ -79,8 +79,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Chemical',
     icon: FlaskConical,
-    color: 'text-emerald-700 dark:text-emerald-300',
-    accent: 'bg-emerald-100 dark:bg-emerald-900/40',
+    color: 'text-accent',
+    accent: 'bg-accent-soft',
     tables: [
       { id: 'chemical_dosing_logs',      label: 'Chemical Dosing Logs',     description: 'Chlorine, SMBS, anti-scalant, soda ash daily dosing',    dateCol: 'log_datetime' },
       { id: 'chemical_deliveries',       label: 'Chemical Deliveries',      description: 'Bulk delivery records with supplier, quantity and cost',  dateCol: 'delivery_date' },
@@ -92,8 +92,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Power',
     icon: Zap,
-    color: 'text-amber-700 dark:text-amber-300',
-    accent: 'bg-amber-100 dark:bg-amber-900/40',
+    color: 'text-warn',
+    accent: 'bg-warn-soft',
     tables: [
       { id: 'power_readings',  label: 'Power Readings',  description: 'kWh meter readings and daily consumption logs',           dateCol: 'reading_datetime' },
       { id: 'electric_bills',  label: 'Electric Bills',  description: 'Monthly electricity billing records',                      dateCol: 'billing_month' },
@@ -103,8 +103,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Maintenance',
     icon: Wrench,
-    color: 'text-orange-700 dark:text-orange-300',
-    accent: 'bg-orange-100 dark:bg-orange-900/40',
+    color: 'text-kpi-solar',
+    accent: 'bg-kpi-solar/15',
     tables: [
       { id: 'incidents',            label: 'Incidents',              description: 'Incident reports with severity, status and resolution',  dateCol: 'when_datetime' },
       { id: 'checklist_executions', label: 'PM Checklist Executions',description: 'Preventive maintenance checklist run records',          dateCol: 'executed_at' },
@@ -114,8 +114,8 @@ const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     label: 'Analysis & Audit',
     icon: BarChart2,
-    color: 'text-violet-700 dark:text-violet-300',
-    accent: 'bg-violet-100 dark:bg-violet-900/40',
+    color: 'text-kpi-ro',
+    accent: 'bg-kpi-ro/15',
     tables: [
       { id: 'reading_normalizations', label: 'Reading Normalizations', description: 'Anomaly flags, corrections and retraction audit log',   dateCol: 'performed_at',  noPlantFilter: true },
       { id: 'regression_results',     label: 'Regression Results',     description: 'AI/ML regression model outputs per reading table',      dateCol: 'computed_at',   noPlantFilter: true },
@@ -208,19 +208,19 @@ function ExportRow({
     <div className="flex items-center gap-3 py-2 px-3 hover:bg-muted/30 rounded-md transition-colors group">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[13px] font-medium text-foreground leading-tight">{table.label}</span>
+          <span className="text-xs font-medium text-foreground leading-tight">{table.label}</span>
           {state === 'done' && count !== null && (
-            <Badge variant="outline" className="text-[9px] px-1.5 h-4 text-emerald-700 border-emerald-300 dark:text-emerald-400 py-0">
+            <Badge variant="outline" className="text-3xs px-1.5 h-4 text-accent border-accent py-0">
               {count.toLocaleString()} rows
             </Badge>
           )}
           {table.noPlantFilter && (
-            <Badge variant="outline" className="text-[9px] px-1.5 h-4 text-muted-foreground py-0">global</Badge>
+            <Badge variant="outline" className="text-3xs px-1.5 h-4 text-muted-foreground py-0">global</Badge>
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <code className="text-[9.5px] font-mono text-muted-foreground/60">{table.id}</code>
-          <span className="text-[10.5px] text-muted-foreground hidden sm:block truncate">{table.description}</span>
+          <code className="text-3xs font-mono text-muted-foreground/60">{table.id}</code>
+          <span className="text-2xs text-muted-foreground hidden sm:block truncate">{table.description}</span>
         </div>
       </div>
       <Button
@@ -230,7 +230,7 @@ function ExportRow({
         disabled={state === 'busy'}
         className={cn(
           'shrink-0 h-7 px-2.5 text-xs gap-1.5 transition-colors',
-          state === 'done' && 'border-emerald-300 text-emerald-700 dark:text-emerald-400',
+          state === 'done' && 'border-accent text-accent',
           state === 'empty' && 'text-muted-foreground',
         )}
       >
@@ -297,8 +297,8 @@ function CategorySection({
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-semibold">{category.label}</span>
-            <span className="text-[10.5px] text-muted-foreground">{category.tables.length} table{category.tables.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs font-semibold">{category.label}</span>
+            <span className="text-2xs text-muted-foreground">{category.tables.length} table{category.tables.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 ml-auto">
@@ -307,7 +307,7 @@ function CategorySection({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
               disabled={bulkState === 'busy'}
               onClick={exportAll}
             >
@@ -471,7 +471,7 @@ export default function Exports() {
         </div>
 
         {/* Global-table note */}
-        <p className="mt-2 text-[10.5px] text-muted-foreground/60">
+        <p className="mt-2 text-2xs text-muted-foreground/60">
           Tables marked <span className="font-medium text-muted-foreground">global</span> export across all plants regardless of plant filter.
           Date filters apply only to tables with a date column.
         </p>

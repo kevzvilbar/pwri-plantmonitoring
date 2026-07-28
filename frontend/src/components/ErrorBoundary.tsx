@@ -70,8 +70,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <div className="min-h-[50vh] flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-3">
-          <div className="mx-auto h-12 w-12 rounded-full bg-rose-100 flex items-center justify-center">
-            <AlertTriangle className="h-6 w-6 text-rose-600" />
+          <div className="mx-auto h-12 w-12 rounded-full bg-danger-soft flex items-center justify-center">
+            <AlertTriangle className="h-6 w-6 text-danger" />
           </div>
           <h2 className="text-lg font-semibold">Something went wrong</h2>
 

@@ -124,7 +124,7 @@ export function DowntimeEventsModal({
 
         {/* List */}
         <div className="border rounded-md overflow-hidden flex-1 min-h-0 flex flex-col">
-          <div className="bg-muted/40 grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <div className="bg-muted/40 grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">
             <span>Date</span>
             <span>Subsystem</span>
             <span className="text-right">Hours</span>
@@ -149,8 +149,8 @@ export function DowntimeEventsModal({
                 <div key={`${ev.event_date}-${ev.subsystem}-${i}`}
                   className={cn(
                     'grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-2 border-t text-xs',
-                    sev === 'high' && 'bg-rose-50/50',
-                    sev === 'med' && 'bg-amber-50/30',
+                    sev === 'high' && 'bg-danger-soft/50',
+                    sev === 'med' && 'bg-warn-soft/30',
                   )}
                   data-testid={`downtime-event-row-${i}`}
                 >
@@ -160,8 +160,8 @@ export function DowntimeEventsModal({
                   </span>
                   <span className={cn(
                     'text-right font-mono-num',
-                    sev === 'high' && 'text-rose-700 font-semibold',
-                    sev === 'med' && 'text-amber-700',
+                    sev === 'high' && 'text-danger font-semibold',
+                    sev === 'med' && 'text-warn',
                   )}>
                     {ev.duration_hrs.toFixed(1)}h
                   </span>

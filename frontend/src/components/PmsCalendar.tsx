@@ -57,9 +57,9 @@ function nextOccurrence(d: Date, freq: Template['frequency']): Date {
 }
 
 const STATUS_COLORS: Record<DueItem['status'], string> = {
-  done: 'bg-emerald-500',
-  pending: 'bg-amber-500',
-  backlog: 'bg-rose-500',
+  done: 'bg-accent',
+  pending: 'bg-warn',
+  backlog: 'bg-danger',
   upcoming: 'bg-muted-foreground/40',
 };
 
@@ -144,7 +144,7 @@ export function PmsCalendar() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-7 text-[10px] text-center text-muted-foreground mb-1">
+        <div className="grid grid-cols-7 text-2xs text-center text-muted-foreground mb-1">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
         </div>
 
@@ -162,9 +162,9 @@ export function PmsCalendar() {
               upcoming: items.filter(i => i.status === 'upcoming').length,
             };
             const cellTone =
-              counts.backlog ? 'bg-rose-500/10 border-rose-500/30'
-              : counts.pending ? 'bg-amber-500/10 border-amber-500/30'
-              : counts.done && !counts.upcoming ? 'bg-emerald-500/10 border-emerald-500/30'
+              counts.backlog ? 'bg-danger/10 border-danger/30'
+              : counts.pending ? 'bg-warn/10 border-warn/30'
+              : counts.done && !counts.upcoming ? 'bg-accent/10 border-accent/30'
               : 'border-border';
             return (
               <button
@@ -180,7 +180,7 @@ export function PmsCalendar() {
                   isToday ? 'font-bold' : '',
                 ].join(' ')}
               >
-                <div className="text-[11px] leading-none">{format(day, 'd')}</div>
+                <div className="text-xs leading-none">{format(day, 'd')}</div>
                 {items.length > 0 && (
                   <div className="mt-auto flex flex-wrap gap-0.5">
                     {(['backlog', 'pending', 'done', 'upcoming'] as const).map(s =>
@@ -195,10 +195,10 @@ export function PmsCalendar() {
           })}
         </div>
 
-        <div className="flex flex-wrap gap-3 text-[10px] mt-3 pt-2 border-t">
-          <Legend dot="bg-emerald-500" label="Done" />
-          <Legend dot="bg-amber-500" label="Due Today" />
-          <Legend dot="bg-rose-500" label="Backlog" />
+        <div className="flex flex-wrap gap-3 text-2xs mt-3 pt-2 border-t">
+          <Legend dot="bg-accent" label="Done" />
+          <Legend dot="bg-warn" label="Due Today" />
+          <Legend dot="bg-danger" label="Backlog" />
           <Legend dot="bg-muted-foreground/40" label="Upcoming" />
         </div>
       </Card>
@@ -222,7 +222,7 @@ export function PmsCalendar() {
                   <span className={`inline-block w-2 h-2 rounded-full ${STATUS_COLORS[it.status]}`} />
                   <span className="font-medium">{it.template.equipment_name}</span>
                   <span className="text-muted-foreground">· {it.template.category}</span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-2xs uppercase tracking-wide text-muted-foreground">
                     {it.template.frequency} · {it.status}
                   </span>
                 </button>

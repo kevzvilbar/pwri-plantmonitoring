@@ -47,7 +47,7 @@ export function ReasonField({
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">
         Reason <span className="text-danger">*</span>
-        <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+        <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
       </Label>
       <Textarea
         value={value}
@@ -60,7 +60,7 @@ export function ReasonField({
         className={tooShort ? 'border-danger' : ''}
       />
       {tooShort && (
-        <p className="text-[10px] text-danger">
+        <p className="text-2xs text-danger">
           Reason must be at least 5 characters ({value.trim().length}/5).
         </p>
       )}
@@ -518,13 +518,13 @@ export function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; 
             <Label className="text-xs font-medium">Select CSV file</Label>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <Upload className="h-3.5 w-3.5" />
                   Choose File
                 </span>
                 <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
                 {rows.length > 0
-                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  ? <span className="text-xs text-primary font-medium">{rows.length} row(s) ready</span>
                   : <span className="text-xs text-muted-foreground">No file chosen</span>}
               </label>
             </div>

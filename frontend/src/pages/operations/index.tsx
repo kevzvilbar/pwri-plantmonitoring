@@ -91,11 +91,11 @@ export default function Operations() {
               onClick={() => handleTabChange(key)}
               className={
                 active
-                  ? 'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 bg-white dark:bg-card shadow-sm text-teal-700 dark:text-teal-400 border border-border/60'
+                  ? 'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 bg-white dark:bg-card shadow-sm text-primary border border-border/60'
                   : 'flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 sm:px-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 text-muted-foreground hover:text-foreground hover:bg-white/50 dark:hover:bg-white/5'
               }
             >
-              <Icon className={['h-3.5 w-3.5 shrink-0', active ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground/70'].join(' ')} />
+              <Icon className={['h-3.5 w-3.5 shrink-0', active ? 'text-primary' : 'text-muted-foreground/70'].join(' ')} />
               <span className="leading-none">{label}</span>
             </button>
           );

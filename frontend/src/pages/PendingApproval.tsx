@@ -32,8 +32,8 @@ export default function PendingApproval() {
         className="max-w-md w-full p-6 text-center space-y-4"
         data-testid="pending-approval-card"
       >
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950/40 mx-auto">
-          <Hourglass className="h-6 w-6 text-amber-600" />
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-warn-soft mx-auto">
+          <Hourglass className="h-6 w-6 text-warn" />
         </div>
         <div className="space-y-1">
           <h1 className="text-lg font-semibold">Account awaiting Admin approval</h1>

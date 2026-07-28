@@ -231,16 +231,16 @@ export function TrainsList({ plantId }: { plantId: string }) {
       className={[
         'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all',
         activeKey === sectionKey
-          ? 'bg-teal-50 border-teal-300 text-teal-800 dark:bg-teal-950/30 dark:border-teal-700 dark:text-teal-200'
-          : 'bg-muted/40 border-border text-muted-foreground hover:border-teal-300 hover:text-foreground hover:bg-muted/60',
+          ? 'bg-primary-soft border-primary text-primary'
+          : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/90 hover:text-foreground hover:bg-muted/60',
       ].join(' ')}
     >
       {icon}
       {label}
       {count !== undefined && (
-        <span className="ml-0.5 text-[10px] font-normal opacity-70">×{count}</span>
+        <span className="ml-0.5 text-2xs font-normal opacity-70">×{count}</span>
       )}
-      <TrendingUp className={`h-2.5 w-2.5 ml-0.5 transition-colors ${activeKey === sectionKey ? 'text-teal-600' : 'opacity-30'}`} />
+      <TrendingUp className={`h-2.5 w-2.5 ml-0.5 transition-colors ${activeKey === sectionKey ? 'text-primary' : 'opacity-30'}`} />
     </button>
   );
 
@@ -305,8 +305,8 @@ export function TrainsList({ plantId }: { plantId: string }) {
                 </div>
                 {/* Type badges */}
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800">{mt}</span>
-                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">{ft}</span>
+                  <span className="inline-flex items-center text-2xs font-medium px-1.5 py-0.5 rounded bg-primary-soft text-primary border border-primary">{mt}</span>
+                  <span className="inline-flex items-center text-2xs font-medium px-1.5 py-0.5 rounded bg-info-soft text-info border border-info">{ft}</span>
                 </div>
               </div>
               {/* Status + edit actions */}
@@ -315,17 +315,17 @@ export function TrainsList({ plantId }: { plantId: string }) {
                   type="button"
                   onClick={() => toggleTrainStatus(t)}
                   title={isManager ? `Click to cycle status (currently ${effectiveStatus})` : effectiveStatus}
-                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
+                  className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
                     effectiveStatus === 'Running'
-                      ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                      ? 'text-accent bg-accent-soft border-accent hover:bg-accent-soft'
                       : effectiveStatus === 'Maintenance'
-                        ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 hover:bg-amber-100'
+                        ? 'text-warn bg-warn-soft border-warn hover:bg-warn-soft'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                   } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${
-                    effectiveStatus === 'Running' ? 'bg-emerald-500'
-                    : effectiveStatus === 'Maintenance' ? 'bg-amber-500'
+                    effectiveStatus === 'Running' ? 'bg-accent'
+                    : effectiveStatus === 'Maintenance' ? 'bg-warn'
                     : 'bg-muted-foreground'
                   }`} />
                   {effectiveStatus}
@@ -351,10 +351,10 @@ export function TrainsList({ plantId }: { plantId: string }) {
             {/* ══ PRE-TREATMENT SECTION ══ */}
             <div className="border-t border-border/60">
               <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="text-3xs font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-accent-soft text-accent border border-accent">
                   Pre-treatment
                 </span>
-                <span className="text-[10px] text-muted-foreground">{mt} → Booster Pump → Pre-filter</span>
+                <span className="text-2xs text-muted-foreground">{mt} → Booster Pump → Pre-filter</span>
               </div>
               <div className="px-3 pb-3 flex flex-wrap gap-2">
                 {numAfm > 0 && (
@@ -405,10 +405,10 @@ export function TrainsList({ plantId }: { plantId: string }) {
             {/* ══ RO SECTION ══ */}
             <div className="border-t border-border/60">
               <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                <span className="text-3xs font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-info-soft text-info border border-info">
                   RO
                 </span>
-                <span className="text-[10px] text-muted-foreground">HPP → RO Membranes → Permeate</span>
+                <span className="text-2xs text-muted-foreground">HPP → RO Membranes → Permeate</span>
               </div>
               <div className="px-3 pb-3 flex flex-wrap gap-2">
                 {numHpp > 0 && (
@@ -452,7 +452,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
                         <MeterDetailButton
                           key={mt}
                           label={`${mt[0].toUpperCase()}${mt.slice(1)} Meter`}
-                          icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                          icon={<Gauge className="h-4 w-4 text-info" />}
                           fields={[
                             { label: 'Brand', value: t[`${mt}_meter_brand`] },
                             { label: 'Size', value: t[`${mt}_meter_size`] ? `${t[`${mt}_meter_size`]} in` : null },
@@ -786,13 +786,13 @@ export function TrainCsvImportDialog({ plantId, onClose,
             <Label className="text-xs font-medium">Select CSV file</Label>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <Upload className="h-3.5 w-3.5" />
                   Choose File
                 </span>
                 <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
                 {rows.length > 0
-                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  ? <span className="text-xs text-primary font-medium">{rows.length} row(s) ready</span>
                   : <span className="text-xs text-muted-foreground">No file chosen</span>}
               </label>
             </div>

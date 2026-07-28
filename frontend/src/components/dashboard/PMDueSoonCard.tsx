@@ -154,7 +154,7 @@ export function PMDueSoonCard({ plantIds }: Props) {
 
   if (!items.length) {
     return (
-      <Card className="p-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <Card className="p-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Wrench className="h-4 w-4 shrink-0" aria-hidden />
         No PM tasks due in the next {LOOKAHEAD_DAYS} days.
       </Card>
@@ -166,8 +166,8 @@ export function PMDueSoonCard({ plantIds }: Props) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <Wrench className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-        <span className="text-[12px] font-medium">PM due soon</span>
-        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn-foreground border border-warn/20 text-[10px] font-medium">
+        <span className="text-xs font-medium">PM due soon</span>
+        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn-foreground border border-warn/20 text-2xs font-medium">
           {items.length} item{items.length > 1 ? 's' : ''}
         </span>
       </div>
@@ -198,11 +198,11 @@ export function PMDueSoonCard({ plantIds }: Props) {
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-medium truncate">
+              <div className="text-xs font-medium truncate">
                 <span className="text-muted-foreground/70 mr-1">{item.plantName} ·</span>
                 {item.equipment}
               </div>
-              <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+              <div className="text-2xs text-muted-foreground/60 mt-0.5">
                 {item.category}
                 {item.category && ' · '}
                 {item.daysUntilDue < 0
@@ -214,7 +214,7 @@ export function PMDueSoonCard({ plantIds }: Props) {
             {/* Urgency badge */}
             <span
               className={cn(
-                'shrink-0 px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold',
+                'shrink-0 px-1.5 py-0.5 rounded-full text-3xs font-semibold',
                 urgencyPillCls(item.daysUntilDue),
               )}
             >
@@ -228,7 +228,7 @@ export function PMDueSoonCard({ plantIds }: Props) {
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-[11px] text-muted-foreground"
+          className="h-auto p-0 text-xs text-muted-foreground"
           onClick={() => navigate('/maintenance')}
         >
           Full PM schedule →

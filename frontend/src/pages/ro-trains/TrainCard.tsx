@@ -50,9 +50,9 @@ export function TrainCard({
   const status: string = deriveTrainStatus(train, last);
 
   const statusBadge = {
-    Running:     { label: 'Online',      dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
-    Maintenance: { label: 'Maintenance', dot: 'bg-amber-500',   text: 'text-amber-600 dark:text-amber-400',     border: 'border-amber-200 dark:border-amber-800'   },
-    Offline:     { label: 'Offline',     dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         border: 'border-red-200 dark:border-red-800'       },
+    Running:     { label: 'Online',      dot: 'bg-accent', text: 'text-accent', border: 'border-accent' },
+    Maintenance: { label: 'Maintenance', dot: 'bg-warn',   text: 'text-warn',     border: 'border-warn'   },
+    Offline:     { label: 'Offline',     dot: 'bg-danger',     text: 'text-danger',         border: 'border-danger'       },
   }[status] ?? { label: status, dot: 'bg-muted-foreground', text: 'text-muted-foreground', border: 'border-border' };
 
   const recovery  = last?.recovery_pct  != null ? `${fmtNum(last.recovery_pct, 1)}%`    : '—';
@@ -73,7 +73,7 @@ export function TrainCard({
           <span className="text-base">🌊</span>
           <span className="text-sm font-semibold">Train {train.train_number}</span>
         </div>
-        <div className={cn('flex items-center gap-1 text-[11px] font-medium', statusBadge.text)}>
+        <div className={cn('flex items-center gap-1 text-xs font-medium', statusBadge.text)}>
           <span className={cn('h-1.5 w-1.5 rounded-full', statusBadge.dot)} />
           {statusBadge.label}
         </div>
@@ -86,7 +86,7 @@ export function TrainCard({
             type="button"
             onClick={() => setGapDialogOpen(true)}
             title={`No reading today — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-            className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors w-fit"
+            className="inline-flex items-center gap-1 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors w-fit"
           >
             <MessageCircleOff className="h-2.5 w-2.5" />
             {reasonCategoryLabel(gapReason.reason_category)}
@@ -96,7 +96,7 @@ export function TrainCard({
             type="button"
             onClick={() => setGapDialogOpen(true)}
             title="No reading today — log why"
-            className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-fit px-1 py-0.5 rounded"
+            className="inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-fit px-1 py-0.5 rounded"
           >
             <MessageCircleOff className="h-3 w-3" />
             No reading today — why?
@@ -105,27 +105,27 @@ export function TrainCard({
       )}
 
       {/* Stats row */}
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span>Recovery:</span>
-        <span className={cn('font-mono-num font-semibold', recWarn ? 'text-amber-500' : 'text-foreground')}>
+        <span className={cn('font-mono-num font-semibold', recWarn ? 'text-warn' : 'text-foreground')}>
           {recovery}
         </span>
         <Sparkline values={recoveryVals} color={recWarn ? '#f59e0b' : '#6b7280'} />
         <span className="ml-1">·</span>
         <span>Perm TDS:</span>
-        <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-red-500' : 'text-foreground')}>
+        <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-danger' : 'text-foreground')}>
           {permTDS}
         </span>
         <Sparkline values={tdsVals} color={tdsWarn ? '#ef4444' : '#6b7280'} />
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5 border-t border-border/50">
+      <div className="flex items-center justify-between text-2xs text-muted-foreground pt-0.5 border-t border-border/50">
         <span>Last reading: {lastTime}</span>
         <div className="flex items-center gap-3">
           {train.num_afm > 0 && <span className="font-medium">AFM×{train.num_afm}</span>}
           {train.num_booster_pumps > 0 && <span className="font-medium">BP×{train.num_booster_pumps}</span>}
-          <button onClick={() => setLogOpen(true)} className="text-teal-600 hover:underline font-medium">
+          <button onClick={() => setLogOpen(true)} className="text-primary hover:underline font-medium">
             Open log →
           </button>
         </div>

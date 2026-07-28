@@ -65,7 +65,7 @@ type FilterTab = 'all' | 'erroneous' | 'normalized' | 'retracted';
 
 function tableIcon(t: string) {
   if (t.includes('locator'))   return <Activity className="h-3.5 w-3.5 text-primary" />;
-  if (t.includes('well'))      return <Database className="h-3.5 w-3.5 text-teal-600" />;
+  if (t.includes('well'))      return <Database className="h-3.5 w-3.5 text-primary" />;
   if (t.includes('product'))   return <FlaskConical className="h-3.5 w-3.5 text-accent" />;
   if (t.includes('ro_train'))  return <RefreshCw className="h-3.5 w-3.5 text-chart-6" />;
   return <Database className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -83,13 +83,13 @@ function tableLabel(t: string) {
 
 function actionBadge(action: NormAction) {
   const cfg: Record<NormAction, { label: string; cls: string }> = {
-    tag:       { label: '⚠️ Tagged',     cls: 'border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300' },
-    normalize: { label: '🔄 Normalized', cls: 'border-teal-400  text-teal-700  bg-teal-50  dark:bg-teal-950/30  dark:text-teal-300'  },
+    tag:       { label: '⚠️ Tagged',     cls: 'border-warn text-warn bg-warn-soft' },
+    normalize: { label: '🔄 Normalized', cls: 'border-primary  text-primary  bg-primary-soft  '  },
     retract:   { label: '⏪ Retracted',  cls: 'border-border    text-muted-foreground bg-muted' },
   };
   const { label, cls } = cfg[action];
   return (
-    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border', cls)}>
+    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium border', cls)}>
       {label}
     </span>
   );
@@ -172,8 +172,8 @@ function FlaggedReadingsSection({ isDataAnalyst }: { isDataAnalyst: boolean }) {
 
   const TABS: { value: FilterTab; label: string; icon: React.ReactNode }[] = [
     { value: 'all',        label: 'All',        icon: <Database className="h-3 w-3" /> },
-    { value: 'erroneous',  label: 'Flagged',    icon: <AlertTriangle className="h-3 w-3 text-amber-500" /> },
-    { value: 'normalized', label: 'Normalized', icon: <RefreshCw className="h-3 w-3 text-teal-500" /> },
+    { value: 'erroneous',  label: 'Flagged',    icon: <AlertTriangle className="h-3 w-3 text-warn" /> },
+    { value: 'normalized', label: 'Normalized', icon: <RefreshCw className="h-3 w-3 text-primary" /> },
     { value: 'retracted',  label: 'Retracted',  icon: <Undo2 className="h-3 w-3" /> },
   ];
 
@@ -197,7 +197,7 @@ function FlaggedReadingsSection({ isDataAnalyst }: { isDataAnalyst: boolean }) {
             >
               {icon}{label}
               {value !== 'all' && (
-                <span className="ml-0.5 tabular-nums text-[10px] opacity-70">
+                <span className="ml-0.5 tabular-nums text-2xs opacity-70">
                   ({all.filter((r) => r.norm_status === value).length})
                 </span>
               )}
@@ -224,7 +224,7 @@ function FlaggedReadingsSection({ isDataAnalyst }: { isDataAnalyst: boolean }) {
       </div>
 
       {/* Table missing warning */}
-      <Card className="p-3 text-xs text-amber-700 border-amber-500/30 bg-amber-500/5 hidden [&.show]:flex items-start gap-2"
+      <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5 hidden [&.show]:flex items-start gap-2"
         id="norm-migration-warning">
         <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
         <span>
@@ -266,7 +266,7 @@ function FlaggedReadingsSection({ isDataAnalyst }: { isDataAnalyst: boolean }) {
                     <div className="flex items-center gap-1.5">
                       {tableIcon(r.table_name)}
                       <span className="font-medium">{tableLabel(r.table_name)}</span>
-                      <span className="text-muted-foreground text-[10px] font-mono truncate max-w-[80px]">
+                      <span className="text-muted-foreground text-2xs font-mono truncate max-w-[80px]">
                         {(r.entity_label ?? '').slice(-8)}
                       </span>
                     </div>
@@ -298,7 +298,7 @@ function FlaggedReadingsSection({ isDataAnalyst }: { isDataAnalyst: boolean }) {
         </div>
       )}
 
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         Showing {filtered.length} of {all.length} non-normal readings.
         Symbols: ⚠️ flagged · 🔄 normalized · ⏪ retracted.
       </p>
@@ -359,25 +359,25 @@ function NormAuditTrail() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 {actionBadge(e.action)}
-                <span className="text-[11px] font-medium">
+                <span className="text-xs font-medium">
                   {tableLabel(e.source_table)}
                   <span className="text-muted-foreground font-normal ml-1 font-mono">
                     …{e.source_id.slice(-8)}
                   </span>
                 </span>
               </div>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {format(new Date(e.performed_at), 'MMM d yyyy, HH:mm')}
               </span>
             </div>
 
-            <div className="text-[11px] text-muted-foreground flex flex-wrap gap-3">
+            <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
               <span>By: <strong className="text-foreground">{e.performed_role}</strong></span>
               {e.original_value != null && (
                 <span>Original: <strong className="text-foreground font-mono">{e.original_value}</strong></span>
               )}
               {e.adjusted_value != null && (
-                <span>Adjusted: <strong className="text-teal-600 dark:text-teal-400 font-mono">{e.adjusted_value}</strong></span>
+                <span>Adjusted: <strong className="text-primary font-mono">{e.adjusted_value}</strong></span>
               )}
               {e.retractable && (
                 <span className="text-primary">retractable</span>
@@ -385,7 +385,7 @@ function NormAuditTrail() {
             </div>
 
             {e.note && (
-              <p className="text-[11px] italic text-muted-foreground">"{e.note}"</p>
+              <p className="text-xs italic text-muted-foreground">"{e.note}"</p>
             )}
           </Card>
         ))}
@@ -417,7 +417,7 @@ export function NormalizationPanel() {
       {/* Header */}
       <div>
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-teal-600" />
+          <RefreshCw className="h-4 w-4 text-primary" />
           Data Normalization
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -428,14 +428,14 @@ export function NormalizationPanel() {
 
       {/* Legend */}
       <Card className="p-3">
-        <p className="text-[11px] font-medium mb-2 text-muted-foreground uppercase tracking-wide">Status legend</p>
+        <p className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">Status legend</p>
         <div className="flex flex-wrap gap-3 text-xs">
           <span className="flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+            <AlertTriangle className="h-3.5 w-3.5 text-warn" />
             <strong>⚠️ Flagged</strong> — erroneous / out-of-range reading
           </span>
           <span className="flex items-center gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5 text-teal-500" />
+            <RefreshCw className="h-3.5 w-3.5 text-primary" />
             <strong>🔄 Normalized</strong> — value adjusted by analyst
           </span>
           <span className="flex items-center gap-1.5">
@@ -447,8 +447,8 @@ export function NormalizationPanel() {
 
       {/* Workflow info (Admin only) */}
       {isAdmin && (
-        <Card className="p-3 border-violet-200 bg-violet-50/40 dark:border-violet-800 dark:bg-violet-950/20">
-          <p className="text-xs text-violet-700 dark:text-violet-300">
+        <Card className="p-3 border-kpi-ro bg-kpi-ro/40">
+          <p className="text-xs text-kpi-ro">
             <strong>Admin:</strong> You can hard-delete readings and assign the Data Analyst role
             from the Users tab. Data Analysts can tag, normalize, and retract but cannot delete.
           </p>

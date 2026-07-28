@@ -88,8 +88,8 @@ function userLabel(s: any): string {
 
 function StatusDot({ status }: { status: string }) {
   const cls =
-    status === 'Active'    ? 'bg-green-500' :
-    status === 'Suspended' ? 'bg-red-500'   : 'bg-amber-400';
+    status === 'Active'    ? 'bg-accent' :
+    status === 'Suspended' ? 'bg-danger'   : 'bg-warn';
   return <span className={cn('w-2 h-2 rounded-full shrink-0', cls)} title={status} />;
 }
 
@@ -368,15 +368,15 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
 
         {needsSetup ? (
           <div className="space-y-3">
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+            <div className="rounded-lg border border-warn bg-warn-soft p-3 text-xs text-warn space-y-1">
               <p className="font-semibold">One-time database setup required</p>
               <p>Run the SQL below once in your <strong>Supabase Dashboard → SQL Editor</strong>, then try again.</p>
             </div>
             <div className="relative">
-              <pre className="rounded-lg border bg-muted text-[10.5px] font-mono p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">{SETUP_SQL}</pre>
+              <pre className="rounded-lg border bg-muted text-2xs font-mono p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">{SETUP_SQL}</pre>
               <button
                 onClick={handleCopy}
-                className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium border border-border/60 bg-background hover:bg-muted transition-colors"
+                className="absolute top-2 right-2 px-2 py-1 rounded text-2xs font-medium border border-border/60 bg-background hover:bg-muted transition-colors"
               >
                 {copied ? '✓ Copied' : 'Copy'}
               </button>
@@ -458,7 +458,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
     <div
       className={cn(
         'group relative flex flex-col rounded-xl border bg-card text-card-foreground transition-all duration-150',
-        expanded ? 'shadow-md border-violet-200 dark:border-violet-800' : 'hover:shadow-sm hover:border-border',
+        expanded ? 'shadow-md border-kpi-ro' : 'hover:shadow-sm hover:border-border',
       )}
       data-testid={`admin-user-card-${s.id}`}
     >
@@ -466,19 +466,19 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
       <div className="p-3 flex flex-col gap-2 flex-1">
         {/* Avatar + name + status */}
         <div className="flex items-start gap-2.5">
-          <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0', avatarCls)}>
+          <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0', avatarCls)}>
             {initials(s.first_name, s.last_name, s.username)}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[13px] font-medium leading-tight truncate max-w-[110px]">{name}</span>
+              <span className="text-xs font-medium leading-tight truncate max-w-[110px]">{name}</span>
               {access.label === 'Elevated' && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 shrink-0 border border-violet-200 dark:border-violet-800">
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-kpi-ro/15 text-kpi-ro shrink-0 border border-kpi-ro">
                   <Zap className="w-2.5 h-2.5" /> Elevated
                 </span>
               )}
             </div>
-            <div className="text-[11px] text-muted-foreground truncate">@{s.username ?? '—'}</div>
+            <div className="text-xs text-muted-foreground truncate">@{s.username ?? '—'}</div>
           </div>
           <StatusDot status={s.status} />
         </div>
@@ -487,12 +487,12 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
         {assignments.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {visiblePlants.map((id) => (
-              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground border border-border/60">
+              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground border border-border/60">
                 {shared.plantName(id)}
               </span>
             ))}
             {overflowCount > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
                 +{overflowCount}
               </span>
             )}
@@ -500,7 +500,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
         )}
 
         {userRoles.length === 0 && (
-          <Badge variant="secondary" className="text-[9px] w-fit">No role</Badge>
+          <Badge variant="secondary" className="text-3xs w-fit">No role</Badge>
         )}
       </div>
 
@@ -508,13 +508,13 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
       <div className="border-t mt-auto">
         {/* Designation + approve */}
         <div className="px-3 pt-2 pb-1.5 flex items-center justify-between gap-2 min-w-0">
-          <span className="text-[10.5px] text-muted-foreground truncate min-w-0" title={s.designation ?? ''}>
+          <span className="text-2xs text-muted-foreground truncate min-w-0" title={s.designation ?? ''}>
             {s.designation || <span className="italic opacity-40">No designation</span>}
           </span>
           {awaiting && (
             <Button
               size="sm"
-              className="h-6 px-2 text-[10px] shrink-0"
+              className="h-6 px-2 text-2xs shrink-0"
               onClick={() => shared.approveUser(s.id, label)}
               data-testid={`approve-user-${s.id}`}
             >
@@ -530,7 +530,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
             className={cn(
               'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
               expanded
-                ? 'bg-violet-100 border-violet-400 text-violet-700 dark:bg-violet-900/40 dark:border-violet-600 dark:text-violet-300'
+                ? 'bg-kpi-ro/15 border-kpi-ro text-kpi-ro'
                 : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
             title="Change role"
@@ -542,7 +542,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
 
           {/* Change password */}
           <button
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 transition-colors shrink-0"
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
             title="Change password"
             aria-label="Change password"
             onClick={() => shared.onChangePassword(s.id, label)}
@@ -552,7 +552,7 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
 
           {/* Change email */}
           <button
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 transition-colors shrink-0"
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
             title="Change email"
             aria-label="Change email"
             onClick={() => shared.onChangeEmail({
@@ -603,9 +603,9 @@ function UserCard({ s, userRoles, ...shared }: { s: any; userRoles: string[] } &
 
         {/* Role expand panel */}
         {expanded && (
-          <div className="border-t border-violet-100 dark:border-violet-900/40 bg-violet-50/50 dark:bg-violet-950/10 px-3 py-2">
+          <div className="border-t border-kpi-ro bg-kpi-ro/50 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1 shrink-0">
+              <span className="text-2xs font-semibold text-kpi-ro flex items-center gap-1 shrink-0">
                 <ShieldCheck className="w-3 h-3" /> Role
               </span>
               <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
@@ -636,26 +636,26 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
       <tr
         className={cn(
           'border-b border-border/50 transition-colors last:border-0',
-          roleOpen ? 'bg-violet-50/40 dark:bg-violet-950/10' : 'hover:bg-muted/30',
+          roleOpen ? 'bg-kpi-ro/40' : 'hover:bg-muted/30',
         )}
         data-testid={`admin-user-row-${s.id}`}
       >
         {/* Name */}
         <td className="py-2.5 pl-4 pr-2">
           <div className="flex items-center gap-2.5">
-            <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0', avatarCls)}>
+            <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-2xs font-semibold shrink-0', avatarCls)}>
               {initials(s.first_name, s.last_name, s.username)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[12.5px] font-medium leading-tight truncate">{name}</span>
+                <span className="text-xs font-medium leading-tight truncate">{name}</span>
                 {access.label === 'Elevated' && (
-                  <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border border-violet-200 dark:border-violet-800 shrink-0">
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-3xs font-medium bg-kpi-ro/15 text-kpi-ro border border-kpi-ro shrink-0">
                     <Zap className="w-2 h-2" /> Elevated
                   </span>
                 )}
               </div>
-              <div className="text-[10.5px] text-muted-foreground">@{s.username ?? '—'}</div>
+              <div className="text-2xs text-muted-foreground">@{s.username ?? '—'}</div>
             </div>
           </div>
         </td>
@@ -664,24 +664,24 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
         <td className="py-2.5 px-2">
           <div className="flex flex-wrap gap-1">
             {assignments.slice(0, 2).map((id) => (
-              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground border border-border/60">
+              <span key={id} className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground border border-border/60">
                 {shared.plantName(id)}
               </span>
             ))}
             {assignments.length > 2 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
                 +{assignments.length - 2}
               </span>
             )}
             {assignments.length === 0 && (
-              <span className="text-[10.5px] text-muted-foreground italic">None</span>
+              <span className="text-2xs text-muted-foreground italic">None</span>
             )}
           </div>
         </td>
 
         {/* Designation */}
         <td className="py-2.5 px-2 hidden sm:table-cell">
-          <span className="text-[11px] text-muted-foreground truncate max-w-[120px] block" title={s.designation ?? ''}>
+          <span className="text-xs text-muted-foreground truncate max-w-[120px] block" title={s.designation ?? ''}>
             {s.designation || <span className="italic opacity-40">—</span>}
           </span>
         </td>
@@ -691,9 +691,9 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
           <div className="flex items-center gap-1.5">
             <StatusDot status={s.status} />
             <span className={cn(
-              'text-[11px]',
-              s.status === 'Active'    ? 'text-green-700 dark:text-green-400' :
-              s.status === 'Suspended' ? 'text-red-600 dark:text-red-400'     : 'text-amber-600 dark:text-amber-400',
+              'text-xs',
+              s.status === 'Active'    ? 'text-accent' :
+              s.status === 'Suspended' ? 'text-danger'     : 'text-warn',
             )}>
               {s.status ?? 'Pending'}
             </span>
@@ -706,7 +706,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
             {awaiting && (
               <Button
                 size="sm"
-                className="h-6 px-2 text-[10px] shrink-0"
+                className="h-6 px-2 text-2xs shrink-0"
                 onClick={() => shared.approveUser(s.id, label)}
                 data-testid={`approve-user-${s.id}`}
               >
@@ -719,7 +719,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
               className={cn(
                 'h-7 w-7 flex items-center justify-center rounded-md border transition-colors shrink-0',
                 roleOpen
-                  ? 'bg-violet-100 border-violet-400 text-violet-700 dark:bg-violet-900/40 dark:border-violet-600 dark:text-violet-300'
+                  ? 'bg-kpi-ro/15 border-kpi-ro text-kpi-ro'
                   : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
               title="Change role"
@@ -731,7 +731,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
 
             {/* Change password */}
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 transition-colors shrink-0"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-warn-soft hover:border-warn/90 hover:text-warn/90 transition-colors shrink-0"
               title="Change password"
               aria-label="Change password"
               onClick={() => shared.onChangePassword(s.id, label)}
@@ -741,7 +741,7 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
 
             {/* Change email */}
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 transition-colors shrink-0"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:bg-info-soft hover:border-info/90 hover:text-info/90 transition-colors shrink-0"
               title="Change email"
               aria-label="Change email"
               onClick={() => shared.onChangeEmail({
@@ -794,10 +794,10 @@ function UserTableRow({ s, userRoles, ...shared }: { s: any; userRoles: string[]
 
       {/* Inline role panel */}
       {roleOpen && (
-        <tr className="border-b border-violet-100 dark:border-violet-900/40 bg-violet-50/50 dark:bg-violet-950/10">
+        <tr className="border-b border-kpi-ro bg-kpi-ro/50">
           <td colSpan={5} className="px-4 py-2">
             <div className="flex items-center gap-2">
-              <span className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1">
+              <span className="text-2xs font-semibold text-kpi-ro flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" /> Change role
               </span>
               <RoleSelector userId={s.id} currentRoles={userRoles} onChanged={shared.invalidate} />
@@ -820,8 +820,8 @@ function CardRoleSection({
     <div className="space-y-2">
       {/* Section header */}
       <div className="flex items-center gap-2">
-        <span className="text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
+        <span className="text-2xs font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="text-2xs px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
         <div className="flex-1 h-px bg-border/60" />
       </div>
       {/* Card grid */}
@@ -848,8 +848,8 @@ function TableRoleSection({
     <div className="space-y-2">
       {/* Section header */}
       <div className="flex items-center gap-2">
-        <span className="text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
+        <span className="text-2xs font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="text-2xs px-1.5 py-0.5 rounded-full border border-border text-muted-foreground bg-muted">{users.length}</span>
         <div className="flex-1 h-px bg-border/60" />
       </div>
 
@@ -858,11 +858,11 @@ function TableRoleSection({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
-              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 pl-4 pr-2">User</th>
-              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Plant</th>
-              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2 hidden sm:table-cell">Designation</th>
-              <th className="text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Status</th>
-              <th className="text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground py-2 pl-2 pr-4">Actions</th>
+              <th className="text-left text-2xs font-medium uppercase tracking-wider text-muted-foreground py-2 pl-4 pr-2">User</th>
+              <th className="text-left text-2xs font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Plant</th>
+              <th className="text-left text-2xs font-medium uppercase tracking-wider text-muted-foreground py-2 px-2 hidden sm:table-cell">Designation</th>
+              <th className="text-left text-2xs font-medium uppercase tracking-wider text-muted-foreground py-2 px-2">Status</th>
+              <th className="text-right text-2xs font-medium uppercase tracking-wider text-muted-foreground py-2 pl-2 pr-4">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -875,7 +875,7 @@ function TableRoleSection({
         {/* Pagination footer */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-border/50 bg-muted/20">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               Page {page + 1} of {totalPages} · {users.length} users
             </span>
             <div className="flex items-center gap-1">
@@ -1031,10 +1031,10 @@ export function UsersPanel() {
           Pending
           {pendingCount > 0 && (
             <span className={cn(
-              'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium leading-none',
+              'ml-1 px-1.5 py-0.5 rounded-full text-2xs font-medium leading-none',
               pendingOnly
                 ? 'bg-white/20 text-white'
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+                : 'bg-warn-soft text-warn',
             )}>
               {pendingCount}
             </span>

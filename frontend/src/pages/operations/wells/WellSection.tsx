@@ -380,7 +380,7 @@ export function WellReadingForm() {
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
               size="sm" variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-teal-600/60 text-teal-700 hover:bg-teal-50 hover:border-teal-600 dark:hover:bg-teal-950/30"
+              className="shrink-0 gap-1.5 h-10 border-primary/60 text-primary hover:bg-primary-soft hover:border-primary/90"
               onClick={() => setImportOpen(true)}
               data-testid="import-well-readings-btn"
             >
@@ -396,10 +396,10 @@ export function WellReadingForm() {
           {/* Section header */}
           <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Droplet className="h-3.5 w-3.5 text-teal-600" />
+              <Droplet className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-semibold text-foreground/80 tracking-tight">Active Wells</span>
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
+            <span className="text-xs text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
               {wells?.length ?? 0} total
             </span>
           </div>
@@ -826,21 +826,21 @@ function WellRow({
         <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground break-words">{well.name}</span>
           {isBlending && (
-            <span className="shrink-0 text-[10px] font-semibold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border border-teal-200/60 dark:border-teal-800/40 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
+            <span className="shrink-0 text-2xs font-semibold text-primary bg-primary-soft border border-primary/60 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
           )}
           {well.has_power_meter && isInSharedPowerGroup && (
-            <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">
+            <span className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-semibold text-warn bg-warn-soft/80 border border-warn/60 px-1.5 py-0.5 rounded-full">
               <Zap className="h-2.5 w-2.5" />Shared
             </span>
           )}
           {editingId && (
-            <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded">Editing</span>
+            <span className="shrink-0 text-2xs font-bold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
           )}
         </div>
 
         {/* Right: count · delta · date · icons */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`text-[10px] tabular-nums font-medium px-1.5 py-0.5 rounded-full border ${atLimit ? 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800/50' : 'text-muted-foreground bg-muted border-transparent'}`}>
+          <span className={`text-2xs tabular-nums font-medium px-1.5 py-0.5 rounded-full border ${atLimit ? 'text-warn bg-warn-soft border-warn' : 'text-muted-foreground bg-muted border-transparent'}`}>
             {todayCount}/{WELL_MAX_READINGS_PER_DAY}
           </span>
           {todayCount === 0 && !editingId && (
@@ -849,7 +849,7 @@ function WellRow({
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
                 title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
                 data-testid={`well-gap-reason-badge-${well.id}`}
               >
                 <MessageCircleOff className="h-2.5 w-2.5" />
@@ -869,12 +869,12 @@ function WellRow({
             )
           )}
           {dailyVol != null && (
-            <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-400 tabular-nums">Δ{fmtNum(dailyVol)}</span>
+            <span className="text-2xs font-semibold text-primary tabular-nums">Δ{fmtNum(dailyVol)}</span>
           )}
           {/* Date picker — hidden native input behind styled label */}
           <label className="cursor-pointer relative shrink-0">
             <span
-              className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-background border border-border/70 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-background border border-border/70 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/50 transition-colors"
               onClick={(e) => {
                 // A click landing inside the input's own box only focuses it
                 // in most browsers — it won't open the calendar overlay.
@@ -938,7 +938,7 @@ function WellRow({
           {/* Water Meter Reading — odometer drum on mobile, compact input on desktop */}
           {isMobile ? (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground">Water Meter</p>
+              <p className="text-2xs font-medium text-muted-foreground">Water Meter</p>
               <OdometerRollerInput
                 value={reading}
                 onChange={(v) => { setReading(v); setDraftWell({ value: v }); }}
@@ -947,28 +947,28 @@ function WellRow({
                 testId={`well-meter-input-${well.id}`}
               />
               {/* prev + delta info row */}
-              <div className="flex items-center justify-between text-[11px] px-0.5">
+              <div className="flex items-center justify-between text-xs px-0.5">
                 <span className="text-muted-foreground">
                   prev: <span className="font-mono-num text-foreground/80">
                     {previousMeter != null ? fmtNum(previousMeter) : '—'}
                   </span>
                 </span>
                 {dailyVol != null && (
-                  <span className="font-mono-num font-semibold text-teal-700 dark:text-teal-400">
+                  <span className="font-mono-num font-semibold text-primary">
                     Δ {fmtNum(dailyVol)} m³
                   </span>
                 )}
               </div>
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit}
-                className="w-full h-10 text-sm bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+                className="w-full h-10 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground w-24 shrink-0">Water Meter</p>
+              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0">Water Meter</p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={reading} onChange={e => setReading(e.target.value)}
@@ -979,7 +979,7 @@ function WellRow({
               <Button
                 onClick={save} disabled={saving || !meterChanged || atLimit}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white text-xs shadow-sm"
+                className="h-7 px-2.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-white text-xs shadow-sm"
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : editingId ? 'Update' : 'Save'}
               </Button>
@@ -989,20 +989,20 @@ function WellRow({
           {/* Grid / Dedicated Power Meter — only for wells with a power meter not in a shared group */}
           {showDedicatedPower && (
             <div className="flex items-center gap-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
-                <Zap className="h-2.5 w-2.5 text-amber-500" />Grid Meter
+              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
+                <Zap className="h-2.5 w-2.5 text-warn" />Grid Meter
               </p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={powerReading} onChange={e => setPowerReading(e.target.value)}
                 placeholder={previousPower != null ? `Prev: ${fmtNum(previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-amber-200/80 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
+                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
                 data-testid={`well-power-input-${well.id}`}
               />
               <Button
                 onClick={savePower} disabled={savingPower || !powerReading}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs shadow-sm border-0"
+                className="h-7 px-2.5 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs shadow-sm border-0"
                 title="Save power meter reading">
                 {savingPower ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
               </Button>
@@ -1012,20 +1012,20 @@ function WellRow({
           {/* Shared Power Meter — shown only on the last well of the group */}
           {sharedPower && (
             <div className="flex items-center gap-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
-                <Zap className="h-2.5 w-2.5 text-amber-500" />Shared Power
+              <p className="text-2xs font-medium text-muted-foreground w-24 shrink-0 flex items-center gap-0.5">
+                <Zap className="h-2.5 w-2.5 text-warn" />Shared Power
               </p>
               <Input
                 type="number" step="any" inputMode="decimal"
                 value={sharedPowerReading} onChange={e => setSharedPowerReading(e.target.value)}
                 placeholder={sharedPower.previousPower != null ? `Prev: ${fmtNum(sharedPower.previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-amber-200/80 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
+                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
                 data-testid={`shared-power-input-${sharedPower.primaryWellId}`}
               />
               <Button
                 onClick={saveSharedPower} disabled={savingSharedPower || !sharedPowerReading}
                 size="sm"
-                className="h-7 px-2.5 shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs shadow-sm border-0"
+                className="h-7 px-2.5 shrink-0 bg-warn hover:bg-warn/90 text-white text-xs shadow-sm border-0"
                 title="Save shared power meter reading">
                 {savingSharedPower ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
               </Button>
@@ -1038,7 +1038,7 @@ function WellRow({
 
           {/* TDS */}
           <div className="flex items-center gap-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground w-16 shrink-0">TDS</p>
+            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">TDS</p>
             <Input
               type="number" step="any" inputMode="decimal"
               value={tdsReading} onChange={e => setTdsReading(e.target.value)}
@@ -1057,7 +1057,7 @@ function WellRow({
 
           {/* Turbidity (NTU) */}
           <div className="flex items-center gap-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground w-16 shrink-0">NTU</p>
+            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">NTU</p>
             <Input
               type="number" step="any" inputMode="decimal"
               value={ntuReading} onChange={e => setNtuReading(e.target.value)}
@@ -1076,7 +1076,7 @@ function WellRow({
 
           {/* Pressure */}
           <div className="flex items-center gap-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground w-16 shrink-0">Pressure</p>
+            <p className="text-2xs font-medium text-muted-foreground w-16 shrink-0">Pressure</p>
             <Input
               type="number" step="any" inputMode="decimal"
               value={pressureReading} onChange={e => setPressureReading(e.target.value)}
@@ -1097,25 +1097,25 @@ function WellRow({
 
       {/* ── Warning banners ── */}
       {reading && (belowPrev || highVol) && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
           {belowPrev && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Meter reading is below the previous value — possible meter rollback or data entry error.
             </span>
           )}
           {belowPrev && (
             <div className="pl-5 flex flex-wrap items-center gap-2 pt-1">
-              <label className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 cursor-pointer">
+              <label className="flex items-center gap-1.5 text-warn cursor-pointer">
                 <Checkbox checked={isRollover} onCheckedChange={(v) => setIsRollover(v === true)} />
                 This is a meter rollover (odometer wrapped around), not an error
               </label>
               {isRollover && (
                 <span className="flex items-center gap-1.5">
-                  <span className="text-amber-700 dark:text-amber-400">Wrap point:</span>
+                  <span className="text-warn">Wrap point:</span>
                   <Input
                     value={rolloverMax}
                     onChange={(e) => setRolloverMax(e.target.value)}
@@ -1127,7 +1127,7 @@ function WellRow({
             </div>
           )}
           {highVol && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Flow rate is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the 10-day average — unusually high.
             </span>
           )}

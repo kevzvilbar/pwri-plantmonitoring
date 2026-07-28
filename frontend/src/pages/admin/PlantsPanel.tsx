@@ -38,7 +38,7 @@ export function PlantsPanel() {
             data-testid="admin-plants-search"
           />
           {query && (
-            <span className="absolute right-2.5 top-2 text-[10px] text-muted-foreground" data-testid="admin-plants-count">
+            <span className="absolute right-2.5 top-2 text-2xs text-muted-foreground" data-testid="admin-plants-count">
               {filtered.length} / {plants?.length ?? 0}
             </span>
           )}
@@ -51,7 +51,7 @@ export function PlantsPanel() {
             key={p.id}
             className={`p-3 border-l-4 transition-colors ${
               active
-                ? 'border-l-emerald-500/70 bg-gradient-to-r from-emerald-50/40 to-transparent dark:from-emerald-950/20'
+                ? 'border-l-emerald-500/70 bg-gradient-to-r from-accent-soft/40 to-transparent'
                 : 'border-l-muted-foreground/40 bg-muted/20 opacity-90'
             }`}
             data-testid={`admin-plant-card-${p.id}`}

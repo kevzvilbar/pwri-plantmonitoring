@@ -41,7 +41,7 @@ export function PendingReviewCard({ plantIds }: Props) {
 
   if (pendingCount === 0) {
     return (
-      <Card className="p-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <Card className="p-3 flex items-center gap-2 text-xs text-muted-foreground">
         <FileSearch className="h-4 w-4 shrink-0" aria-hidden />
         No readings awaiting review.
       </Card>
@@ -51,14 +51,14 @@ export function PendingReviewCard({ plantIds }: Props) {
   return (
     <Card className="p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <FileSearch className="h-4 w-4 text-amber-600 shrink-0" aria-hidden />
-        <span className="text-[12px] font-medium">Pending review</span>
-        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/70 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/40 text-[10px] font-medium">
+        <FileSearch className="h-4 w-4 text-warn shrink-0" aria-hidden />
+        <span className="text-xs font-medium">Pending review</span>
+        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/70 text-2xs font-medium">
           {pendingCount} reading{pendingCount > 1 ? 's' : ''}
         </span>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Flagged as backward or a spike, waiting on Admin/Data Analyst review before they normalize.
       </p>
 
@@ -66,7 +66,7 @@ export function PendingReviewCard({ plantIds }: Props) {
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-[11px] text-muted-foreground"
+          className="h-auto p-0 text-xs text-muted-foreground"
           onClick={() => navigate('/data-corrections')}
         >
           Review now →

@@ -4014,7 +4014,7 @@ export function TrendChart({
                 const row = phActiveData.find((d) => d.date === label);
                 if (!row) return null;
                 const pct = row.healthPct ?? 0;
-                const dotColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                const dotColor = pct >= 80 ? 'hsl(var(--accent))' : pct >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
                 return (
                   <div style={{
                     background: 'hsl(var(--card))',
@@ -4028,10 +4028,10 @@ export function TrendChart({
                     </p>
                     {row.onlineCount != null && (
                       <>
-                        <p style={{ margin: '1px 0', color: '#10b981' }}>
+                        <p style={{ margin: '1px 0', color: 'hsl(var(--accent))' }}>
                           ● Online: {row.onlineCount} / {row.totalTrains}
                         </p>
-                        <p style={{ margin: '1px 0', color: '#ef4444' }}>
+                        <p style={{ margin: '1px 0', color: 'hsl(var(--danger))' }}>
                           ● Offline: {row.offlineCount}
                         </p>
                       </>
@@ -4041,11 +4041,11 @@ export function TrendChart({
                         marginTop: 6, paddingTop: 5,
                         borderTop: '1px solid hsl(var(--border))',
                       }}>
-                        <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#ef4444' }}>
+                        <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: 'hsl(var(--danger))' }}>
                           Offline trains:
                         </p>
                         {row.offlineTrains.map((name) => (
-                          <p key={name} style={{ margin: '1px 0', fontSize: 10, color: '#ef4444', opacity: 0.85 }}>
+                          <p key={name} style={{ margin: '1px 0', fontSize: 10, color: 'hsl(var(--danger))', opacity: 0.85 }}>
                             · {name}
                           </p>
                         ))}
@@ -4058,7 +4058,7 @@ export function TrendChart({
               // Color each dot by health zone
               const dotFill = (entry: any) => {
                 const p = entry?.healthPct ?? 0;
-                return p >= 80 ? '#10b981' : p >= 50 ? '#f59e0b' : '#ef4444';
+                return p >= 80 ? 'hsl(var(--accent))' : p >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
               };
 
               return (
@@ -4089,10 +4089,10 @@ export function TrendChart({
                   <Tooltip content={<PhTooltip />} />
                   {/* ── Green zone ≥80% ── */}
                   <ReferenceLine y={80} stroke="#10b981" strokeDasharray="4 3" strokeWidth={1}
-                    label={{ value: '80%', position: 'right', fontSize: 9, fill: '#10b981' }} />
+                    label={{ value: '80%', position: 'right', fontSize: 9, fill: 'hsl(var(--accent))' }} />
                   {/* ── Amber zone ≥50% ── */}
                   <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1}
-                    label={{ value: '50%', position: 'right', fontSize: 9, fill: '#f59e0b' }} />
+                    label={{ value: '50%', position: 'right', fontSize: 9, fill: 'hsl(var(--warn))' }} />
                   <Line
                     type="monotone"
                     dataKey="healthPct"

@@ -533,9 +533,9 @@ export function MigrationsPanel() {
   }, [data, showApplied]);
 
   const STATUS_META: Record<MigrationFile['status'], { label: string; className: string; Icon: any }> = {
-    applied:       { label: 'Applied',       className: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/40', Icon: CheckCircle2 },
-    pending:       { label: 'Pending',       className: 'bg-rose-500/15 text-rose-700 border-rose-500/40',          Icon: AlertTriangle },
-    partial:       { label: 'Partial',       className: 'bg-amber-500/15 text-amber-700 border-amber-500/40',       Icon: AlertTriangle },
+    applied:       { label: 'Applied',       className: 'bg-accent/15 text-accent border-accent/40', Icon: CheckCircle2 },
+    pending:       { label: 'Pending',       className: 'bg-danger/15 text-danger border-danger/40',          Icon: AlertTriangle },
+    partial:       { label: 'Partial',       className: 'bg-warn/15 text-warn border-warn/40',       Icon: AlertTriangle },
     indeterminate: { label: 'Indeterminate', className: 'bg-zinc-500/15 text-zinc-700 border-zinc-500/40',          Icon: FileCode },
   };
 
@@ -556,16 +556,16 @@ export function MigrationsPanel() {
         </div>
         {data && (
           <div className="flex flex-wrap gap-2 items-center pt-1">
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700">
+            <Badge variant="outline" className="bg-accent/10 text-accent">
               {data.summary.applied} applied
             </Badge>
             {data.summary.pending > 0 && (
-              <Badge variant="outline" className="bg-rose-500/10 text-rose-700">
+              <Badge variant="outline" className="bg-danger/10 text-danger">
                 {data.summary.pending} pending
               </Badge>
             )}
             {data.summary.partial > 0 && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-700">
+              <Badge variant="outline" className="bg-warn/10 text-warn">
                 {data.summary.partial} partial
               </Badge>
             )}
@@ -577,7 +577,7 @@ export function MigrationsPanel() {
             {driftCount > 0 && (
               <Badge
                 variant="outline"
-                className="bg-amber-500/15 text-amber-700 border-amber-500/40"
+                className="bg-warn/15 text-warn border-warn/40"
                 title={
                   `${driftCount} migration file${driftCount === 1 ? '' : 's'} ` +
                   `changed on disk since the last Re-check. ` +
@@ -590,7 +590,7 @@ export function MigrationsPanel() {
                 {driftCount} modified since last check
               </Badge>
             )}
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               · {data.summary.total} total
             </span>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -601,7 +601,7 @@ export function MigrationsPanel() {
                   placeholder="Filter filenames…"
                   value={nameFilter}
                   onChange={(e) => setNameFilter(e.target.value)}
-                  className="h-7 pl-6 pr-2 text-[11px] rounded-md border bg-background w-44 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="h-7 pl-6 pr-2 text-xs rounded-md border bg-background w-44 focus:outline-none focus:ring-1 focus:ring-ring"
                   title="Case-insensitive substring match against filename"
                   data-testid="migrations-name-filter"
                 />
@@ -609,7 +609,7 @@ export function MigrationsPanel() {
                   <button
                     type="button"
                     onClick={() => setNameFilter('')}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-[14px] leading-none px-1"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm leading-none px-1"
                     title="Clear filter"
                     data-testid="migrations-name-filter-clear"
                   >
@@ -617,7 +617,7 @@ export function MigrationsPanel() {
                   </button>
                 )}
               </div>
-              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={showApplied}
                   onCheckedChange={(v) => setShowApplied(!!v)}
@@ -665,7 +665,7 @@ export function MigrationsPanel() {
                 </Button>
               )}
               <label
-                className={`inline-flex items-center h-7 px-3 text-[12px] rounded-md border bg-background hover:bg-muted cursor-pointer ${
+                className={`inline-flex items-center h-7 px-3 text-xs rounded-md border bg-background hover:bg-muted cursor-pointer ${
                   importing ? 'opacity-60 pointer-events-none' : ''
                 }`}
                 title="Import a previously-exported apply-history JSON. Non-destructive: local entries always win on conflict."
@@ -730,7 +730,7 @@ export function MigrationsPanel() {
       )}
 
       {nameFilter && visibleFiles.length > 0 && data && (
-        <div className="text-[11px] text-muted-foreground px-1">
+        <div className="text-xs text-muted-foreground px-1">
           Showing <strong className="text-foreground">{visibleFiles.length}</strong> of{' '}
           <strong className="text-foreground">{visibleBeforeFilter}</strong>
           {visibleBeforeFilter !== data.summary.total && (
@@ -763,7 +763,7 @@ export function MigrationsPanel() {
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <FileCode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <code className="text-xs font-mono truncate">{f.filename}</code>
-                  <Badge variant="outline" className={`text-[10px] ${meta.className}`}>
+                  <Badge variant="outline" className={`text-2xs ${meta.className}`}>
                     <meta.Icon className="h-2.5 w-2.5 mr-1" />
                     {meta.label}
                   </Badge>
@@ -774,7 +774,7 @@ export function MigrationsPanel() {
                     return (
                       <Badge
                         variant="outline"
-                        className="text-[10px] bg-amber-500/15 text-amber-700 border-amber-500/40"
+                        className="text-2xs bg-warn/15 text-warn border-warn/40"
                         title={
                           `On-disk content changed since last Re-check.\n` +
                           `was: ${seen?.slice(0, 12)}…\n` +
@@ -805,7 +805,7 @@ export function MigrationsPanel() {
                     return (
                       <Badge
                         variant="outline"
-                        className="text-[10px] bg-emerald-500/5 text-emerald-700 border-emerald-500/30 font-mono"
+                        className="text-2xs bg-accent/5 text-accent border-accent/30 font-mono"
                         title={
                           `First marked applied locally at ${abs} (local time)` +
                           (h.by_label ? ` by ${h.by_label}` : '') +
@@ -819,25 +819,25 @@ export function MigrationsPanel() {
                       </Badge>
                     );
                   })()}
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-2xs text-muted-foreground">
                     {(f.size / 1024).toFixed(1)} KB
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {f.probed_status !== 'applied' && (
                     <Button
-                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      size="sm" variant="outline" className="h-7 text-xs"
                       onClick={() => copySql(f.filename, f.sql)}
                       data-testid={`migration-copy-${f.filename}`}
                     >
                       {wasCopied
-                        ? <><CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" /> Copied</>
+                        ? <><CheckCircle2 className="h-3 w-3 mr-1 text-accent" /> Copied</>
                         : <><Copy className="h-3 w-3 mr-1" /> Copy SQL</>}
                     </Button>
                   )}
                   {f.probed_status !== 'applied' && supabaseSqlEditorUrl && (
                     <Button
-                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      size="sm" variant="outline" className="h-7 text-xs"
                       onClick={() => openInSupabase(f.filename, f.sql)}
                       title="Copy this file's SQL and open the Supabase SQL editor in a new tab"
                       data-testid={`migration-open-supabase-${f.filename}`}
@@ -848,7 +848,7 @@ export function MigrationsPanel() {
                   )}
                   {f.override_applied ? (
                     <Button
-                      size="sm" variant="outline" className="h-7 text-[11px]"
+                      size="sm" variant="outline" className="h-7 text-xs"
                       disabled={busy === f.filename}
                       onClick={() => setUnmarkTarget(f.filename)}
                       data-testid={`migration-unmark-${f.filename}`}
@@ -861,7 +861,7 @@ export function MigrationsPanel() {
                   ) : (
                     f.probed_status !== 'applied' && (
                       <Button
-                        size="sm" variant="outline" className="h-7 text-[11px]"
+                        size="sm" variant="outline" className="h-7 text-xs"
                         disabled={busy === f.filename}
                         onClick={() => markApplied(f.filename)}
                         data-testid={`migration-mark-${f.filename}`}
@@ -874,7 +874,7 @@ export function MigrationsPanel() {
                     )
                   )}
                   <Button
-                    size="sm" variant="ghost" className="h-7 text-[11px]"
+                    size="sm" variant="ghost" className="h-7 text-xs"
                     onClick={() => setExpanded((m) => ({ ...m, [f.filename]: !m[f.filename] }))}
                   >
                     {isOpen
@@ -895,14 +895,14 @@ export function MigrationsPanel() {
                   ? formatDistanceToNow(marked, { addSuffix: true })
                   : '';
                 return (
-                  <div className="mt-1.5 text-[11px] text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
-                    <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-400/40 text-[10px]">
+                  <div className="mt-1.5 text-xs text-muted-foreground italic flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="outline" className="bg-info/10 text-info border-info/40 text-2xs">
                       manual override
                     </Badge>
                     {validMarked && (
                       <Badge
                         variant="outline"
-                        className="bg-sky-500/5 text-sky-700 border-sky-400/30 text-[10px] not-italic font-mono"
+                        className="bg-info/5 text-info border-info/30 text-2xs not-italic font-mono"
                         title={`Marked applied at ${absolute} (local time)`}
                         data-testid={`migration-override-age-${f.filename}`}
                       >
@@ -929,20 +929,20 @@ export function MigrationsPanel() {
                     return (
                       <div
                         key={`t-${p.name}`}
-                        className={`rounded-md border px-2 py-1.5 text-[11px] ${
+                        className={`rounded-md border px-2 py-1.5 text-xs ${
                           !p.exists
-                            ? 'bg-rose-500/5 border-rose-500/30'
+                            ? 'bg-danger/5 border-danger/30'
                             : hasDrift
-                              ? 'bg-amber-500/5 border-amber-500/30'
-                              : 'bg-emerald-500/5 border-emerald-500/30'
+                              ? 'bg-warn/5 border-warn/30'
+                              : 'bg-accent/5 border-accent/30'
                         }`}
                       >
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                            className={`text-2xs rounded-full px-1.5 py-0.5 border ${
                               p.exists
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                                ? 'bg-accent-soft text-accent border-accent'
+                                : 'bg-danger-soft text-danger border-danger'
                             }`}
                           >
                             table {p.name} {p.exists ? '✓ present' : '✗ missing'}
@@ -962,7 +962,7 @@ export function MigrationsPanel() {
                             {(p.missing_columns ?? []).map((c) => (
                               <span
                                 key={`m-${p.name}.${c}`}
-                                className="text-[10px] rounded-full px-1.5 py-0.5 border bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200"
+                                className="text-2xs rounded-full px-1.5 py-0.5 border bg-danger-soft text-danger border-danger"
                                 title={`Column ${p.name}.${c} declared in this migration is not present in the live table`}
                               >
                                 {p.name}.{c} ✗
@@ -975,16 +975,16 @@ export function MigrationsPanel() {
                   })}
                   {f.column_probes.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-0.5">
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground self-center mr-1">
+                      <span className="text-2xs uppercase tracking-wide text-muted-foreground self-center mr-1">
                         Added columns:
                       </span>
                       {f.column_probes.map((p) => (
                         <span
                           key={`c-${p.table}.${p.column}`}
-                          className={`text-[10px] rounded-full px-1.5 py-0.5 border ${
+                          className={`text-2xs rounded-full px-1.5 py-0.5 border ${
                             p.exists
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-200'
-                              : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-900/20 dark:text-rose-200'
+                              ? 'bg-accent-soft text-accent border-accent'
+                              : 'bg-danger-soft text-danger border-danger'
                           }`}
                         >
                           {p.table}.{p.column} {p.exists ? '✓' : '✗'}
@@ -996,7 +996,7 @@ export function MigrationsPanel() {
               )}
 
               {isOpen && (
-                <pre className="mt-2 p-2 rounded-md bg-muted/40 border text-[10px] font-mono overflow-auto max-h-72">
+                <pre className="mt-2 p-2 rounded-md bg-muted/40 border text-2xs font-mono overflow-auto max-h-72">
 {f.sql}
                 </pre>
               )}

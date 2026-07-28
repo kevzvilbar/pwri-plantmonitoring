@@ -239,7 +239,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
 
   const fmtVal = (v: any, unit = '') =>
     v != null
-      ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-[10px]">{unit}</span></span>
+      ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
       : <span className="text-muted-foreground/30">—</span>;
 
   const exportCSV = () => {
@@ -298,7 +298,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
           <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
             <div className="min-w-0">
               <div className="text-base font-semibold flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-teal-600 shrink-0" />
+                <BarChart2 className="h-4 w-4 text-primary shrink-0" />
                 <span className="truncate">Operator Log — {trainLabel}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -312,7 +312,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
               {logTab === 'ro' && (
                 <Button
                   size="sm" variant="outline"
-                  className="h-7 px-2.5 text-xs gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 dark:text-teal-300 dark:border-teal-700 dark:hover:bg-teal-950/30"
+                  className="h-7 px-2.5 text-xs gap-1 text-primary border-primary hover:bg-primary-soft"
                   onClick={() => setShowImportRO(true)}
                 >
                   <Upload className="h-3 w-3" /><span className="hidden sm:inline">Import RO CSV</span>
@@ -322,7 +322,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
               {logTab === 'pretreat' && (
                 <Button
                   size="sm" variant="outline"
-                  className="h-7 px-2.5 text-xs gap-1 text-teal-700 border-teal-300 hover:bg-teal-50 dark:text-teal-300 dark:border-teal-700 dark:hover:bg-teal-950/30"
+                  className="h-7 px-2.5 text-xs gap-1 text-primary border-primary hover:bg-primary-soft"
                   onClick={() => setShowImportPretreat(true)}
                 >
                   <Upload className="h-3 w-3" /><span className="hidden sm:inline">Import Pre-Treatment CSV</span>
@@ -340,7 +340,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
               {(['ro', 'pretreat'] as const).map(tab => (
                 <button key={tab} onClick={() => { setLogTab(tab); setPage(0); }}
                   className={cn('px-3 py-1 transition-colors',
-                    logTab === tab ? 'bg-teal-700 text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                    logTab === tab ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
                   {tab === 'ro' ? 'RO' : 'Pre-Treatment'}
                 </button>
               ))}
@@ -348,7 +348,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
             {(['7', '30', '90'] as const).map(p => (
               <button key={p} onClick={() => applyPreset(p)}
                 className={cn('h-6 px-2 rounded text-xs font-medium border transition-colors',
-                  rangePreset === p ? 'bg-teal-700 text-white border-teal-700' : 'bg-background border-input text-muted-foreground hover:text-foreground')}>
+                  rangePreset === p ? 'bg-primary text-white border-primary' : 'bg-background border-input text-muted-foreground hover:text-foreground')}>
                 {p}d
               </button>
             ))}
@@ -379,15 +379,15 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
             ) : (
               <table className="w-full text-xs border-collapse">
                 <thead className="sticky top-0 bg-background border-b z-10">
-                  <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                  <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
                     <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
                     <th className="text-left px-2 py-2 font-semibold w-[100px]">Operator</th>
                     <th className="text-right px-0 py-0 font-semibold whitespace-nowrap" colSpan={2}>
                       <div className="flex flex-col items-end">
                         <span className="px-2 pt-2 pb-0.5">Perm Flow</span>
                         <div className="flex border-t border-border/40 w-full">
-                          <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-[9px] text-right border-r border-border/30">EM</span>
-                          <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-[9px] text-right text-teal-600 dark:text-teal-400">Meter</span>
+                          <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-3xs text-right border-r border-border/30">EM</span>
+                          <span className="flex-1 px-1.5 pb-1.5 pt-0.5 text-3xs text-right text-primary">Meter</span>
                         </div>
                       </div>
                     </th>
@@ -396,7 +396,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                       'Cl Residual','Recovery','Feed Meter','Perm Meter','Δ Perm m³','Rej. Meter','Δ Rej. m³'].map(h => (
                       <th key={h} className="text-right px-2 py-2 font-semibold whitespace-nowrap">{h}</th>
                     ))}
-                    <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[50px]" title="Meter Replacement flag">Repl.</th>
+                    <th className="px-2 py-2 font-semibold text-center text-kpi-solar whitespace-nowrap w-[50px]" title="Meter Replacement flag">Repl.</th>
                     <th className="text-left px-2 py-2 font-semibold">Remarks</th>
                     <th className="px-2 py-2 font-semibold text-center whitespace-nowrap w-[36px]"></th>
                   </tr>
@@ -410,22 +410,22 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                       ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
                     const delta = r._computed_delta ?? r.permeate_meter_delta;
                     return (
-                      <tr key={r.id ?? i} className={cn('border-t transition-colors', isRepl ? 'bg-orange-50/40 dark:bg-orange-950/10' : 'hover:bg-muted/30')}>
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                      <tr key={r.id ?? i} className={cn('border-t transition-colors', isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/30')}>
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
                           <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                           <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-1.5">
-                            <span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[9px] font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
-                            <span className="text-[11px] font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                            <span className="h-5 w-5 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                            <span className="text-xs font-medium leading-tight truncate max-w-[80px]">{opName}</span>
                           </div>
                         </td>
                         <td className="px-2 py-2 text-right border-r border-border/20">{fmtVal(r.permeate_flow, 'm³/h')}</td>
                         <td className="px-2 py-2 text-right">
-                          {isRepl ? <span className="text-orange-400 text-[10px]">—</span>
+                          {isRepl ? <span className="text-kpi-solar text-2xs">—</span>
                             : r._perm_flow_meter != null
-                              ? <span className="text-teal-700 dark:text-teal-400 font-mono text-[11px]">{r._perm_flow_meter}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³/h</span></span>
+                              ? <span className="text-primary font-mono text-xs">{r._perm_flow_meter}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³/h</span></span>
                               : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right">{fmtVal(r.feed_flow, 'm³/h')}</td>
@@ -442,26 +442,26 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                         <td className="px-2 py-2 text-right">{fmtVal(r.permeate_ph, '')}</td>
                         <td className="px-2 py-2 text-right">{fmtVal(r.chlorine_residual_mg_l, 'mg/L')}</td>
                         <td className="px-2 py-2 text-right">{fmtVal(r.recovery_pct, '%')}</td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px]">
-                          {r.feed_meter != null ? <span>{Number(r.feed_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                        <td className="px-2 py-2 text-right font-mono text-xs">
+                          {r.feed_meter != null ? <span>{Number(r.feed_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px]">
-                          {r.permeate_meter != null ? <span>{Number(r.permeate_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                        <td className="px-2 py-2 text-right font-mono text-xs">
+                          {r.permeate_meter != null ? <span>{Number(r.permeate_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
                         </td>
-                        <td className={cn('px-2 py-2 text-right font-mono text-[11px]', isRepl && 'text-orange-500')}>
-                          {isRepl ? <span className="text-orange-500 font-semibold">★ 0</span>
-                            : delta != null ? <span>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>
+                        <td className={cn('px-2 py-2 text-right font-mono text-xs', isRepl && 'text-kpi-solar')}>
+                          {isRepl ? <span className="text-kpi-solar font-semibold">★ 0</span>
+                            : delta != null ? <span>{Number(delta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>
                             : <span className="text-muted-foreground/30">—</span>}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px]">
-                          {r.reject_meter != null ? <span>{Number(r.reject_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                        <td className="px-2 py-2 text-right font-mono text-xs">
+                          {r.reject_meter != null ? <span>{Number(r.reject_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
                         </td>
-                        <td className={cn('px-2 py-2 text-right font-mono text-[11px]', r.is_reject_meter_replacement && 'text-orange-500')}>
+                        <td className={cn('px-2 py-2 text-right font-mono text-xs', r.is_reject_meter_replacement && 'text-kpi-solar')}>
                           {(() => {
                             const isRejRepl = !!(r.is_reject_meter_replacement);
                             const rejDelta  = r._computed_rej_delta ?? (r.reject_meter_delta != null ? +r.reject_meter_delta : null);
-                            if (isRejRepl)         return <span className="text-orange-500 font-semibold">★ 0</span>;
-                            if (rejDelta != null)   return <span>{Number(rejDelta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">m³</span></span>;
+                            if (isRejRepl)         return <span className="text-kpi-solar font-semibold">★ 0</span>;
+                            if (rejDelta != null)   return <span>{Number(rejDelta).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span>;
                             return <span className="text-muted-foreground/30">—</span>;
                           })()}
                         </td>
@@ -471,13 +471,13 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                               title={isRepl ? 'Meter replacement — click to unmark' : 'Toggle meter replacement flag'}
                               aria-label={isRepl ? 'Meter replacement — click to unmark' : 'Toggle meter replacement flag'}
                               className={cn('h-5 w-5 rounded border-2 inline-flex items-center justify-center transition-colors mx-auto',
-                                isRepl ? 'border-orange-500 bg-orange-500 text-white' : 'border-border bg-background hover:border-orange-400',
+                                isRepl ? 'border-kpi-solar bg-kpi-solar text-white' : 'border-border bg-background hover:border-kpi-solar/90',
                                 isToggling ? 'opacity-50 cursor-wait' : 'cursor-pointer')}>
-                              {isToggling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null}
+                              {isToggling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
                             </button>
-                          ) : isRepl ? <span className="text-orange-500 text-[10px]">★</span> : null}
+                          ) : isRepl ? <span className="text-kpi-solar text-2xs">★</span> : null}
                         </td>
-                        <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
+                        <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                         <td className="px-2 py-2 text-center">
                           {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
                             <button onClick={() => setEditingRoRow(r)} title="Edit reading" aria-label="Edit reading"
@@ -495,7 +495,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                                 readingDatetime: r.reading_datetime ?? new Date().toISOString(),
                               })}
                               title="Request correction" aria-label="Request correction"
-                              className="p-1 rounded hover:bg-amber-50 text-muted-foreground/40 hover:text-amber-600 transition-colors">
+                              className="p-1 rounded hover:bg-warn-soft text-muted-foreground/40 hover:text-warn/90 transition-colors">
                               <MessageSquarePlus className="h-3 w-3" />
                             </button>
                           )}
@@ -528,9 +528,9 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                         if (u.backwash_on) {
                           const mRow   = (u._mmfReadings ?? []).find((m: any) => m.unit === u.unit);
                           const mDelta = mRow?.meter_start != null && mRow?.meter_end != null ? ` +${(mRow.meter_end - mRow.meter_start).toFixed(0)}` : '';
-                          return <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 font-mono whitespace-nowrap text-amber-700 dark:text-amber-300">{getLabel(u)} BW{mDelta}</span>;
+                          return <span key={j} className="text-3xs px-1 py-0.5 rounded bg-warn-soft border border-warn font-mono whitespace-nowrap text-warn">{getLabel(u)} BW{mDelta}</span>;
                         }
-                        return <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-muted/50 border border-border/40 font-mono whitespace-nowrap">{getLabel(u)}{dp != null ? ` ΔP=${dp}` : inP != null ? ` ${inP}→${outP}` : ''}</span>;
+                        return <span key={j} className="text-3xs px-1 py-0.5 rounded bg-muted/50 border border-border/40 font-mono whitespace-nowrap">{getLabel(u)}{dp != null ? ` ΔP=${dp}` : inP != null ? ` ${inP}→${outP}` : ''}</span>;
                       })}
                     </div>;
               const boosterPills = (units: any[]) =>
@@ -538,7 +538,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                   ? <span className="text-muted-foreground/30">—</span>
                   : <div className="flex flex-wrap gap-0.5 justify-end">
                       {units.map((u: any, j: number) => (
-                        <span key={j} className="text-[9px] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 font-mono whitespace-nowrap">
+                        <span key={j} className="text-3xs px-1 py-0.5 rounded bg-info-soft border border-info font-mono whitespace-nowrap">
                           P{u.unit} {u.target_pressure_psi != null ? `${u.target_pressure_psi}psi` : u.target_hz != null ? `${u.target_hz}Hz` : '—'}{u.amperage != null ? ` ${u.amperage}A` : ''}
                         </span>
                       ))}
@@ -546,7 +546,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
               return (
                 <table className="w-full text-xs border-collapse">
                   <thead className="sticky top-0 bg-background border-b z-10">
-                    <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                    <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
                       {['Date / Time','Operator','HPP (psi)','AFM/MMF Units','Booster Pumps','Cart./Bag Housings','Filter Housings','Changed','Remarks',''].map((h, i) => (
                         <th key={i} className={cn('px-2 py-2 font-semibold whitespace-nowrap', i === 0 ? 'text-left px-3 w-[130px]' : i === 1 ? 'text-left w-[100px]' : i === 8 ? 'text-left' : i === 9 ? 'text-center w-[36px]' : 'text-right')}>{h}</th>
                       ))}
@@ -558,29 +558,29 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                       const initials = opName !== 'Unknown' ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
                       return (
                         <tr key={r.id ?? i} className="border-t hover:bg-muted/30 transition-colors">
-                          <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                          <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
                             <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                             <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex items-center gap-1.5">
-                              <span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[9px] font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
-                              <span className="text-[11px] font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                              <span className="h-5 w-5 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
+                              <span className="text-xs font-medium leading-tight truncate max-w-[80px]">{opName}</span>
                             </div>
                           </td>
-                          <td className="px-2 py-2 text-right font-mono text-[11px]">
-                            {r.hpp_target_pressure_psi != null ? <span>{r.hpp_target_pressure_psi}<span className="text-muted-foreground/60 ml-0.5 text-[9px]">psi</span></span> : <span className="text-muted-foreground/30">—</span>}
+                          <td className="px-2 py-2 text-right font-mono text-xs">
+                            {r.hpp_target_pressure_psi != null ? <span>{r.hpp_target_pressure_psi}<span className="text-muted-foreground/60 ml-0.5 text-3xs">psi</span></span> : <span className="text-muted-foreground/30">—</span>}
                           </td>
                           <td className="px-2 py-2 text-right">{pressurePills(r.afm_units ?? [])}</td>
                           <td className="px-2 py-2 text-right">{boosterPills(r.booster_pumps ?? [])}</td>
                           <td className="px-2 py-2 text-right">{pressurePills(r.cartridge_filter_housings ?? [], u => `H${u.unit}`)}</td>
                           <td className="px-2 py-2 text-right">{pressurePills(r.filter_housings ?? [], u => `F${u.unit}`)}</td>
-                          <td className="px-2 py-2 text-right font-mono text-[11px]">
+                          <td className="px-2 py-2 text-right font-mono text-xs">
                             {r.bag_filters_changed != null && r.bag_filters_changed > 0
-                              ? <span className="text-amber-600 font-semibold">{r.bag_filters_changed}</span>
+                              ? <span className="text-warn font-semibold">{r.bag_filters_changed}</span>
                               : <span className="text-muted-foreground/30">—</span>}
                           </td>
-                          <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                           <td className="px-2 py-2 text-center">
                             {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
                               <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
@@ -597,7 +597,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                                   readingDatetime: r.reading_datetime ?? new Date().toISOString(),
                                 })}
                                 title="Request correction" aria-label="Request correction"
-                                className="p-1 rounded hover:bg-amber-50 text-muted-foreground/40 hover:text-amber-600 transition-colors">
+                                className="p-1 rounded hover:bg-warn-soft text-muted-foreground/40 hover:text-warn/90 transition-colors">
                                 <MessageSquarePlus className="h-3 w-3" />
                               </button>
                             )}

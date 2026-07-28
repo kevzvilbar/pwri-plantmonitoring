@@ -240,8 +240,8 @@ function summaryPctDelta(today: number, yesterday: number): number | null {
 
 function DeltaIcon({ pct }: { pct: number | null }) {
   if (pct == null) return <Minus className="h-3 w-3 text-muted-foreground" />;
-  if (pct > 0) return <ArrowUpRight className="h-3 w-3 text-emerald-500" />;
-  return <ArrowDownRight className="h-3 w-3 text-rose-500" />;
+  if (pct > 0) return <ArrowUpRight className="h-3 w-3 text-accent" />;
+  return <ArrowDownRight className="h-3 w-3 text-danger" />;
 }
 
 function pctLabel(pct: number | null) {
@@ -738,13 +738,13 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
              sticky thead is never displaced when scrolling horizontally. ── */}
         {!isLoading && tab === 'current' && (
           <div className="flex items-center gap-1 px-4 py-2 border-b bg-muted/10 shrink-0">
-            <span className="text-[10px] text-muted-foreground mr-1">Show:</span>
+            <span className="text-2xs text-muted-foreground mr-1">Show:</span>
             {(['consumption', 'production'] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setCurrentSide(s)}
                 className={[
-                  'px-2.5 py-0.5 text-[10px] rounded-full border transition-colors',
+                  'px-2.5 py-0.5 text-2xs rounded-full border transition-colors',
                   currentSide === s
                     ? 'bg-primary text-primary-foreground border-primary font-semibold'
                     : 'border-border text-muted-foreground hover:text-foreground',
@@ -809,21 +809,21 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             const totBal  = totProd - totCons;
             const totNRW  = totProd > 0 ? +((totBal / totProd) * 100).toFixed(1) : null;
             return (
-              <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-both-table">
+              <table className="min-w-full text-xs border-collapse" data-testid="dsm-both-table">
                 <thead>
                   <tr className="bg-muted/95 backdrop-blur-sm">
                     <th className="sticky top-0 left-0 z-30 bg-muted/95 px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-b border-r border-border min-w-[100px]">Date</th>
                     <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-primary whitespace-nowrap border-b border-border min-w-[110px]">Production (m³)</th>
                     <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-highlight whitespace-nowrap border-b border-border min-w-[120px]">Consumption (m³)</th>
                     <th className="sticky top-0 z-20 bg-muted/95 px-3 py-2 text-right font-semibold text-muted-foreground whitespace-nowrap border-b border-border min-w-[100px]">Balance (m³)</th>
-                    <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
+                    <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">NRW %</th>
                   </tr>
-                  <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                    <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">TOTAL</td>
+                  <tr className="bg-primary-soft/60">
+                    <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">TOTAL</td>
                     <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-primary border-b border-border tabular-nums">{totProd > 0 ? totProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
                     <td className="px-3 py-1.5 text-right font-semibold font-mono-num text-highlight border-b border-border tabular-nums">{totCons > 0 ? totCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
-                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
-                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
+                    <td className={['px-3 py-1.5 text-right font-semibold font-mono-num border-b border-border tabular-nums', totBal >= 0 ? 'text-accent' : 'text-danger'].join(' ')}>{totBal !== 0 ? totBal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                    <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">{totNRW != null ? `${totNRW}%` : '—'}</td>
                   </tr>
                 </thead>
                 <tbody>
@@ -834,8 +834,8 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         <td className={['sticky left-0 z-10 px-3 py-1.5 font-medium text-muted-foreground whitespace-nowrap border-r border-border', isEven ? 'bg-background' : 'bg-muted/10'].join(' ')}>{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-primary">{prod > 0 ? prod.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num tabular-nums text-highlight">{cons > 0 ? cons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}</td>
-                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-emerald-600 dark:text-emerald-400' : bal < 0 ? 'text-rose-600' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
-                        <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-rose-600' : nrw != null ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
+                        <td className={['px-3 py-1.5 text-right font-mono-num tabular-nums', bal > 0 ? 'text-accent' : bal < 0 ? 'text-danger' : 'text-muted-foreground/40'].join(' ')}>{prod > 0 || cons > 0 ? bal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</td>
+                        <td className={['sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums border-l border-border', isEven ? 'bg-background' : 'bg-muted/10', nrw != null && nrw > 10 ? 'text-danger' : nrw != null ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>{nrw != null ? `${nrw}%` : '—'}</td>
                       </tr>
                     );
                   })}
@@ -859,7 +859,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
           )}
           {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length > 0 && (
             <div className="flex-1 overflow-auto min-h-0">
-            <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-pivot-table">
+            <table className="min-w-full text-xs border-collapse" data-testid="dsm-pivot-table">
               <thead>
                 {/* Entity name header row */}
                 <tr className="bg-muted/95 backdrop-blur-sm">
@@ -881,27 +881,27 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                       >
                         <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
                         {sublabel && (
-                          <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
+                          <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
                         )}
                       </th>
                     );
                   })}
-                  <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[90px]">
+                  <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[90px]">
                     {tab === 'production' ? 'Total Prod. (m³)' : 'Total (m³)'}
                   </th>
                 </tr>
 
                 {/* Column totals sub-header */}
-                <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                  <td className="sticky left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border text-[10px]">
+                <tr className="bg-primary-soft/60">
+                  <td className="sticky left-0 z-30 bg-primary-soft/60 px-3 py-1.5 font-semibold text-primary whitespace-nowrap border-b border-r border-border text-2xs">
                     TOTAL
                   </td>
                   {colTotals.map((tot, i) => (
-                    <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-teal-700 dark:text-teal-300 border-b border-border tabular-nums">
+                    <td key={entities[i].id} className="px-2 py-1.5 text-center font-semibold font-mono-num text-primary border-b border-border tabular-nums">
                       {tot > 0 ? tot.toLocaleString(undefined, { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/50">—</span>}
                     </td>
                   ))}
-                  <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right font-bold font-mono-num text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">
+                  <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right font-bold font-mono-num text-primary border-b border-l border-border tabular-nums">
                     {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                   </td>
                 </tr>
@@ -932,14 +932,14 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                             key={entityId}
                             className={[
                               "px-2 py-1.5 text-right font-mono-num tabular-nums border-border",
-                              isEst ? "bg-amber-50/60 dark:bg-amber-950/20" : "",
+                              isEst ? "bg-warn-soft/60" : "",
                             ].join(" ")}
                             title={isEst ? "Auto-estimated via Polynomial Regression (degree 3) — no reading was recorded for this day. Value will be replaced when actual data is entered." : undefined}
                           >
                             {vol != null && vol > 0 ? (
                               <span className="inline-flex items-center gap-0.5">
                                 {isEst && (
-                                  <span className="text-amber-500 dark:text-amber-400 text-[9px] font-bold leading-none" aria-label="estimated">~</span>
+                                  <span className="text-warn text-3xs font-bold leading-none" aria-label="estimated">~</span>
                                 )}
                                 {vol.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                               </span>
@@ -984,11 +984,11 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                   {/* Section divider — labels the second table clearly */}
                   <div className="flex items-center gap-2 px-3 py-2 border-t-2 border-border/60 bg-muted/30">
                     <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-[11px] font-semibold text-muted-foreground">Current Readings</span>
-                    <span className="text-[10px] text-muted-foreground/60">— latest raw meter value per entity per day (absolute, not delta)</span>
+                    <span className="text-xs font-semibold text-muted-foreground">Current Readings</span>
+                    <span className="text-2xs text-muted-foreground/60">— latest raw meter value per entity per day (absolute, not delta)</span>
                   </div>
 
-                  <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-current-inline-table">
+                  <table className="min-w-full text-xs border-collapse" data-testid="dsm-current-inline-table">
                     <thead>
                       {/* ── Column header row ── */}
                       <tr className="bg-muted/90 backdrop-blur-sm">
@@ -1007,32 +1007,32 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                             >
                               <div className="truncate max-w-[110px] mx-auto font-mono-num">{label}</div>
                               {sublabel && (
-                                <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
+                                <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
                               )}
                             </th>
                           );
                         })}
-                        <th className="sticky right-0 z-20 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">
+                        <th className="sticky right-0 z-20 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">
                           Coverage
                         </th>
                       </tr>
 
                       {/* ── LATEST sub-header row ── */}
-                      <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                        <td className="sticky left-0 z-20 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-[10px] font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border">
+                      <tr className="bg-primary-soft/60">
+                        <td className="sticky left-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-2xs font-bold text-primary whitespace-nowrap border-b border-r border-border">
                           LATEST
                         </td>
                         {icEntityLatest.map((val, i) => (
                           <td
                             key={icEntities[i].id}
-                            className="px-2 py-1.5 text-center text-[10px] font-semibold font-mono-num tabular-nums text-teal-700 dark:text-teal-300 border-b border-border"
+                            className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
                           >
                             {val != null
                               ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
                               : <span className="text-muted-foreground/40">—</span>}
                           </td>
                         ))}
-                        <td className="sticky right-0 z-20 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right text-[10px] font-bold text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">
+                        <td className="sticky right-0 z-20 bg-primary-soft/60 px-3 py-1.5 text-right text-2xs font-bold text-primary border-b border-l border-border tabular-nums">
                           {icEntities.length} entities
                         </td>
                       </tr>
@@ -1046,9 +1046,9 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         const total       = icEntities.length;
                         const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
                         const coverageColor =
-                          coveragePct === 100 ? 'text-emerald-600 dark:text-emerald-400' :
-                          coveragePct >= 50   ? 'text-amber-600 dark:text-amber-400'    :
-                                                'text-rose-500 dark:text-rose-400';
+                          coveragePct === 100 ? 'text-accent' :
+                          coveragePct >= 50   ? 'text-warn'    :
+                                                'text-danger';
                         return (
                           <tr
                             key={date}
@@ -1073,7 +1073,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                             ))}
                             <td
                               className={[
-                                'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[10px] border-l border-border',
+                                'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-2xs border-l border-border',
                                 isEven ? 'bg-background' : 'bg-muted/10',
                                 coverageColor,
                               ].join(' ')}
@@ -1123,7 +1123,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             });
 
             return (
-              <table className="min-w-full text-[11px] border-collapse" data-testid="dsm-current-table">
+              <table className="min-w-full text-xs border-collapse" data-testid="dsm-current-table">
                 <thead>
                   {/* ── Row 1: column labels ── */}
                   <tr className="bg-muted/95 backdrop-blur-sm">
@@ -1142,33 +1142,33 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         >
                           <div className="truncate max-w-[120px] mx-auto">{label}</div>
                           {sublabel && (
-                            <div className="text-[9px] font-normal text-muted-foreground/70 truncate">{sublabel}</div>
+                            <div className="text-3xs font-normal text-muted-foreground/70 truncate">{sublabel}</div>
                           )}
                         </th>
                       );
                     })}
                     {/* Coverage header — sticky right */}
-                    <th className="sticky top-0 right-0 z-30 bg-teal-50/95 dark:bg-teal-950/60 px-3 py-2 text-right font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-l border-border min-w-[80px]">
+                    <th className="sticky top-0 right-0 z-30 bg-primary-soft/95 px-3 py-2 text-right font-bold text-primary whitespace-nowrap border-b border-l border-border min-w-[80px]">
                       Coverage
                     </th>
                   </tr>
 
                   {/* ── Row 2: LATEST sub-header ── */}
-                  <tr className="bg-teal-50/60 dark:bg-teal-950/20">
-                    <td className="sticky top-0 left-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-[10px] font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap border-b border-r border-border">
+                  <tr className="bg-primary-soft/60">
+                    <td className="sticky top-0 left-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-2xs font-bold text-primary whitespace-nowrap border-b border-r border-border">
                       LATEST
                     </td>
                     {entityLatest.map((val, i) => (
                       <td
                         key={crEntities[i].id}
-                        className="px-2 py-1.5 text-center text-[10px] font-semibold font-mono-num tabular-nums text-teal-700 dark:text-teal-300 border-b border-border"
+                        className="px-2 py-1.5 text-center text-2xs font-semibold font-mono-num tabular-nums text-primary border-b border-border"
                       >
                         {val != null
                           ? val.toLocaleString(undefined, { maximumFractionDigits: 2 })
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                     ))}
-                    <td className="sticky right-0 z-30 bg-teal-50/60 dark:bg-teal-950/20 px-3 py-1.5 text-right text-[10px] font-bold text-teal-700 dark:text-teal-300 border-b border-l border-border tabular-nums">
+                    <td className="sticky right-0 z-30 bg-primary-soft/60 px-3 py-1.5 text-right text-2xs font-bold text-primary border-b border-l border-border tabular-nums">
                       {crEntities.length} entities
                     </td>
                   </tr>
@@ -1182,9 +1182,9 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                     const total       = crEntities.length;
                     const coveragePct = total > 0 ? Math.round((reported / total) * 100) : 0;
                     const coverageColor =
-                      coveragePct === 100 ? 'text-emerald-600 dark:text-emerald-400' :
-                      coveragePct >= 50   ? 'text-amber-600 dark:text-amber-400'    :
-                                            'text-rose-500 dark:text-rose-400';
+                      coveragePct === 100 ? 'text-accent' :
+                      coveragePct >= 50   ? 'text-warn'    :
+                                            'text-danger';
 
                     return (
                       <tr
@@ -1215,7 +1215,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                         {/* Coverage cell — sticky right */}
                         <td
                           className={[
-                            'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-[10px] border-l border-border',
+                            'sticky right-0 z-10 px-3 py-1.5 text-right font-semibold font-mono-num tabular-nums text-2xs border-l border-border',
                             isEven ? 'bg-background' : 'bg-muted/10',
                             coverageColor,
                           ].join(' ')}
@@ -1235,7 +1235,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
         </div>
 
         {/* ── Footer legend ── */}
-        <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-[10px] text-muted-foreground bg-muted/20">
+        <div className="px-5 py-2 border-t shrink-0 flex items-center gap-4 text-2xs text-muted-foreground bg-muted/20">
           {tab === 'both' && <><Activity className="h-3 w-3 text-primary" /> Production vs Consumption — daily totals (m³) · NRW % = (Prod − Cons) ÷ Prod</>}
           {tab === 'consumption' && <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator · Current Readings — raw meter values per locator per day</>}
           {tab === 'production' && (
@@ -1244,8 +1244,8 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
               : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter · Current Readings — raw meter values per meter per day</>
           )}
           {(tab === 'production' || tab === 'consumption') && estimatedKeys.size > 0 && (
-            <span className="flex items-center gap-1 ml-3 text-amber-600 dark:text-amber-400">
-              <span className="font-bold text-[10px]">~</span>
+            <span className="flex items-center gap-1 ml-3 text-warn">
+              <span className="font-bold text-2xs">~</span>
               Auto-estimated (Poly. Regression deg. 3) — hover cell for details
             </span>
           )}

@@ -152,7 +152,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Current reading (to fix)</span>
-            <span className="font-mono font-medium text-amber-600">{fmtNum(target.currentReading)}</span>
+            <span className="font-mono font-medium text-warn">{fmtNum(target.currentReading)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Current delta</span>
@@ -178,7 +178,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
           {newDelta != null && (
             <p className="text-xs text-muted-foreground">
               New delta would be{' '}
-              <span className={`font-mono font-medium ${newDelta < 0 ? 'text-destructive' : 'text-emerald-600'}`}>
+              <span className={`font-mono font-medium ${newDelta < 0 ? 'text-destructive' : 'text-accent'}`}>
                 {newDelta >= 0 ? '+' : ''}{fmtNum(newDelta)} m³
               </span>
             </p>
@@ -220,7 +220,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
         </div>
 
         {/* Info banner */}
-        <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-lg px-3 py-2">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <span>
             Your supervisor will be notified and must approve this correction.

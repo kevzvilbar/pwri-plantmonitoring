@@ -533,7 +533,7 @@ export function LocatorReadingForm() {
             <Button
               size="sm"
               variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-teal-600/60 text-teal-700 hover:bg-teal-50 hover:border-teal-600 dark:hover:bg-teal-950/30"
+              className="shrink-0 gap-1.5 h-10 border-primary/60 text-primary hover:bg-primary-soft hover:border-primary/90"
               onClick={() => setImportOpen(true)}
               data-testid="import-locator-readings-btn"
             >
@@ -549,10 +549,10 @@ export function LocatorReadingForm() {
           {/* Section header */}
           <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MapPin className="h-3.5 w-3.5 text-teal-600" />
+              <MapPin className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-semibold text-foreground/80 tracking-tight">Active Locators</span>
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
+            <span className="text-xs text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
               {locators?.length ?? 0} total
             </span>
           </div>
@@ -929,7 +929,7 @@ function LocatorRow({
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
-            <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+            <span className="text-3xs font-bold uppercase tracking-widest bg-warn-soft text-warn px-1.5 py-0.5 rounded-full shrink-0">
               ~ Derived
             </span>
           </div>
@@ -943,8 +943,8 @@ function LocatorRow({
         </div>
 
         {reviewFlag && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 rounded-lg px-3 py-2">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/60 rounded-lg px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warn" />
             <span>
               Needs review — a sibling locator or the mother meter changed for {new Date(reviewFlag.date_key).toLocaleDateString()} since this was last computed.
             </span>
@@ -952,7 +952,7 @@ function LocatorRow({
         )}
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-          <Gauge className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <Gauge className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span>
             No physical meter — volume is auto-computed as mother meter minus other locators.
             {/* FIX (2026-07-26): the residual sweep can only compute a day's
@@ -1083,14 +1083,14 @@ function LocatorRow({
       )}
       {/* Item 9: locked badge — reading approved by supervisor, cannot be edited */}
       {isLocked && lastToday && !editingId && (
-        <span className="h-10 px-2 flex items-center text-[10px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg gap-1 shrink-0">
+        <span className="h-10 px-2 flex items-center text-2xs font-medium text-primary bg-primary-soft border border-primary rounded-lg gap-1 shrink-0">
           🔒 Locked
         </span>
       )}
       {/* Item 8: correction request — visible for entries 2h–7d old that aren't locked */}
       {lastToday && !editingId && canRequest && (
         <Button variant="ghost" size="sm"
-          className="h-10 px-2.5 rounded-lg shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-xs font-medium gap-1.5"
+          className="h-10 px-2.5 rounded-lg shrink-0 text-warn hover:text-warn/90 hover:bg-warn-soft text-xs font-medium gap-1.5"
           onClick={handleCorrectionRequest}
           title="Entry is older than 2 hours — submit a correction request for supervisor review">
           ✎ Fix
@@ -1117,7 +1117,7 @@ function LocatorRow({
             <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off-site</StatusPill>
           )}
           {editingId && (
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded">Editing</span>
+            <span className="text-2xs font-semibold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
           )}
           {todayCount === 0 && !editingId && (
             gapReason ? (
@@ -1125,7 +1125,7 @@ function LocatorRow({
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
                 title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
                 data-testid={`locator-gap-reason-badge-${locator.id}`}
               >
                 <MessageCircleOff className="h-2.5 w-2.5" />
@@ -1148,7 +1148,7 @@ function LocatorRow({
         {/* Date picker always visible, not fighting for space with the name */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               // Clicking inside the input's own box only focuses/places the
               // cursor in most browsers — it does not open the picker
@@ -1176,7 +1176,7 @@ function LocatorRow({
       {/* Row 2: input mode (read-only — set in Plant config > Locators by a Manager/Admin) + status */}
       <div className="flex items-center gap-3">
         <div
-          className="flex items-center rounded-lg border border-border overflow-hidden text-[10px] font-semibold shrink-0 px-2.5 py-1.5 bg-teal-700 text-white"
+          className="flex items-center rounded-lg border border-border overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-1.5 bg-primary text-white"
           title={locInputMode === 'raw'
             ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
             : 'Daily m³ entered directly. Set in Plant config > Locators.'}
@@ -1188,13 +1188,13 @@ function LocatorRow({
             <>
               prev: <span className="font-mono-num text-foreground/80">{previous == null ? '—' : fmtNum(previous)}</span>
               {/* On mobile the delta is shown below the drum, so only show it inline on desktop */}
-              {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-medium text-teal-700 dark:text-teal-400">{fmtNum(dailyVol)} m³</span></>}
+              {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span></>}
               <span className="mx-1.5 text-border">·</span>
               <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
             </>
           ) : (
             <>
-              {dailyVol != null ? <><span className="font-mono-num font-medium text-teal-700 dark:text-teal-400">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/60">enter daily volume</span>}
+              {dailyVol != null ? <><span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/60">enter daily volume</span>}
               <span className="mx-1.5 text-border">·</span>
               <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
             </>
@@ -1223,7 +1223,7 @@ function LocatorRow({
               </span>
             </span>
             {dailyVol != null && (
-              <span className="font-mono-num font-semibold text-teal-700 dark:text-teal-400">
+              <span className="font-mono-num font-semibold text-primary">
                 Δ {fmtNum(dailyVol)} m³
               </span>
             )}
@@ -1233,7 +1233,7 @@ function LocatorRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !readingChanged || atLimit}
-              className="flex-1 h-11 text-sm bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+              className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
             </Button>
@@ -1244,17 +1244,17 @@ function LocatorRow({
         /* ── Row 3 (desktop or direct-mode): standard Input row ── */
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-500 pointer-events-none" />
+            <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }}
               placeholder={locInputMode === 'direct' ? 'Daily volume (m³)' : 'Meter reading'}
-              className="pl-8 h-10 bg-teal-50/30 dark:bg-teal-950/10 border-teal-200 dark:border-teal-800/50 focus-visible:ring-teal-500/30"
+              className="pl-8 h-10 bg-primary-soft/30 border-primary focus-visible:ring-teal-500/30"
             />
           </div>
           <Button
             onClick={save} disabled={saving || !readingChanged || atLimit}
-            className="h-10 px-4 text-sm shrink-0 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+            className="h-10 px-4 text-sm shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
           </Button>
@@ -1282,20 +1282,20 @@ function LocatorRow({
       )}
 
       {lastSavePending && !cooldownMinutes && (
-        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+        <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn px-2.5 py-1.5 text-xs text-warn">
           <AlertCircle className="h-3 w-3 shrink-0" />
           Last reading sent for supervisor review — excluded from totals until approved.
         </div>
       )}
 
       {reading && (belowPrev || highVol) && !lastSavePending && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             {belowPrev ? 'Below previous — will go to supervisor review after save.' : `Flow rate ${Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above avg — will go to supervisor review after save.`}
           </span>
           {belowPrev && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               If the meter was replaced, use the meter replacement toggle.
             </span>
           )}
@@ -1398,22 +1398,22 @@ function SharedPowerMeterRow({
 
   return (
     /* ── Shared meter group header — owns the kWh input ── */
-    <div className="border-b border-amber-200/80 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/20">
+    <div className="border-b border-warn/80 bg-warn-soft/60">
       {/* Title bar */}
       <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
-        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
-          <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-warn-soft shrink-0">
+          <Zap className="h-3.5 w-3.5 text-warn" />
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground tracking-tight truncate">{groupName}</span>
-          <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-200/70 dark:bg-amber-800/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
+          <span className="text-3xs font-bold uppercase tracking-widest bg-warn-soft/70 text-warn px-1.5 py-0.5 rounded-full shrink-0">
             Shared Meter
           </span>
         </div>
         {/* Date picker */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               e.preventDefault();
               const el = dtInputRef.current;
@@ -1441,14 +1441,14 @@ function SharedPowerMeterRow({
           prev: <span className="font-mono-num font-medium text-foreground/80">{previousPower == null ? '—' : fmtNum(previousPower)}</span>
         </span>
         <div className="relative flex-1">
-          <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-500 pointer-events-none" />
+          <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-warn pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={reading}
             onChange={e => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }} placeholder="Shared power kWh"
-            className="h-10 pl-8 w-full border-amber-200 dark:border-amber-800/50 focus-visible:ring-amber-400/40 bg-white/70 dark:bg-amber-950/30 placeholder:text-muted-foreground/50"
+            className="h-10 pl-8 w-full border-warn focus-visible:ring-amber-400/40 bg-white/70 placeholder:text-muted-foreground/50"
             data-testid={`shared-power-input-${primaryWellId}`} />
         </div>
         <Button onClick={save} disabled={saving || !reading}
-          className="h-10 px-4 text-sm shrink-0 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm border-0">
+          className="h-10 px-4 text-sm shrink-0 bg-warn hover:bg-warn/90 active:bg-warn text-white shadow-sm border-0">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
         </Button>
       </div>

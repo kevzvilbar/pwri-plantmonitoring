@@ -112,7 +112,7 @@ function DeltaBadge({ vol }: { vol: number | null }) {
   const isNeg = vol < 0;
   return (
     <span className={cn('font-mono text-xs font-medium',
-      isNeg ? 'text-destructive' : vol > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+      isNeg ? 'text-destructive' : vol > 0 ? 'text-accent' : 'text-muted-foreground')}>
       {vol >= 0 ? '+' : ''}{fmtNum(vol)} m³
     </span>
   );
@@ -165,17 +165,17 @@ function ChainContext({ focusedId, sourceTable, entityId, plantId }:
 
   return (
     <div className="mt-3 border rounded-lg overflow-hidden text-xs">
-      <div className="bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+      <div className="bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
         Meter chain context
       </div>
       <table className="w-full">
         <thead>
           <tr className="border-b">
-            <th className="text-left px-3 py-1.5 text-[10px] text-muted-foreground font-medium">Date / Time</th>
-            <th className="text-right px-3 py-1.5 text-[10px] text-muted-foreground font-medium">Previous</th>
-            <th className="text-right px-3 py-1.5 text-[10px] text-muted-foreground font-medium">Current</th>
-            <th className="text-right px-3 py-1.5 text-[10px] text-muted-foreground font-medium">Delta</th>
-            <th className="px-3 py-1.5 text-[10px] text-muted-foreground font-medium">Status</th>
+            <th className="text-left px-3 py-1.5 text-2xs text-muted-foreground font-medium">Date / Time</th>
+            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Previous</th>
+            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Current</th>
+            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Delta</th>
+            <th className="px-3 py-1.5 text-2xs text-muted-foreground font-medium">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -183,21 +183,21 @@ function ChainContext({ focusedId, sourceTable, entityId, plantId }:
             <tr key={row.id}
               className={cn('border-b last:border-0 transition-colors',
                 row.isFocused
-                  ? 'bg-amber-50 dark:bg-amber-950/30 font-semibold'
+                  ? 'bg-warn-soft font-semibold'
                   : 'hover:bg-muted/20')}>
               <td className="px-3 py-2 font-mono">
-                {row.isFocused && <span className="mr-1 text-amber-600">▶</span>}
+                {row.isFocused && <span className="mr-1 text-warn">▶</span>}
                 {format(new Date(row.reading_datetime), 'dd MMM HH:mm')}
               </td>
               <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmtNum(row.previous_reading)}</td>
               <td className="px-3 py-2 text-right font-mono">{fmtNum(row.current_reading)}</td>
               <td className="px-3 py-2 text-right"><DeltaBadge vol={row.daily_volume} /></td>
               <td className="px-3 py-2">
-                <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
+                <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium',
                   row.norm_status === 'retracted' ? 'bg-muted text-muted-foreground' :
-                  row.norm_status === 'pending_review' ? 'bg-amber-100 text-amber-700' :
-                  row.norm_status === 'normalized' ? 'bg-teal-100 text-teal-700' :
-                  row.isFocused ? 'bg-amber-100 text-amber-700' : 'bg-muted/50 text-muted-foreground')}>
+                  row.norm_status === 'pending_review' ? 'bg-warn-soft text-warn' :
+                  row.norm_status === 'normalized' ? 'bg-primary-soft text-primary' :
+                  row.isFocused ? 'bg-warn-soft text-warn' : 'bg-muted/50 text-muted-foreground')}>
                   {row.norm_status}
                 </span>
               </td>
@@ -559,7 +559,7 @@ function PendingReviewTab() {
         <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
           <span className="text-xs font-medium">{selected.size} selected</span>
           <div className="flex gap-1.5 ml-auto">
-            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-emerald-400/40 text-emerald-700 hover:bg-emerald-50"
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-accent/40 text-accent hover:bg-accent-soft"
               disabled={bulkBusy} onClick={() => bulkResolve('normal')}>
               {bulkBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
               Approve all
@@ -581,14 +581,14 @@ function PendingReviewTab() {
             Operator correction requests ({corrReqs.length})
           </p>
           {corrReqs.map(req => (
-            <Card key={req.id} className="p-4 border-blue-300/40 bg-blue-50/20 dark:bg-blue-950/10">
+            <Card key={req.id} className="p-4 border-info/40 bg-info-soft/20">
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-medium">{tableLabel[req.source_table]}</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{req.plant_name}</Badge>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+                      <Badge variant="outline" className="text-2xs px-1.5 py-0">{req.plant_name}</Badge>
+                      <span className="text-2xs px-1.5 py-0.5 rounded font-medium bg-info-soft text-info">
                         Operator request
                       </span>
                     </div>
@@ -598,16 +598,16 @@ function PendingReviewTab() {
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-xs">
-                  <div><div className="text-muted-foreground">Original</div><div className="font-mono font-medium text-amber-600">{fmtNum(req.original_value)}</div></div>
+                  <div><div className="text-muted-foreground">Original</div><div className="font-mono font-medium text-warn">{fmtNum(req.original_value)}</div></div>
                   <div>
                     <div className="text-muted-foreground flex items-center gap-1"><ArrowRight className="h-2.5 w-2.5" />Proposed</div>
-                    <div className="font-mono font-medium text-emerald-600">{fmtNum(req.proposed_value)}</div>
+                    <div className="font-mono font-medium text-accent">{fmtNum(req.proposed_value)}</div>
                   </div>
-                  <div><div className="text-muted-foreground">Reason</div><div className="text-[11px] leading-tight">{req.reason}</div></div>
+                  <div><div className="text-muted-foreground">Reason</div><div className="text-xs leading-tight">{req.reason}</div></div>
                 </div>
                 {req.note && <p className="text-xs text-muted-foreground italic">"{req.note}"</p>}
                 <div className="flex gap-1.5 flex-wrap">
-                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-emerald-400/40 text-emerald-700 hover:bg-emerald-50"
+                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-accent/40 text-accent hover:bg-accent-soft"
                     onClick={() => approveRequest(req)}>
                     <CheckCircle2 className="h-3 w-3" />Apply correction
                   </Button>
@@ -624,7 +624,7 @@ function PendingReviewTab() {
 
       {filtered.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
-          <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+          <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-accent" />
           {rows.length === 0 ? 'No readings pending review — all clear.' : 'No results match the current filters.'}
         </Card>
       ) : (
@@ -642,7 +642,7 @@ function PendingReviewTab() {
             // Rough entity + plant IDs for chain context — we pass plant_id from the row
             // The row doesn't carry entityId directly; we use id as proxy for chain lookup
             return (
-              <Card key={row.id} className={cn('p-4', isBack ? 'border-destructive/30' : 'border-amber-300/40')}>
+              <Card key={row.id} className={cn('p-4', isBack ? 'border-destructive/30' : 'border-warn/40')}>
                 <div className="flex items-start gap-2.5">
                   <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="flex-1 min-w-0 space-y-2">
@@ -651,10 +651,10 @@ function PendingReviewTab() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-sm font-medium truncate">{row.entity_name}</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{row.plant_name}</Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
-                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
-                            isBack ? 'bg-destructive/10 text-destructive' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300')}>
+                          <Badge variant="outline" className="text-2xs px-1.5 py-0">{row.plant_name}</Badge>
+                          <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
+                          <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium',
+                            isBack ? 'bg-destructive/10 text-destructive' : 'bg-warn-soft text-warn')}>
                             {isBack ? '↓ backward' : '↑ spike'}
                           </span>
                         </div>
@@ -696,13 +696,13 @@ function PendingReviewTab() {
                         disabled={isBusy}
                       />
                       <Button size="sm" variant="outline"
-                        className="h-7 gap-1 text-xs border-teal-400/40 text-teal-700 hover:bg-teal-50"
+                        className="h-7 gap-1 text-xs border-primary/40 text-primary hover:bg-primary-soft"
                         disabled={isBusy} onClick={() => resolveOne(row, 'normal')}>
                         {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                         Approve
                       </Button>
                       <Button size="sm" variant="outline"
-                        className="h-7 gap-1 text-xs border-amber-400/40 text-amber-700 hover:bg-amber-50"
+                        className="h-7 gap-1 text-xs border-warn/40 text-warn hover:bg-warn-soft"
                         disabled={isBusy} onClick={() => setEditRow(row)}>
                         <Pencil className="h-3 w-3" />
                         Edit value
@@ -716,7 +716,7 @@ function PendingReviewTab() {
                       {/* Item 9: unlock button — only shows after supervisor approval locks the row */}
                       {(row as any).locked_at && (
                         <Button size="sm" variant="outline"
-                          className="h-7 gap-1 text-xs border-teal-400/40 text-teal-700 hover:bg-teal-50"
+                          className="h-7 gap-1 text-xs border-primary/40 text-primary hover:bg-primary-soft"
                           disabled={isBusy} onClick={() => unlockReading(row)}>
                           🔓 Unlock
                         </Button>
@@ -860,7 +860,7 @@ function CorrectionInboxTab() {
 
       {rows.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
-          <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+          <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-accent" />
           No active backward readings — inbox clear.
         </Card>
       ) : rows.map(row => {
@@ -873,8 +873,8 @@ function CorrectionInboxTab() {
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-sm font-medium">{row.entity_name}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{row.plant_name}</Badge>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
+                    <Badge variant="outline" className="text-2xs px-1.5 py-0">{row.plant_name}</Badge>
+                    <Badge variant="outline" className="text-2xs px-1.5 py-0">{tableLabel[row.source_table]}</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">{fmtDt(row.reading_datetime)} · {row.operator_email ?? '—'}</div>
                 </div>
@@ -892,7 +892,7 @@ function CorrectionInboxTab() {
                 <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={isBusy} onClick={() => setEditRow(row)}>
                   <Pencil className="h-3 w-3" />Edit value
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-amber-700 border-amber-400/40" disabled={isBusy} onClick={() => markReplacement(row)}>
+                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-warn border-warn/40" disabled={isBusy} onClick={() => markReplacement(row)}>
                   Mark as meter replacement
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-destructive border-destructive/30" disabled={isBusy} onClick={() => retractOne(row)}>
@@ -929,11 +929,11 @@ function EditHistoryTab() {
 
   const actionBadge = (action: string) => {
     const cfg: Record<string, string> = {
-      normalize: 'bg-teal-100 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300',
+      normalize: 'bg-primary-soft text-primary',
       retract:   'bg-muted text-muted-foreground',
-      tag:       'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+      tag:       'bg-warn-soft text-warn',
     };
-    return <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', cfg[action] ?? 'bg-muted text-muted-foreground')}>{action}</span>;
+    return <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium', cfg[action] ?? 'bg-muted text-muted-foreground')}>{action}</span>;
   };
 
   if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
@@ -949,7 +949,7 @@ function EditHistoryTab() {
             <thead className="bg-muted/40">
               <tr>
                 {['Date', 'Table', 'Action', 'Original', 'Adjusted', 'Note', 'By'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-[10px] uppercase tracking-wide">{h}</th>
+                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -990,12 +990,12 @@ function OperatorStatsTab() {
 
   const rateColor = (pct: number) =>
     pct >= 20 ? 'text-destructive font-semibold' :
-    pct >= 10 ? 'text-amber-600 font-medium' :
-    pct >= 5  ? 'text-amber-500' : 'text-emerald-600';
+    pct >= 10 ? 'text-warn font-medium' :
+    pct >= 5  ? 'text-warn' : 'text-accent';
 
   const rateBg = (pct: number) =>
     pct >= 20 ? 'bg-destructive/10' :
-    pct >= 10 ? 'bg-amber-50 dark:bg-amber-950/20' : '';
+    pct >= 10 ? 'bg-warn-soft' : '';
 
   if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
 
@@ -1010,7 +1010,7 @@ function OperatorStatsTab() {
             <thead className="bg-muted/40">
               <tr>
                 {['Operator', 'Entries', 'Backward', 'Pending', 'Retracted', 'Error rate', 'Last entry'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-[10px] uppercase tracking-wide">{h}</th>
+                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1020,19 +1020,19 @@ function OperatorStatsTab() {
                   <td className="px-3 py-2.5 font-medium max-w-[180px]">
                     <div className="truncate" title={s.operator_email}>{s.operator_email ?? '—'}</div>
                     {s.error_rate_pct >= 10 && (
-                      <div className="text-[10px] text-amber-600 mt-0.5">Needs review</div>
+                      <div className="text-2xs text-warn mt-0.5">Needs review</div>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-muted-foreground">{s.total_entries.toLocaleString()}</td>
                   <td className="px-3 py-2.5">{s.backward_readings > 0 ? <span className="text-destructive font-medium">{s.backward_readings}</span> : <span className="text-muted-foreground">0</span>}</td>
-                  <td className="px-3 py-2.5">{s.pending_review > 0 ? <span className="text-amber-600 font-medium">{s.pending_review}</span> : <span className="text-muted-foreground">0</span>}</td>
+                  <td className="px-3 py-2.5">{s.pending_review > 0 ? <span className="text-warn font-medium">{s.pending_review}</span> : <span className="text-muted-foreground">0</span>}</td>
                   <td className="px-3 py-2.5">{s.retracted > 0 ? <span className="text-muted-foreground">{s.retracted}</span> : <span className="text-muted-foreground">0</span>}</td>
                   <td className="px-3 py-2.5">
                     <span className={cn('font-mono', rateColor(s.error_rate_pct))}>
                       {s.error_rate_pct?.toFixed(1) ?? '0.0'}%
                     </span>
                     <div className="w-full bg-muted rounded-full h-1 mt-1">
-                      <div className={cn('h-1 rounded-full', s.error_rate_pct >= 20 ? 'bg-destructive' : s.error_rate_pct >= 10 ? 'bg-amber-500' : 'bg-emerald-500')}
+                      <div className={cn('h-1 rounded-full', s.error_rate_pct >= 20 ? 'bg-destructive' : s.error_rate_pct >= 10 ? 'bg-warn' : 'bg-accent')}
                         style={{ width: `${Math.min(100, s.error_rate_pct * 3)}%` }} />
                     </div>
                   </td>
@@ -1096,7 +1096,7 @@ export default function DataCorrections() {
             <ClipboardCheck className="h-3.5 w-3.5" />
             Pending
             {pendingCount > 0 && (
-              <Badge className="ml-1 h-4 min-w-4 px-1 text-[10px] bg-destructive text-destructive-foreground">
+              <Badge className="ml-1 h-4 min-w-4 px-1 text-2xs bg-destructive text-destructive-foreground">
                 {pendingCount}
               </Badge>
             )}

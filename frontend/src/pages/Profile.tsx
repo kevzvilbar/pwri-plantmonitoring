@@ -143,7 +143,7 @@ export default function Profile() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[11px] text-muted-foreground mt-1.5">
+        <p className="text-xs text-muted-foreground mt-1.5">
           You can always switch plant from the top-bar selector.
         </p>
       </Card>
@@ -167,7 +167,7 @@ export default function Profile() {
           ))}
           <StatusPill tone={access.tone}>{access.label}</StatusPill>
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           Access level is computed from role:{' '}
           Admin → Full access · Manager → Elevated · Supervisor → Limited · others → Restricted.
         </div>
@@ -287,7 +287,7 @@ export default function Profile() {
             ))}
           </div>
         )}
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Plant assignments can only be changed by an Admin.
         </p>
       </Card>

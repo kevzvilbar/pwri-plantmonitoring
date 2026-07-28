@@ -171,11 +171,11 @@ export function TopBar() {
               style={{ display: 'none' }}
               className="h-7 w-7 rounded-lg bg-[hsl(175_84%_31%)] items-center justify-center shrink-0"
             >
-              <span className="text-white font-bold text-[11px] select-none">PW</span>
+              <span className="text-white font-bold text-xs select-none">PW</span>
             </div>
             <div className="flex flex-col leading-none">
-              <span className="text-[13px] font-semibold tracking-tight text-topbar-foreground">PWRI</span>
-              <span className="text-[9px] text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
+              <span className="text-xs font-semibold tracking-tight text-topbar-foreground">PWRI</span>
+              <span className="text-3xs text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
                 Monitoring & Alert
               </span>
             </div>
@@ -193,7 +193,7 @@ export function TopBar() {
                 'w-[140px] sm:w-[210px] h-8',
                 'bg-white/10 border-white/15 text-topbar-foreground',
                 'hover:bg-white/15 focus:ring-white/30 focus:ring-1',
-                'text-[12.5px] font-medium placeholder:text-topbar-muted',
+                'text-xs font-medium placeholder:text-topbar-muted',
                 '[&>span]:text-topbar-foreground [&>svg]:text-topbar-muted',
               )}
             >
@@ -254,7 +254,7 @@ export function TopBar() {
                   className={cn(
                     'absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-[3px]',
                     'flex items-center justify-center rounded-full',
-                    'text-[9px] font-bold text-white leading-none',
+                    'text-3xs font-bold text-white leading-none',
                     'ring-2 ring-topbar',
                     hasCritical ? 'bg-danger animate-pulse' : plantAlerts.length > 0 ? 'bg-warn' : 'bg-danger',
                   )}
@@ -274,9 +274,9 @@ export function TopBar() {
                 <DropdownMenuLabel className="flex items-center justify-between py-2">
                   <span className="flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-danger" />
-                    <span className="text-[12px]">Plant Alerts</span>
+                    <span className="text-xs">Plant Alerts</span>
                     <span className={cn(
-                      'text-[9.5px] font-bold px-1.5 py-0.5 rounded-full',
+                      'text-3xs font-bold px-1.5 py-0.5 rounded-full',
                       hasCritical
                         ? 'bg-danger-soft text-danger'
                         : 'bg-warn-soft text-warn-foreground',
@@ -287,7 +287,7 @@ export function TopBar() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => sortedAlerts.forEach((a) => snoozeAlert(a.id, 60 * 60 * 1000))}
-                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-warn transition-colors"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-warn transition-colors"
                       title="Snooze all alerts for 1 hour"
                     >
                       <BellOff className="h-3 w-3" />
@@ -296,7 +296,7 @@ export function TopBar() {
                     <span className="text-muted-foreground/30">|</span>
                     <button
                       onClick={clearAlerts}
-                      className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                     >
                       Dismiss all
                     </button>
@@ -318,7 +318,7 @@ export function TopBar() {
                       <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', sevTextCls(alert.severity))} />
                       <div className="flex-1 min-w-0 space-y-0.5">
                         <div className="flex items-start justify-between gap-1">
-                          <span className={cn('text-[12px] font-semibold leading-snug', sevTextCls(alert.severity))}>
+                          <span className={cn('text-xs font-semibold leading-snug', sevTextCls(alert.severity))}>
                             {alert.title}
                           </span>
                           <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
@@ -332,7 +332,7 @@ export function TopBar() {
                             </button>
                             <button
                               onClick={() => removeAlerts([alert.id])}
-                              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-[10px]"
+                              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-2xs"
                               aria-label="Dismiss"
                               title="Dismiss"
                             >
@@ -340,8 +340,8 @@ export function TopBar() {
                             </button>
                           </div>
                         </div>
-                        <p className="text-[11px] text-muted-foreground leading-snug">{alert.description}</p>
-                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+                        <p className="text-xs text-muted-foreground leading-snug">{alert.description}</p>
+                        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground/60">
                           <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', sevDotCls(alert.severity))} />
                           {/* Plant name — only shown when user has multi-plant access */}
                           {isMultiPlant && plantName && (
@@ -373,11 +373,11 @@ export function TopBar() {
 
             {/* DB Notifications */}
             <DropdownMenuLabel className="flex items-center justify-between py-2">
-              <span className="text-[12px]">Notifications</span>
+              <span className="text-xs">Notifications</span>
               {unreadCount > 0 && (
                 <button
                   onClick={markAllRead}
-                  className="text-[11px] text-accent hover:text-accent/80 underline underline-offset-2 transition-colors"
+                  className="text-xs text-accent hover:text-accent/80 underline underline-offset-2 transition-colors"
                 >
                   Mark all read
                 </button>
@@ -402,15 +402,15 @@ export function TopBar() {
                   {!n.read && (
                     <span className="h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
                   )}
-                  <span className={cn('text-[12.5px] flex-1', n.read ? 'font-normal' : 'font-semibold')}>
+                  <span className={cn('text-xs flex-1', n.read ? 'font-normal' : 'font-semibold')}>
                     {n.title}
                   </span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="text-2xs text-muted-foreground shrink-0">
                     {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                   </span>
                 </div>
                 {n.message && (
-                  <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2 pl-3.5">
+                  <p className="text-xs text-muted-foreground leading-snug line-clamp-2 pl-3.5">
                     {n.message}
                   </p>
                 )}

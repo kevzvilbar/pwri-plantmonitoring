@@ -60,7 +60,7 @@ export function AuditLogPanel() {
         ))}
       </div>
       {data?.table_missing && (
-        <Card className="p-3 text-xs text-amber-600 border-amber-500/30 bg-amber-500/5">
+        <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5">
           <strong>Audit log table not yet created.</strong> Run{' '}
           <code>supabase/migrations/20260424_deletion_audit_log.sql</code> in your
           Supabase project (SQL editor) to enable full audit history. Deletions
@@ -68,7 +68,7 @@ export function AuditLogPanel() {
         </Card>
       )}
       {data?.warning && !data?.table_missing && (
-        <Card className="p-3 text-xs text-amber-600 border-amber-500/30 bg-amber-500/5">
+        <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5">
           Audit log warning: <code>{data.warning}</code>
         </Card>
       )}
@@ -90,7 +90,7 @@ export function AuditLogPanel() {
                 <Badge className="bg-danger text-danger-foreground">FORCE</Badge>
               )}
             </div>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {format(new Date(e.created_at), 'yyyy-MM-dd HH:mm')}
             </span>
           </div>

@@ -99,12 +99,12 @@ export default function Admin() {
         </TabsList>
 
         {/* Banner: redirect to unified Data Corrections page */}
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/40 rounded-lg mt-3 text-xs">
-          <span className="text-teal-800 dark:text-teal-300">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-primary-soft border border-primary rounded-lg mt-3 text-xs">
+          <span className="text-primary">
             Reading corrections, pending reviews, and operator stats have moved to <strong>Data Corrections</strong>.
           </span>
           <a href="/pwri-plantmonitoring/data-corrections"
-             className="shrink-0 text-teal-700 dark:text-teal-400 font-medium hover:underline">
+             className="shrink-0 text-primary font-medium hover:underline">
             Open →
           </a>
         </div>

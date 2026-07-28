@@ -19,14 +19,14 @@ function statusFromLastDt(dt: string | null | undefined): StripStatus {
 }
 
 const DOT_CLS: Record<StripStatus, string> = {
-  online:  'bg-emerald-500',
-  stale:   'bg-amber-400',
+  online:  'bg-accent',
+  stale:   'bg-warn',
   offline: 'bg-muted-foreground/30',
 };
 
 const PILL_CLS: Record<StripStatus, string> = {
-  online:  'border-emerald-200/70 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/20',
-  stale:   'border-amber-200/70  bg-amber-50/40  dark:border-amber-900/50  dark:bg-amber-950/20',
+  online:  'border-accent/70 bg-accent-soft/40',
+  stale:   'border-warn/70  bg-warn-soft/40  ',
   offline: 'border-border/60 bg-muted/20',
 };
 
@@ -113,7 +113,7 @@ export function PlantHealthStrip({ plantIds }: Props) {
       aria-label="Per-plant status strip"
     >
       <div className="flex items-center gap-1.5 sm:flex-wrap min-w-max sm:min-w-0">
-        <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mr-0.5 shrink-0">
+        <span className="text-2xs text-muted-foreground/50 uppercase tracking-wider mr-0.5 shrink-0">
           Plants
         </span>
 
@@ -126,7 +126,7 @@ export function PlantHealthStrip({ plantIds }: Props) {
             <div
               key={plant.id}
               className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] whitespace-nowrap select-none shrink-0',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs whitespace-nowrap select-none shrink-0',
                 PILL_CLS[status],
               )}
               title={`${plant.name} · Last reading: ${lastDt ? new Date(lastDt).toLocaleString() : 'none'}`}

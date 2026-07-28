@@ -59,7 +59,7 @@ export function ReasonDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              Details <span className="text-[10px]">(optional)</span>
+              Details <span className="text-2xs">(optional)</span>
             </Label>
             <Textarea
               value={detail}

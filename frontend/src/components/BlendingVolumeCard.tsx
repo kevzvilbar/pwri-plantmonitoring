@@ -147,10 +147,10 @@ export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
     <Card className="p-3" data-testid="blending-volume-card">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <h2 className="text-sm font-semibold flex items-center gap-1.5">
-          <Waves className="h-4 w-4 text-violet-600" />
+          <Waves className="h-4 w-4 text-kpi-ro" />
           Blending Volume · last {days}d
         </h2>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-2xs text-muted-foreground">
           Product-line water from blending wells (m³)
         </span>
       </div>
@@ -189,7 +189,7 @@ export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
 
       {topWells.length > 0 && (
         <div className="mt-3 pt-2 border-t">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
+          <div className="text-2xs uppercase tracking-wide text-muted-foreground mb-1.5">
             Top contributors
           </div>
           <div className="space-y-1">
@@ -206,7 +206,7 @@ export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
                   )}
                 </div>
                 <span className="font-mono-num shrink-0 ml-2">
-                  {fmtNum(w.volume_m3, 0)} <span className="text-[10px] text-muted-foreground">m³</span>
+                  {fmtNum(w.volume_m3, 0)} <span className="text-2xs text-muted-foreground">m³</span>
                 </span>
               </div>
             ))}
@@ -228,12 +228,12 @@ function KpiTile({
 }) {
   return (
     <div className="rounded-md border bg-card p-2" data-testid={testId}>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+      <div className="text-2xs uppercase tracking-wide text-muted-foreground truncate">
         {label}
       </div>
       <div className="mt-1 font-mono-num text-base text-foreground">
         {value}
-        <span className="text-[10px] font-sans text-muted-foreground ml-1">m³</span>
+        <span className="text-2xs font-sans text-muted-foreground ml-1">m³</span>
       </div>
     </div>
   );

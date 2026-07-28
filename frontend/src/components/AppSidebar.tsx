@@ -135,8 +135,8 @@ export function AppSidebar() {
             className="h-7 w-7 rounded-lg object-cover shrink-0"
           />
           <div className="flex flex-col leading-none">
-            <span className="text-[13px] font-semibold text-sidebar-foreground tracking-tight">PWRI</span>
-            <span className="text-[9px] text-sidebar-foreground/35 tracking-[0.1em] uppercase">
+            <span className="text-xs font-semibold text-sidebar-foreground tracking-tight">PWRI</span>
+            <span className="text-3xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">
               Monitoring & Alert
             </span>
           </div>
@@ -159,7 +159,7 @@ export function AppSidebar() {
               <SidebarGroupLabel
                 className={cn(
                   'h-5 px-1.5 mb-0.5',
-                  'text-[9px] font-bold tracking-[0.14em] uppercase select-none',
+                  'text-3xs font-bold tracking-[0.14em] uppercase select-none',
                   'text-sidebar-foreground/30',
                   groupIdx > 0 && 'border-t border-sidebar-border/25 pt-2.5 mt-2',
                 )}
@@ -219,7 +219,7 @@ export function AppSidebar() {
                             end={item.end}
                             className={cn(
                               'flex items-center gap-2.5 w-full px-2 py-[5px] rounded-md',
-                              'text-[12px] leading-tight transition-all duration-150 group',
+                              'text-xs leading-tight transition-all duration-150 group',
                               isActive
                                 ? [
                                     'bg-sidebar-accent text-sidebar-foreground font-semibold',
@@ -269,7 +269,7 @@ export function AppSidebar() {
               ) : (
                 <>
                   <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
-                  <span className="text-[11px] font-medium">Collapse</span>
+                  <span className="text-xs font-medium">Collapse</span>
                 </>
               )}
             </button>

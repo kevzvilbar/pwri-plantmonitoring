@@ -79,9 +79,9 @@ function getPresence(updatedAt: string, accountStatus: string, isOnline = false)
 }
 
 const presenceConfig: Record<PresenceState, { label: string; dot: string; badge: string }> = {
-  active:  { label: 'Active',  dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  idle:    { label: 'Idle',    dot: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
-  away:    { label: 'Away',    dot: 'bg-orange-400',  badge: 'bg-orange-50 text-orange-700 border-orange-200' },
+  active:  { label: 'Active',  dot: 'bg-accent', badge: 'bg-accent-soft text-accent border-accent' },
+  idle:    { label: 'Idle',    dot: 'bg-warn',   badge: 'bg-warn-soft text-warn border-warn' },
+  away:    { label: 'Away',    dot: 'bg-kpi-solar',  badge: 'bg-kpi-solar/15 text-kpi-solar border-kpi-solar' },
   offline: { label: 'Offline', dot: 'bg-zinc-300',    badge: 'bg-zinc-50 text-zinc-500 border-zinc-200' },
 };
 
@@ -95,26 +95,26 @@ const TILE_ACCENTS = [
 ];
 
 const AVATAR_COLORS = [
-  'bg-sky-500', 'bg-violet-500', 'bg-teal-500', 'bg-rose-500',
-  'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-pink-500',
+  'bg-info', 'bg-kpi-ro', 'bg-primary', 'bg-danger',
+  'bg-warn', 'bg-kpi-ro', 'bg-accent', 'bg-danger',
 ];
 
 const PLANT_COLUMN_ACCENTS = [
-  { header: 'from-sky-600 to-sky-500',      border: 'border-sky-200',   bg: 'bg-sky-50',    text: 'text-sky-700',    line: '#0ea5e9' },
-  { header: 'from-teal-600 to-teal-500',    border: 'border-teal-200',  bg: 'bg-teal-50',   text: 'text-teal-700',   line: '#14b8a6' },
-  { header: 'from-cyan-600 to-cyan-500',    border: 'border-cyan-200',  bg: 'bg-cyan-50',   text: 'text-cyan-700',   line: '#06b6d4' },
-  { header: 'from-sky-700 to-teal-600',     border: 'border-sky-300',   bg: 'bg-sky-100',   text: 'text-sky-800',    line: '#0369a1' },
-  { header: 'from-teal-700 to-cyan-600',    border: 'border-teal-300',  bg: 'bg-teal-100',  text: 'text-teal-800',   line: '#0f766e' },
-  { header: 'from-cyan-700 to-sky-600',     border: 'border-cyan-300',  bg: 'bg-cyan-100',  text: 'text-cyan-800',   line: '#0e7490' },
+  { header: 'from-info to-info',      border: 'border-info',   bg: 'bg-info-soft',    text: 'text-info',    line: '#0ea5e9' },
+  { header: 'from-primary to-primary',    border: 'border-primary',  bg: 'bg-primary-soft',   text: 'text-primary',   line: '#14b8a6' },
+  { header: 'from-highlight to-highlight',    border: 'border-highlight',  bg: 'bg-highlight-soft',   text: 'text-highlight',   line: '#06b6d4' },
+  { header: 'from-info to-primary',     border: 'border-info',   bg: 'bg-info-soft',   text: 'text-info',    line: '#0369a1' },
+  { header: 'from-primary to-highlight',    border: 'border-primary',  bg: 'bg-primary-soft',  text: 'text-primary',   line: '#0f766e' },
+  { header: 'from-highlight to-info',     border: 'border-highlight',  bg: 'bg-highlight-soft',  text: 'text-highlight',   line: '#0e7490' },
 ];
 
 const DEPTH_SHADES = [
   'bg-white',
-  'bg-sky-50/80',
-  'bg-sky-100/70',
-  'bg-teal-50/80',
-  'bg-teal-100/70',
-  'bg-cyan-50/80',
+  'bg-info-soft/80',
+  'bg-info-soft/70',
+  'bg-primary-soft/80',
+  'bg-primary-soft/70',
+  'bg-highlight-soft/80',
 ];
 
 const CONNECTOR_COLORS = ['#0ea5e9', '#14b8a6', '#06b6d4', '#0369a1', '#0f766e', '#0e7490'];
@@ -142,10 +142,10 @@ function fullName(s: StaffMember) {
 // ---------------------------------------------------------------------------
 
 const ROLE_HIERARCHY: { role: string; level: number; icon: ReactNode; color: string; bg: string }[] = [
-  { role: 'Admin',         level: 0, icon: <Crown className="h-3 w-3" />,        color: 'text-rose-700',    bg: 'bg-rose-50 border-rose-200' },
-  { role: 'Manager',       level: 1, icon: <Briefcase className="h-3 w-3" />,    color: 'text-sky-700',     bg: 'bg-sky-50 border-sky-200' },
-  { role: 'Data Analyst',  level: 2, icon: <BarChart2 className="h-3 w-3" />,    color: 'text-violet-700',  bg: 'bg-violet-50 border-violet-200' },
-  { role: 'Technician',    level: 3, icon: <Settings className="h-3 w-3" />,     color: 'text-teal-700',    bg: 'bg-teal-50 border-teal-200' },
+  { role: 'Admin',         level: 0, icon: <Crown className="h-3 w-3" />,        color: 'text-danger',    bg: 'bg-danger-soft border-danger' },
+  { role: 'Manager',       level: 1, icon: <Briefcase className="h-3 w-3" />,    color: 'text-info',     bg: 'bg-info-soft border-info' },
+  { role: 'Data Analyst',  level: 2, icon: <BarChart2 className="h-3 w-3" />,    color: 'text-kpi-ro',  bg: 'bg-kpi-ro/15 border-kpi-ro' },
+  { role: 'Technician',    level: 3, icon: <Settings className="h-3 w-3" />,     color: 'text-primary',    bg: 'bg-primary-soft border-primary' },
   { role: 'Operator',      level: 4, icon: <UserCircle className="h-3 w-3" />,   color: 'text-zinc-700',    bg: 'bg-zinc-50 border-zinc-200' },
 ];
 
@@ -189,7 +189,7 @@ function MsgStatus({ isMine, msgId, messages }: { isMine: boolean; msgId: string
   const idx = messages.findIndex((m) => m.id === msgId);
   const delivered = idx !== -1;
   return delivered
-    ? <CheckCheck className="h-2.5 w-2.5 text-sky-300 shrink-0" />
+    ? <CheckCheck className="h-2.5 w-2.5 text-info shrink-0" />
     : <Check className="h-2.5 w-2.5 text-white/50 shrink-0" />;
 }
 
@@ -285,16 +285,16 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
       )}
       style={{ height: 'min(460px, 80dvh)' }}
     >
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-info to-primary text-white shrink-0">
         <div className="relative shrink-0">
           <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold', avatarColor(peer.id))}>
             {initials(peer)}
           </div>
-          <span className={cn('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-sky-600', pc.dot)} />
+          <span className={cn('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-info', pc.dot)} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-sm truncate leading-tight">{fullName(peer)}</div>
-          <div className="text-[10px] opacity-75 leading-tight">
+          <div className="text-2xs opacity-75 leading-tight">
             {peerTyping ? (
               <span className="animate-pulse">typing…</span>
             ) : (
@@ -307,7 +307,7 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
         </Button>
       </div>
 
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100 text-amber-700 text-[10px] shrink-0">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-warn-soft border-b border-warn text-warn text-2xs shrink-0">
         <Clock className="h-3 w-3 shrink-0" />
         Messages auto-delete after 8 hours. No content is retained.
       </div>
@@ -326,12 +326,12 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
                   <div className={cn(
                     'rounded-2xl px-3 py-2 text-xs max-w-[85%] break-words leading-relaxed',
                     mine
-                      ? 'bg-sky-600 text-white rounded-br-sm'
+                      ? 'bg-info text-white rounded-br-sm'
                       : 'bg-muted text-foreground rounded-bl-sm',
                   )}>
                     {m.body}
                   </div>
-                  <div className="flex items-center gap-1 text-[9px] text-muted-foreground px-1">
+                  <div className="flex items-center gap-1 text-3xs text-muted-foreground px-1">
                     <span>{formatTime(m.sent_at)}</span>
                     <span className="opacity-40">·</span>
                     <Clock className="h-2 w-2 opacity-60" />
@@ -345,7 +345,7 @@ function ChatWindow({ peer, currentUserId, onClose, onlineIds }: {
               <div className="flex items-start">
                 <div className="flex flex-col gap-0.5 items-start">
                   <TypingIndicator />
-                  <span className="text-[9px] text-muted-foreground px-1">{peer.first_name ?? peer.username} is typing…</span>
+                  <span className="text-3xs text-muted-foreground px-1">{peer.first_name ?? peer.username} is typing…</span>
                 </div>
               </div>
             )}
@@ -387,7 +387,7 @@ function InfoRow({ icon, label, value }: { icon: ReactNode; label: string; value
     <div className="flex gap-2.5">
       <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
       <div className="min-w-0">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</div>
+        <div className="text-2xs text-muted-foreground uppercase tracking-wide">{label}</div>
         <div className="text-sm break-words">{value}</div>
       </div>
     </div>
@@ -475,7 +475,7 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
 
   return (
     <div
-      className="relative bg-card rounded-xl border p-3 flex flex-col items-center gap-1.5 hover:shadow-md transition-all cursor-pointer group hover:border-sky-300"
+      className="relative bg-card rounded-xl border p-3 flex flex-col items-center gap-1.5 hover:shadow-md transition-all cursor-pointer group hover:border-info/90"
       onClick={onDetail}
     >
       {/* Avatar circle */}
@@ -490,9 +490,9 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
       <div className="text-center min-w-0 w-full">
         <div className="font-medium text-xs leading-tight truncate text-center">
           {fullName(member)}
-          {isSelf && <span className="ml-1 text-[9px] text-muted-foreground">(you)</span>}
+          {isSelf && <span className="ml-1 text-3xs text-muted-foreground">(you)</span>}
         </div>
-        <div className={cn('inline-flex items-center gap-0.5 mt-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full border', rc.bg, rc.color)}>
+        <div className={cn('inline-flex items-center gap-0.5 mt-0.5 text-3xs font-medium px-1.5 py-0.5 rounded-full border', rc.bg, rc.color)}>
           {rc.icon}
           <span>{memberRole}</span>
         </div>
@@ -500,10 +500,10 @@ function StaffTile({ member, roles, isSelf, onlineIds, onChat, onDetail }: {
 
       {/* Status + Chat */}
       <div className="flex items-center gap-1.5 w-full justify-center">
-        <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-medium', pc.badge)}>{pc.label}</span>
+        <span className={cn('text-3xs px-1.5 py-0.5 rounded-full border font-medium', pc.badge)}>{pc.label}</span>
         {!isSelf && (
           <button
-            className="h-5 w-5 flex items-center justify-center rounded-full bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors shrink-0"
+            className="h-5 w-5 flex items-center justify-center rounded-full bg-info-soft text-info hover:bg-info-soft transition-colors shrink-0"
             onClick={(e) => { e.stopPropagation(); onChat(); }}
             title="Chat"
             aria-label="Chat"
@@ -634,8 +634,8 @@ function Staff() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-            <span className="text-emerald-600 font-semibold">{onlineCount}</span> active · {filteredStaff.length} shown
+          <span className="text-2xs text-muted-foreground whitespace-nowrap">
+            <span className="text-accent font-semibold">{onlineCount}</span> active · {filteredStaff.length} shown
           </span>
         </div>
       </div>
@@ -724,29 +724,29 @@ function OrgNodeFixed({ member, allStaff, roles, depth = 0, accentLine }: {
         )}
 
         {/* Avatar */}
-        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0', avatarColor(member.id))}>
+        <div className={cn('h-6 w-6 rounded-full flex items-center justify-center text-3xs font-bold text-white shrink-0', avatarColor(member.id))}>
           {initials(member)}
         </div>
 
         {/* Name + role */}
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-semibold leading-snug truncate">{fullName(member)}</div>
+          <div className="text-xs font-semibold leading-snug truncate">{fullName(member)}</div>
           <div className="flex items-center gap-1 mt-0.5">
             <span
-              className={cn('inline-flex items-center gap-0.5 text-[9px] font-medium px-1 py-0.5 rounded border', rc.bg, rc.color)}
+              className={cn('inline-flex items-center gap-0.5 text-3xs font-medium px-1 py-0.5 rounded border', rc.bg, rc.color)}
             >
               {rc.icon}
               <span>{memberRole}</span>
             </span>
             {member.designation && (
-              <span className="text-[9px] text-muted-foreground truncate max-w-[72px]">{member.designation}</span>
+              <span className="text-3xs text-muted-foreground truncate max-w-[72px]">{member.designation}</span>
             )}
           </div>
         </div>
 
         {hasChildren && (
           <span
-            className="text-[8px] font-bold px-1 rounded shrink-0"
+            className="text-3xs font-bold px-1 rounded shrink-0"
             style={{ color: lineColor, background: `${lineColor}20` }}
           >
             {children.length}
@@ -783,7 +783,7 @@ function HierarchyLegend() {
     <div className="flex flex-wrap items-center gap-1.5 mb-3 px-1">
       {ROLE_HIERARCHY.map((r, i) => (
         <div key={r.role} className="flex items-center gap-1">
-          <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border', r.bg, r.color)}>
+          <span className={cn('inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full border', r.bg, r.color)}>
             {r.icon} {r.role}
           </span>
           {i < ROLE_HIERARCHY.length - 1 && (
@@ -823,7 +823,7 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
           const count = staff.filter((s) => s.plant_assignments?.includes(plant.id)).length;
           return (
             <div key={plant.id}
-              className={cn('flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full border', accent.bg, accent.border, accent.text)}
+              className={cn('flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-1 rounded-full border', accent.bg, accent.border, accent.text)}
             >
               <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent.line }} />
               {plant.name}
@@ -856,8 +856,8 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
               <div className={cn('px-3 py-2 bg-gradient-to-r text-white', accent.header)}>
                 <div className="flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                  <span className="text-[12px] font-bold uppercase tracking-wide truncate flex-1">{plant.name}</span>
-                  <span className="text-[10px] font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full">
+                  <span className="text-xs font-bold uppercase tracking-wide truncate flex-1">{plant.name}</span>
+                  <span className="text-2xs font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full">
                     {plantStaff.length}
                   </span>
                 </div>
@@ -866,7 +866,7 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
               {/* Tree nodes — fully expanded */}
               <div className={cn('flex-1 p-2 space-y-0.5 overflow-y-auto', accent.bg)} style={{ maxHeight: 380 }}>
                 {roots.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground py-3 text-center">No hierarchy configured.</p>
+                  <p className="text-xs text-muted-foreground py-3 text-center">No hierarchy configured.</p>
                 ) : (
                   roots.map((r) => (
                     <OrgNodeFixed
@@ -988,7 +988,7 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
     return (
       <div className="flex items-center justify-center py-1">
         <div
-          className="flex items-center justify-center rounded-md font-bold text-[10px] text-white cursor-default select-none transition-transform hover:scale-105"
+          className="flex items-center justify-center rounded-md font-bold text-2xs text-white cursor-default select-none transition-transform hover:scale-105"
           style={{ background: color, width: 44, height: 22, opacity: status === 'na' ? 0.5 : 1 }}
           onMouseEnter={(e) => onHover(
             status === 'na' ? `${label}\nNot applicable`
@@ -1032,11 +1032,11 @@ function MiniHeatmap({ scores, days, label, todayStr, onHover }: {
 function KpiLegend2() {
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <span className="text-[10px] text-muted-foreground font-semibold">Legend:</span>
+      <span className="text-2xs text-muted-foreground font-semibold">Legend:</span>
       {Object.entries(KPI_STATUS).map(([key, cfg]) => (
         <div key={key} className="flex items-center gap-1">
           <div className="h-3 w-3 rounded-sm" style={{ background: cfg.color }} />
-          <span className="text-[10px] text-muted-foreground">{cfg.label}</span>
+          <span className="text-2xs text-muted-foreground">{cfg.label}</span>
         </div>
       ))}
     </div>
@@ -1430,7 +1430,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
           {RANGES.map(({ label, value }) => (
             <button key={String(value)}
               className={cn('px-3 py-1.5 text-xs font-medium transition-colors',
-                range === value ? 'bg-sky-600 text-white' : 'hover:bg-muted')}
+                range === value ? 'bg-info text-white' : 'hover:bg-muted')}
               onClick={() => setRange(value)}>
               {label}
             </button>
@@ -1440,13 +1440,13 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
         <div className="flex rounded-lg border overflow-hidden">
           <button
             className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors',
-              viewMode === 'team' ? 'bg-violet-600 text-white' : 'hover:bg-muted')}
+              viewMode === 'team' ? 'bg-kpi-ro text-white' : 'hover:bg-muted')}
             onClick={() => setViewMode('team')}>
             <Building2 className="h-3 w-3" /> Team Coverage
           </button>
           <button
             className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors',
-              viewMode === 'individual' ? 'bg-violet-600 text-white' : 'hover:bg-muted')}
+              viewMode === 'individual' ? 'bg-kpi-ro text-white' : 'hover:bg-muted')}
             onClick={() => setViewMode('individual')}>
             <User className="h-3 w-3" /> Individual Activity
           </button>
@@ -1459,7 +1459,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
             <><span className="font-semibold text-foreground">{operators.length}</span> operators ·{' '}</>
           )}
           <span className={cn('font-semibold',
-            summary.pct >= 80 ? 'text-emerald-600' : summary.pct >= 50 ? 'text-amber-600' : 'text-red-600')}>
+            summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger')}>
             {summary.pct}%
           </span>{' '}{viewMode === 'team' ? 'covered' : 'logged (of full plant target)'}
         </div>
@@ -1475,7 +1475,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       <KpiLegend2 />
 
       {/* Info banner */}
-      <div className="flex items-start gap-2 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 text-xs text-sky-700">
+      <div className="flex items-start gap-2 bg-info-soft border border-info rounded-lg px-3 py-2 text-xs text-info">
         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
           {viewMode === 'team' ? (
@@ -1505,13 +1505,13 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
             {/* Column headers */}
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-semibold text-[11px] sticky left-0 bg-muted/50 z-10 min-w-[148px] max-w-[148px]">
+                <th className="text-left px-3 py-2 font-semibold text-xs sticky left-0 bg-muted/50 z-10 min-w-[148px] max-w-[148px]">
                   {viewMode === 'team' ? 'Plant' : 'Operator'}
                 </th>
                 {INPUT_COLS.map((col) => (
                   <th key={col.key} className="py-2 px-1 font-semibold text-center">
                     <span
-                      className="inline-block px-2 py-0.5 rounded text-white text-[9px] font-bold whitespace-nowrap"
+                      className="inline-block px-2 py-0.5 rounded text-white text-3xs font-bold whitespace-nowrap"
                       style={{ background: col.color }}>
                       {col.label}
                     </span>
@@ -1531,7 +1531,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                         style={{ borderLeft: `3px solid ${accent.line}` }}>
                         <div className="flex items-center gap-1.5">
                           <Building2 className={cn('h-3 w-3 shrink-0', accent.text)} />
-                          <span className={cn('font-semibold text-[11px]', accent.text)}>{plant.name}</span>
+                          <span className={cn('font-semibold text-xs', accent.text)}>{plant.name}</span>
                         </div>
                       </td>
                       {INPUT_COLS.map((col) => (
@@ -1566,8 +1566,8 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                           <ChevronRight className={cn('h-3.5 w-3.5 transition-transform shrink-0',
                             accent.text, isExpanded && 'rotate-90')} />
                           <Building2 className={cn('h-3 w-3 shrink-0', accent.text)} />
-                          <span className={cn('font-semibold text-[11px]', accent.text)}>{plant.name}</span>
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className={cn('font-semibold text-xs', accent.text)}>{plant.name}</span>
+                          <span className="text-2xs text-muted-foreground">
                             ({plantOps.length})
                           </span>
                         </div>
@@ -1606,10 +1606,10 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                           <td className="px-3 py-1 sticky left-0 z-10 bg-background pl-8"
                             style={{ borderLeft: `3px solid ${accent.line}` }}>
                             <div className="flex items-center gap-1.5">
-                              <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0', avatarColor(op.id))}>
+                              <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-3xs font-bold text-white shrink-0', avatarColor(op.id))}>
                                 {initials(op)}
                               </div>
-                              <span className="text-[11px] font-medium truncate max-w-[90px] leading-tight">
+                              <span className="text-xs font-medium truncate max-w-[90px] leading-tight">
                                 {fullName(op)}
                               </span>
                             </div>
@@ -1641,21 +1641,21 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-2">
         {[
-          { label: viewMode === 'team' ? 'Coverage Rate' : 'Logging Rate', value: `${summary.pct}%`, color: summary.pct >= 80 ? 'text-emerald-600' : summary.pct >= 50 ? 'text-amber-600' : 'text-red-600' },
-          { label: viewMode === 'team' ? 'Asset-Days Logged' : 'Cells Completed', value: `${summary.complete}/${summary.total}`, color: 'text-sky-600' },
-          { label: viewMode === 'team' ? 'Assets Missed' : 'Cells Missed', value: `${summary.missed}`, color: summary.missed === 0 ? 'text-emerald-600' : 'text-red-600' },
-          { label: 'Pending Today', value: `${summary.pending}`, color: summary.pending === 0 ? 'text-muted-foreground' : 'text-sky-500' },
+          { label: viewMode === 'team' ? 'Coverage Rate' : 'Logging Rate', value: `${summary.pct}%`, color: summary.pct >= 80 ? 'text-accent' : summary.pct >= 50 ? 'text-warn' : 'text-danger' },
+          { label: viewMode === 'team' ? 'Asset-Days Logged' : 'Cells Completed', value: `${summary.complete}/${summary.total}`, color: 'text-info' },
+          { label: viewMode === 'team' ? 'Assets Missed' : 'Cells Missed', value: `${summary.missed}`, color: summary.missed === 0 ? 'text-accent' : 'text-danger' },
+          { label: 'Pending Today', value: `${summary.pending}`, color: summary.pending === 0 ? 'text-muted-foreground' : 'text-info' },
         ].map((s) => (
           <div key={s.label} className="flex flex-col items-center bg-muted/40 rounded-lg py-3 px-2 text-center gap-0.5">
             <span className={cn('text-xl font-bold leading-none', s.color)}>{s.value}</span>
-            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+            <span className="text-2xs text-muted-foreground">{s.label}</span>
           </div>
         ))}
       </div>
 
       {/* Tooltip */}
       {tooltip && (
-        <div className="fixed z-50 bg-zinc-900 text-white text-[10px] rounded-lg px-2.5 py-2 shadow-lg pointer-events-none whitespace-pre leading-relaxed"
+        <div className="fixed z-50 bg-zinc-900 text-white text-2xs rounded-lg px-2.5 py-2 shadow-lg pointer-events-none whitespace-pre leading-relaxed"
           style={{ left: tooltip.x + 12, top: tooltip.y - 12 }}>
           {tooltip.text}
         </div>
@@ -1679,9 +1679,9 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
   const coveredPlantIds = new Set(staff.flatMap((s) => s.plant_assignments ?? []));
   const plantsCount = plants.filter((p) => coveredPlantIds.has(p.id)).length;
   const statItems = [
-    { label: 'Total Staff', value: staff.length, icon: <Users className="h-4 w-4" />, color: 'text-sky-600' },
-    { label: 'Active', value: activeCount, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600' },
-    { label: 'Plants Covered', value: plantsCount, icon: <Building2 className="h-4 w-4" />, color: 'text-violet-600' },
+    { label: 'Total Staff', value: staff.length, icon: <Users className="h-4 w-4" />, color: 'text-info' },
+    { label: 'Active', value: activeCount, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-accent' },
+    { label: 'Plants Covered', value: plantsCount, icon: <Building2 className="h-4 w-4" />, color: 'text-kpi-ro' },
   ];
   return (
     <div className="space-y-3">
@@ -1690,7 +1690,7 @@ function DirectoryStats({ staff, roles, plants }: { staff: StaffMember[]; roles:
           <div key={s.label} className="flex flex-col items-center bg-muted/50 rounded-lg py-3 px-2 text-center gap-1">
             <span className={s.color}>{s.icon}</span>
             <span className="text-xl font-bold leading-none">{s.value}</span>
-            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+            <span className="text-2xs text-muted-foreground">{s.label}</span>
           </div>
         ))}
       </div>
@@ -1737,7 +1737,7 @@ function PendingApprovals({ staff }: { staff: StaffMember[] }) {
   if (pending.length === 0) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
-        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+        <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
         No pending approvals. All accounts are active.
       </div>
     );
@@ -1746,17 +1746,17 @@ function PendingApprovals({ staff }: { staff: StaffMember[] }) {
   return (
     <div className="space-y-2">
       {pending.map((s) => (
-        <div key={s.id} className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', avatarColor(s.id))}>
+        <div key={s.id} className="flex items-center gap-3 bg-warn-soft border border-warn rounded-lg px-3 py-2">
+          <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0', avatarColor(s.id))}>
             {initials(s)}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate">{fullName(s)}</div>
-            <div className="text-[11px] text-muted-foreground">@{s.username ?? '—'} · {s.designation ?? 'No designation'}</div>
+            <div className="text-xs text-muted-foreground">@{s.username ?? '—'} · {s.designation ?? 'No designation'}</div>
           </div>
           <Button
             size="sm" variant="outline"
-            className="h-7 px-2 text-[11px] text-emerald-700 border-emerald-300 hover:bg-emerald-50 shrink-0"
+            className="h-7 px-2 text-xs text-accent border-accent hover:bg-accent-soft shrink-0"
             disabled={approving === s.id}
             onClick={() => approve(s.id)}
           >
@@ -1800,7 +1800,7 @@ const MANUAL_SECTIONS: ManualSection[] = [
           };
           return (
             <div key={role} className="flex gap-2">
-              <span className={cn('inline-flex items-center gap-1 font-semibold text-foreground w-28 shrink-0 text-[10px]', color)}>
+              <span className={cn('inline-flex items-center gap-1 font-semibold text-foreground w-28 shrink-0 text-2xs', color)}>
                 {icon} {role}
               </span>
               <span className="text-muted-foreground">{descs[role] ?? '—'}</span>
@@ -1943,7 +1943,7 @@ function RegisterInfo() {
       {isAdmin && (
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3 border-b">
-            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+            <AlertCircle className="h-4 w-4 text-warn shrink-0" />
             <span className="text-sm font-semibold">Pending Approvals</span>
           </div>
           <div className="p-3">
@@ -1957,7 +1957,7 @@ function RegisterInfo() {
         <div className="flex items-center gap-2.5 px-4 py-3 border-b">
           <GitBranch className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-semibold">Reporting Tree</span>
-          <span className="text-[10px] text-muted-foreground ml-1">by plant</span>
+          <span className="text-2xs text-muted-foreground ml-1">by plant</span>
         </div>
         <div className="px-4 py-3">
           <OrgChart staff={staff} roles={roles} plants={plants} />

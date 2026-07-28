@@ -125,26 +125,26 @@ export function BadImportCleanupCard() {
 
   return (
     <Card
-      className="p-3 border-amber-500/30 bg-amber-500/5"
+      className="p-3 border-warn/30 bg-warn/5"
       data-testid="bad-import-cleanup-card"
     >
       <div className="flex items-start gap-2">
-        <Sparkles className="h-4 w-4 mt-0.5 text-amber-600" />
+        <Sparkles className="h-4 w-4 mt-0.5 text-warn" />
         <div className="flex-1 min-w-0 space-y-2">
           <div>
             <h3 className="text-sm font-semibold">
               Cleanup imported-by-mistake plants
             </h3>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               One-click hard-delete of plants imported in error via Smart Import.
               Removes the plant + all wells, locators, RO trains, readings, logs,
               and assignments. Each removal is recorded in the audit log with a{' '}
-              <code className="text-[10px]">[CLEANUP]</code> tag.
+              <code className="text-2xs">[CLEANUP]</code> tag.
             </p>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">
+            <Label className="text-xs text-muted-foreground">
               Plants to delete
             </Label>
             {filteredPlants.length === 0 && (
@@ -164,7 +164,7 @@ export function BadImportCleanupCard() {
                   data-testid={`cleanup-checkbox-${p.name}`}
                 />
                 <span className="flex-1 truncate">{p.name}</span>
-                <span className="text-[11px] text-muted-foreground truncate">
+                <span className="text-xs text-muted-foreground truncate">
                   {p.address ?? '—'}
                 </span>
               </label>
@@ -173,14 +173,14 @@ export function BadImportCleanupCard() {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[11px] text-muted-foreground">
+              <Label className="text-xs text-muted-foreground">
                 Reason <span className="text-danger">*</span>{' '}
-                <span className="text-[10px]">(min 5 chars — required for audit log)</span>
+                <span className="text-2xs">(min 5 chars — required for audit log)</span>
               </Label>
               <button
                 type="button"
                 onClick={() => setReasonExpanded((v) => !v)}
-                className="text-[10px] text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
+                className="text-2xs text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
                 data-testid="cleanup-reason-expand"
                 aria-expanded={reasonExpanded}
               >
@@ -198,9 +198,9 @@ export function BadImportCleanupCard() {
                     key={t.label}
                     type="button"
                     onClick={() => setReason(t.value)}
-                    className={`text-[10px] rounded-full px-2 py-0.5 border transition-colors ${
+                    className={`text-2xs rounded-full px-2 py-0.5 border transition-colors ${
                       active
-                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-800 dark:text-amber-200'
+                        ? 'bg-warn/20 border-warn/50 text-warn'
                         : 'bg-card hover:bg-muted/50 border-border text-muted-foreground'
                     }`}
                     data-testid={`cleanup-reason-template-${t.label}`}
@@ -222,7 +222,7 @@ export function BadImportCleanupCard() {
               className={`text-xs resize-none ${reason.length > 0 && !reasonValid ? 'border-danger' : ''}`}
             />
             {reason.length > 0 && !reasonValid && (
-              <p className="text-[10px] text-danger">
+              <p className="text-2xs text-danger">
                 Reason must be at least 5 characters ({reason.trim().length}/5).
               </p>
             )}
@@ -231,10 +231,10 @@ export function BadImportCleanupCard() {
                with reason="[CLEANUP] <reason>" against entity_label=<plant>. */}
             {selected.size > 0 && reasonValid && (
               <div
-                className="rounded-md bg-muted/40 border border-border/60 px-2 py-1.5 text-[10px] font-mono text-muted-foreground space-y-0.5"
+                className="rounded-md bg-muted/40 border border-border/60 px-2 py-1.5 text-2xs font-mono text-muted-foreground space-y-0.5"
                 data-testid="cleanup-audit-preview"
               >
-                <div className="text-[9px] uppercase tracking-wider text-muted-foreground/70 not-italic">
+                <div className="text-3xs uppercase tracking-wider text-muted-foreground/70 not-italic">
                   audit log preview ({selected.size} {selected.size === 1 ? 'entry' : 'entries'})
                 </div>
                 {Array.from(selected).map((n) => (
@@ -281,7 +281,7 @@ export function BadImportCleanupCard() {
                 );
               })}
               {lastResult.not_found.length > 0 && (
-                <div className="text-amber-600">
+                <div className="text-warn">
                   Skipped (not found): {lastResult.not_found.join(', ')}
                 </div>
               )}
@@ -309,10 +309,10 @@ export function BadImportCleanupCard() {
                   ))}
                 </ul>
                 <div
-                  className="rounded-md bg-muted/50 border border-border/60 px-2 py-1.5 text-[11px] font-mono text-muted-foreground space-y-0.5"
+                  className="rounded-md bg-muted/50 border border-border/60 px-2 py-1.5 text-xs font-mono text-muted-foreground space-y-0.5"
                   data-testid="cleanup-confirm-preview"
                 >
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                  <div className="text-2xs uppercase tracking-wider text-muted-foreground/70">
                     audit log — {selected.size} {selected.size === 1 ? 'entry' : 'entries'}
                   </div>
                   {Array.from(selected).map((n) => (

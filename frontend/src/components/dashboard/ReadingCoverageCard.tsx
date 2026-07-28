@@ -18,15 +18,15 @@ interface CoverageRow {
 function CoverageBar({ done, total, urgent }: { done: number; total: number; urgent: boolean }) {
   const pct    = total > 0 ? Math.round((done / total) * 100) : 0;
   const isLow  = pct < 50;
-  const barCls = urgent && isLow ? 'bg-rose-500' : pct < 80 ? 'bg-amber-400' : 'bg-emerald-500';
+  const barCls = urgent && isLow ? 'bg-danger' : pct < 80 ? 'bg-warn' : 'bg-accent';
 
   return (
     <div>
       <div className="flex justify-between items-baseline mb-1">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {done} <span className="text-muted-foreground/50">/ {total}</span>
         </span>
-        <span className={cn('text-[10px] font-medium', isLow && urgent ? 'text-rose-600' : 'text-muted-foreground')}>
+        <span className={cn('text-2xs font-medium', isLow && urgent ? 'text-danger' : 'text-muted-foreground')}>
           {pct}%
         </span>
       </div>
@@ -144,9 +144,9 @@ export function ReadingCoverageCard({ plantIds }: Props) {
     <Card className="p-3 space-y-3">
       <div className="flex items-center gap-2">
         <ClipboardCheck className="h-4 w-4 text-info shrink-0" aria-hidden />
-        <span className="text-[12px] font-medium">Today's coverage</span>
+        <span className="text-xs font-medium">Today's coverage</span>
         {anyMissing && (
-          <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/70 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/40 text-[10px] font-medium">
+          <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/70 text-2xs font-medium">
             Gaps
           </span>
         )}
@@ -155,7 +155,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       <div className="space-y-2.5">
         {rows.map((r) => (
           <div key={r.label}>
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
               {r.label}
             </span>
             <CoverageBar done={r.done} total={r.total} urgent={r.urgent} />
@@ -167,7 +167,7 @@ export function ReadingCoverageCard({ plantIds }: Props) {
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-[11px] text-muted-foreground"
+          className="h-auto p-0 text-xs text-muted-foreground"
           onClick={() => navigate('/operations')}
         >
           Log missing readings →

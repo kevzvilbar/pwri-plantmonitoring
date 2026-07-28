@@ -229,7 +229,7 @@ export function EmailChangeDialog({ open, onOpenChange, target, onSuccess }: Pro
               autoComplete="off"
               onPaste={(e) => e.preventDefault()} // force manual re-type
             />
-            <p className="text-[11px] text-muted-foreground">Paste is disabled — type it again.</p>
+            <p className="text-xs text-muted-foreground">Paste is disabled — type it again.</p>
           </div>
 
           {/* Validation / hook error */}

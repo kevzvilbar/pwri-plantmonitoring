@@ -176,12 +176,12 @@ export function PmForecastTab() {
         <Card className={cn(
           'p-4 border-l-4',
           !result.recommended_next_date ? 'border-slate-300'
-            : isOverdue(result.recommended_next_date) ? 'border-rose-500 bg-rose-50/40'
-            : isSoon(result.recommended_next_date) ? 'border-amber-500 bg-amber-50/40'
-            : 'border-emerald-500 bg-emerald-50/40',
+            : isOverdue(result.recommended_next_date) ? 'border-danger bg-danger-soft/40'
+            : isSoon(result.recommended_next_date) ? 'border-warn bg-warn-soft/40'
+            : 'border-accent bg-accent-soft/40',
         )}>
           <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-md bg-gradient-to-br from-sky-500 to-violet-600 text-white flex items-center justify-center shrink-0">
+            <div className="h-10 w-10 rounded-md bg-gradient-to-br from-info to-kpi-ro text-white flex items-center justify-center shrink-0">
               <Sparkles className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -197,9 +197,9 @@ export function PmForecastTab() {
                   return (
                     <Badge variant="outline" className={cn(
                       'font-mono-num',
-                      diff < 0 && 'bg-rose-100 text-rose-700 border-rose-200',
-                      diff >= 0 && diff <= 14 && 'bg-amber-100 text-amber-700 border-amber-200',
-                      diff > 14 && 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                      diff < 0 && 'bg-danger-soft text-danger border-danger',
+                      diff >= 0 && diff <= 14 && 'bg-warn-soft text-warn border-warn',
+                      diff > 14 && 'bg-accent-soft text-accent border-accent',
                     )}>
                       <Calendar className="h-3 w-3 mr-1" />
                       {diff === 0 ? 'today' : diff < 0 ? `${-diff}d overdue` : `in ${diff}d`}
@@ -221,7 +221,7 @@ export function PmForecastTab() {
             </div>
           </div>
           {chosen && (
-            <div className="mt-3 text-[11px] text-muted-foreground pl-13">
+            <div className="mt-3 text-xs text-muted-foreground pl-13">
               Asset: <b>{chosen.equipment_name}</b> · Frequency: <b>{chosen.frequency}</b> · Category: {chosen.category}
             </div>
           )}

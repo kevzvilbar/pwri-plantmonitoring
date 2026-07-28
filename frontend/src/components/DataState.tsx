@@ -38,12 +38,12 @@ export function DataState({
   if (error) {
     const msg = (error instanceof Error ? error.message : String(error)) || 'Failed to load';
     return (
-      <div className={cn('rounded-md border border-rose-200 bg-rose-50/50 p-4 text-sm', className)}>
+      <div className={cn('rounded-md border border-danger bg-danger-soft/50 p-4 text-sm', className)}>
         <div className="flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-rose-600 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-danger mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="font-medium text-rose-800">Could not load data</div>
-            <div className="text-xs text-rose-700/80 mt-0.5 break-words">{msg}</div>
+            <div className="font-medium text-danger">Could not load data</div>
+            <div className="text-xs text-danger/80 mt-0.5 break-words">{msg}</div>
           </div>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry}>Retry</Button>

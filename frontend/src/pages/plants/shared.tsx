@@ -98,9 +98,9 @@ export function SummaryCount({ label }: { label: string }) {
   const allActive = active === total && total > 0;
   const noneActive = active === 0;
   const color = allActive
-    ? 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-accent'
     : noneActive && total > 0
-      ? 'text-amber-600 dark:text-amber-400'
+      ? 'text-warn'
       : 'text-foreground';
   return (
     <div className={`font-mono-num text-sm font-medium ${color}`}>

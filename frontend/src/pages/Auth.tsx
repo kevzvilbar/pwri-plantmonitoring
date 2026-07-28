@@ -702,12 +702,12 @@ function SignUpForm() {
       <div className="flex items-center gap-1 flex-wrap">
         {allSteps.map((s, i) => (
           <span key={s} className="flex items-center gap-1">
-            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
               s === step ? 'bg-accent text-accent-foreground'
               : i < stepIdx ? 'bg-muted text-muted-foreground line-through'
               : 'text-muted-foreground'
             }`}>{stepLabel[s]}</span>
-            {i < allSteps.length - 1 && <span className="text-muted-foreground text-[10px]">›</span>}
+            {i < allSteps.length - 1 && <span className="text-muted-foreground text-2xs">›</span>}
           </span>
         ))}
       </div>
@@ -723,7 +723,7 @@ function SignUpForm() {
           </div>
           {designation && (
             <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${
-              isOperator ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-blue-50 border border-blue-200 text-blue-800'
+              isOperator ? 'bg-warn-soft border border-warn text-warn' : 'bg-info-soft border border-info text-info'
             }`}>
               {isOperator ? <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <User className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
               {isOperator
@@ -744,7 +744,7 @@ function SignUpForm() {
             <Label>How many Operators will use this email? *</Label>
             <Input type="number" min={1} max={20} value={operatorCount}
               onChange={(e) => setOperatorCount(Math.max(1, Math.min(20, +e.target.value)))} />
-            <p className="text-[11px] text-muted-foreground mt-1">Maximum 20 per shared email</p>
+            <p className="text-xs text-muted-foreground mt-1">Maximum 20 per shared email</p>
           </div>
         </div>
       )}
@@ -756,7 +756,7 @@ function SignUpForm() {
             <div key={i} className="border rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Operator {i + 1}</span>
-                <Badge variant="outline" className="text-[10px]">Shared: {email}</Badge>
+                <Badge variant="outline" className="text-2xs">Shared: {email}</Badge>
               </div>
               <div><Label className="text-xs">Username *</Label>
                 <Input value={operators[i]?.username ?? ''} onChange={(e) => updateOp(i, 'username', e.target.value)} placeholder="e.g. jdelacruz" /></div>
@@ -794,7 +794,7 @@ function SignUpForm() {
                 {(plants ?? []).map((p) => (
                   <label key={p.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${plantId === p.id ? 'border-accent bg-accent/5' : 'hover:bg-muted/60'}`}>
                     <input type="radio" name="op-plant" value={p.id} checked={plantId === p.id} onChange={() => setPlantId(p.id)} className="accent-accent" />
-                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-[11px] text-muted-foreground">{p.address}</div>}</div>
+                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-xs text-muted-foreground">{p.address}</div>}</div>
                   </label>
                 ))}
               </div>
@@ -806,7 +806,7 @@ function SignUpForm() {
                 {(plants ?? []).map((p) => (
                   <label key={p.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${plantIds.includes(p.id) ? 'border-accent bg-accent/5' : 'hover:bg-muted/60'}`}>
                     <Checkbox checked={plantIds.includes(p.id)} onCheckedChange={() => setPlantIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])} />
-                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-[11px] text-muted-foreground">{p.address}</div>}</div>
+                    <div><div className="text-sm font-medium">{p.name}</div>{p.address && <div className="text-xs text-muted-foreground">{p.address}</div>}</div>
                   </label>
                 ))}
               </div>
@@ -828,7 +828,7 @@ function SignUpForm() {
                 <div className="p-3"><span className="text-muted-foreground text-xs">Usernames</span>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {operators.slice(0, operatorCount).map((o, i) => (
-                      <Badge key={i} variant="secondary" className="text-[11px]">@{o.username} — {o.first_name} {o.last_name}</Badge>
+                      <Badge key={i} variant="secondary" className="text-xs">@{o.username} — {o.first_name} {o.last_name}</Badge>
                     ))}
                   </div>
                 </div>
@@ -840,7 +840,7 @@ function SignUpForm() {
                 <div className="p-3 flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{single.first_name} {single.last_name}</span></div>
                 <div className="p-3"><span className="text-muted-foreground text-xs">Plants</span>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {plantIds.map((id) => <Badge key={id} variant="secondary" className="text-[11px]">{(plants ?? []).find((p) => p.id === id)?.name ?? id}</Badge>)}
+                    {plantIds.map((id) => <Badge key={id} variant="secondary" className="text-xs">{(plants ?? []).find((p) => p.id === id)?.name ?? id}</Badge>)}
                   </div>
                 </div>
               </>

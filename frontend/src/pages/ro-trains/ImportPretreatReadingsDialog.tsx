@@ -167,15 +167,15 @@ export function ImportPretreatReadingsDialog({
 
           {/* Scoped-train badge */}
           {isScoped && (
-            <div className="rounded-md border border-teal-300 dark:border-teal-700 bg-teal-50/70 dark:bg-teal-950/30 p-3 flex items-start gap-2">
-              <Lock className="h-3.5 w-3.5 text-teal-700 dark:text-teal-300 mt-0.5 shrink-0" />
+            <div className="rounded-md border border-primary bg-primary-soft/70 p-3 flex items-start gap-2">
+              <Lock className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-teal-800 dark:text-teal-200">
+                <p className="text-xs font-semibold text-primary">
                   Scoped to {trainLabel ?? 'this train'}
                 </p>
-                <p className="text-[11px] text-teal-700 dark:text-teal-400 leading-relaxed">
+                <p className="text-xs text-primary leading-relaxed">
                   All rows will be written to this train regardless of the{' '}
-                  <code className="text-[10px] bg-muted px-1 rounded">train_number</code> column in your CSV.
+                  <code className="text-2xs bg-muted px-1 rounded">train_number</code> column in your CSV.
                 </p>
               </div>
             </div>
@@ -183,24 +183,24 @@ export function ImportPretreatReadingsDialog({
 
           {/* Date-range constraint */}
           {dateRange && (
-            <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/20 p-3 space-y-1">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+            <div className="rounded-md border border-warn bg-warn-soft/70 p-3 space-y-1">
+              <p className="text-xs font-semibold text-warn flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" /> Gap window — rows outside this range will be skipped
               </p>
-              <p className="text-[11px] font-mono text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-mono text-warn">
                 {dateRange.start} → {dateRange.end}
               </p>
             </div>
           )}
 
           {/* Shape note — pretreatment-specific */}
-          <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3 space-y-1">
-            <p className="text-xs font-semibold text-blue-800 dark:text-blue-200">Wide flat format</p>
-            <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
+          <div className="rounded-md border border-info bg-info-soft/50 p-3 space-y-1">
+            <p className="text-xs font-semibold text-info">Wide flat format</p>
+            <p className="text-xs text-info leading-relaxed">
               The template uses numbered columns (afm1_in_psi, afm2_in_psi…) up to the maximum.
               Leave columns blank for units your train doesn't have — they will be omitted automatically.
-              Backwash datetimes (<code className="text-[10px] bg-muted px-1 rounded">afm1_bw_start</code>,{' '}
-              <code className="text-[10px] bg-muted px-1 rounded">afm1_bw_end</code>) are optional.
+              Backwash datetimes (<code className="text-2xs bg-muted px-1 rounded">afm1_bw_start</code>,{' '}
+              <code className="text-2xs bg-muted px-1 rounded">afm1_bw_end</code>) are optional.
             </p>
           </div>
 
@@ -217,11 +217,11 @@ export function ImportPretreatReadingsDialog({
 
           {/* Schema hint */}
           <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" /> Expected columns:
             </p>
-            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{PRETREAT_SCHEMA}</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs font-mono text-foreground leading-relaxed break-all">{PRETREAT_SCHEMA}</p>
+            <p className="text-2xs text-muted-foreground">
               Columns marked <strong>*</strong> are required. Existing readings at the same minute are skipped.
             </p>
           </div>
@@ -232,7 +232,7 @@ export function ImportPretreatReadingsDialog({
             <div className="flex items-center gap-2">
               <Button
                 size="sm" variant="outline"
-                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" /> Choose File
@@ -247,16 +247,16 @@ export function ImportPretreatReadingsDialog({
             <div className={`rounded-md border p-3 space-y-2 ${
               errors.length > 0
                 ? 'border-destructive/40 bg-destructive/5'
-                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                : 'border-accent bg-accent-soft'
             }`}>
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
-                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
                   : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (
-                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                <ul className="text-2xs text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
                   {errors.map((e, i) => <li key={i}>{e}</li>)}
                 </ul>
               )}
@@ -271,10 +271,10 @@ export function ImportPretreatReadingsDialog({
           {/* Condensed row preview (show only key columns to avoid overflow) */}
           {rows.length > 0 && errors.length === 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground font-medium">
+              <p className="text-xs text-muted-foreground font-medium">
                 Preview — key columns (first {Math.min(rows.length, 5)} of {rows.length} rows):
               </p>
-              <div className="overflow-x-auto rounded-md border text-[10px]">
+              <div className="overflow-x-auto rounded-md border text-2xs">
                 <table className="min-w-full">
                   <thead className="bg-muted/50">
                     <tr>
@@ -294,7 +294,7 @@ export function ImportPretreatReadingsDialog({
                   </tbody>
                 </table>
               </div>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 Showing {PREVIEW_COLS.length} of {Object.keys(rows[0] ?? {}).length} columns — download the template to see all columns.
               </p>
             </div>
@@ -302,14 +302,14 @@ export function ImportPretreatReadingsDialog({
 
           {/* Conflict resolution UI */}
           {done && conflictState === 'pending' && skippedCount > 0 && (
-            <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-3">
+            <div className="rounded-md border border-warn bg-warn-soft p-3 space-y-3">
               <div className="flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <AlertCircle className="h-4 w-4 text-warn mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                  <p className="text-xs font-semibold text-warn">
                     {skippedCount} duplicate{skippedCount !== 1 ? 's' : ''} found
                   </p>
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                  <p className="text-xs text-warn mt-0.5">
                     {imported > 0 && <>{imported} new row{imported !== 1 ? 's' : ''} imported. </>}
                     These readings already exist. What would you like to do?
                   </p>
@@ -317,13 +317,13 @@ export function ImportPretreatReadingsDialog({
               </div>
               <div className="flex gap-2 flex-wrap">
                 <Button size="sm" variant="outline"
-                  className="text-xs border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                  className="text-xs border-warn text-warn hover:bg-warn-soft"
                   disabled={busy} onClick={doSkipAll}>
                   Skip All
                 </Button>
                 {!dateRange && (
                   <Button size="sm"
-                    className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                    className="text-xs bg-warn hover:bg-warn/90 text-white"
                     disabled={busy} onClick={doOverwriteAll}>
                     {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                     Overwrite All
@@ -331,7 +331,7 @@ export function ImportPretreatReadingsDialog({
                 )}
               </div>
               {dateRange && (
-                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                <p className="text-2xs text-warn">
                   Overwrite is disabled for a gap-window import — a duplicate found inside an
                   accepted window means the window doesn't match reality. Skip these and review
                   the conflicting readings directly before resolving.
@@ -343,18 +343,18 @@ export function ImportPretreatReadingsDialog({
           {/* Result */}
           {done && conflictState === 'none' && (
             <div className="space-y-2">
-              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-warn' : 'text-accent'}`}>
+                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-warn' : 'bg-accent'}`} />
                 {imported} pre-treatment record(s) imported
                 {skippedCount > 0 ? `, ${skippedCount} skipped` : ''}
                 {importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}.
               </p>
               {importErrors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
-                  <p className="text-[11px] font-semibold text-destructive mb-1 flex items-center gap-1">
+                  <p className="text-xs font-semibold text-destructive mb-1 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> Issues (first {Math.min(importErrors.length, 20)}):
                   </p>
-                  <ul className="text-[10px] text-destructive list-disc ml-3 space-y-0.5">
+                  <ul className="text-2xs text-destructive list-disc ml-3 space-y-0.5">
                     {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </div>
@@ -369,7 +369,7 @@ export function ImportPretreatReadingsDialog({
             <Button
               onClick={doImport}
               disabled={!canSubmit}
-              className="bg-teal-700 text-white hover:bg-teal-800"
+              className="bg-primary text-white hover:bg-primary/90"
             >
               {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}

@@ -202,19 +202,19 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                   return (
                     <div key={u.unit} className="rounded-md border p-2.5 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-muted-foreground">Unit U{u.unit}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-xs font-semibold text-muted-foreground">Unit U{u.unit}</span>
+                        <span className="text-2xs font-mono text-muted-foreground">
                           {inP != null && outP != null ? `ΔP ${(inP - outP).toFixed(1)} psi` : '—'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-[10px]">In (psi)</Label>
+                          <Label className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={u.in_psi} className="h-8"
                             onChange={(e) => updateAt(setAfmUnits, idx, { in_psi: e.target.value })} />
                         </div>
                         <div>
-                          <Label className="text-[10px]">Out (psi)</Label>
+                          <Label className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={u.out_psi} className="h-8"
                             onChange={(e) => updateAt(setAfmUnits, idx, { out_psi: e.target.value })} />
                         </div>
@@ -232,20 +232,20 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                 {boosterPumps.map((p, idx) => (
                   <div key={p.unit} className="rounded-md border p-2.5 space-y-2">
-                    <span className="text-[11px] font-semibold text-muted-foreground">Pump P{p.unit}</span>
+                    <span className="text-xs font-semibold text-muted-foreground">Pump P{p.unit}</span>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-[10px]">Target (psi)</Label>
+                        <Label className="text-2xs">Target (psi)</Label>
                         <Input type="number" step="any" value={p.target_pressure_psi} className="h-8"
                           onChange={(e) => updateAt(setBoosterPumps, idx, { target_pressure_psi: e.target.value })} />
                       </div>
                       <div>
-                        <Label className="text-[10px]">Target (Hz)</Label>
+                        <Label className="text-2xs">Target (Hz)</Label>
                         <Input type="number" step="any" value={p.target_hz} className="h-8"
                           onChange={(e) => updateAt(setBoosterPumps, idx, { target_hz: e.target.value })} />
                       </div>
                       <div>
-                        <Label className="text-[10px]">Amperage (A)</Label>
+                        <Label className="text-2xs">Amperage (A)</Label>
                         <Input type="number" step="any" value={p.amperage} className="h-8"
                           onChange={(e) => updateAt(setBoosterPumps, idx, { amperage: e.target.value })} />
                       </div>
@@ -266,19 +266,19 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                   return (
                     <div key={h.unit} className="rounded-md border p-2.5 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-muted-foreground">Housing H{h.unit}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-xs font-semibold text-muted-foreground">Housing H{h.unit}</span>
+                        <span className="text-2xs font-mono text-muted-foreground">
                           {inP != null && outP != null ? `ΔP ${(inP - outP).toFixed(1)} psi` : '—'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-[10px]">In (psi)</Label>
+                          <Label className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={h.in_psi} className="h-8"
                             onChange={(e) => updateAt(setCartHousings, idx, { in_psi: e.target.value })} />
                         </div>
                         <div>
-                          <Label className="text-[10px]">Out (psi)</Label>
+                          <Label className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={h.out_psi} className="h-8"
                             onChange={(e) => updateAt(setCartHousings, idx, { out_psi: e.target.value })} />
                         </div>
@@ -300,19 +300,19 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                   return (
                     <div key={h.unit} className="rounded-md border p-2.5 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-muted-foreground">Housing F{h.unit}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-xs font-semibold text-muted-foreground">Housing F{h.unit}</span>
+                        <span className="text-2xs font-mono text-muted-foreground">
                           {inP != null && outP != null ? `ΔP ${(inP - outP).toFixed(1)} psi` : '—'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-[10px]">In (psi)</Label>
+                          <Label className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={h.in_psi} className="h-8"
                             onChange={(e) => updateAt(setFilterHousings, idx, { in_psi: e.target.value })} />
                         </div>
                         <div>
-                          <Label className="text-[10px]">Out (psi)</Label>
+                          <Label className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={h.out_psi} className="h-8"
                             onChange={(e) => updateAt(setFilterHousings, idx, { out_psi: e.target.value })} />
                         </div>
@@ -329,7 +329,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
           </div>
 
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {hasFullAccess
               ? 'As a Manager, Data Analyst, or Admin, you can edit any reading at any time.'
               : `You can edit your own entries within ${EDIT_WINDOW_HOURS} hours of submission. After that, use "Request correction" instead. Backwash windows and MMF meter start/end aren't editable here — submit a new entry to correct those.`}

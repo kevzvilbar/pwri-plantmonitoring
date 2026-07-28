@@ -87,14 +87,14 @@ export function SyncIndicator() {
             <RefreshCw className="h-[15px] w-[15px] animate-spin" aria-hidden />
           )}
           {isError && (
-            <WifiOff className="h-[15px] w-[15px] text-amber-400" aria-hidden />
+            <WifiOff className="h-[15px] w-[15px] text-warn" aria-hidden />
           )}
           {!isSyncing && !isError && (
             <Clock className="h-[15px] w-[15px]" aria-hidden />
           )}
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-[11px]">
+      <TooltipContent side="bottom" className="text-xs">
         <span>{label}</span>
         {!isSyncing && (
           <span className="block text-muted-foreground/70 mt-0.5">Click to sync now</span>

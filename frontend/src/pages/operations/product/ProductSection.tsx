@@ -199,7 +199,7 @@ export function ProductForm() {
           {canEdit && plantId && (
             <Button
               size="sm" variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-teal-600/60 text-teal-700 hover:bg-teal-50 hover:border-teal-600 dark:hover:bg-teal-950/30"
+              className="shrink-0 gap-1.5 h-10 border-primary/60 text-primary hover:bg-primary-soft hover:border-primary/90"
               onClick={() => setImportOpen(true)}
               data-testid="import-product-readings-btn"
             >
@@ -216,11 +216,11 @@ export function ProductForm() {
           <Card className="p-0 overflow-hidden">
             <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Gauge className="h-3.5 w-3.5 text-teal-600" />
+                <Gauge className="h-3.5 w-3.5 text-primary" />
                 <span className="text-xs font-semibold text-foreground/80 tracking-tight">Product Meters</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">{meters?.length ?? 0} configured</span>
+                <span className="text-xs text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">{meters?.length ?? 0} configured</span>
               </div>
             </div>
 
@@ -494,12 +494,12 @@ function ProductMeterRow({
       <div className="min-w-0">
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="text-sm font-medium truncate flex items-center gap-1.5 min-w-0 flex-1">
-            <Gauge className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+            <Gauge className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="truncate">{meter.name}</span>
           </div>
           <label className="shrink-0 cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -525,7 +525,7 @@ function ProductMeterRow({
           {productionVolume != null && (
             <>
               {' · '}
-              <span className="font-mono-num text-teal-600 font-medium">{fmtNum(productionVolume)} m³</span>
+              <span className="font-mono-num text-primary font-medium">{fmtNum(productionVolume)} m³</span>
               {' produced'}
             </>
           )}
@@ -545,7 +545,7 @@ function ProductMeterRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !reading}
-              className="flex-1 h-11 text-sm bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+              className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
               data-testid={`product-meter-save-${meter.id}`}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
@@ -561,13 +561,13 @@ function ProductMeterRow({
       ) : (
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div className="relative flex-1 min-w-0">
-            <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600 pointer-events-none" />
+            <Gauge className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading}
               onChange={(e) => setReading(e.target.value)}
               placeholder="Product Reading"
-              className="h-9 pl-7 w-full border-teal-300 focus-visible:ring-teal-300 bg-teal-50/40 dark:bg-teal-950/20"
+              className="h-9 pl-7 w-full border-primary focus-visible:ring-teal-300 bg-primary-soft/40"
               data-testid={`product-meter-input-${meter.id}`}
             />
           </div>
@@ -593,18 +593,18 @@ function ProductMeterRow({
 
       {/* Warning banner — mirrors locator / well / blending style */}
       {productionVolume != null && (productionVolume < 0 || highVol) && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
           {productionVolume < 0 && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Reading is below the previous value — possible meter rollback or data entry error.
             </span>
           )}
           {highVol && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Production volume is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the 10-day average — unusually high.
             </span>
           )}
@@ -808,7 +808,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base flex items-center gap-1.5">
-            <Gauge className="h-4 w-4 text-teal-600" /> {meter.name} — History
+            <Gauge className="h-4 w-4 text-primary" /> {meter.name} — History
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
@@ -816,12 +816,12 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             {WINDOWS.map(({ label, days: d }) => (
               <button key={label} onClick={() => { setDays(d as any); setEditRow(null); }}
                 className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
-                  days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  days === d ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}>{label}</button>
             ))}
             <button onClick={() => { setDays('custom'); setEditRow(null); }}
               className={['px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === 'custom' ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                days === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}>Custom</button>
           </div>
           {days === 'custom' && (
@@ -833,7 +833,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
               <input type="date" value={customTo} min={customFrom} max={format(new Date(), 'yyyy-MM-dd')}
                 onChange={e => setCustomTo(e.target.value)}
                 className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
-              <Button size="sm" className="h-7 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
+              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-white hover:bg-primary/90"
                 onClick={() => { setAppliedFrom(customFrom); setAppliedTo(customTo); setEditRow(null); }}>
                 Apply
               </Button>
@@ -846,19 +846,19 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             <p className="font-medium">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-[11px]">Date &amp; Time</Label>
+                <Label className="text-xs">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })} className="h-8 text-xs" />
               </div>
               <div>
-                <Label className="text-[11px]">Reading</Label>
+                <Label className="text-xs">Reading</Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" />
               </div>
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
-                className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs px-3">
+                className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
@@ -912,24 +912,24 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                   return (
                     <tr key={r.id ?? i} className={[
                       'border-t',
-                      isEditing            ? 'bg-teal-50/60 dark:bg-teal-950/20'
-                      : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                      isEditing            ? 'bg-primary-soft/60'
+                      : isMeterReplacement ? 'bg-kpi-solar/40'
                       : 'hover:bg-muted/40',
                     ].join(' ')}>
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           {r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy HH:mm') : '—'}
                           {isMeterReplacement && (
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
+                            <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
                               repl.
                             </span>
                           )}
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono-num text-teal-600">
+                      <td className="px-3 py-1.5 text-right font-mono-num text-primary">
                         {isMeterReplacement
-                          ? <span className="text-orange-500 font-medium">0</span>
+                          ? <span className="text-kpi-solar font-medium">0</span>
                           : vol != null ? fmtNum(vol) : '—'
                         }
                       </td>
@@ -943,13 +943,13 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                             'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                             'disabled:opacity-40 disabled:cursor-not-allowed',
                             isMeterReplacement
-                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
-                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                              ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
+                              : 'border-input bg-background hover:border-kpi-solar/90 hover:bg-kpi-solar/15',
                           ].join(' ')}
                         >
                           {isToggling
                             ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                            : isMeterReplacement ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                            : isMeterReplacement ? <span className="text-3xs font-bold leading-none">✓</span> : null
                           }
                         </button>
                       </td>
@@ -974,7 +974,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             </table>
           )}
         </div>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {days === 'custom' ? `Showing ${appliedFrom} → ${appliedTo}` : `Showing up to ${days} days`} · {rows?.length ?? 0} records
         </p>
 
@@ -1033,10 +1033,10 @@ function MeterNameList({
 }) {
   const isYellow = accentColor === 'yellow';
   const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
-  const border = isYellow ? 'border-yellow-300' : 'border-blue-300';
+  const border = isYellow ? 'border-warn' : 'border-info';
   const chip   = isYellow
-    ? 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/20 dark:border-yellow-800 dark:text-yellow-300'
-    : 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300';
+    ? 'bg-warn-soft border-warn text-warn'
+    : 'bg-info-soft border-info text-info';
 
   // editingIdx: which chip is in edit mode (-1 = none)
   const [editingIdx, setEditingIdx] = useState<number>(-1);
@@ -1092,16 +1092,16 @@ function MeterNameList({
                 value={editVal}
                 onChange={e => setEditVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                className={`h-5 w-20 text-[11px] bg-transparent focus:outline-none focus-visible:ring-1 ${ring} rounded px-0.5`}
+                className={`h-5 w-20 text-xs bg-transparent focus:outline-none focus-visible:ring-1 ${ring} rounded px-0.5`}
               />
               <button
                 onClick={commitEdit}
-                className="text-[9px] font-semibold text-emerald-700 hover:text-emerald-900 px-0.5 leading-none"
+                className="text-3xs font-semibold text-accent hover:text-accent/90 px-0.5 leading-none"
                 title="Save name"
               >✓</button>
               <button
                 onClick={cancelEdit}
-                className="text-[9px] text-muted-foreground hover:text-foreground px-0.5 leading-none"
+                className="text-3xs text-muted-foreground hover:text-foreground px-0.5 leading-none"
                 title="Cancel"
               >✕</button>
             </div>
@@ -1111,15 +1111,15 @@ function MeterNameList({
         if (isDeleting) {
           return (
             <div key={i} className="flex items-center gap-0.5 rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5">
-              <span className="text-[10px] text-destructive font-medium">Delete "{name}"?</span>
+              <span className="text-2xs text-destructive font-medium">Delete "{name}"?</span>
               <button
                 onClick={() => confirmDelete(i)}
-                className="text-[9px] font-bold text-destructive hover:text-destructive/80 ml-1 px-0.5"
+                className="text-3xs font-bold text-destructive hover:text-destructive/80 ml-1 px-0.5"
                 title="Confirm delete"
               >Yes</button>
               <button
                 onClick={cancelDelete}
-                className="text-[9px] text-muted-foreground hover:text-foreground px-0.5"
+                className="text-3xs text-muted-foreground hover:text-foreground px-0.5"
                 title="Cancel"
               >No</button>
             </div>
@@ -1127,7 +1127,7 @@ function MeterNameList({
         }
 
         return (
-          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-[11px]`}>
+          <div key={i} className={`flex items-center gap-0.5 rounded border ${chip} px-1.5 py-0.5 text-xs`}>
             <span className="leading-none">{name}</span>
             <button
               onClick={() => startEdit(i)}

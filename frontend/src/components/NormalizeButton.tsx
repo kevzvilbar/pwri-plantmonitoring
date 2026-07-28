@@ -89,14 +89,14 @@ export interface NormalizeButtonProps {
 export function NormStatusBadge({ status }: { status: NormStatus }) {
   if (status === 'normal') return null;
   const cfg = {
-    erroneous:  { icon: <AlertTriangle className="h-3 w-3" />, label: 'Flagged',    cls: 'text-amber-600 bg-amber-50  dark:bg-amber-950/40 dark:text-amber-300 border-amber-300/60' },
-    normalized: { icon: <RefreshCw     className="h-3 w-3" />, label: 'Normalized', cls: 'text-teal-600  bg-teal-50   dark:bg-teal-950/40  dark:text-teal-300  border-teal-300/60'  },
+    erroneous:  { icon: <AlertTriangle className="h-3 w-3" />, label: 'Flagged',    cls: 'text-warn bg-warn-soft  border-warn/60' },
+    normalized: { icon: <RefreshCw     className="h-3 w-3" />, label: 'Normalized', cls: 'text-primary  bg-primary-soft     border-primary/60'  },
     retracted:  { icon: <Undo2         className="h-3 w-3" />, label: 'Retracted',  cls: 'text-muted-foreground bg-muted border-border' },
   }[status];
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border',
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium border',
         cfg.cls,
       )}
       title={`Reading ${cfg.label.toLowerCase()}`}
@@ -177,7 +177,7 @@ function NormalizeDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 text-teal-600" />
+            <RefreshCw className="h-4 w-4 text-primary" />
             Normalize Reading
           </DialogTitle>
         </DialogHeader>
@@ -209,7 +209,7 @@ function NormalizeDialog({
               placeholder="Reason for adjustment…"
             />
           </div>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             Metadata: <code>normalized_by={performerRole}:{'{your user id}'}</code>,
             timestamp={new Date().toISOString().slice(0, 16)},
             retractable=true
@@ -305,9 +305,9 @@ export function NormalizeButton({
   };
 
   const triggerCls = cn(
-    'h-6 px-1.5 text-[10px] font-medium rounded border transition-colors inline-flex items-center gap-1',
-    status === 'erroneous'  && 'border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300',
-    status === 'normalized' && 'border-teal-400  text-teal-600  bg-teal-50  dark:bg-teal-950/40  dark:text-teal-300',
+    'h-6 px-1.5 text-2xs font-medium rounded border transition-colors inline-flex items-center gap-1',
+    status === 'erroneous'  && 'border-warn text-warn bg-warn-soft',
+    status === 'normalized' && 'border-primary  text-primary  bg-primary-soft  ',
     status === 'retracted'  && 'border-border    text-muted-foreground bg-muted',
     status === 'normal'     && 'border-border    text-muted-foreground bg-card hover:bg-muted',
     className,
@@ -335,7 +335,7 @@ export function NormalizeButton({
           <DropdownMenuItem
             onClick={handleTag}
             disabled={busy || status === 'erroneous'}
-            className="text-amber-600 focus:text-amber-600 gap-2"
+            className="text-warn focus:text-warn gap-2"
             data-testid="normalize-action-tag"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -348,7 +348,7 @@ export function NormalizeButton({
             className="gap-2"
             data-testid="normalize-action-normalize"
           >
-            <RefreshCw className="h-3.5 w-3.5 text-teal-600" />
+            <RefreshCw className="h-3.5 w-3.5 text-primary" />
             Normalize value
           </DropdownMenuItem>
 

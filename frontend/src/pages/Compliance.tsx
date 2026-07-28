@@ -134,15 +134,15 @@ function computeComplianceScore(violations: Violation[]): number {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600';
-  if (score >= 50) return 'text-amber-600';
-  return 'text-rose-600';
+  if (score >= 80) return 'text-accent';
+  if (score >= 50) return 'text-warn';
+  return 'text-danger';
 }
 
 function scoreBgColor(score: number): string {
-  if (score >= 80) return 'bg-emerald-50 border-emerald-200';
-  if (score >= 50) return 'bg-amber-50 border-amber-200';
-  return 'bg-rose-50 border-rose-200';
+  if (score >= 80) return 'bg-accent-soft border-accent';
+  if (score >= 50) return 'bg-warn-soft border-warn';
+  return 'bg-danger-soft border-danger';
 }
 
 function scoreLabel(score: number): string {
@@ -163,7 +163,7 @@ function ScoreGauge({ score }: { score: number }) {
   const offset = circumference - (score / 100) * circumference;
 
   const strokeColor =
-    score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#f43f5e';
+    score >= 80 ? 'hsl(var(--accent))' : score >= 50 ? 'hsl(var(--warn))' : 'hsl(var(--danger))';
 
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -172,7 +172,7 @@ function ScoreGauge({ score }: { score: number }) {
         <path
           d="M 6 42 A 32 32 0 0 1 70 42"
           fill="none"
-          stroke="#e5e7eb"
+          stroke="hsl(var(--muted))"
           strokeWidth="6"
           strokeLinecap="round"
         />
@@ -191,7 +191,7 @@ function ScoreGauge({ score }: { score: number }) {
           {score}
         </text>
       </svg>
-      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', scoreColor(score))}>
+      <span className={cn('text-2xs font-semibold uppercase tracking-wide', scoreColor(score))}>
         {scoreLabel(score)}
       </span>
     </div>
@@ -248,7 +248,7 @@ function Sparkline({
         {/* Threshold line */}
         <line
           x1={PAD} y1={thY} x2={W - PAD} y2={thY}
-          stroke="#f43f5e" strokeWidth="1" strokeDasharray="4 2" opacity="0.7"
+          stroke="hsl(var(--danger))" strokeWidth="1" strokeDasharray="4 2" opacity="0.7"
         />
         {/* Sparkline */}
         <polyline
@@ -269,16 +269,16 @@ function Sparkline({
               cx={toX(i)}
               cy={toY(v.val)}
               r="2.5"
-              fill={breached ? '#f43f5e' : '#6366f1'}
+              fill={breached ? 'hsl(var(--danger))' : '#6366f1'}
             />
           );
         })}
         {/* Threshold label */}
-        <text x={W - PAD + 2} y={thY + 3} fontSize="8" fill="#f43f5e">
+        <text x={W - PAD + 2} y={thY + 3} fontSize="8" fill="hsl(var(--danger))">
           {threshold}
         </text>
       </svg>
-      <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5 px-[8px]">
+      <div className="flex justify-between text-2xs text-muted-foreground mt-0.5 px-[8px]">
         <span>{values[0]?.date?.slice(5)}</span>
         <span>{values[values.length - 1]?.date?.slice(5)}</span>
       </div>
@@ -299,9 +299,9 @@ function TrendIndicator({ trend, improving }: { trend: Trend; improving: boolean
   const isGood = (trend === 'up') === improving;
 
   if (trend === 'up') {
-    return <TrendingUp className={cn('h-3.5 w-3.5', isGood ? 'text-emerald-600' : 'text-rose-500')} />;
+    return <TrendingUp className={cn('h-3.5 w-3.5', isGood ? 'text-accent' : 'text-danger')} />;
   }
-  return <TrendingDown className={cn('h-3.5 w-3.5', isGood ? 'text-emerald-600' : 'text-rose-500')} />;
+  return <TrendingDown className={cn('h-3.5 w-3.5', isGood ? 'text-accent' : 'text-danger')} />;
 }
 
 /** Which direction is "improving" for each metric */
@@ -350,12 +350,12 @@ function MetricPreview({
   const hasGaps = entries.some(([, v]) => v === undefined || v === null || Number.isNaN(v));
 
   return (
-    <Card className="p-3 border-blue-200 bg-blue-50/40">
+    <Card className="p-3 border-info bg-info-soft/40">
       <div className="flex items-center gap-1.5 mb-2">
-        <Eye className="h-3.5 w-3.5 text-blue-600" />
-        <span className="text-xs font-medium text-blue-800">Metric Preview</span>
+        <Eye className="h-3.5 w-3.5 text-info" />
+        <span className="text-xs font-medium text-info">Metric Preview</span>
         {hasGaps && (
-          <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 ml-auto">
+          <Badge variant="outline" className="text-2xs border-warn text-warn bg-warn-soft ml-auto">
             Data gaps detected
           </Badge>
         )}
@@ -365,13 +365,13 @@ function MetricPreview({
           <div key={k} className={cn(
             'rounded px-2 py-1.5',
             v === undefined || v === null || Number.isNaN(v as any)
-              ? 'bg-amber-100/60'
+              ? 'bg-warn-soft/60'
               : 'bg-white/80',
           )}>
-            <div className="text-[10px] text-muted-foreground truncate">{labelize(k)}</div>
+            <div className="text-2xs text-muted-foreground truncate">{labelize(k)}</div>
             <div className={cn(
               'text-sm font-mono font-medium',
-              v === undefined || v === null || Number.isNaN(v as any) ? 'text-amber-600' : '',
+              v === undefined || v === null || Number.isNaN(v as any) ? 'text-warn' : '',
             )}>
               {v !== undefined && v !== null && !Number.isNaN(v as any)
                 ? (Math.round((v as number) * 100) / 100)
@@ -802,7 +802,7 @@ export default function Compliance() {
             <Zap className="h-3.5 w-3.5 mr-1" />
             What-if
             {whatIfViolations !== null && (
-              <Badge className="ml-1.5 text-[10px] h-4 px-1 bg-amber-500">
+              <Badge className="ml-1.5 text-2xs h-4 px-1 bg-warn">
                 {whatIfViolations.length}
               </Badge>
             )}
@@ -824,15 +824,15 @@ export default function Compliance() {
                 <Card className={cn(
                   'p-3 border-l-4 flex-1',
                   result.violations.length === 0
-                    ? 'border-emerald-500 bg-emerald-50/50'
+                    ? 'border-accent bg-accent-soft/50'
                     : result.violations.some((v) => v.severity === 'high')
-                      ? 'border-rose-500 bg-rose-50/50'
-                      : 'border-amber-500 bg-amber-50/50',
+                      ? 'border-danger bg-danger-soft/50'
+                      : 'border-warn bg-warn-soft/50',
                 )}>
                   <div className="flex items-start gap-3">
                     {result.violations.length === 0
-                      ? <ShieldCheck className="h-6 w-6 text-emerald-600 shrink-0" />
-                      : <ShieldAlert className="h-6 w-6 text-rose-600 shrink-0" />}
+                      ? <ShieldCheck className="h-6 w-6 text-accent shrink-0" />
+                      : <ShieldAlert className="h-6 w-6 text-danger shrink-0" />}
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{summary?.headline}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
@@ -843,7 +843,7 @@ export default function Compliance() {
                         <ul className="mt-2 space-y-1">
                           {summary.details.map((d, i) => (
                             <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+                              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
                               {d}
                             </li>
                           ))}
@@ -856,7 +856,7 @@ export default function Compliance() {
                 {/* NEW: Compliance Score gauge */}
                 {complianceScore !== null && (
                   <Card className={cn('p-3 flex flex-col items-center justify-center border', scoreBgColor(complianceScore))}>
-                    <div className="text-[10px] text-muted-foreground mb-1 font-medium uppercase tracking-wide">
+                    <div className="text-2xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">
                       Score
                     </div>
                     <ScoreGauge score={complianceScore} />
@@ -879,7 +879,7 @@ export default function Compliance() {
                       const improving = METRIC_IMPROVING_DIRECTION[k] ?? true;
                       return (
                         <div key={k} className="rounded px-2 py-1.5 bg-muted/30">
-                          <div className="text-[10px] text-muted-foreground truncate">{labelize(k)}</div>
+                          <div className="text-2xs text-muted-foreground truncate">{labelize(k)}</div>
                           <div className="flex items-center gap-1">
                             <span className="text-sm font-mono font-medium">
                               {v !== undefined && !Number.isNaN(v as any)
@@ -888,7 +888,7 @@ export default function Compliance() {
                             </span>
                             <TrendIndicator trend={trend} improving={improving} />
                             {prev !== undefined && (
-                              <span className="text-[10px] text-muted-foreground">
+                              <span className="text-2xs text-muted-foreground">
                                 ({prev >= 0 ? '' : ''}{Math.round((prev as number) * 100) / 100} prev)
                               </span>
                             )}
@@ -904,7 +904,7 @@ export default function Compliance() {
               {result.violations.length > 0 && (
                 <Card className="p-0 overflow-hidden">
                   <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-[11px] text-muted-foreground">
+                    <thead className="bg-muted/50 text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 text-left w-6"></th>
                         <th className="px-3 py-2 text-left">Severity</th>
@@ -946,9 +946,9 @@ export default function Compliance() {
                             {isExpanded && (
                               <tr key={rowKey + '-drill'} className="bg-muted/20 border-t border-dashed">
                                 <td colSpan={6} className="px-5 py-3">
-                                  <div className="text-[11px] font-medium text-muted-foreground mb-1">
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">
                                     Daily breakdown — <span className="font-mono">{v.metric}</span>
-                                    <span className="ml-2 text-rose-500">
+                                    <span className="ml-2 text-danger">
                                       Red dots = threshold breached
                                     </span>
                                   </div>
@@ -1039,9 +1039,9 @@ export default function Compliance() {
         <TabsContent value="override" className="mt-3 space-y-3">
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Zap className="h-4 w-4 text-amber-500" />
+              <Zap className="h-4 w-4 text-warn" />
               <span className="text-sm font-medium">What-if Mode</span>
-              <Badge variant="outline" className="text-[10px] ml-auto border-amber-300 text-amber-700 bg-amber-50">
+              <Badge variant="outline" className="text-2xs ml-auto border-warn text-warn bg-warn-soft">
                 Live preview
               </Badge>
             </div>
@@ -1059,7 +1059,7 @@ export default function Compliance() {
                   <div key={k}>
                     <Label className="text-xs">{labelize(k)}</Label>
                     {fetched !== undefined && overrideMetrics[k] === undefined && (
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-2xs text-muted-foreground">
                         Fetched: {Math.round((fetched as number) * 100) / 100}
                       </div>
                     )}
@@ -1092,19 +1092,19 @@ export default function Compliance() {
             <Card className={cn(
               'p-3 border-l-4',
               whatIfViolations.length === 0
-                ? 'border-emerald-500 bg-emerald-50/50'
+                ? 'border-accent bg-accent-soft/50'
                 : whatIfViolations.some((v) => v.severity === 'high')
-                  ? 'border-rose-500 bg-rose-50/50'
-                  : 'border-amber-500 bg-amber-50/50',
+                  ? 'border-danger bg-danger-soft/50'
+                  : 'border-warn bg-warn-soft/50',
             )}>
               <div className="flex items-center gap-2 mb-2">
-                <Zap className="h-4 w-4 text-amber-500" />
+                <Zap className="h-4 w-4 text-warn" />
                 <span className="text-xs font-semibold">
                   What-if Result — Score: {computeComplianceScore(whatIfViolations)}/100
                 </span>
                 {whatIfViolations.length === 0
-                  ? <Badge className="text-[10px] bg-emerald-600 ml-auto">No violations</Badge>
-                  : <Badge className="text-[10px] bg-rose-600 ml-auto">{whatIfViolations.length} violation{whatIfViolations.length > 1 ? 's' : ''}</Badge>}
+                  ? <Badge className="text-2xs bg-accent ml-auto">No violations</Badge>
+                  : <Badge className="text-2xs bg-danger ml-auto">{whatIfViolations.length} violation{whatIfViolations.length > 1 ? 's' : ''}</Badge>}
               </div>
               {whatIfViolations.length > 0 && (
                 <div className="space-y-1">
@@ -1134,9 +1134,9 @@ export default function Compliance() {
 
 function SeverityBadge({ sev }: { sev: string }) {
   const m: Record<string, string> = {
-    high:   'bg-rose-100 text-rose-700 border-rose-200',
-    medium: 'bg-amber-100 text-amber-700 border-amber-200',
-    low:    'bg-sky-100 text-sky-700 border-sky-200',
+    high:   'bg-danger-soft text-danger border-danger',
+    medium: 'bg-warn-soft text-warn border-warn',
+    low:    'bg-info-soft text-info border-info',
   };
   return (
     <Badge variant="outline" className={cn('capitalize font-normal', m[sev] ?? '')}>

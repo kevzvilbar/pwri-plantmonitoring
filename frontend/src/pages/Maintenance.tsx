@@ -140,7 +140,7 @@ function AddTemplate() {
         <Sparkles className="h-4 w-4 text-accent mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold">Generate Standard PMS Library</div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             One-tap setup of standard PMS schedules (Genset, RO, Dosing Pump, Controllers, Cartridge Filter, Pumps & Motors, pH/NTU/Colorimeter)
             for the selected plant. Skips anything that already exists.
           </p>
@@ -185,7 +185,7 @@ function AddTemplate() {
               </label>
             ))}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             One PMS schedule will be generated per selected frequency, starting from the date below.
           </p>
         </div>

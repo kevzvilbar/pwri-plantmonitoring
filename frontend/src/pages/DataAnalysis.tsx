@@ -606,14 +606,14 @@ async function recalculateTrainDeltas(trainId: string): Promise<void> {
 function NormBadge({ status }: { status?: NormStatus }) {
   if (!status || status === 'normal') return null;
   const cfg: Record<string, { emoji: string; cls: string }> = {
-    erroneous:  { emoji: '⚠️', cls: 'border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30' },
-    normalized: { emoji: '🔄', cls: 'border-teal-400  text-teal-700  bg-teal-50  dark:bg-teal-950/30'  },
+    erroneous:  { emoji: '⚠️', cls: 'border-warn text-warn bg-warn-soft' },
+    normalized: { emoji: '🔄', cls: 'border-primary  text-primary  bg-primary-soft '  },
     retracted:  { emoji: '⏪', cls: 'border-border    text-muted-foreground bg-muted'                    },
   };
   const c = cfg[status];
   if (!c) return null;
   return (
-    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border', c.cls)}>
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium border', c.cls)}>
       {c.emoji} {status}
     </span>
   );
@@ -621,12 +621,12 @@ function NormBadge({ status }: { status?: NormStatus }) {
 
 function StatusBadge({ status }: { status: RegressionResult['status'] }) {
   const cfg = {
-    pending:   { label: 'Pending',   cls: 'bg-amber-100 text-amber-800 border-amber-300' },
-    applied:   { label: 'Applied',   cls: 'bg-teal-100  text-teal-800  border-teal-300'  },
+    pending:   { label: 'Pending',   cls: 'bg-warn-soft text-warn border-warn' },
+    applied:   { label: 'Applied',   cls: 'bg-primary-soft  text-primary  border-primary'  },
     retracted: { label: 'Retracted', cls: 'bg-muted     text-muted-foreground border-border' },
   }[status];
   return (
-    <span className={cn('inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border', cfg.cls)}>
+    <span className={cn('inline-flex px-2 py-0.5 rounded text-2xs font-semibold border', cfg.cls)}>
       {cfg.label}
     </span>
   );
@@ -763,7 +763,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-4 w-4" /> Edit Raw Value
             {isPaired && (
-              <Badge variant="outline" className="text-[10px] ml-1 border-teal-400 text-teal-700">
+              <Badge variant="outline" className="text-2xs ml-1 border-primary text-primary">
                 Paired Edit
               </Badge>
             )}
@@ -785,11 +785,11 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
             <Label className="text-xs font-semibold">{column}</Label>
             <div className="flex gap-2 mt-1 items-center">
               <div className="w-1/2">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Current</p>
+                <p className="text-2xs text-muted-foreground mb-0.5">Current</p>
                 <Input value={oldValue ?? '—'} disabled className="font-mono text-sm bg-muted/40 h-8" />
               </div>
               <div className="w-1/2">
-                <p className="text-[10px] text-muted-foreground mb-0.5">New value <span className="text-danger">*</span></p>
+                <p className="text-2xs text-muted-foreground mb-0.5">New value <span className="text-danger">*</span></p>
                 <Input
                   className="font-mono text-sm h-8"
                   placeholder="e.g. 123.45"
@@ -806,16 +806,16 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
             <div className="border-t pt-3">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
                 {pairedCol}
-                <span className="text-[10px] font-normal text-muted-foreground">(linked — editable)</span>
+                <span className="text-2xs font-normal text-muted-foreground">(linked — editable)</span>
                 {loadingPaired && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
               </Label>
               <div className="flex gap-2 mt-1 items-center">
                 <div className="w-1/2">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Current</p>
+                  <p className="text-2xs text-muted-foreground mb-0.5">Current</p>
                   <Input value={loadingPaired ? 'Loading…' : (pairedOldValue || '—')} disabled className="font-mono text-sm bg-muted/40 h-8" />
                 </div>
                 <div className="w-1/2">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">New value</p>
+                  <p className="text-2xs text-muted-foreground mb-0.5">New value</p>
                   <Input
                     className="font-mono text-sm h-8"
                     placeholder="optional"
@@ -830,9 +830,9 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
 
           {/* Auto-computed daily_volume indicator */}
           {isPaired && computedDelta != null && (
-            <div className="rounded bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 px-3 py-1.5 flex items-center justify-between text-xs">
-              <span className="text-teal-700 dark:text-teal-300 font-medium">Computed daily_volume</span>
-              <span className={cn('font-mono font-semibold', computedDelta < 0 ? 'text-danger' : 'text-teal-700 dark:text-teal-300')}>
+            <div className="rounded bg-primary-soft border border-primary px-3 py-1.5 flex items-center justify-between text-xs">
+              <span className="text-primary font-medium">Computed daily_volume</span>
+              <span className={cn('font-mono font-semibold', computedDelta < 0 ? 'text-danger' : 'text-primary')}>
                 {computedDelta >= 0 ? '+' : ''}{computedDelta.toFixed(3)}
               </span>
             </div>
@@ -842,7 +842,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
             <Label className="text-xs">Reason / note</Label>
             <Input className="mt-1 text-sm" placeholder="Optional" value={note} onChange={e => setNote(e.target.value)} />
           </div>
-          <div className="rounded bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+          <div className="rounded bg-warn-soft border border-warn p-2 text-xs text-warn">
             <Info className="inline h-3 w-3 mr-1" />
             {isPaired
               ? 'Both columns are saved together and each change is logged in the audit trail.'
@@ -897,10 +897,10 @@ function LinearRegressionChart({
 
   return (
     <div className="rounded border bg-card overflow-hidden">
-      <div className="text-[10px] text-muted-foreground px-3 pt-2 pb-0 font-semibold uppercase tracking-wide flex items-center justify-between">
+      <div className="text-2xs text-muted-foreground px-3 pt-2 pb-0 font-semibold uppercase tracking-wide flex items-center justify-between">
         <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3 text-primary" /> Linear Regression Fit</span>
         {rSquared != null && (
-          <span className="font-mono text-[10px]">R² = <span className="text-primary font-bold">{rSquared.toFixed(4)}</span></span>
+          <span className="font-mono text-2xs">R² = <span className="text-primary font-bold">{rSquared.toFixed(4)}</span></span>
         )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full" style={{ height: 90 }}>
@@ -936,24 +936,24 @@ function LinearRegressionChart({
                 <line
                   x1={toX(i)} y1={toY(c.original_value!)}
                   x2={toX(i)} y2={toY(c.corrected_value)}
-                  stroke="#ef4444" strokeWidth={1} opacity={0.4} strokeDasharray="2 1"
+                  stroke="hsl(var(--danger))" strokeWidth={1} opacity={0.4} strokeDasharray="2 1"
                 />
               )}
-              <circle cx={toX(i)} cy={toY(c.original_value!)} r={4} fill="#ef4444" opacity={0.85} />
+              <circle cx={toX(i)} cy={toY(c.original_value!)} r={4} fill="hsl(var(--danger))" opacity={0.85} />
               {c.corrected_value != null && (
-                <circle cx={toX(i)} cy={toY(c.corrected_value)} r={3.5} fill="rgb(20 184 166)" stroke="white" strokeWidth={1.2} />
+                <circle cx={toX(i)} cy={toY(c.corrected_value)} r={3.5} fill="hsl(var(--primary))" stroke="white" strokeWidth={1.2} />
               )}
             </g>
           ) : null
         )}
       </svg>
-      <div className="flex items-center gap-4 px-3 pb-2 text-[10px] text-muted-foreground border-t mt-0 pt-1.5">
+      <div className="flex items-center gap-4 px-3 pb-2 text-2xs text-muted-foreground border-t mt-0 pt-1.5">
         <span className="flex items-center gap-1.5">
           <svg width="14" height="6"><line x1="0" y1="3" x2="14" y2="3" stroke="hsl(var(--primary))" strokeWidth="1.5" strokeDasharray="5 3"/></svg>
           OLS line (slope={slope.toFixed(3)}/day)
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full inline-block bg-red-500 opacity-85" /> Outlier
+          <span className="w-2.5 h-2.5 rounded-full inline-block bg-danger opacity-85" /> Outlier
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:'rgb(20 184 166)'}} /> Corrected
@@ -1353,7 +1353,7 @@ function RegressionDetail({
           </div>
           {/* Plant + entity name subtitle */}
           {(plantName || entityName) && (
-            <div className="flex items-center gap-1.5 pl-6 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 pl-6 text-xs text-muted-foreground">
               {plantName && (
                 <span className="inline-flex items-center gap-1">
                   <Database className="h-3 w-3" />
@@ -1380,14 +1380,14 @@ function RegressionDetail({
               variant="outline"
               onClick={handleInsertGaps}
               disabled={insertingGaps}
-              className="h-7 text-xs border-blue-400 text-blue-700 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-950/30"
+              className="h-7 text-xs border-info text-info hover:bg-info-soft"
             >
               <Zap className="h-3 w-3 mr-1" />
               {insertingGaps ? 'Inserting…' : `Insert gaps (${gapFillRows.length})`}
             </Button>
           )}
           {gapsInserted && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-blue-600 font-medium">
+            <span className="inline-flex items-center gap-1 text-xs text-info font-medium">
               <CheckCircle2 className="h-3.5 w-3.5" /> Gaps inserted
             </span>
           )}
@@ -1406,9 +1406,9 @@ function RegressionDetail({
           </button>
           {confirmDelete ? (
             <div className="flex items-center gap-1.5 bg-destructive/10 border border-destructive/30 rounded-md px-2 py-1">
-              <span className="text-[11px] text-destructive font-medium whitespace-nowrap">Delete?</span>
+              <span className="text-xs text-destructive font-medium whitespace-nowrap">Delete?</span>
               <button
-                className="text-[11px] font-semibold text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
+                className="text-xs font-semibold text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
                 disabled={deleting}
                 onClick={async () => {
                   setDeleting(true);
@@ -1423,9 +1423,9 @@ function RegressionDetail({
               >
                 {deleting ? 'Deleting…' : 'Yes'}
               </button>
-              <span className="text-muted-foreground/50 text-[11px]">·</span>
+              <span className="text-muted-foreground/50 text-xs">·</span>
               <button
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setConfirmDelete(false)}
               >
                 No
@@ -1450,22 +1450,22 @@ function RegressionDetail({
           const resetCount = outliers.filter(c => c.note?.includes('reset anomaly')).length;
           const olsCount   = outliers.length - resetCount;
           return [
-            { label: 'Rows',    value: result.row_count, color: result.truncated ? 'text-amber-600' : '' },
-            { label: 'Resets',  value: resetCount,         color: resetCount  > 0 ? 'text-orange-600' : '' },
-            { label: 'OLS',     value: olsCount,           color: olsCount    > 0 ? 'text-amber-600'  : '' },
-            { label: 'Gaps',    value: gapFillRows.length, color: gapFillRows.length > 0 ? 'text-blue-600' : '' },
+            { label: 'Rows',    value: result.row_count, color: result.truncated ? 'text-warn' : '' },
+            { label: 'Resets',  value: resetCount,         color: resetCount  > 0 ? 'text-kpi-solar' : '' },
+            { label: 'OLS',     value: olsCount,           color: olsCount    > 0 ? 'text-warn'  : '' },
+            { label: 'Gaps',    value: gapFillRows.length, color: gapFillRows.length > 0 ? 'text-info' : '' },
             { label: 'R²',      value: result.r_squared != null ? result.r_squared.toFixed(4) : '—', color: '' },
             { label: 'Run at',  value: result.created_at ? format(parseISO(result.created_at), 'MMM d HH:mm') : '—', color: '' },
           ];
         })().map(s => (
           <div key={s.label} className="px-3 py-1">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{s.label}</div>
+            <div className="text-2xs text-muted-foreground uppercase tracking-wide">{s.label}</div>
             <div className={cn('font-mono text-sm font-semibold', s.color)}>{s.value}</div>
           </div>
         ))}
       </div>
       {result.truncated && (
-        <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 border-b flex items-center gap-2">
+        <div className="px-4 py-2 text-xs bg-warn-soft text-warn border-b flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           This date range has more readings than the analysis row cap — only the earliest {result.row_count.toLocaleString()} rows were analyzed. Narrow the date range to cover the rest.
         </div>
@@ -1488,7 +1488,7 @@ function RegressionDetail({
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="text-[11px]">
+              <TableRow className="text-xs">
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Original</TableHead>
                 <TableHead className="text-right">Corrected</TableHead>
@@ -1506,12 +1506,12 @@ function RegressionDetail({
                 const isApplied  = individuallyApplied.has(c.reading_id) || result.status === 'applied';
                 const isApplying = applyingOne === c.reading_id;
                 return (
-                  <TableRow key={c.reading_id} className={cn('text-xs', isReset && 'bg-orange-50/60 dark:bg-orange-950/20')}>
+                  <TableRow key={c.reading_id} className={cn('text-xs', isReset && 'bg-kpi-solar/60')}>
                     <TableCell className="font-mono">{c.reading_datetime?.slice(0, 16).replace('T', ' ')}</TableCell>
                     <TableCell className="text-right font-mono text-danger">
                       {c.original_value?.toFixed(2) ?? '—'}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-teal-600">
+                    <TableCell className="text-right font-mono text-primary">
                       {c.corrected_value?.toFixed(2) ?? '—'}
                     </TableCell>
                     <TableCell className="text-right font-mono">
@@ -1519,15 +1519,15 @@ function RegressionDetail({
                         <span className={Math.abs(c.z_score) > 3 ? 'text-danger font-bold' : ''}>
                           {c.z_score.toFixed(2)}
                         </span>
-                      ) : <span className="text-muted-foreground text-[10px]">n/a</span>}
+                      ) : <span className="text-muted-foreground text-2xs">n/a</span>}
                     </TableCell>
                     <TableCell>
                       {isReset ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium border bg-kpi-solar/15 text-kpi-solar border-kpi-solar">
                           <Zap className="h-2.5 w-2.5" /> Reset
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-amber-100 text-amber-800 border-amber-300">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium border bg-warn-soft text-warn border-warn">
                           OLS
                         </span>
                       )}
@@ -1536,14 +1536,14 @@ function RegressionDetail({
                     {canEdit && result.status !== 'retracted' && (
                       <TableCell className="text-center">
                         {isApplied ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-teal-600">
+                          <span className="inline-flex items-center gap-1 text-2xs font-medium text-primary">
                             <CheckCircle2 className="h-3 w-3" /> Applied
                           </span>
                         ) : (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-6 text-[10px] px-2 border-teal-400 text-teal-700 hover:bg-teal-50"
+                            className="h-6 text-2xs px-2 border-primary text-primary hover:bg-primary-soft"
                             disabled={isApplying || !!applyingOne}
                             onClick={() => handleApplyOne(c)}
                           >
@@ -1570,19 +1570,19 @@ function RegressionDetail({
       {/* Gap Fills table (collapsible, shown when gaps exist) */}
       {expanded && gapFillRows.length > 0 && (
         <div className="border-t">
-          <div className="px-4 py-2 bg-blue-50/60 dark:bg-blue-950/20 border-b flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5 text-blue-600" />
-            <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400">
+          <div className="px-4 py-2 bg-info-soft/60 border-b flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 text-info" />
+            <span className="text-xs font-semibold text-info">
               Missing Dates — Linear Interpolation ({gapFillRows.length} row{gapFillRows.length !== 1 ? 's' : ''})
             </span>
-            <span className="text-[10px] text-blue-600/70 dark:text-blue-500">
+            <span className="text-2xs text-info/70">
               Click "Insert gaps" in the header to write these into the source table.
             </span>
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="text-[11px]">
+                <TableRow className="text-xs">
                   <TableHead>Missing Date</TableHead>
                   {entityCfgRD && <TableHead>{entityCfgRD.filterLabel}</TableHead>}
                   <TableHead className="text-right">Interpolated Value</TableHead>
@@ -1598,20 +1598,20 @@ function RegressionDetail({
                     ? (gapEntityNames?.[meta.entity_fk_val] ?? meta.entity_fk_val)
                     : null;
                   return (
-                    <TableRow key={g.reading_id} className="text-xs bg-blue-50/30 dark:bg-blue-950/10">
+                    <TableRow key={g.reading_id} className="text-xs bg-info-soft/30">
                       <TableCell className="font-mono">{g.reading_datetime?.slice(0, 10)}</TableCell>
                       {entityCfgRD && (
-                        <TableCell className="font-mono text-[11px] text-muted-foreground">
+                        <TableCell className="font-mono text-xs text-muted-foreground">
                           {entityLabel ?? <span className="opacity-40">—</span>}
                         </TableCell>
                       )}
-                      <TableCell className="text-right font-mono text-blue-700 dark:text-blue-400 font-semibold">
+                      <TableCell className="text-right font-mono text-info font-semibold">
                         {g.corrected_value?.toFixed(3) ?? '—'}
                       </TableCell>
-                      <TableCell className="text-[10px] text-muted-foreground font-mono">
+                      <TableCell className="text-2xs text-muted-foreground font-mono">
                         {meta ? `${meta.from_date} = ${meta.from_value}` : '—'}
                       </TableCell>
-                      <TableCell className="text-[10px] text-muted-foreground font-mono">
+                      <TableCell className="text-2xs text-muted-foreground font-mono">
                         {meta ? `${meta.to_date} = ${meta.to_value}` : '—'}
                       </TableCell>
                     </TableRow>
@@ -1718,9 +1718,9 @@ function RawDataTable({
 
   if (isLoading) return (
     <div className="overflow-auto max-h-[560px] rounded border">
-      <Table className="text-[11px]">
+      <Table className="text-xs">
         <TableHeader className="sticky top-0 bg-card z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
-          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <TableRow className="text-2xs uppercase tracking-wide text-muted-foreground">
             <TableHead className="whitespace-nowrap w-[88px]">Date</TableHead>
             {entityCfgRT && <TableHead className="whitespace-nowrap">{entityCfgRT.filterLabel}</TableHead>}
             <TableHead className="text-right whitespace-nowrap">{column}</TableHead>
@@ -1752,9 +1752,9 @@ function RawDataTable({
 
   return (
     <div className="overflow-auto max-h-[560px] rounded border">
-      <Table className="text-[11px]">
+      <Table className="text-xs">
         <TableHeader className="sticky top-0 bg-card z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
-          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <TableRow className="text-2xs uppercase tracking-wide text-muted-foreground">
             <TableHead className={cn('whitespace-nowrap', showTime ? 'w-[118px]' : 'w-[88px]')}>
               {showTime ? 'Date & Time' : 'Date'}
             </TableHead>
@@ -1778,41 +1778,41 @@ function RawDataTable({
             const delta = deltaMap.get(row.id) ?? null;
             const { date, time } = fmtDatetime(String(row.reading_datetime || ''), showTime);
             return (
-              <TableRow key={row.id} className={cn(hasNormStatus && row.norm_status === 'erroneous' && 'bg-amber-50/60 dark:bg-amber-950/20')}>
+              <TableRow key={row.id} className={cn(hasNormStatus && row.norm_status === 'erroneous' && 'bg-warn-soft/60')}>
                 <TableCell className="font-mono whitespace-nowrap py-1.5">
                   {showTime ? (
                     <span className="flex flex-col leading-tight">
-                      <span className="text-[11px]">{date}</span>
-                      <span className="text-[10px] text-muted-foreground">{time}</span>
+                      <span className="text-xs">{date}</span>
+                      <span className="text-2xs text-muted-foreground">{time}</span>
                     </span>
                   ) : (
-                    <span className="text-[11px]">{date}</span>
+                    <span className="text-xs">{date}</span>
                   )}
                 </TableCell>
                 {ENTITY_CONFIG[sourceTable] && (
-                  <TableCell className="text-[11px] text-muted-foreground font-mono py-1.5">
+                  <TableCell className="text-xs text-muted-foreground font-mono py-1.5">
                     {entityLookup[row[ENTITY_CONFIG[sourceTable].fkColumn] as string] ?? <span className="text-muted-foreground/50">—</span>}
                   </TableCell>
                 )}
                 {/* Paired columns — current_reading then previous_reading */}
                 {isPairedColRT ? (
                   <>
-                    <TableCell className="text-right font-mono text-[11px] py-1.5">
+                    <TableCell className="text-right font-mono text-xs py-1.5">
                       {row['current_reading'] != null ? Number(row['current_reading']).toFixed(3) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-[11px] py-1.5 text-muted-foreground">
+                    <TableCell className="text-right font-mono text-xs py-1.5 text-muted-foreground">
                       {row['previous_reading'] != null ? Number(row['previous_reading']).toFixed(3) : <span className="text-muted-foreground/50">—</span>}
                     </TableCell>
                   </>
                 ) : (
-                  <TableCell className="text-right font-mono text-[11px] py-1.5">
+                  <TableCell className="text-right font-mono text-xs py-1.5">
                     {row[column] != null ? Number(row[column]).toFixed(3) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                 )}
-                <TableCell className="text-right font-mono text-[11px] py-1.5">
+                <TableCell className="text-right font-mono text-xs py-1.5">
                   {delta != null ? (
                     <span className={cn(
-                      delta > 0  && 'text-teal-600',
+                      delta > 0  && 'text-primary',
                       delta < 0  && 'text-danger',
                       delta === 0 && 'text-muted-foreground',
                     )}>
@@ -1868,7 +1868,7 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
 
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</div>;
   if (isError)   return (
-    <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+    <div className="flex items-center gap-2 rounded border border-warn bg-warn-soft px-3 py-2 text-xs text-warn">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
       Audit log unavailable — run the <code className="font-mono">20260515_supabase_only_and_data_analysis.sql</code> migration in Supabase to create the <code className="font-mono">raw_edit_log</code> table.
     </div>
@@ -1879,7 +1879,7 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
     <div className="overflow-auto max-h-[400px] rounded border">
       <Table>
         <TableHeader className="sticky top-0 bg-background z-10">
-          <TableRow className="text-[11px]">
+          <TableRow className="text-xs">
             <TableHead>Edited at</TableHead>
             <TableHead>Column</TableHead>
             <TableHead className="text-right">Old</TableHead>
@@ -1894,8 +1894,8 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
               <TableCell className="font-mono">{String(r.edited_at ?? '').slice(0, 16)}</TableCell>
               <TableCell className="font-mono">{String(r.column_name ?? '')}</TableCell>
               <TableCell className="text-right font-mono text-danger">{r.old_value != null ? Number(r.old_value).toFixed(3) : '—'}</TableCell>
-              <TableCell className="text-right font-mono text-teal-600">{r.new_value != null ? Number(r.new_value).toFixed(3) : '—'}</TableCell>
-              <TableCell><Badge variant="outline" className="text-[10px]">{String(r.edited_role ?? '')}</Badge></TableCell>
+              <TableCell className="text-right font-mono text-primary">{r.new_value != null ? Number(r.new_value).toFixed(3) : '—'}</TableCell>
+              <TableCell><Badge variant="outline" className="text-2xs">{String(r.edited_role ?? '')}</Badge></TableCell>
               <TableCell className="text-muted-foreground max-w-[180px] truncate">{String(r.note ?? '')}</TableCell>
             </TableRow>
           ))}
@@ -1929,8 +1929,8 @@ function NormalizationAuditTab({ sourceTable }: { sourceTable: string }) {
   if (!rows.length) return <div className="py-8 text-center text-sm text-muted-foreground">No normalization records for this table.</div>;
 
   const actionCfg = {
-    tag:       { emoji: '⚠️', cls: 'text-amber-700  bg-amber-50  border-amber-300  dark:bg-amber-950/30 dark:text-amber-300' },
-    normalize: { emoji: '🔄', cls: 'text-teal-700   bg-teal-50   border-teal-300   dark:bg-teal-950/30  dark:text-teal-300'  },
+    tag:       { emoji: '⚠️', cls: 'text-warn  bg-warn-soft  border-warn ' },
+    normalize: { emoji: '🔄', cls: 'text-primary   bg-primary-soft   border-primary   '  },
     retract:   { emoji: '⏪', cls: 'text-muted-foreground bg-muted border-border' },
   } as const;
 
@@ -1938,7 +1938,7 @@ function NormalizationAuditTab({ sourceTable }: { sourceTable: string }) {
     <div className="overflow-auto max-h-[400px] rounded border">
       <Table>
         <TableHeader className="sticky top-0 bg-background z-10">
-          <TableRow className="text-[11px]">
+          <TableRow className="text-xs">
             <TableHead>Date</TableHead>
             <TableHead>Action</TableHead>
             <TableHead className="text-right">Original</TableHead>
@@ -1954,17 +1954,17 @@ function NormalizationAuditTab({ sourceTable }: { sourceTable: string }) {
               <TableRow key={r.id as string} className="text-xs">
                 <TableCell className="font-mono">{String(r.performed_at ?? '').slice(0, 16)}</TableCell>
                 <TableCell>
-                  <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border', cfg.cls)}>
+                  <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium border', cfg.cls)}>
                     {cfg.emoji} {r.action as string}
                   </span>
                 </TableCell>
                 <TableCell className="text-right font-mono text-danger">
                   {r.original_value != null ? Number(r.original_value).toFixed(3) : '—'}
                 </TableCell>
-                <TableCell className="text-right font-mono text-teal-600">
+                <TableCell className="text-right font-mono text-primary">
                   {r.adjusted_value != null ? Number(r.adjusted_value).toFixed(3) : '—'}
                 </TableCell>
-                <TableCell><Badge variant="outline" className="text-[10px]">{String(r.performed_role ?? '')}</Badge></TableCell>
+                <TableCell><Badge variant="outline" className="text-2xs">{String(r.performed_role ?? '')}</Badge></TableCell>
                 <TableCell className="text-muted-foreground max-w-[200px] truncate">{String(r.note ?? '')}</TableCell>
               </TableRow>
             );
@@ -2346,7 +2346,7 @@ export default function DataAnalysis() {
                 <Label className="text-xs flex items-center gap-1">
                   {entityCfgMain.filterLabel}
                   {entityOptions.length > 0 && (
-                    <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-[10px] text-muted-foreground font-normal">
+                    <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-2xs text-muted-foreground font-normal">
                       {entityOptions.length}
                     </span>
                   )}
@@ -2369,11 +2369,11 @@ export default function DataAnalysis() {
                     <SelectItem value="all" className="text-xs text-muted-foreground">
                       All {entityCfgMain.filterLabel}s
                       {entityOptions.length > 0 && (
-                        <span className="ml-1.5 text-[10px] opacity-60">({entityOptions.length})</span>
+                        <span className="ml-1.5 text-2xs opacity-60">({entityOptions.length})</span>
                       )}
                     </SelectItem>
                     {entityOptions.length === 0 && !entityFetching && (
-                      <div className="px-3 py-2 text-[11px] text-muted-foreground italic">
+                      <div className="px-3 py-2 text-xs text-muted-foreground italic">
                         No {entityCfgMain.filterLabel.toLowerCase()}s found
                         {plantId !== 'all' ? ' for this plant' : ''}
                       </div>
@@ -2452,9 +2452,9 @@ export default function DataAnalysis() {
             <CardTitle className="text-sm flex items-center gap-2">
               <Database className="h-4 w-4 text-muted-foreground" />
               Raw Data
-              <Badge variant="outline" className="text-[10px] ml-1">Read-only source</Badge>
+              <Badge variant="outline" className="text-2xs ml-1">Read-only source</Badge>
             </CardTitle>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Latest 200 rows for <span className="font-mono font-medium">{column}</span>.
               {canEdit && ' Click ✏ to edit a value (logged to audit trail).'}
             </p>
@@ -2479,29 +2479,29 @@ export default function DataAnalysis() {
             <CardTitle className="text-sm flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
               Regression Results
-              <Badge variant="outline" className="text-[10px] ml-1">corrected_value + notes</Badge>
+              <Badge variant="outline" className="text-2xs ml-1">corrected_value + notes</Badge>
             </CardTitle>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Each run shows outlier readings, corrected values (OLS projection), and Z-scores.
               {canEdit && ' Apply to write corrections; Retract to undo.'}
             </p>
           </CardHeader>
           <CardContent className="px-3 pb-4 space-y-3">
             {resultsError && (
-              <div className="flex flex-col gap-1.5 rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2.5 text-[11px]">
-                <div className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+              <div className="flex flex-col gap-1.5 rounded border border-warn bg-warn-soft px-3 py-2.5 text-xs">
+                <div className="flex items-center gap-2 font-medium text-warn">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   Regression results table not found
                 </div>
-                <p className="text-amber-700 dark:text-amber-400 leading-relaxed">
-                  The <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">regression_results</code> and{' '}
-                  <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">raw_edit_log</code> tables
+                <p className="text-warn leading-relaxed">
+                  The <code className="font-mono bg-warn-soft px-1 rounded">regression_results</code> and{' '}
+                  <code className="font-mono bg-warn-soft px-1 rounded">raw_edit_log</code> tables
                   have not been created in Supabase yet. Run the migration to fix this:
                 </p>
-                <p className="text-amber-700 dark:text-amber-400 font-mono text-[10px] bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded">
+                <p className="text-warn font-mono text-2xs bg-warn-soft px-2 py-1 rounded">
                   supabase/migrations/20260515_supabase_only_and_data_analysis.sql
                 </p>
-                <p className="text-amber-600 dark:text-amber-500">
+                <p className="text-warn">
                   Go to <strong>Supabase Dashboard → SQL Editor</strong> and run the migration file above.
                 </p>
               </div>

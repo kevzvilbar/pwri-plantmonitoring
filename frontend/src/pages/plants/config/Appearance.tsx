@@ -84,7 +84,7 @@ export function BackwashModeCard({ plant }: { plant: any }) {
           <div className="text-sm font-semibold">
             {mediaLabel} Backwash Mode
           </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             {mode === 'synchronized'
               ? `All ${mediaLabel} units on a train backwash together.`
               : `Each ${mediaLabel} unit backwashes independently.`}
@@ -103,7 +103,7 @@ export function BackwashModeCard({ plant }: { plant: any }) {
                 className={[
                   'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150',
                   active
-                    ? 'bg-teal-700 text-white shadow-sm'
+                    ? 'bg-primary text-white shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
                   !isManager ? 'cursor-default opacity-70' : 'cursor-pointer',
                 ].join(' ')}
@@ -138,7 +138,7 @@ export function EnergySourceInline({ plant }: { plant: any; isManager?: boolean;
       <div className="flex items-center gap-2 flex-wrap text-xs">
         {hasSolar && (
           <span className="inline-flex items-center gap-1 opacity-90">
-            <Sun className="h-3 w-3 text-yellow-300" />
+            <Sun className="h-3 w-3 text-warn" />
             Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
           </span>
         )}
@@ -148,7 +148,7 @@ export function EnergySourceInline({ plant }: { plant: any; isManager?: boolean;
           </span>
         )}
         {!hasSolar && !hasGrid && <span className="opacity-50 italic text-xs">No source</span>}
-        <span className="opacity-40 text-[10px] ml-1">(configure in Power tab)</span>
+        <span className="opacity-40 text-2xs ml-1">(configure in Power tab)</span>
       </div>
     </div>
   );
@@ -188,10 +188,10 @@ export function EnergySourceCard({ plant }: { plant: any }) {
             <div className="text-sm font-semibold flex items-center gap-2">
               <Zap className="h-4 w-4 text-chart-6" /> Energy Sources
             </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
               {hasSolar && (
                 <span className="inline-flex items-center gap-1">
-                  <Sun className="h-3 w-3 text-yellow-500" />
+                  <Sun className="h-3 w-3 text-warn" />
                   Solar{plant.solar_capacity_kw ? ` · ${plant.solar_capacity_kw} kW` : ''}
                 </span>
               )}
@@ -221,7 +221,7 @@ export function EnergySourceCard({ plant }: { plant: any }) {
               className="h-8 w-14 sm:h-6 sm:w-11 [&>span]:h-6 [&>span]:w-6 sm:[&>span]:h-5 sm:[&>span]:w-5 [&>span]:data-[state=checked]:translate-x-6 sm:[&>span]:data-[state=checked]:translate-x-5"
             />
             <span className="inline-flex items-center gap-1">
-              <Sun className="h-3.5 w-3.5 text-yellow-500" /> Has solar
+              <Sun className="h-3.5 w-3.5 text-warn" /> Has solar
             </span>
           </label>
           <label className="flex items-center gap-2 text-sm">

@@ -330,11 +330,11 @@ export function ImportReadingsDialog({
 
           {/* Schema reference */}
           <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" /> Expected columns:
             </p>
-            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
+            <p className="text-2xs text-muted-foreground">
               Columns marked <strong>*</strong> are required. <code>reading_datetime</code> accepts
               ISO 8601 format (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
               Leave blank to default to the import timestamp.
@@ -350,7 +350,7 @@ export function ImportReadingsDialog({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" />
@@ -373,16 +373,16 @@ export function ImportReadingsDialog({
             <div className={`rounded-md border p-3 space-y-2 ${
               errors.length > 0
                 ? 'border-destructive/40 bg-destructive/5'
-                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                : 'border-accent bg-accent-soft'
             }`}>
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
-                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
                   : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (
-                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                <ul className="text-2xs text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
                   {errors.map((e, i) => <li key={i}>{e}</li>)}
                 </ul>
               )}
@@ -397,10 +397,10 @@ export function ImportReadingsDialog({
           {/* Row preview */}
           {rows.length > 0 && errors.length === 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground font-medium">
+              <p className="text-xs text-muted-foreground font-medium">
                 Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
               </p>
-              <div className="overflow-x-auto rounded-md border text-[10px]">
+              <div className="overflow-x-auto rounded-md border text-2xs">
                 <table className="min-w-full">
                   <thead className="bg-muted/50">
                     <tr>
@@ -425,16 +425,16 @@ export function ImportReadingsDialog({
 
           {done && (
             <div className="space-y-2">
-              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <p className={`text-xs font-medium flex items-center gap-1.5 ${importErrors.length > 0 ? 'text-warn' : 'text-accent'}`}>
+                <span className={`h-2 w-2 rounded-full inline-block ${importErrors.length > 0 ? 'bg-warn' : 'bg-accent'}`} />
                 {imported} record(s) imported{importErrors.length > 0 ? `, ${importErrors.length} failed` : ''}. Audit log written.
               </p>
               {importErrors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
-                  <p className="text-[11px] font-semibold text-destructive mb-1 flex items-center gap-1">
+                  <p className="text-xs font-semibold text-destructive mb-1 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" /> Import errors (first {Math.min(importErrors.length, 20)} of {importErrors.length}):
                   </p>
-                  <ul className="text-[10px] text-destructive list-disc ml-3 space-y-0.5">
+                  <ul className="text-2xs text-destructive list-disc ml-3 space-y-0.5">
                     {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </div>
@@ -444,7 +444,7 @@ export function ImportReadingsDialog({
 
           {/* Intra-file duplicate notice (shown after dedup, before re-import) */}
           {dupResolved && !done && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <div className="rounded-md border border-warn bg-warn-soft p-3 text-xs text-warn flex items-start gap-2">
               <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>Duplicate rows within the file were removed — only the first occurrence of each date is kept. Click <strong>Import Rows</strong> to proceed.</span>
             </div>
@@ -457,7 +457,7 @@ export function ImportReadingsDialog({
             >
               <AlertDialogHeader>
                 <AlertDialogTitle className="flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4 text-amber-600" /> Duplicate detected
+                  <AlertCircle className="h-4 w-4 text-warn" /> Duplicate detected
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   A reading for "{dupConfirm?.label}" already exists{' '}
@@ -485,14 +485,14 @@ export function ImportReadingsDialog({
                 </Button>
                 <Button
                   size="sm"
-                  className="h-7 text-xs bg-teal-700 text-white hover:bg-teal-800"
+                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
                   onClick={() => handleDupDecision('overwrite', true)}
                   title="Overwrite this and all remaining duplicates"
                 >
                   Overwrite All
                 </Button>
                 <AlertDialogAction
-                  className="h-7 text-xs bg-teal-700 text-white hover:bg-teal-800"
+                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
                   onClick={() => handleDupDecision('overwrite')}
                 >
                   Overwrite
@@ -507,7 +507,7 @@ export function ImportReadingsDialog({
           <Button
             onClick={doImport}
             disabled={!canSubmit}
-            className="bg-teal-700 text-white hover:bg-teal-800"
+            className="bg-primary text-white hover:bg-primary/90"
             data-testid="confirm-import-btn"
           >
             {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}

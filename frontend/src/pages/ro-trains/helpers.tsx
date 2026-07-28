@@ -17,7 +17,7 @@ export function Sparkline({
   color?: string;
 }) {
   if (values.length < 2)
-    return <span className="text-[10px] text-muted-foreground/40">—</span>;
+    return <span className="text-2xs text-muted-foreground/40">—</span>;
   const w = 48; const h = 16;
   const min = Math.min(...values); const max = Math.max(...values);
   const range = max - min || 1;

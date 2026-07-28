@@ -200,7 +200,7 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
                 className="shrink-0 h-5 w-5 sm:h-4 sm:w-4 [&]:rounded-full sm:[&]:rounded-sm"
                 data-testid="add-well-has-power-meter"
               />
-              <Zap className="h-3 w-3 text-amber-500" />
+              <Zap className="h-3 w-3 text-warn" />
               Has Dedicated Electric Meter
             </label>
             {form.has_power_meter && (
@@ -352,7 +352,7 @@ export function EditHydraulicDialog({ well, latest, onClose }: { well: any; late
             <div className="col-span-2"><Label>Turbidity (NTU)</Label><Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} /></div>
             <div className="col-span-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => set('remarks', e.target.value)} /></div>
           </div>
-          <p className="text-[10px] text-muted-foreground">Each save creates a new history entry so you can track changes over time.</p>
+          <p className="text-2xs text-muted-foreground">Each save creates a new history entry so you can track changes over time.</p>
         </div>
         <DialogFooter><Button onClick={submit}>Save entry</Button></DialogFooter>
       </DialogContent>
@@ -442,13 +442,13 @@ export function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onC
             <Label className="text-xs font-medium">Select CSV file</Label>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-700 group-hover:bg-teal-600 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">
+                  <Upload className="h-3.5 w-3.5" />
                   Choose File
                 </span>
                 <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
                 {rows.length > 0
-                  ? <span className="text-xs text-teal-700 font-medium">{rows.length} row(s) ready</span>
+                  ? <span className="text-xs text-primary font-medium">{rows.length} row(s) ready</span>
                   : <span className="text-xs text-muted-foreground">No file chosen</span>}
               </label>
             </div>

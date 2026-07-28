@@ -249,7 +249,7 @@ export function DeleteEntityMenu({
               onClick={() => { setReason(''); setOpenSoft(true); }}
               data-testid={`soft-delete-${kind}-${id}`}
             >
-              <ShieldAlert className="h-4 w-4 mr-2 text-amber-500" />
+              <ShieldAlert className="h-4 w-4 mr-2 text-warn" />
               {copy.softVerb} ({copy.softName})
             </DropdownMenuItem>
           )}
@@ -325,7 +325,7 @@ export function DeleteEntityMenu({
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
-              <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+              <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
             </Label>
             <Textarea
               value={reason}
@@ -338,7 +338,7 @@ export function DeleteEntityMenu({
               className={reason.length > 0 && !reasonValid ? 'border-danger' : ''}
             />
             {reason.length > 0 && !reasonValid && (
-              <p className="text-[10px] text-danger">
+              <p className="text-2xs text-danger">
                 Reason must be at least 5 characters ({reason.trim().length}/5).
               </p>
             )}
@@ -420,7 +420,7 @@ export function DeleteEntityMenu({
                 variant="outline"
                 onClick={() => doHard(true, true)}
                 disabled={busy || !forceAck || !reasonValid}
-                className="border-amber-500 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300 whitespace-nowrap"
+                className="border-warn text-warn hover:bg-warn/10 whitespace-nowrap"
                 data-testid="archive-and-force-delete"
               >
                 {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
@@ -455,7 +455,7 @@ function DependencyReport({ deps, kind }: { deps: DependencySnapshot; kind: Kind
 
   if (!hasAny) {
     return (
-      <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs">
+      <div className="rounded-md border border-accent/30 bg-accent/5 p-2 text-xs">
         No dependent records found. Safe to permanently delete.
       </div>
     );

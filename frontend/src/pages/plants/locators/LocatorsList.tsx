@@ -199,7 +199,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
           {isAdmin && locators && locators.length > 0 && (
             <button
               onClick={toggleAll}
-              className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
               data-testid="locators-toggle-all"
             >
               {selected.size === locators.length ? 'Clear' : 'Select all'}
@@ -259,7 +259,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate flex items-center gap-1.5">
                       {l.name}
-                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedLocator === l.id ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
+                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedLocator === l.id ? 'text-primary' : 'text-muted-foreground/30'}`} />
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
@@ -269,7 +269,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                       const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
                       if (!supplyMeter) return null;
                       return (
-                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs bg-primary-soft text-primary border border-primary">
                           <Droplet className="h-2.5 w-2.5" />
                           Fed by: {supplyMeter.name}
                         </div>
@@ -280,13 +280,13 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); toggleLocatorStatus(l); }}
                     title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       l.status === 'Active'
-                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        ? 'text-accent bg-accent-soft border-accent hover:bg-accent-soft'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                     } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
                     {l.status}
                   </button>
                 </div>
@@ -306,7 +306,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
             <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => setDetail(l.id)}
-                className="text-[11px] text-teal-600 hover:underline inline-flex items-center gap-0.5"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-0.5"
               >
                 Details →
               </button>
@@ -438,12 +438,12 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
               </a>
             )}
           </div>
-          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${
             locator.status === 'Active'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900'
+              ? 'text-accent bg-accent-soft border-accent'
               : 'text-muted-foreground bg-muted border-border'
           }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
             {locator.status ?? 'Active'}
           </span>
         </div>

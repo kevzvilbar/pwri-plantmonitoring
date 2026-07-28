@@ -393,7 +393,7 @@ export function EditTrainDialog({
               <Label className="text-xs mb-1.5 block">
                 Media Filter Type
                 {usingPlantMedia && (
-                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                  <span className="ml-2 text-2xs text-accent font-normal">
                     ✓ Matches plant default
                   </span>
                 )}
@@ -416,7 +416,7 @@ export function EditTrainDialog({
                   </Button>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">AFM = Active Filter Media · MMF = Multi-Media Filter</p>
+              <p className="text-2xs text-muted-foreground mt-1">AFM = Active Filter Media · MMF = Multi-Media Filter</p>
             </div>
 
             {/* Pre-filter housing type */}
@@ -424,7 +424,7 @@ export function EditTrainDialog({
               <Label className="text-xs mb-1.5 block">
                 Pre-filter Housing Type
                 {usingPlantFilter && (
-                  <span className="ml-2 text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                  <span className="ml-2 text-2xs text-accent font-normal">
                     ✓ Matches plant default
                   </span>
                 )}
@@ -450,7 +450,7 @@ export function EditTrainDialog({
             </div>
 
             {(!usingPlantMedia || !usingPlantFilter) && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+              <p className="text-2xs text-warn">
                 ⚠ This train differs from the plant default. It will display its own type labels.
               </p>
             )}
@@ -519,14 +519,14 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Production History</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['30','90','180','all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
             ))}
@@ -539,11 +539,11 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
       {rows.length > 0 && (
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase">Days</div>
+            <div className="text-muted-foreground text-2xs uppercase">Days</div>
             <div className="font-mono font-semibold text-base">{rows.length}</div>
           </div>
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase">Total m³</div>
+            <div className="text-muted-foreground text-2xs uppercase">Total m³</div>
             <div className="font-mono font-semibold text-base">{fmtNum(total)}</div>
           </div>
         </div>
@@ -670,7 +670,7 @@ export function TrainMetricChart({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">{title}</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
@@ -678,7 +678,7 @@ export function TrainMetricChart({
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['30', '90', '180', 'all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
             ))}
@@ -696,15 +696,15 @@ export function TrainMetricChart({
         return (
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg</div>
-              <div className="font-mono font-semibold text-sm">{fmtNum(avg)}<span className="text-[10px] font-normal ml-0.5">{firstMetric.unit}</span></div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">Avg</div>
+              <div className="font-mono font-semibold text-sm">{fmtNum(avg)}<span className="text-2xs font-normal ml-0.5">{firstMetric.unit}</span></div>
             </div>
             <div className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Peak</div>
-              <div className="font-mono font-semibold text-sm">{fmtNum(max)}<span className="text-[10px] font-normal ml-0.5">{firstMetric.unit}</span></div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">Peak</div>
+              <div className="font-mono font-semibold text-sm">{fmtNum(max)}<span className="text-2xs font-normal ml-0.5">{firstMetric.unit}</span></div>
             </div>
             <div className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Days</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">Days</div>
               <div className="font-mono font-semibold text-sm">{rows.length}</div>
             </div>
           </div>
@@ -804,14 +804,14 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">RO Performance</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['30', '90', '180', 'all'] as const).map(r => (
               <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
                 {r === 'all' ? 'All' : `${r}d`}
               </button>
             ))}
@@ -839,12 +839,12 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
             return (
               <div key={m.key} className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{m.unit}</span>
+                  <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
+                  <span className="text-2xs text-muted-foreground shrink-0">{m.unit}</span>
                 </div>
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
-                  <span className="text-[10px] text-muted-foreground">avg · pk {fmtNum(max)}</span>
+                  <span className="text-2xs text-muted-foreground">avg · pk {fmtNum(max)}</span>
                 </div>
                 <div className="h-14 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -973,8 +973,8 @@ export function PretreatAFMChart({
     <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
       {(['30', '90', '180', 'all'] as const).map(r => (
         <button key={r} onClick={() => setRange(r)}
-          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
-            ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+          className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
+            ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
           {r === 'all' ? 'All' : `${r}d`}
         </button>
       ))}
@@ -985,7 +985,7 @@ export function PretreatAFMChart({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">{mediaType} — Pressure & Backwash</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
@@ -993,8 +993,8 @@ export function PretreatAFMChart({
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
             {(['pressure', 'backwash'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-colors
-                  ${view === v ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`px-2 py-0.5 rounded text-2xs font-medium capitalize transition-colors
+                  ${view === v ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
                 {v}
               </button>
             ))}
@@ -1011,9 +1011,9 @@ export function PretreatAFMChart({
             { label: 'BW Total', val: String(totalBw), unit: 'events' },
           ].map(s => (
             <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">{s.label}</div>
               <div className="font-mono font-semibold text-sm">
-                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+                {s.val}<span className="text-2xs font-normal ml-0.5">{s.unit}</span>
               </div>
             </div>
           ))}
@@ -1027,9 +1027,9 @@ export function PretreatAFMChart({
             { label: 'Avg Volume',   val: fmtNum(avgVol, 3),  unit: 'm³'     },
           ].map(s => (
             <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">{s.label}</div>
               <div className="font-mono font-semibold text-sm">
-                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+                {s.val}<span className="text-2xs font-normal ml-0.5">{s.unit}</span>
               </div>
             </div>
           ))}
@@ -1046,7 +1046,7 @@ export function PretreatAFMChart({
         </div>
       ) : view === 'pressure' ? (
         <>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+          <div className="flex items-center gap-3 text-2xs text-muted-foreground flex-wrap">
             {[
               { color: 'hsl(216,72%,50%)', label: 'In Pressure' },
               { color: 'hsl(38,84%,52%)',  label: 'Out Pressure' },
@@ -1174,15 +1174,15 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Booster Pump — Target Setting</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
         <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
           {(['30', '90', '180', 'all'] as const).map(r => (
             <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
-                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
+                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
               {r === 'all' ? 'All' : `${r}d`}
             </button>
           ))}
@@ -1193,17 +1193,17 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
         <div className={`grid gap-2 ${hasPsi && hasHz ? 'grid-cols-2' : 'grid-cols-1 max-w-xs'}`}>
           {hasPsi && (
             <div className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg Target (PSI)</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">Avg Target (PSI)</div>
               <div className="font-mono font-semibold text-sm">
-                {fmtNum(avgPsi)}<span className="text-[10px] font-normal ml-0.5">psi</span>
+                {fmtNum(avgPsi)}<span className="text-2xs font-normal ml-0.5">psi</span>
               </div>
             </div>
           )}
           {hasHz && (
             <div className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg Target (Hz)</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">Avg Target (Hz)</div>
               <div className="font-mono font-semibold text-sm">
-                {fmtNum(avgHz)}<span className="text-[10px] font-normal ml-0.5">Hz</span>
+                {fmtNum(avgHz)}<span className="text-2xs font-normal ml-0.5">Hz</span>
               </div>
             </div>
           )}
@@ -1327,15 +1327,15 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">HPP — Target vs Actual Pressure</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
         <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
           {(['30', '90', '180', 'all'] as const).map(r => (
             <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
-                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
+                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
               {r === 'all' ? 'All' : `${r}d`}
             </button>
           ))}
@@ -1344,7 +1344,7 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
 
       {rows.length > 0 && (
         <>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+          <div className="flex items-center gap-3 text-2xs text-muted-foreground flex-wrap">
             {[
               { color: 'hsl(216,72%,46%)', label: 'Feed (actual)', dashed: false },
               { color: 'hsl(174,72%,40%)', label: 'HPP Target',    dashed: true  },
@@ -1363,14 +1363,14 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
           <div className="flex gap-2 flex-wrap text-xs">
             {avgTgt  != null && (
               <div className="bg-muted/40 rounded-lg px-3 py-1.5 text-center">
-                <span className="text-muted-foreground text-[10px] uppercase tracking-wide block">Avg Target</span>
-                <span className="font-mono font-semibold">{fmtNum(avgTgt)} <span className="font-normal text-[10px]">psi</span></span>
+                <span className="text-muted-foreground text-2xs uppercase tracking-wide block">Avg Target</span>
+                <span className="font-mono font-semibold">{fmtNum(avgTgt)} <span className="font-normal text-2xs">psi</span></span>
               </div>
             )}
             {avgFeed != null && (
               <div className="bg-muted/40 rounded-lg px-3 py-1.5 text-center">
-                <span className="text-muted-foreground text-[10px] uppercase tracking-wide block">Avg Feed</span>
-                <span className="font-mono font-semibold">{fmtNum(avgFeed)} <span className="font-normal text-[10px]">psi</span></span>
+                <span className="text-muted-foreground text-2xs uppercase tracking-wide block">Avg Feed</span>
+                <span className="font-mono font-semibold">{fmtNum(avgFeed)} <span className="font-normal text-2xs">psi</span></span>
               </div>
             )}
           </div>
@@ -1484,15 +1484,15 @@ export function PretreatCFChart({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">{label} — In / Out / ΔP</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
         <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
           {(['30', '90', '180', 'all'] as const).map(r => (
             <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors
-                ${range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
+                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
               {r === 'all' ? 'All' : `${r}d`}
             </button>
           ))}
@@ -1507,9 +1507,9 @@ export function PretreatCFChart({
             { label: 'Peak ΔP', val: fmtNum(maxDp),  unit: 'psi' },
           ].map(s => (
             <div key={s.label} className="bg-muted/40 rounded-lg p-2 text-center">
-              <div className="text-muted-foreground text-[10px] uppercase tracking-wide">{s.label}</div>
+              <div className="text-muted-foreground text-2xs uppercase tracking-wide">{s.label}</div>
               <div className="font-mono font-semibold text-sm">
-                {s.val}<span className="text-[10px] font-normal ml-0.5">{s.unit}</span>
+                {s.val}<span className="text-2xs font-normal ml-0.5">{s.unit}</span>
               </div>
             </div>
           ))}
@@ -1518,7 +1518,7 @@ export function PretreatCFChart({
 
       {/* Legend */}
       {rows.length > 0 && (
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+        <div className="flex items-center gap-3 text-2xs text-muted-foreground flex-wrap">
           {[
             { color: 'hsl(216,72%,50%)', label: 'In Pressure',  dashed: false },
             { color: 'hsl(38,84%,52%)',  label: 'Out Pressure', dashed: false },
@@ -1907,7 +1907,7 @@ export function TrainOperatorLogModal({
   const pageLogs   = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const fmtVal = (v: any, unit = '') =>
-    v != null ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-[10px]">{unit}</span></span>
+    v != null ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
               : <span className="text-muted-foreground/30">—</span>;
 
   const exportCSV = () => {
@@ -1964,7 +1964,7 @@ export function TrainOperatorLogModal({
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
           <div className="min-w-0">
             <div className="text-base font-semibold flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-teal-600 shrink-0" />
+              <BarChart2 className="h-4 w-4 text-primary shrink-0" />
               <span className="truncate">Operator Log — {trainLabel}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -1987,7 +1987,7 @@ export function TrainOperatorLogModal({
               className={[
                 'h-6 px-2 rounded text-xs font-medium border transition-colors',
                 rangePreset === p
-                  ? 'bg-teal-700 text-white border-teal-700'
+                  ? 'bg-primary text-white border-primary'
                   : 'bg-background border-input text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >{p}d</button>
@@ -2025,7 +2025,7 @@ export function TrainOperatorLogModal({
           ) : (
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 bg-background border-b z-10">
-                <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap w-[130px]">Date / Time</th>
                   <th className="text-left px-2 py-2 font-semibold w-[110px]">Operator</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Flow</th>
@@ -2041,7 +2041,7 @@ export function TrainOperatorLogModal({
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Recovery</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Perm Meter</th>
                   <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Δ m³</th>
-                  <th className="px-2 py-2 font-semibold text-center text-orange-600 whitespace-nowrap w-[54px]" title="Meter Replacement — flags reading as meter change; zeroes Δ in chart">Repl.</th>
+                  <th className="px-2 py-2 font-semibold text-center text-kpi-solar whitespace-nowrap w-[54px]" title="Meter Replacement — flags reading as meter change; zeroes Δ in chart">Repl.</th>
                   <th className="text-left px-2 py-2 font-semibold">Remarks</th>
                 </tr>
               </thead>
@@ -2058,23 +2058,23 @@ export function TrainOperatorLogModal({
                       key={r.id ?? i}
                       className={[
                         'border-t transition-colors',
-                        isRepl ? 'bg-orange-50/40 dark:bg-orange-950/10' : 'hover:bg-muted/30',
+                        isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/30',
                       ].join(' ')}
                     >
                       {/* Date / Time */}
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground font-mono text-[11px]">
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground font-mono text-xs">
                         <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                         <div className="flex items-center gap-1">
                           {r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}
                           {isRepl && (
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">repl.</span>
+                            <span className="text-3xs font-bold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">repl.</span>
                           )}
                         </div>
                       </td>
                       {/* Operator */}
                       <td className="px-2 py-2">
                         <div className="flex items-center gap-1.5">
-                          <div className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[9px] font-bold shrink-0">
+                          <div className="h-5 w-5 rounded-full bg-primary-soft text-primary flex items-center justify-center text-3xs font-bold shrink-0">
                             {initials}
                           </div>
                           <span className="truncate max-w-[80px]" title={opName}>{opName}</span>
@@ -2096,24 +2096,24 @@ export function TrainOperatorLogModal({
                       {/* Recovery */}
                       <td className="px-2 py-2 text-right font-mono">
                         {r.recovery_pct != null
-                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">{Number(r.recovery_pct).toFixed(1)}%</span>
+                          ? <span className="text-accent font-medium">{Number(r.recovery_pct).toFixed(1)}%</span>
                           : <span className="text-muted-foreground/30">—</span>}
                       </td>
                       {/* Permeate meter */}
-                      <td className="px-2 py-2 text-right font-mono text-[11px]">{fmtVal(r.permeate_meter, 'm³')}</td>
+                      <td className="px-2 py-2 text-right font-mono text-xs">{fmtVal(r.permeate_meter, 'm³')}</td>
                       {/* Δ m³ — prefer in-memory delta (computed from corrected permeate_meter)
                            over the stored permeate_meter_delta, which may have been written
                            before DataAnalysis corrected the underlying meter reading. */}
-                      <td className="px-2 py-2 text-right font-mono text-[11px]">
+                      <td className="px-2 py-2 text-right font-mono text-xs">
                         {(() => {
                           // _computed_delta is always available when permeate_meter exists and
                           // there is a predecessor row.  Fall back to stored delta only when
                           // _computed_delta is null (e.g. first-ever reading for this train).
                           const d = r._computed_delta ?? (r.permeate_meter_delta != null ? +r.permeate_meter_delta : null);
                           if (d == null) return <span className="text-muted-foreground/30">—</span>;
-                          if (isRepl) return <span className="text-orange-500 font-medium">0</span>;
+                          if (isRepl) return <span className="text-kpi-solar font-medium">0</span>;
                           return d > 0
-                            ? <span className="text-teal-600 dark:text-teal-400">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
+                            ? <span className="text-primary">+{d.toLocaleString(undefined,{maximumFractionDigits:1})}</span>
                             : <span className="text-muted-foreground/40">0</span>;
                         })()}
                       </td>
@@ -2128,13 +2128,13 @@ export function TrainOperatorLogModal({
                             'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                             !isManager ? 'opacity-30 cursor-not-allowed' : 'disabled:opacity-40 disabled:cursor-not-allowed',
                             isRepl
-                              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
-                              : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
+                              ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
+                              : 'border-input bg-background hover:border-kpi-solar/90 hover:bg-kpi-solar/15',
                           ].join(' ')}
                         >
                           {isToggling
                             ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                            : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                            : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
                           }
                         </button>
                       </td>

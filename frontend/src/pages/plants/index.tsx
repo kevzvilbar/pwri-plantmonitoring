@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings, Search } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -182,15 +182,15 @@ export default function Plants() {
   function statBarColor(active: number, total: number): { bar: string; textColor: string; bg: string; border: string; dot: string } {
     if (total === 0) return { bar: 'bg-muted', textColor: 'text-muted-foreground', bg: 'bg-muted/40', border: 'border-border/40', dot: '#94a3b8' };
     const r = active / total;
-    if (r >= 0.75) return { bar: 'bg-teal-500',  textColor: 'text-teal-700 dark:text-teal-400',  bg: 'bg-teal-50 dark:bg-teal-950/30',  border: 'border-teal-200 dark:border-teal-800/50',  dot: '#0D9488' };
-    if (r >= 0.4)  return { bar: 'bg-sky-400',   textColor: 'text-sky-700 dark:text-sky-400',    bg: 'bg-sky-50 dark:bg-sky-950/30',    border: 'border-sky-200 dark:border-sky-800/50',    dot: '#0EA5E9' };
-    return                { bar: 'bg-red-500',   textColor: 'text-red-700 dark:text-red-400',    bg: 'bg-red-50 dark:bg-red-950/30',    border: 'border-red-200 dark:border-red-800/50',    dot: '#ef4444' };
+    if (r >= 0.75) return { bar: 'bg-primary',  textColor: 'text-primary',  bg: 'bg-primary-soft',  border: 'border-primary',  dot: '#0D9488' };
+    if (r >= 0.4)  return { bar: 'bg-info',   textColor: 'text-info',    bg: 'bg-info-soft',    border: 'border-info',    dot: '#0EA5E9' };
+    return                { bar: 'bg-danger',   textColor: 'text-danger',    bg: 'bg-danger-soft',    border: 'border-danger',    dot: '#ef4444' };
   }
 
   function roUtilColors(pct: number) {
-    if (pct >= 75) return { text: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-950/30', border: 'border-teal-200 dark:border-teal-800/50' };
-    if (pct >= 40) return { text: 'text-sky-700 dark:text-sky-400',   bg: 'bg-sky-50 dark:bg-sky-950/30',   border: 'border-sky-200 dark:border-sky-800/50'   };
-    return               { text: 'text-red-700 dark:text-red-400',   bg: 'bg-red-50 dark:bg-red-950/30',   border: 'border-red-200 dark:border-red-800/50'   };
+    if (pct >= 75) return { text: 'text-primary', bg: 'bg-primary-soft', border: 'border-primary' };
+    if (pct >= 40) return { text: 'text-info',   bg: 'bg-info-soft',   border: 'border-info'   };
+    return               { text: 'text-danger',   bg: 'bg-danger-soft',   border: 'border-danger'   };
   }
 
   // ── Sub-components (defined inside Plants so they share scope) ────────────
@@ -201,14 +201,14 @@ export default function Plants() {
     return (
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+          <span className="flex items-center gap-1 text-2xs uppercase tracking-wide text-muted-foreground font-medium">
             {icon}{label}
           </span>
           <span className="flex items-center gap-1.5 shrink-0">
             <span className="text-xs font-medium text-foreground">
               {active}<span className="text-muted-foreground font-normal">/{total}</span>
             </span>
-            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${colors.textColor} ${colors.bg} border ${colors.border}`}>
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${colors.textColor} ${colors.bg} border ${colors.border}`}>
               {p}%
             </span>
           </span>
@@ -230,9 +230,9 @@ export default function Plants() {
     const circ = 2 * Math.PI * r;
     const dash  = (score / 100) * circ;
     const color = plantColor ?? (
-      score >= 80 ? '#0D9488' :
-      score >= 40 ? '#0EA5E9' :
-                    '#ef4444'
+      score >= 80 ? 'hsl(var(--primary))' :
+      score >= 40 ? 'hsl(var(--info))' :
+                    'hsl(var(--danger))'
     );
     const fontSize = size >= 60 ? '12px' : size >= 48 ? '10px' : '9px';
     return (
@@ -278,7 +278,7 @@ export default function Plants() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Total capacity */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-background text-xs">
-            <Droplet className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <Droplet className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="text-muted-foreground">Total capacity</span>
             <span className="font-semibold text-foreground">{fmtNum(totalCapacity)} MLD</span>
           </div>
@@ -293,27 +293,27 @@ export default function Plants() {
           {/* Avg plant health */}
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${
             avgHealth >= 75
-              ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800/50'
+              ? 'bg-primary-soft border-primary'
               : avgHealth >= 40
-                ? 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/50'
-                : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50'
+                ? 'bg-info-soft border-info'
+                : 'bg-danger-soft border-danger'
           }`}>
             <TrendingUp className={`h-3.5 w-3.5 shrink-0 ${
-              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
-              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
-              : 'text-red-700 dark:text-red-400'
+              avgHealth >= 75 ? 'text-primary'
+              : avgHealth >= 40 ? 'text-info'
+              : 'text-danger'
             }`} />
             <span className={
-              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
-              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
-              : 'text-red-700 dark:text-red-400'
+              avgHealth >= 75 ? 'text-primary'
+              : avgHealth >= 40 ? 'text-info'
+              : 'text-danger'
             }>
               Avg. health
             </span>
             <span className={`font-semibold ${
-              avgHealth >= 75 ? 'text-teal-700 dark:text-teal-400'
-              : avgHealth >= 40 ? 'text-sky-700 dark:text-sky-400'
-              : 'text-red-700 dark:text-red-400'
+              avgHealth >= 75 ? 'text-primary'
+              : avgHealth >= 40 ? 'text-info'
+              : 'text-danger'
             }`}>
               {avgHealth}%
             </span>
@@ -325,9 +325,7 @@ export default function Plants() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px]">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
+            <Search className="h-3.5 w-3.5" aria-hidden />
           </span>
           <input
             type="text"
@@ -343,7 +341,7 @@ export default function Plants() {
             onClick={() => setStatusFilter(f)}
             className={`h-8 px-3 rounded-md text-xs font-medium transition-colors border ${
               statusFilter === f
-                ? 'bg-teal-700 text-white border-teal-700 dark:bg-teal-600 dark:border-teal-600'
+                ? 'bg-primary text-white border-primary'
                 : 'bg-background text-muted-foreground border-border/60 hover:bg-muted/60'
             }`}
           >
@@ -368,7 +366,7 @@ export default function Plants() {
             const pct = total > 0 ? Math.round((active / total) * 100) : 0;
             return (
               <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-3 min-w-[90px] flex-1">
-                <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="flex items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {icon}
                   {label}
                 </div>
@@ -376,7 +374,7 @@ export default function Plants() {
                   {active}
                   <span className="text-muted-foreground font-normal text-sm">/{total}</span>
                 </div>
-                <div className="flex items-center gap-1 text-[11px] font-semibold">
+                <div className="flex items-center gap-1 text-xs font-semibold">
                   <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colors.dot }} />
                   <span className={colors.textColor}>{pct}%</span>
                 </div>
@@ -409,7 +407,7 @@ export default function Plants() {
                   <div className="text-xs font-semibold mt-1 uppercase tracking-wider" style={{ color: plantColor }}>
                     MLD
                   </div>
-                  <div className="text-[10px] font-medium text-muted-foreground mt-0.5 uppercase tracking-widest">
+                  <div className="text-2xs font-medium text-muted-foreground mt-0.5 uppercase tracking-widest">
                     CAPACITY
                   </div>
                 </div>
@@ -437,7 +435,7 @@ export default function Plants() {
                       className="flex flex-col items-center justify-center gap-1 px-1 shrink-0"
                       onClick={e => e.stopPropagation()}
                     >
-                      <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground'}`}>
+                      <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
                         {p.status}
                       </span>
                       {isManager && (
@@ -456,7 +454,7 @@ export default function Plants() {
                     {/* Health ring — enlarged */}
                     <div className="flex flex-col items-center justify-center gap-1 pl-1 shrink-0">
                       <HealthRing score={health} plantColor={plantColor} size={80} />
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Health</span>
+                      <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Health</span>
                     </div>
                   </div>
                 </div>
@@ -479,7 +477,7 @@ export default function Plants() {
                   >
                     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
                       isActive
-                        ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800/50'
+                        ? 'bg-primary-soft text-primary border-primary'
                         : 'bg-muted text-muted-foreground border-border/60'
                     }`}>
                       <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? plantColor : undefined, opacity: isActive ? 1 : 0.4 }} />
@@ -502,7 +500,7 @@ export default function Plants() {
                 {/* Body: capacity | stat bars | health ring */}
                 <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
                   <div className="border-r border-border/50 pr-3 flex flex-col justify-center min-w-[72px]">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Capacity</div>
+                    <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Capacity</div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-2xl font-semibold leading-none" style={{ color: plantColor }}>
                         {fmtNum(p.design_capacity_m3 ?? 0)}
@@ -517,7 +515,7 @@ export default function Plants() {
                   </div>
                   <div className="hidden sm:flex flex-col items-center gap-1 pl-2">
                     <HealthRing score={health} plantColor={plantColor} />
-                    <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Health</span>
+                    <span className="text-3xs font-medium uppercase tracking-wide text-muted-foreground">Health</span>
                   </div>
                 </div>
               </div>
@@ -536,12 +534,10 @@ export default function Plants() {
         {/* Empty state: search/filter returned nothing */}
         {!!list?.length && !filteredList?.length && (
           <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground text-sm rounded-xl border border-dashed border-border/60">
-            <svg className="h-8 w-8 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
+            <Search className="h-8 w-8 opacity-30" strokeWidth={1.5} aria-hidden />
             <span>No plants match your search</span>
             <button
-              className="text-xs text-teal-600 dark:text-teal-400 underline underline-offset-2 hover:no-underline"
+              className="text-xs text-primary underline underline-offset-2 hover:no-underline"
               onClick={() => { setSearch(''); setStatusFilter('all'); }}
             >
               Clear filters
@@ -673,8 +669,8 @@ function PlantDetail({ plantId }: { plantId: string }) {
             <span className={[
               'text-xs font-semibold px-3 py-1 rounded-full border',
               plant.status === 'Active'
-                ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30'
-                : 'bg-amber-400/20 text-amber-200 border-amber-400/30',
+                ? 'bg-accent/20 text-accent border-accent/30'
+                : 'bg-warn/20 text-warn border-warn/30',
             ].join(' ')}>
               Status: <span className="font-bold">{plant.status}</span>
             </span>
@@ -701,28 +697,28 @@ function PlantDetail({ plantId }: { plantId: string }) {
         {/* Stats: Capacity / RO Trains / Product Meters */}
         <div className="grid grid-cols-3 gap-4 mt-4 text-xs">
           <div>
-            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Capacity</div>
+            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">Capacity</div>
             <div className="font-mono-num text-lg font-bold">{fmtNum(plant.design_capacity_m3 ?? 0)} MLD</div>
           </div>
           <div>
-            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">RO Trains</div>
+            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">RO Trains</div>
             <div className="font-mono-num text-lg font-bold">
               {trainCounts ? (
                 <>
                   <span className={
                     trainCounts.active === trainCounts.total && trainCounts.total > 0
-                      ? 'text-emerald-300'
+                      ? 'text-accent'
                       : trainCounts.active === 0 && trainCounts.total > 0
-                        ? 'text-amber-300' : ''
+                        ? 'text-warn' : ''
                   }>{trainCounts.active}</span>
                   <span className="opacity-40 font-normal text-base">/{trainCounts.total}</span>
                 </>
               ) : (plant.num_ro_trains ?? '—')}
             </div>
-            <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+            <div className="opacity-40 text-2xs mt-0.5">active / total</div>
           </div>
           <div>
-            <div className="opacity-50 text-[10px] uppercase tracking-widest mb-1">Product Meters</div>
+            <div className="opacity-50 text-2xs uppercase tracking-widest mb-1">Product Meters</div>
             <ProductMetersStat plantId={plant.id} />
           </div>
         </div>
@@ -800,13 +796,13 @@ function PlantDetail({ plantId }: { plantId: string }) {
             className={[
               'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none min-w-0',
               tab === t.id
-                ? 'bg-teal-700 text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             ].join(' ')}
           >
             {t.icon}
             <span className="hidden sm:inline truncate">{t.label}</span>
-            <span className="sm:hidden text-[9px] font-semibold tracking-wide">{t.short}</span>
+            <span className="sm:hidden text-3xs font-semibold tracking-wide">{t.short}</span>
           </button>
         ))}
       </div>

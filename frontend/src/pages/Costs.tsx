@@ -221,11 +221,11 @@ function ImportReadingsDialog({
 
           {/* Schema reference */}
           <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" /> Expected columns:
             </p>
-            <p className="text-[11px] font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs font-mono text-foreground leading-relaxed break-all">{schemaHint}</p>
+            <p className="text-2xs text-muted-foreground">
               Columns marked <strong>*</strong> are required.{' '}
               <code>billing_month</code> accepts <code>YYYY-MM-DD</code> or <code>M/D/YYYY</code> — always stored as first of month.
             </p>
@@ -240,7 +240,7 @@ function ImportReadingsDialog({
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 bg-teal-700 text-white hover:bg-teal-800 border-teal-700"
+                className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" />
@@ -262,16 +262,16 @@ function ImportReadingsDialog({
             <div className={`rounded-md border p-3 space-y-2 ${
               errors.length > 0
                 ? 'border-destructive/40 bg-destructive/5'
-                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                : 'border-accent bg-accent-soft'
             }`}>
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
-                  ? <><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
+                  ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
                   : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (
-                <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
+                <ul className="text-2xs text-destructive list-disc ml-4 space-y-0.5 max-h-28 overflow-y-auto">
                   {errors.map((e, i) => <li key={i}>{e}</li>)}
                 </ul>
               )}
@@ -286,10 +286,10 @@ function ImportReadingsDialog({
           {/* Row preview */}
           {rows.length > 0 && errors.length === 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground font-medium">
+              <p className="text-xs text-muted-foreground font-medium">
                 Preview (first {Math.min(rows.length, 5)} of {rows.length} rows):
               </p>
-              <div className="overflow-x-auto rounded-md border text-[10px]">
+              <div className="overflow-x-auto rounded-md border text-2xs">
                 <table className="min-w-full">
                   <thead className="bg-muted/50">
                     <tr>
@@ -313,8 +313,8 @@ function ImportReadingsDialog({
           )}
 
           {done && imported > 0 && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+            <p className="text-xs text-accent font-medium flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-accent inline-block" />
               {imported} record(s) imported. Audit log written.
             </p>
           )}
@@ -325,7 +325,7 @@ function ImportReadingsDialog({
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 {imported} imported · {importErrors.length} failed
               </p>
-              <ul className="text-[10px] text-destructive list-disc ml-4 space-y-0.5 max-h-32 overflow-y-auto">
+              <ul className="text-2xs text-destructive list-disc ml-4 space-y-0.5 max-h-32 overflow-y-auto">
                 {importErrors.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             </div>
@@ -333,7 +333,7 @@ function ImportReadingsDialog({
 
           {/* Intra-file duplicate notice */}
           {dupResolved && !done && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <div className="rounded-md border border-warn bg-warn-soft p-3 text-xs text-warn flex items-start gap-2">
               <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>Duplicate billing months within the file were removed — only the first occurrence is kept. Click <strong>Import Rows</strong> to proceed.</span>
             </div>
@@ -341,20 +341,20 @@ function ImportReadingsDialog({
 
           {/* DB-level duplicate confirmation */}
           {dupConfirm && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20 p-3 space-y-2">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+            <div className="rounded-md border border-warn bg-warn-soft p-3 space-y-2">
+              <p className="text-xs font-semibold text-warn flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 Duplicate detected
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-warn">
                 A bill for <strong>"{dupConfirm.label}"</strong> already exists{' '}
                 {dupConfirm.isDateOnly ? 'for this billing month' : 'at this date'}.
                 Overwrite it, or skip this row?
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
+                <Button size="sm" className="bg-primary text-white hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite')}>Overwrite</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip')}>Skip</Button>
-                <Button size="sm" className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)} title="Overwrite this and all remaining duplicates">Overwrite All</Button>
+                <Button size="sm" className="bg-primary text-white hover:bg-primary/90 h-7 text-xs" onClick={() => handleDupDecision('overwrite', true)} title="Overwrite this and all remaining duplicates">Overwrite All</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDupDecision('skip', true)} title="Skip this and all remaining duplicates">Skip All</Button>
               </div>
             </div>
@@ -366,7 +366,7 @@ function ImportReadingsDialog({
           <Button
             onClick={doImport}
             disabled={!canSubmit}
-            className="bg-teal-700 text-white hover:bg-teal-800"
+            className="bg-primary text-white hover:bg-primary/90"
           >
             {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
@@ -549,12 +549,12 @@ export default function Costs() {
       <PageHeader title="Costs" subtitle="Production cost, power bills & tariffs, chemical prices" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
         <TabsList className={`grid ${canViewBudget ? 'grid-cols-5' : 'grid-cols-4'} w-full h-auto bg-muted rounded-xl p-1`}>
-          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Rollup</TabsTrigger>
-          <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Power</TabsTrigger>
-          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Compare</TabsTrigger>
-          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Prices</TabsTrigger>
+          <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Rollup</TabsTrigger>
+          <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Power</TabsTrigger>
+          <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Compare</TabsTrigger>
+          <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Prices</TabsTrigger>
           {canViewBudget && (
-            <TabsTrigger value="budget" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm">Budget</TabsTrigger>
+            <TabsTrigger value="budget" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Budget</TabsTrigger>
           )}
         </TabsList>
         <TabsContent value="rollup" className="mt-3"><Rollup /></TabsContent>
@@ -698,7 +698,7 @@ function ChemicalPrices() {
             <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} />
           </div>
         </div>
-        <Button onClick={submit} className="w-full bg-teal-700 hover:bg-teal-800 text-white" size="sm">Add price</Button>
+        <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-white" size="sm">Add price</Button>
       </Card>
 
       {/* ── Price history table ────────────────────────────────────────────── */}
@@ -709,7 +709,7 @@ function ChemicalPrices() {
         </div>
 
         {/* Column headers */}
-        <div className={`grid gap-2 text-[10px] text-muted-foreground pb-1 border-b ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
+        <div className={`grid gap-2 text-2xs text-muted-foreground pb-1 border-b ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
           <div>Chemical</div>
           <div className="text-right">Price</div>
           <div className="text-right">Date</div>
@@ -768,7 +768,7 @@ function ChemicalPrices() {
                   </Button>
                   <Button
                     size="sm"
-                    className="h-7 text-xs gap-1 bg-teal-700 hover:bg-teal-800 text-white"
+                    className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-white"
                     onClick={saveEdit}
                     disabled={saving}
                   >
@@ -1015,7 +1015,7 @@ function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; fr
     <Card className="p-3 space-y-2">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Auto insights</h4>
-        <span className="text-[10px] text-muted-foreground">Computed monthly · no manual notes needed</span>
+        <span className="text-2xs text-muted-foreground">Computed monthly · no manual notes needed</span>
       </div>
       <div className="space-y-1.5">
         {insights.map((i, idx) => (
@@ -1184,7 +1184,7 @@ function Power() {
         </div>
 
         <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Billing</div>
           <div className="grid grid-cols-2 gap-2">
             {/* Billing Month — dropdown instead of date picker */}
             <div>
@@ -1207,7 +1207,7 @@ function Power() {
         </div>
 
         <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Meter</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Meter</div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
             <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
@@ -1217,7 +1217,7 @@ function Power() {
             <div className="flex-1">
               <Label className="text-xs flex items-center gap-1">
                 Multiplier
-                {!canEdit && <span className="text-[10px] text-muted-foreground">(read-only)</span>}
+                {!canEdit && <span className="text-2xs text-muted-foreground">(read-only)</span>}
               </Label>
               <Input
                 type="number" step="any" value={v.multiplier}
@@ -1232,14 +1232,14 @@ function Power() {
             </div>
           </div>
           {canEdit && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               Multiplier auto-fills from the last saved bill. Change only if the meter transformer ratio changes.
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Charges (₱)</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Charges (₱)</div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-xs">Generation</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} /></div>
             <div><Label className="text-xs">Distribution</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} /></div>
@@ -1274,7 +1274,7 @@ function Power() {
                   <div className="font-mono-num flex items-center gap-1.5">
                     {b.billing_month ? format(parseISO(b.billing_month), 'MMM yyyy') : '—'}
                     {isNegativeKwh && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive border border-destructive/40 rounded px-1 py-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-2xs font-semibold text-destructive border border-destructive/40 rounded px-1 py-0.5">
                         <AlertCircle className="h-2.5 w-2.5" /> Reversed readings
                       </span>
                     )}
@@ -1461,25 +1461,25 @@ function Compare() {
             <div className="flex items-center gap-1 flex-wrap">
               {rangeBtns.map(({ key, label }) => (
                 <button key={key} onClick={() => setViewMode(key)}
-                  className={['h-6 px-2 rounded text-[11px] font-medium border transition-colors',
-                    viewMode === key ? 'bg-teal-700 text-white border-teal-700' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  className={['h-6 px-2 rounded text-xs font-medium border transition-colors',
+                    viewMode === key ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                   ].join(' ')}>{label}</button>
               ))}
               {viewMode === 'custom' && (
                 <>
-                  <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-6 w-[110px] text-[11px] px-1.5" />
-                  <span className="text-[11px] text-muted-foreground">→</span>
-                  <Input type="date" value={customTo}   onChange={(e) => setCustomTo(e.target.value)}   className="h-6 w-[110px] text-[11px] px-1.5" />
+                  <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-6 w-[110px] text-xs px-1.5" />
+                  <span className="text-xs text-muted-foreground">→</span>
+                  <Input type="date" value={customTo}   onChange={(e) => setCustomTo(e.target.value)}   className="h-6 w-[110px] text-xs px-1.5" />
                 </>
               )}
               <div className="ml-2 flex items-center gap-1">
                 <button onClick={() => setChartType('line')}
-                  className={['h-6 px-2 rounded text-[11px] font-medium border transition-colors',
-                    chartType === 'line' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  className={['h-6 px-2 rounded text-xs font-medium border transition-colors',
+                    chartType === 'line' ? 'bg-kpi-ro text-white border-kpi-ro' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                   ].join(' ')}>Line</button>
                 <button onClick={() => setChartType('bar')}
-                  className={['h-6 px-2 rounded text-[11px] font-medium border transition-colors',
-                    chartType === 'bar' ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                  className={['h-6 px-2 rounded text-xs font-medium border transition-colors',
+                    chartType === 'bar' ? 'bg-kpi-ro text-white border-kpi-ro' : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                   ].join(' ')}>Bar</button>
               </div>
             </div>
@@ -1492,14 +1492,14 @@ function Compare() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
             { label: 'Grid kWh', value: fmtNum(stats.totalGrid, 0), sub: `avg ${fmtNum(stats.avgDaily, 0)}/day`, color: 'text-chart-1' },
-            { label: 'Solar kWh', value: fmtNum(stats.totalSolar, 0), sub: `${stats.solarPct.toFixed(1)}% of total`, color: 'text-green-600' },
-            { label: 'Peak Day', value: fmtNum(stats.peakDay.total, 0), sub: stats.peakDay.date, color: 'text-amber-600' },
+            { label: 'Solar kWh', value: fmtNum(stats.totalSolar, 0), sub: `${stats.solarPct.toFixed(1)}% of total`, color: 'text-accent' },
+            { label: 'Peak Day', value: fmtNum(stats.peakDay.total, 0), sub: stats.peakDay.date, color: 'text-warn' },
             { label: 'Days in range', value: String(dailyChartData.length), sub: `${rangeStart} – ${rangeEnd}`, color: 'text-muted-foreground' },
           ].map(({ label, value, sub, color }) => (
             <Card key={label} className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{label}</div>
+              <div className="text-2xs text-muted-foreground uppercase tracking-wide mb-0.5">{label}</div>
               <div className={`text-xl font-bold font-mono-num ${color}`}>{value}</div>
-              <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+              <div className="text-2xs text-muted-foreground mt-0.5">{sub}</div>
             </Card>
           ))}
         </div>
@@ -1510,7 +1510,7 @@ function Compare() {
         <Card className="p-3">
           <h4 className="text-sm font-semibold mb-2">
             Daily kWh — {viewMode === 'custom' ? `${customFrom} → ${customTo}` : viewMode.toUpperCase()}
-            {isFetching && <span className="text-[10px] text-muted-foreground ml-2">Loading…</span>}
+            {isFetching && <span className="text-2xs text-muted-foreground ml-2">Loading…</span>}
           </h4>
           <div className="h-64">
             <ResponsiveContainer>
@@ -1572,7 +1572,7 @@ function Compare() {
                   <div className="font-mono-num">{r.billing_month ? format(parseISO(r.billing_month), 'MMM yy') : '—'}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.total_kwh, 0)}</div>
                   <div className="font-mono-num text-right">{fmtNum(r.sumDaily, 0)}</div>
-                  <div className="font-mono-num text-right text-amber-700 dark:text-amber-400">{fmtNum(r.sumEffective, 0)}</div>
+                  <div className="font-mono-num text-right text-warn">{fmtNum(r.sumEffective, 0)}</div>
                   <div className="text-right">
                     {r.variance != null && (
                       <StatusPill tone={Math.abs(r.variance) > 15 ? 'danger' : Math.abs(r.variance) > 5 ? 'warn' : 'accent'}>
@@ -1582,11 +1582,11 @@ function Compare() {
                   </div>
                 </div>
               ))}
-              <div className="grid grid-cols-5 gap-2 text-[10px] text-muted-foreground pt-1">
+              <div className="grid grid-cols-5 gap-2 text-2xs text-muted-foreground pt-1">
                 <div>Month</div><div className="text-right">Billed kWh</div><div className="text-right">Daily Σ</div>
-                <div className="text-right text-amber-600">Eff. kWh×</div><div className="text-right">Δ%</div>
+                <div className="text-right text-warn">Eff. kWh×</div><div className="text-right">Δ%</div>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-2xs text-muted-foreground mt-1">
                 Eff. kWh× = Σ(daily reading × CT multiplier). Variance compares effective kWh to billed.
               </p>
             </div>

@@ -112,8 +112,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Locator Readings',
     description: 'Water supply locator/meter daily readings (raw or direct m³)',
     icon: MapPin,
-    color: 'text-sky-700 dark:text-sky-300',
-    accent: 'bg-sky-100 dark:bg-sky-900/40',
+    color: 'text-info',
+    accent: 'bg-info-soft',
     table: 'locator_readings',
     category: 'Operations',
     entityTable: 'locators',
@@ -136,8 +136,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Well Readings',
     description: 'Groundwater well meter readings with optional power/solar data',
     icon: Activity,
-    color: 'text-teal-700 dark:text-teal-300',
-    accent: 'bg-teal-100 dark:bg-teal-900/40',
+    color: 'text-primary',
+    accent: 'bg-primary-soft',
     table: 'well_readings',
     category: 'Operations',
     entityTable: 'wells',
@@ -159,8 +159,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Product Meter Readings',
     description: 'Distribution output meter readings per product meter',
     icon: Building2,
-    color: 'text-indigo-700 dark:text-indigo-300',
-    accent: 'bg-indigo-100 dark:bg-indigo-900/40',
+    color: 'text-kpi-ro',
+    accent: 'bg-kpi-ro/15',
     table: 'product_meter_readings',
     category: 'Operations',
     entityTable: 'product_meters',
@@ -181,8 +181,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'TDS Readings',
     description: 'Feed, permeate, product & reject TDS/pH per RO train',
     icon: Waves,
-    color: 'text-cyan-700 dark:text-cyan-300',
-    accent: 'bg-cyan-100 dark:bg-cyan-900/40',
+    color: 'text-highlight',
+    accent: 'bg-highlight-soft',
     table: 'ro_train_readings',
     category: 'RO Trains',
     csvTemplate: 'reading_datetime,train_id,feed_tds,permeate_tds,product_tds,reject_tds,feed_ph,permeate_ph,reject_ph,temperature_c',
@@ -204,8 +204,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Water Quality',
     description: 'Turbidity, conductivity, recovery %, salt passage & pressure',
     icon: Droplet,
-    color: 'text-blue-700 dark:text-blue-300',
-    accent: 'bg-blue-100 dark:bg-blue-900/40',
+    color: 'text-info',
+    accent: 'bg-info-soft',
     table: 'ro_train_readings',
     category: 'RO Trains',
     csvTemplate: 'reading_datetime,train_id,turbidity_ntu,recovery_pct,rejection_pct,salt_passage_pct,feed_pressure_psi,reject_pressure_psi,dp_psi,feed_flow,permeate_flow,reject_flow',
@@ -229,8 +229,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Pump Readings',
     description: 'HPP / booster pump amps, voltage & pressure per train',
     icon: Gauge,
-    color: 'text-orange-700 dark:text-orange-300',
-    accent: 'bg-orange-100 dark:bg-orange-900/40',
+    color: 'text-kpi-solar',
+    accent: 'bg-kpi-solar/15',
     table: 'pump_readings',
     category: 'RO Trains',
     csvTemplate: 'reading_datetime,train_id,pump_number,pump_type,l1_amp,l2_amp,l3_amp,voltage,target_pressure_psi',
@@ -251,8 +251,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'AFM / MMF Readings',
     description: 'Backwash meter, ΔP, inlet/outlet pressure per AFM unit',
     icon: Thermometer,
-    color: 'text-rose-700 dark:text-rose-300',
-    accent: 'bg-rose-100 dark:bg-rose-900/40',
+    color: 'text-danger',
+    accent: 'bg-danger-soft',
     table: 'afm_readings',
     category: 'RO Trains',
     csvTemplate: 'reading_datetime,train_id,afm_unit_number,mode,meter_initial,meter_final,backwash_volume,dp_psi,inlet_pressure_psi,outlet_pressure_psi,backwash_start,backwash_end',
@@ -277,8 +277,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Chemical Dosing',
     description: 'Chlorine, SMBS, anti-scalant, soda ash dosing logs',
     icon: FlaskConical,
-    color: 'text-emerald-700 dark:text-emerald-300',
-    accent: 'bg-emerald-100 dark:bg-emerald-900/40',
+    color: 'text-accent',
+    accent: 'bg-accent-soft',
     table: 'chemical_dosing_logs',
     category: 'Chemical',
     csvTemplate: 'log_datetime,chlorine_kg,smbs_kg,anti_scalant_l,soda_ash_kg,free_chlorine_reagent_pcs,product_water_free_cl_ppm',
@@ -297,8 +297,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Chemical Deliveries',
     description: 'Bulk chemical delivery records with supplier & cost',
     icon: FlaskConical,
-    color: 'text-violet-700 dark:text-violet-300',
-    accent: 'bg-violet-100 dark:bg-violet-900/40',
+    color: 'text-kpi-ro',
+    accent: 'bg-kpi-ro/15',
     table: 'chemical_deliveries',
     category: 'Chemical',
     csvTemplate: 'delivery_date,chemical_name,quantity,unit,unit_cost,supplier,remarks',
@@ -318,8 +318,8 @@ const IMPORT_CONFIGS: ImportTypeConfig[] = [
     label: 'Power Readings',
     description: 'kWh meter readings and daily consumption',
     icon: Zap,
-    color: 'text-amber-700 dark:text-amber-300',
-    accent: 'bg-amber-100 dark:bg-amber-900/40',
+    color: 'text-warn',
+    accent: 'bg-warn-soft',
     table: 'power_readings',
     category: 'Power',
     csvTemplate: 'reading_datetime,meter_reading_kwh,daily_consumption_kwh',
@@ -496,13 +496,13 @@ function ImportTypeCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[13px] font-medium truncate leading-tight">{config.label}</span>
+            <span className="text-xs font-medium truncate leading-tight">{config.label}</span>
             <ChevronRight className={cn(
               'h-3 w-3 shrink-0 transition-transform',
               selected ? 'text-primary rotate-90' : 'text-muted-foreground/40 group-hover:translate-x-0.5',
             )} />
           </div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug line-clamp-2">{config.description}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">{config.description}</p>
         </div>
       </div>
     </button>
@@ -522,7 +522,7 @@ function SidebarContent({
         return (
           <div key={group.label} className={cn(gi > 0 && 'pt-2')}>
             <p className={cn(
-              'text-[9.5px] font-bold tracking-[0.12em] uppercase px-1 mb-1',
+              'text-3xs font-bold tracking-[0.12em] uppercase px-1 mb-1',
               gi > 0 && 'border-t border-border/50 pt-2',
               'text-muted-foreground/50',
             )}>
@@ -612,12 +612,12 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
   return (
     <div className="rounded-lg border bg-muted/30 overflow-hidden">
       <div className="px-3 py-1.5 border-b bg-muted/50 flex items-center justify-between">
-        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
           Expected Columns
         </span>
         <button
           onClick={() => downloadTemplate(config)}
-          className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
         >
           <Download className="h-3 w-3" /> CSV Template
         </button>
@@ -625,28 +625,28 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
       <div className="divide-y">
         {config.columns.map(col => (
           <div key={col.key} className="flex items-center gap-2 px-3 py-[5px]">
-            <code className="text-[10px] font-mono bg-background border rounded px-1.5 py-px shrink-0 whitespace-nowrap leading-tight">
+            <code className="text-2xs font-mono bg-background border rounded px-1.5 py-px shrink-0 whitespace-nowrap leading-tight">
               {col.key}
             </code>
-            <span className="text-[11px] font-medium flex-1 min-w-0 truncate leading-tight" title={col.label}>
+            <span className="text-xs font-medium flex-1 min-w-0 truncate leading-tight" title={col.label}>
               {col.label}
             </span>
             <span className="flex items-center gap-1 shrink-0">
               {col.required && (
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-rose-300 text-rose-600 dark:text-rose-400 leading-none">
+                <Badge variant="outline" className="text-3xs px-1 py-0 h-4 border-danger text-danger leading-none">
                   req
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground leading-none">
+              <Badge variant="outline" className="text-3xs px-1 py-0 h-4 text-muted-foreground leading-none">
                 {col.type}
               </Badge>
               {col.hint && (
-                <span className="text-[9px] text-muted-foreground/50 italic hidden sm:inline max-w-[90px] truncate" title={col.hint}>
+                <span className="text-3xs text-muted-foreground/50 italic hidden sm:inline max-w-[90px] truncate" title={col.hint}>
                   {col.hint}
                 </span>
               )}
               {col.type === 'select' && col.selectOptions && (
-                <span className="text-[9px] text-muted-foreground/50 italic hidden sm:inline max-w-[100px] truncate" title={col.selectOptions.join(', ')}>
+                <span className="text-3xs text-muted-foreground/50 italic hidden sm:inline max-w-[100px] truncate" title={col.selectOptions.join(', ')}>
                   {col.selectOptions.join('/')}
                 </span>
               )}
@@ -656,9 +656,9 @@ function ColumnReference({ config }: { config: ImportTypeConfig }) {
       </div>
       {/* Entity note */}
       {config.entityTable && (
-        <div className="flex items-start gap-2 px-3 py-2 border-t bg-amber-50/60 dark:bg-amber-950/20">
-          <Info className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-[10.5px] text-amber-700 dark:text-amber-300">
+        <div className="flex items-start gap-2 px-3 py-2 border-t bg-warn-soft/60">
+          <Info className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
+          <p className="text-2xs text-warn">
             <span className="font-medium">{config.entityNameKey?.replace(/_/g, ' ')}</span> is matched by name to existing{' '}
             {config.entityTable} in the selected plant — make sure names match exactly.
           </p>
@@ -691,7 +691,7 @@ function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeC
                 key={row.rowIndex}
                 className={cn(
                   'transition-colors',
-                  row.valid ? 'hover:bg-muted/20' : 'bg-rose-50/50 dark:bg-rose-950/20',
+                  row.valid ? 'hover:bg-muted/20' : 'bg-danger-soft/50',
                 )}
               >
                 <td className="px-2 py-1.5 text-muted-foreground tabular-nums">{row.rowIndex + 1}</td>
@@ -702,12 +702,12 @@ function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeC
                 ))}
                 <td className="px-2.5 py-1.5 whitespace-nowrap">
                   {row.valid ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                    <span className="inline-flex items-center gap-1 text-accent">
                       <CheckCircle2 className="h-3 w-3" /> OK
                     </span>
                   ) : (
                     <span
-                      className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 cursor-help"
+                      className="inline-flex items-center gap-1 text-danger cursor-help"
                       title={row.errors.join('; ')}
                     >
                       <XCircle className="h-3 w-3" />
@@ -965,7 +965,7 @@ export default function SmartImportPanel() {
           />
           <div className="relative z-10 flex flex-col w-72 max-w-[85vw] h-full bg-background border-r shadow-xl animate-in slide-in-from-left-4 duration-200">
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Import Type</span>
+              <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Import Type</span>
               <button
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close"
@@ -984,7 +984,7 @@ export default function SmartImportPanel() {
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 items-start">
         {/* Left: type selector (desktop) */}
         <Card className="p-3 hidden lg:block sticky top-20">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 px-0.5 mb-2">
+          <p className="text-2xs font-bold uppercase tracking-[0.12em] text-muted-foreground/50 px-0.5 mb-2">
             Import Type
           </p>
           <SidebarContent selected={selected} onSelect={handleSelectType} />
@@ -1003,7 +1003,7 @@ export default function SmartImportPanel() {
                 <h2 className="text-sm font-semibold">{config.label}</h2>
                 <p className="text-xs text-muted-foreground">{config.description}</p>
               </div>
-              <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0 h-5 text-muted-foreground shrink-0">
+              <Badge variant="outline" className="ml-auto text-2xs px-1.5 py-0 h-5 text-muted-foreground shrink-0">
                 {config.category}
               </Badge>
             </div>
@@ -1012,7 +1012,7 @@ export default function SmartImportPanel() {
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1 flex-1 min-w-[160px]">
                 <Label className="text-xs">
-                  Target Plant <span className="text-rose-500">*</span>
+                  Target Plant <span className="text-danger">*</span>
                 </Label>
                 <Select value={plantId} onValueChange={setPlantId}>
                   <SelectTrigger className="h-8 text-xs">
@@ -1042,7 +1042,7 @@ export default function SmartImportPanel() {
                     skipInvalid ? 'translate-x-4' : 'translate-x-0',
                   )} />
                 </button>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap">Skip invalid</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Skip invalid</span>
               </div>
             </div>
 
@@ -1066,11 +1066,11 @@ export default function SmartImportPanel() {
             <Card className="p-4 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">Preview</span>
-                <Badge variant="outline" className="text-emerald-700 border-emerald-300 dark:text-emerald-400 gap-1 text-[11px] px-1.5 py-0">
+                <Badge variant="outline" className="text-accent border-accent gap-1 text-xs px-1.5 py-0">
                   <CheckCircle2 className="h-3 w-3" /> {validCount} valid
                 </Badge>
                 {invalidCount > 0 && (
-                  <Badge variant="outline" className="text-rose-600 border-rose-300 dark:text-rose-400 gap-1 text-[11px] px-1.5 py-0">
+                  <Badge variant="outline" className="text-danger border-danger gap-1 text-xs px-1.5 py-0">
                     <XCircle className="h-3 w-3" /> {invalidCount} invalid
                   </Badge>
                 )}
@@ -1080,7 +1080,7 @@ export default function SmartImportPanel() {
               </div>
 
               {invalidCount > 0 && skipInvalid && (
-                <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                <div className="flex items-start gap-2 rounded-md bg-warn-soft border border-warn px-3 py-2 text-xs text-warn">
                   <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   {invalidCount} row(s) will be skipped. Hover an error badge for details.
                 </div>
@@ -1115,9 +1115,9 @@ export default function SmartImportPanel() {
               <div className="max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 space-y-0.5">
                 {importLog.map((line, i) => (
                   <p key={i} className={cn(
-                    'text-[11px] font-mono',
-                    line.startsWith('❌') ? 'text-rose-600 dark:text-rose-400' :
-                    line.startsWith('⚠') ? 'text-amber-600 dark:text-amber-400' :
+                    'text-xs font-mono',
+                    line.startsWith('❌') ? 'text-danger' :
+                    line.startsWith('⚠') ? 'text-warn' :
                     'text-muted-foreground',
                   )}>
                     {line}
@@ -1135,7 +1135,7 @@ export default function SmartImportPanel() {
           {/* Error state */}
           {status === 'error' && (
             <Card className="p-4">
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <div className="flex items-center gap-2 text-danger">
                 <XCircle className="h-4 w-4" />
                 <span className="text-sm font-medium">Parse failed — check file format</span>
               </div>

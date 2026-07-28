@@ -325,7 +325,7 @@ export function WellsList({ plantId }: { plantId: string }) {
           {isAdmin && wells && wells.length > 0 && (
             <button
               onClick={toggleAll}
-              className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
               data-testid="wells-toggle-all"
             >
               {selected.size === wells.length ? 'Clear' : 'Select all'}
@@ -365,7 +365,7 @@ export function WellsList({ plantId }: { plantId: string }) {
               w.status === 'Active'
                 ? 'border-l-emerald-400 dark:border-l-emerald-600'
                 : 'border-l-muted-foreground/30'
-            } ${isBlending ? 'border-teal-400' : ''}`}
+            } ${isBlending ? 'border-primary' : ''}`}
             data-testid={`well-card-${w.id}`}
           >
             <div className="flex items-start gap-2">
@@ -385,15 +385,15 @@ export function WellsList({ plantId }: { plantId: string }) {
                   <div className="min-w-0">
                     <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
                       <span className="truncate">{w.name}</span>
-                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedWell === w.id ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
+                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedWell === w.id ? 'text-primary' : 'text-muted-foreground/30'}`} />
                       {w.has_power_meter && (() => {
                         const elMode = getWellElectricMode(w.id);
                         return (
                           <span
-                            className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
+                            className={`text-3xs uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
                               elMode === 'shared'
-                                ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
-                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                ? 'bg-primary-soft text-primary'
+                                : 'bg-warn-soft text-warn'
                             }`}
                             title={elMode === 'shared' ? 'Shared kWh meter group' : 'Dedicated kWh meter'}
                           >
@@ -404,7 +404,7 @@ export function WellsList({ plantId }: { plantId: string }) {
                       })()}
                       {isBlending && (
                         <span
-                          className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-1.5 py-0.5 rounded"
+                          className="text-3xs uppercase tracking-wide bg-kpi-ro/15 text-kpi-ro px-1.5 py-0.5 rounded"
                           title="Blending: separate water meter feeding product line"
                         >
                           Blending
@@ -438,13 +438,13 @@ export function WellsList({ plantId }: { plantId: string }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); toggleWellStatus(w); }}
                     title={isManager ? `Click to toggle status (currently ${w.status})` : w.status}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       w.status === 'Active'
-                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        ? 'text-accent bg-accent-soft border-accent hover:bg-accent-soft'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                     } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${w.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${w.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
                     {w.status}
                   </button>
                 </div>
@@ -469,9 +469,9 @@ export function WellsList({ plantId }: { plantId: string }) {
                 <button
                   onClick={() => toggleBlending(w, !isBlending)}
                   disabled={blendingPending}
-                  className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-colors ${
+                  className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
                     isBlending
-                      ? 'bg-teal-700 border-teal-700 text-white'
+                      ? 'bg-primary border-primary text-white'
                       : 'bg-background border-border text-muted-foreground hover:bg-muted'
                   } ${blendingPending ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                   title={isBlending ? 'Blending on — click to clear' : 'Mark as blending well'}
@@ -488,11 +488,11 @@ export function WellsList({ plantId }: { plantId: string }) {
                     <button
                       onClick={() => toggleWellElectric(w)}
                       disabled={powerBusy.has(w.id)}
-                      className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-colors ${
+                      className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-colors ${
                         elMode === 'dedicated'
-                          ? 'bg-amber-600 border-amber-600 text-white'
+                          ? 'bg-warn border-warn text-white'
                           : elMode === 'shared'
-                          ? 'bg-teal-600 border-teal-600 text-white'
+                          ? 'bg-primary border-primary text-white'
                           : 'bg-background border-border text-muted-foreground hover:bg-muted'
                       } ${powerBusy.has(w.id) ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                       title={
@@ -517,7 +517,7 @@ export function WellsList({ plantId }: { plantId: string }) {
             <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => setDetail(w.id)}
-                className="text-[11px] text-teal-600 hover:underline inline-flex items-center gap-0.5"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-0.5"
               >
                 Details →
               </button>
@@ -593,7 +593,7 @@ export function WellsList({ plantId }: { plantId: string }) {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
-              <span className="ml-1 text-[10px]">(min 5 chars — required for audit log)</span>
+              <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
             </Label>
             <Textarea
               value={bulkReason}
@@ -606,7 +606,7 @@ export function WellsList({ plantId }: { plantId: string }) {
               className={bulkReason.length > 0 && bulkReason.trim().length < 5 ? 'border-danger' : ''}
             />
             {bulkReason.length > 0 && bulkReason.trim().length < 5 && (
-              <p className="text-[10px] text-danger">
+              <p className="text-2xs text-danger">
                 Reason must be at least 5 characters ({bulkReason.trim().length}/5).
               </p>
             )}
@@ -703,12 +703,12 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
               </a>
             )}
           </div>
-          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${
             well.status === 'Active'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30'
+              ? 'text-accent bg-accent-soft border-accent'
               : 'text-muted-foreground bg-muted border-border'
           }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${well.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${well.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
             {well.status ?? 'Active'}
           </span>
         </div>
@@ -717,7 +717,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       {/* Water Meter — popup button */}
       <MeterDetailButton
         label="Water Meter"
-        icon={<Gauge className="h-4 w-4 text-blue-500" />}
+        icon={<Gauge className="h-4 w-4 text-info" />}
         fields={[
           { label: 'Brand', value: well.meter_brand },
           { label: 'Size', value: well.meter_size ? `${well.meter_size} in` : null },
@@ -736,7 +736,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       {well.has_power_meter && (
         <MeterDetailButton
           label="Electric Meter"
-          icon={<Zap className="h-4 w-4 text-amber-500" />}
+          icon={<Zap className="h-4 w-4 text-warn" />}
           fields={[
             { label: 'Brand', value: (well as any).electric_meter_brand },
             { label: 'Size', value: (well as any).electric_meter_size },
@@ -761,7 +761,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       <Card className="p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-semibold flex items-center gap-1.5">
-            <Gauge className="h-4 w-4 text-sky-500" /> Hydraulic Data
+            <Gauge className="h-4 w-4 text-info" /> Hydraulic Data
           </span>
           {isManager && (
             <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setEditHydraulicOpen(true)}>
@@ -782,12 +782,12 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
             ['Turbidity', `${latest?.turbidity_ntu ?? '—'} NTU`],
           ] as [string, string | number | null | undefined][]).map(([k, val]) => (
             <div key={k}>
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
+              <div className="text-2xs uppercase tracking-wide text-muted-foreground">{k}</div>
               <div className="font-mono-num font-medium">{val ?? '—'}</div>
             </div>
           ))}
           {latest?.date_gathered && (
-            <div className="col-span-2 text-[10px] text-muted-foreground pt-1">Last gathered: {latest.date_gathered}</div>
+            <div className="col-span-2 text-2xs text-muted-foreground pt-1">Last gathered: {latest.date_gathered}</div>
           )}
         </div>
         {pms && pms.length > 1 && (
@@ -795,7 +795,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
             <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
               History ({pms.length} records)
             </summary>
-            <div className="mt-2 space-y-0 text-[11px] max-h-48 overflow-y-auto">
+            <div className="mt-2 space-y-0 text-xs max-h-48 overflow-y-auto">
               {(pms as any[]).map((p: any) => (
                 <div key={p.id} className="border-t py-1.5 grid grid-cols-3 gap-x-2">
                   <span className="font-medium col-span-3">{p.date_gathered}</span>
@@ -815,14 +815,14 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
           <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
             <Gauge className="h-3.5 w-3.5" /> Recent Readings
             {well.has_power_meter && (
-              <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 px-1.5 py-0.5 rounded">
+              <span className="ml-1 inline-flex items-center gap-0.5 text-2xs uppercase tracking-wide text-warn bg-warn-soft px-1.5 py-0.5 rounded">
                 <Zap className="h-2.5 w-2.5" /> kWh tracked
               </span>
             )}
           </h4>
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-xs">
-              <thead className="text-[10px] uppercase text-muted-foreground">
+              <thead className="text-2xs uppercase text-muted-foreground">
                 <tr className="border-b">
                   <th className="text-left px-1 py-1 font-medium">Date</th>
                   <th className="text-right px-1 py-1 font-medium">Water m³</th>
@@ -844,7 +844,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
                       <td className="px-1 py-1 text-right font-mono-num">{r.current_reading != null ? fmtNum(+r.current_reading) : '—'}</td>
                       <td className="px-1 py-1 text-right font-mono-num text-muted-foreground">{delta != null ? fmtNum(delta) : '—'}</td>
                       {well.has_power_meter && (
-                        <td className="px-1 py-1 text-right font-mono-num text-amber-700 dark:text-amber-300">
+                        <td className="px-1 py-1 text-right font-mono-num text-warn">
                           {r.power_meter_reading != null ? fmtNum(+r.power_meter_reading) : '—'}
                         </td>
                       )}

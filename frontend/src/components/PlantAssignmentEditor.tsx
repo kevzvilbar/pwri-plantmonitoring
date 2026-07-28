@@ -119,12 +119,12 @@ export function PlantAssignmentEditor({
                 }
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{p.name}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">
+                  <div className="text-xs text-muted-foreground truncate">
                     {p.address ?? '—'}
                   </div>
                 </div>
                 {p.status !== 'Active' && (
-                  <Badge variant="secondary" className="text-[10px]">{p.status}</Badge>
+                  <Badge variant="secondary" className="text-2xs">{p.status}</Badge>
                 )}
               </label>
             );

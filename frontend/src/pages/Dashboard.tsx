@@ -1327,7 +1327,7 @@ export default function Dashboard() {
             {openIncidentCount > 0 && (
               <button
                 onClick={() => navigate('/incidents')}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/20 text-[10px] font-semibold hover:bg-danger/10 transition-colors"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/20 text-2xs font-semibold hover:bg-danger/10 transition-colors"
                 title={`${openIncidentCount} open incident${openIncidentCount > 1 ? 's' : ''} — click to view`}
               >
                 <ShieldAlert className="h-3 w-3" aria-hidden />
@@ -1353,7 +1353,7 @@ export default function Dashboard() {
           >
             <ToggleGroupItem
               value="inline"
-              className="h-8 px-2 text-[11px] gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
               title="Inline — all trend graphs visible directly on the dashboard, just scroll"
               aria-label="Inline view"
             >
@@ -1362,7 +1362,7 @@ export default function Dashboard() {
             </ToggleGroupItem>
             <ToggleGroupItem
               value="sections"
-              className="h-8 px-2 text-[11px] gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
               title="Sections — click any KPI card to fold/unfold its trend chart inline"
               aria-label="Sections view"
             >
@@ -1371,7 +1371,7 @@ export default function Dashboard() {
             </ToggleGroupItem>
             <ToggleGroupItem
               value="popup"
-              className="h-8 px-2 text-[11px] gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              className="h-8 px-2 text-xs gap-1 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
               title="Dialog — click a KPI card to open its trend chart in a full-screen dialog"
               aria-label="Dialog view"
             >
@@ -1407,7 +1407,7 @@ export default function Dashboard() {
         <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
           value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
           onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
-        <StatCard icon={Waves} accent="text-violet-600" label="Blending"
+        <StatCard icon={Waves} accent="text-kpi-ro" label="Blending"
           value={fmtNum(blending)} unit="m³" />
       </div>
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
@@ -1535,7 +1535,7 @@ export default function Dashboard() {
       </div>
 
       {/* ─── Cluster 4: Plant Health + Blending Volume ───────────────────── */}
-      <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-emerald-500" subtitle="RO trains" />
+      <ClusterHeader icon={Activity} title="Plant Health Trend" accent="text-accent" subtitle="RO trains" />
       <InlineTrendChart metric="plantHealth" title="Plant Health Trend" plantIds={plantIds} compact={viewMode === 'inline'} />
 
       {/* Blending Volume sits immediately below the trend chart in the same cluster.

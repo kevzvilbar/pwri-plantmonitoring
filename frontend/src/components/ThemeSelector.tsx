@@ -44,7 +44,7 @@ export function ThemeSelector() {
         sideOffset={8}
         className="w-72 p-4 shadow-[var(--shadow-modal)]"
       >
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Color Theme
         </p>
 
@@ -81,10 +81,10 @@ export function ThemeSelector() {
 
                 {/* Label */}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium leading-tight text-foreground">
+                  <span className="block text-xs font-medium leading-tight text-foreground">
                     {theme.name}
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {theme.description}
                   </span>
                 </span>

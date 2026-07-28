@@ -612,7 +612,7 @@ function NodePalette({ onDragStart, paletteItems, onAddPaletteItem, onRenamePale
     <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border bg-card/80 backdrop-blur-sm shrink-0 overflow-x-auto">
       <div className="flex items-center gap-1 mr-2 shrink-0">
         <Move className="h-3 w-3 text-muted-foreground" />
-        <span className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase whitespace-nowrap">Drag to canvas:</span>
+        <span className="text-3xs font-mono tracking-widest text-muted-foreground uppercase whitespace-nowrap">Drag to canvas:</span>
       </div>
       {PALETTE_TYPES.map((type) => {
         const c = COLORS[type];
@@ -627,7 +627,7 @@ function NodePalette({ onDragStart, paletteItems, onAddPaletteItem, onRenamePale
             }}
           >
             <GripVertical className="h-2.5 w-2.5 opacity-40" style={{ color: c.accent }} />
-            <span className="text-[9px] font-mono font-bold tracking-wide" style={{ color: c.text }}>
+            <span className="text-3xs font-mono font-bold tracking-wide" style={{ color: c.text }}>
               {NODE_LABELS[type]}
             </span>
           </div>
@@ -682,7 +682,7 @@ function CustomNodePaletteSection({
 
   return (
     <div className="flex items-center gap-1 shrink-0">
-      <span className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mr-1 whitespace-nowrap">Custom:</span>
+      <span className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mr-1 whitespace-nowrap">Custom:</span>
 
       {/* Existing palette chips */}
       {paletteItems.map((item) => (
@@ -698,7 +698,7 @@ function CustomNodePaletteSection({
                 if (e.key === 'Escape') { setEditId(null); setEditName(''); }
               }}
               onBlur={confirmEdit}
-              className="h-6 w-24 text-[10px] rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-6 w-24 text-2xs rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
             />
           ) : (
             /* ── Draggable chip ── */
@@ -711,7 +711,7 @@ function CustomNodePaletteSection({
               }}
             >
               <GripVertical className="h-2.5 w-2.5 opacity-40" style={{ color: c.accent }} />
-              <span className="text-[9px] font-mono font-bold tracking-wide max-w-[80px] truncate" style={{ color: c.text }}>
+              <span className="text-3xs font-mono font-bold tracking-wide max-w-[80px] truncate" style={{ color: c.text }}>
                 {item.label}
               </span>
               {/* Edit icon */}
@@ -725,12 +725,12 @@ function CustomNodePaletteSection({
               </button>
               {/* Delete icon */}
               <button
-                className="p-0.5 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="p-0.5 rounded hover:bg-danger-soft opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => { e.stopPropagation(); onDeletePaletteItem(item.id); }}
                 title="Remove from palette"
                 aria-label="Remove from palette"
               >
-                <Trash2 className="h-2.5 w-2.5 text-red-400" />
+                <Trash2 className="h-2.5 w-2.5 text-danger" />
               </button>
             </div>
           )}
@@ -750,7 +750,7 @@ function CustomNodePaletteSection({
             }}
             onBlur={confirmAdd}
             placeholder="Node name…"
-            className="h-6 w-28 text-[10px] rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-6 w-28 text-2xs rounded border border-primary px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
       ) : (
@@ -760,7 +760,7 @@ function CustomNodePaletteSection({
           title="Add custom node"
         >
           <Plus className="h-3 w-3" />
-          <span className="text-[9px] font-mono font-bold tracking-wide">ADD</span>
+          <span className="text-3xs font-mono font-bold tracking-wide">ADD</span>
         </button>
       )}
     </div>
@@ -793,7 +793,7 @@ function RenameModal({ defaultName, nodeType, onConfirm, onCancel }: RenameModal
       <div className="bg-card rounded-xl border border-border shadow-2xl w-80 overflow-hidden">
         <div className="h-1.5 w-full" style={{ background: c.accent }} />
         <div className="px-5 py-4">
-          <p className="text-[9px] font-mono tracking-widest uppercase mb-1" style={{ color: c.accent }}>
+          <p className="text-3xs font-mono tracking-widest uppercase mb-1" style={{ color: c.accent }}>
             {NODE_LABELS[nodeType]}
           </p>
           <h3 className="text-sm font-bold text-foreground mb-3">Name this node</h3>
@@ -847,7 +847,7 @@ function DragGhost({ item, x, y, snapping }: DragGhostProps) {
       style={{ left: x + 16, top: y - 18 }}
     >
       <div
-        className="px-3 py-1.5 rounded-lg border-2 text-[10px] font-bold font-mono shadow-xl"
+        className="px-3 py-1.5 rounded-lg border-2 text-2xs font-bold font-mono shadow-xl"
         style={{
           background: c.bg,
           borderColor: snapping ? c.accent : c.border + 'aa',
@@ -925,7 +925,7 @@ function SidePanel({
       {/* Panel header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40 shrink-0">
         <div>
-          <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase">Topology</p>
+          <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase">Topology</p>
           <h2 className="text-sm font-bold text-foreground">Node Panel</h2>
         </div>
         <button onClick={onClose} aria-label="Close node panel" className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
@@ -935,17 +935,17 @@ function SidePanel({
 
       {/* Inventory */}
       <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
-        <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Node Inventory</p>
+        <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-2">Node Inventory</p>
         <div className="grid grid-cols-2 gap-1.5">
           {(Object.entries(counts) as [NodeType, number][]).map(([type, count]) => (
             <div
               key={type}
-              className="flex items-center justify-between rounded-md px-2 py-1 text-[10px] font-mono"
+              className="flex items-center justify-between rounded-md px-2 py-1 text-2xs font-mono"
               style={{ background: COLORS[type].bg, border: `1px solid ${COLORS[type].border}20` }}
             >
               <span style={{ color: COLORS[type].text }} className="truncate">{NODE_LABELS[type]}</span>
               <span
-                className="ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+                className="ml-1 rounded-full px-1.5 py-0.5 text-3xs font-bold"
                 style={{ background: COLORS[type].accent, color: '#fff' }}
               >
                 {count}
@@ -965,7 +965,7 @@ function SidePanel({
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-1 rounded text-[10px] font-semibold transition-all ${
+                className={`flex-1 py-1 rounded text-2xs font-semibold transition-all ${
                   activeTab === tab
                     ? 'bg-card shadow-sm text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
@@ -979,13 +979,13 @@ function SidePanel({
           {activeTab === 'column' ? (
             /* ── Add Column ── */
             <div>
-              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Insert After</p>
+              <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-2">Insert After</p>
               <div className="flex flex-wrap gap-1 mb-3">
                 {BASE_COL_SLOTS.map((slot) => (
                   <button
                     key={slot.key}
                     onClick={() => setInsertAfter(slot.key)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                    className={`px-2 py-0.5 rounded text-2xs font-semibold border transition-all ${
                       insertAfter === slot.key
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-muted-foreground hover:border-primary/50'
@@ -995,7 +995,7 @@ function SidePanel({
                   </button>
                 ))}
               </div>
-              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Column Name</p>
+              <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-2">Column Name</p>
               <div className="flex gap-1.5">
                 <input
                   value={newColName}
@@ -1010,14 +1010,14 @@ function SidePanel({
               </div>
               {customColumns.length > 0 && (
                 <div className="mt-3 flex flex-col gap-1">
-                  <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-1">Your Columns</p>
+                  <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-1">Your Columns</p>
                   {customColumns.map((col) => {
                     const after = BASE_COL_SLOTS.find((s) => s.key === col.insertAfter);
                     return (
                       <div key={col.id} className="flex items-center gap-1.5 rounded px-2 py-1.5 bg-muted/50 border border-border">
                         <div className="flex-1 min-w-0">
-                          <div className="text-[10px] font-semibold text-foreground truncate">{col.label}</div>
-                          <div className="text-[9px] text-muted-foreground">after {after?.label ?? col.insertAfter}</div>
+                          <div className="text-2xs font-semibold text-foreground truncate">{col.label}</div>
+                          <div className="text-3xs text-muted-foreground">after {after?.label ?? col.insertAfter}</div>
                         </div>
                         <button
                           onClick={() => onDeleteColumn(col.id)}
@@ -1036,13 +1036,13 @@ function SidePanel({
           ) : (
             /* ── Add Row ── */
             <div>
-              <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">Column</p>
+              <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-2">Column</p>
               <div className="flex flex-wrap gap-1 mb-2">
                 {(['bulk', 'locator'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setAddType(t)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                    className={`px-2 py-0.5 rounded text-2xs font-semibold border transition-all ${
                       addType === t
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-muted-foreground hover:border-primary/50'
@@ -1055,7 +1055,7 @@ function SidePanel({
                   <button
                     key={col.id}
                     onClick={() => setAddType(col.id)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                    className={`px-2 py-0.5 rounded text-2xs font-semibold border transition-all ${
                       addType === col.id
                         ? 'border-slate-500 bg-slate-100 text-slate-700'
                         : 'border-border text-muted-foreground hover:border-slate-400'
@@ -1090,7 +1090,7 @@ function SidePanel({
       <div className="flex-1 overflow-y-auto px-4 pt-3">
         {customNodes.length > 0 && (
           <>
-            <p className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mb-2">
+            <p className="text-3xs font-mono tracking-widest text-muted-foreground uppercase mb-2">
               Custom Nodes ({customNodes.length})
             </p>
             <div className="flex flex-col gap-1.5">
@@ -1109,10 +1109,10 @@ function SidePanel({
                           if (e.key === 'Enter') { onRenameCustomNode(n.id, editName); setEditId(null); }
                           if (e.key === 'Escape') setEditId(null);
                         }}
-                        className="h-5 text-[10px] flex-1 p-1"
+                        className="h-5 text-2xs flex-1 p-1"
                         autoFocus
                       />
-                      <button onClick={() => { onRenameCustomNode(n.id, editName); setEditId(null); }} aria-label="Save name" className="text-emerald-600 hover:text-emerald-700">
+                      <button onClick={() => { onRenameCustomNode(n.id, editName); setEditId(null); }} aria-label="Save name" className="text-accent hover:text-accent/90">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => setEditId(null)} aria-label="Cancel rename" className="text-muted-foreground hover:text-foreground">
@@ -1122,12 +1122,12 @@ function SidePanel({
                   ) : (
                     <>
                       <span
-                        className="text-[9px] font-mono rounded px-1"
+                        className="text-3xs font-mono rounded px-1"
                         style={{ background: COLORS[n.type].accent, color: '#fff' }}
                       >
                         {NODE_LABELS[n.type]}
                       </span>
-                      <span className="flex-1 text-[10px] font-medium truncate" style={{ color: COLORS[n.type].text }}>
+                      <span className="flex-1 text-2xs font-medium truncate" style={{ color: COLORS[n.type].text }}>
                         {n.label}
                       </span>
                       {canEdit && (
@@ -1156,7 +1156,7 @@ function SidePanel({
           </>
         )}
         {customNodes.length === 0 && canEdit && (
-          <p className="text-[10px] text-muted-foreground text-center pt-4">
+          <p className="text-2xs text-muted-foreground text-center pt-4">
             Use "Add Box" above to create custom bulk meter or locator nodes.
           </p>
         )}
@@ -1580,7 +1580,7 @@ export default function PlantTopology() {
         {/* Type badge */}
         <text x={NODE_W / 2 + 4} y={17}
           textAnchor="middle" fill={c.accent}
-          fontSize={7.5} fontFamily="'IBM Plex Mono', 'Courier New', monospace"
+          fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
           fontWeight={700} letterSpacing={1.2} opacity={0.9}
         >
           {NODE_LABELS[node.type]}
@@ -1590,7 +1590,7 @@ export default function PlantTopology() {
         <text x={NODE_W / 2 + 4} y={35}
           textAnchor="middle"
           fill={isInactive ? '#94a3b8' : c.text}
-          fontSize={11.5} fontFamily="'IBM Plex Sans', system-ui, sans-serif"
+          fontSize={11.5} fontFamily="'Inter', system-ui, sans-serif"
           fontWeight={600}
         >
           {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
@@ -1602,7 +1602,7 @@ export default function PlantTopology() {
             textAnchor="middle"
             fill={isInactive ? '#94a3b8' : c.accent}
             fontSize={8.5}
-            fontFamily="'IBM Plex Mono', 'Courier New', monospace"
+            fontFamily="'JetBrains Mono', monospace"
             opacity={0.85}
           >
             {(node.detail ?? '').length > 22 ? (node.detail ?? '').slice(0, 21) + '…' : node.detail}
@@ -1627,7 +1627,7 @@ export default function PlantTopology() {
               fill={c.accent} opacity={0.25} />
             <text x={17} y={h - 4}
               textAnchor="middle" fill={c.accent}
-              fontSize={5.5} fontWeight={700} fontFamily="monospace">
+              fontSize={5.5} fontWeight={700} fontFamily="'JetBrains Mono', monospace">
               CUSTOM
             </text>
           </>
@@ -1739,7 +1739,7 @@ export default function PlantTopology() {
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <div className="shrink-0">
-            <p className="text-[10px] tracking-widest text-primary font-mono uppercase font-semibold">Plant Monitor</p>
+            <p className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">Plant Monitor</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground leading-tight">Network Topology</h1>
           </div>
 
@@ -1821,13 +1821,13 @@ export default function PlantTopology() {
       {/* ── Edit toolbar ──────────────────────────────────────────────────────── */}
       {canEdit && (
         <div className="flex items-center gap-2 px-5 py-2 border-b border-border bg-muted/20 shrink-0 flex-wrap">
-          <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase mr-1">Edit Links:</span>
+          <span className="text-2xs font-mono tracking-widest text-muted-foreground uppercase mr-1">Edit Links:</span>
           <button
             onClick={() => { setEditMode(editMode === 'connect' ? null : 'connect'); setPendingFrom(null); }}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'connect'
-                ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
-                : 'border-border text-muted-foreground hover:border-emerald-400/60 hover:text-emerald-700'
+                ? 'bg-accent-soft border-accent text-accent'
+                : 'border-border text-muted-foreground hover:border-accent/60 hover:text-accent/90'
             }`}
           >
             <Plug className="h-3.5 w-3.5" />
@@ -1837,8 +1837,8 @@ export default function PlantTopology() {
             onClick={() => { setEditMode(editMode === 'disconnect' ? null : 'disconnect'); setPendingFrom(null); }}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-all ${
               editMode === 'disconnect'
-                ? 'bg-red-50 border-red-400 text-red-700'
-                : 'border-border text-muted-foreground hover:border-red-400/60 hover:text-red-700'
+                ? 'bg-danger-soft border-danger text-danger'
+                : 'border-border text-muted-foreground hover:border-danger/60 hover:text-danger/90'
             }`}
           >
             <Unplug className="h-3.5 w-3.5" />
@@ -1851,7 +1851,7 @@ export default function PlantTopology() {
               className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
               <ZoomIn className="h-3 w-3" />
             </button>
-            <span className="text-[10px] font-mono text-muted-foreground w-8 text-center">{Math.round(zoom * 100)}%</span>
+            <span className="text-2xs font-mono text-muted-foreground w-8 text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
               aria-label="Zoom out"
               className="p-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
@@ -1900,10 +1900,10 @@ export default function PlantTopology() {
           {/* Zone label */}
           <div className="flex items-center gap-2 mb-3 shrink-0">
             <Droplets className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] tracking-widest text-primary font-mono uppercase font-semibold">
+            <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">
               {activePlant?.name} — Water Treatment Flow
             </span>
-            <span className="ml-auto text-[9px] text-muted-foreground font-mono">
+            <span className="ml-auto text-3xs text-muted-foreground font-mono">
               {dragItem ? '📌 Drop on any column to place node' : 'Scroll to pan · Alt+drag · Ctrl+scroll to zoom'}
             </span>
           </div>
@@ -2058,7 +2058,7 @@ export default function PlantTopology() {
                       {/* Drop label */}
                       <text x={snapX + NODE_W / 2} y={snapY + NODE_H / 2 + 4}
                         textAnchor="middle" fill={c.accent}
-                        fontSize={9} fontFamily="'IBM Plex Mono', monospace" fontWeight={700}>
+                        fontSize={9} fontFamily="'JetBrains Mono', monospace" fontWeight={700}>
                         DROP HERE
                       </text>
                     </g>
@@ -2073,13 +2073,13 @@ export default function PlantTopology() {
                     <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="#f1f5f9" />
                     <text x={62} y={powerDividerY - 11} textAnchor="middle"
                       fill="#64748b" fontSize={9}
-                      fontFamily="'IBM Plex Mono', monospace" fontWeight={600} letterSpacing={1.2}>
+                      fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       POWER SUPPLY
                     </text>
                     <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="#f0fdf4" />
                     <text x={54} y={START_Y - 15} textAnchor="middle"
                       fill="#15803d" fontSize={9}
-                      fontFamily="'IBM Plex Mono', monospace" fontWeight={600} letterSpacing={1.2}>
+                      fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       WATER FLOW
                     </text>
                   </>
@@ -2094,7 +2094,7 @@ export default function PlantTopology() {
                       textAnchor="middle"
                       fill={slot.isCustom ? '#475569' : '#64748b'}
                       fontSize={8.5}
-                      fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
+                      fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
                       {slot.label.toUpperCase()}
                     </text>
                   );
@@ -2105,7 +2105,7 @@ export default function PlantTopology() {
                 ].map(({ x, label }) => (
                   <text key={`pwr-${label}`} x={x + NODE_W / 2} y={powerDividerY + 16}
                     textAnchor="middle" fill="#92400e" fontSize={8}
-                    fontFamily="'IBM Plex Mono', monospace" letterSpacing={1.5} fontWeight={700}>
+                    fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
                     {label}
                   </text>
                 ))}
@@ -2124,22 +2124,22 @@ export default function PlantTopology() {
               <div key={type} className="flex items-center gap-1.5">
                 <div className="w-3.5 h-3.5 rounded-sm border-[1.5px]"
                   style={{ background: c.bg, borderColor: c.border }} />
-                <span className="text-[10px] text-muted-foreground font-mono tracking-wide">
+                <span className="text-2xs text-muted-foreground font-mono tracking-wide">
                   {NODE_LABELS[type]}
                 </span>
               </div>
             ))}
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="w-8 border-t-2 border-dashed border-slate-400" />
-              <span className="text-[10px] text-muted-foreground font-mono">Editable</span>
+              <span className="text-2xs text-muted-foreground font-mono">Editable</span>
               <div className="w-8 border-t-2 border-slate-400 ml-2" />
-              <span className="text-[10px] text-muted-foreground font-mono">Fixed</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-emerald-400 ml-2 border border-white" />
-              <span className="text-[10px] text-muted-foreground font-mono">Active</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-red-400 border border-white" />
-              <span className="text-[10px] text-muted-foreground font-mono">Inactive</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border border-white" />
-              <span className="text-[10px] text-muted-foreground font-mono">Maintenance</span>
+              <span className="text-2xs text-muted-foreground font-mono">Fixed</span>
+              <div className="w-3.5 h-3.5 rounded-full bg-accent ml-2 border border-white" />
+              <span className="text-2xs text-muted-foreground font-mono">Active</span>
+              <div className="w-3.5 h-3.5 rounded-full bg-danger border border-white" />
+              <span className="text-2xs text-muted-foreground font-mono">Inactive</span>
+              <div className="w-3.5 h-3.5 rounded-full bg-warn border border-white" />
+              <span className="text-2xs text-muted-foreground font-mono">Maintenance</span>
             </div>
           </div>
           </div>{/* end inner flex-col (zone label + canvas + legend) */}

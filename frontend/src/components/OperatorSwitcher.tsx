@@ -126,7 +126,7 @@ export function OperatorSwitcher() {
   useEffect(() => { if (!open) setPendingId(null); }, [open]);
 
   const isOverride = activeOperatorId !== null && activeOperatorId !== user?.id;
-  const avatarBg = isOverride ? 'bg-amber-500' : 'bg-accent';
+  const avatarBg = isOverride ? 'bg-warn' : 'bg-accent';
 
   const handleSelect = async (p: Profile) => {
     const targetPlants: string[] = p.plant_assignments ?? [];
@@ -169,12 +169,12 @@ export function OperatorSwitcher() {
         <button className="flex items-center gap-1 hover:bg-topbar/40 rounded-full pl-1 pr-1.5 py-0.5 transition-colors">
           <div className="relative">
             <Avatar className="h-7 w-7">
-              <AvatarFallback className={`${avatarBg} text-white text-[11px] font-semibold`}>
+              <AvatarFallback className={`${avatarBg} text-white text-xs font-semibold`}>
                 {initials(activeOperator)}
               </AvatarFallback>
             </Avatar>
             {isOverride && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 border-2 border-topbar flex items-center justify-center">
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-warn border-2 border-topbar flex items-center justify-center">
                 <UserCheck className="h-1.5 w-1.5 text-white" />
               </span>
             )}
@@ -189,14 +189,14 @@ export function OperatorSwitcher() {
         <div className="px-3 py-2">
           <div className="flex items-center gap-1.5">
             {isOverride
-              ? <UserCheck className="h-3 w-3 text-amber-500 shrink-0" />
+              ? <UserCheck className="h-3 w-3 text-warn shrink-0" />
               : <UserCog className="h-3 w-3 text-muted-foreground shrink-0" />
             }
             <span className="font-semibold text-xs truncate">{fullName(activeOperator)}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground pl-4 leading-tight">{activeOperator?.designation ?? 'Operator'}</p>
+          <p className="text-2xs text-muted-foreground pl-4 leading-tight">{activeOperator?.designation ?? 'Operator'}</p>
           {isOverride && (
-            <p className="text-[10px] text-muted-foreground pl-4 leading-tight truncate">Logged in as {user?.email}</p>
+            <p className="text-2xs text-muted-foreground pl-4 leading-tight truncate">Logged in as {user?.email}</p>
           )}
         </div>
 
@@ -205,12 +205,12 @@ export function OperatorSwitcher() {
         {/* Switch Operator — Operators only */}
         {switchAllowed && (
           <>
-            <p className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
+            <p className="px-3 pt-1.5 pb-0.5 text-2xs uppercase tracking-widest text-muted-foreground font-medium">
               Switch operator
             </p>
             <div className="max-h-44 overflow-y-auto">
               {peers.length === 0 ? (
-                <p className="px-3 py-2 text-[11px] text-muted-foreground text-center">
+                <p className="px-3 py-2 text-xs text-muted-foreground text-center">
                   No other active operators at this plant
                 </p>
               ) : (
@@ -221,25 +221,25 @@ export function OperatorSwitcher() {
                   return (
                     <DropdownMenuItem
                       key={p.id}
-                      className={`flex items-center gap-2 cursor-pointer py-1.5 px-3 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                      className={`flex items-center gap-2 cursor-pointer py-1.5 px-3 ${isActive ? 'bg-accent/10' : ''} ${isPending ? 'bg-warn-soft' : ''}`}
                       onSelect={(e) => { e.preventDefault(); handleSelect(p); }}
                     >
                       <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarFallback className={`text-[9px] font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
+                        <AvatarFallback className={`text-3xs font-semibold ${isActive ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
                           {initials(p)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium truncate leading-tight">
                           {fullName(p)}
-                          {isSelf && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
+                          {isSelf && <span className="text-2xs text-muted-foreground ml-1">(you)</span>}
                         </div>
                       </div>
                       {isActive && !isPending && (
                         <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
                       )}
                       {isPending && (
-                        <span className="text-[10px] text-amber-600 font-medium shrink-0">Confirm?</span>
+                        <span className="text-2xs text-warn font-medium shrink-0">Confirm?</span>
                       )}
                     </DropdownMenuItem>
                   );

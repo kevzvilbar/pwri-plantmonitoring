@@ -23,7 +23,7 @@ export default function NotFound() {
 
         {/* Error code */}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60 mb-1">
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground/60 mb-1">
             Error 404
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
@@ -31,7 +31,7 @@ export default function NotFound() {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
             The route{' '}
-            <code className="text-[11.5px] font-mono bg-muted px-1.5 py-0.5 rounded-md border">
+            <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded-md border">
               {location.pathname}
             </code>{' '}
             doesn't exist in PWRI.

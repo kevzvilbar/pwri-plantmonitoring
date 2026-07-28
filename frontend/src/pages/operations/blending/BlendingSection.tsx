@@ -343,7 +343,7 @@ export function BlendingForm() {
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
               size="sm" variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-teal-600/60 text-teal-700 hover:bg-teal-50 hover:border-teal-600 dark:hover:bg-teal-950/30"
+              className="shrink-0 gap-1.5 h-10 border-primary/60 text-primary hover:bg-primary-soft hover:border-primary/90"
               onClick={() => setImportOpen(true)}
               data-testid="import-blending-readings-btn"
             >
@@ -357,18 +357,18 @@ export function BlendingForm() {
       {plantId && blendingWells.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           <Card className="p-3.5">
-            <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Tagged wells</div>
+            <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Tagged wells</div>
             <div className="text-2xl font-semibold mt-1 tabular-nums">{blendingWells.length}</div>
           </Card>
           <Card className="p-3.5">
-            <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Logged today</div>
+            <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Logged today</div>
             <div className="text-2xl font-semibold mt-1 tabular-nums">
               {loggedTodayCount}<span className="text-muted-foreground font-normal">/{blendingWells.length}</span>
             </div>
           </Card>
           <Card className="p-3.5">
-            <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Total blended today</div>
-            <div className="text-2xl font-semibold mt-1 tabular-nums text-teal-700 dark:text-teal-500">{fmtNum(totalTodayM3)} m³</div>
+            <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Total blended today</div>
+            <div className="text-2xl font-semibold mt-1 tabular-nums text-primary">{fmtNum(totalTodayM3)} m³</div>
           </Card>
         </div>
       )}
@@ -377,10 +377,10 @@ export function BlendingForm() {
         <Card className="p-0 overflow-hidden">
           <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Gauge className="h-3.5 w-3.5 text-teal-600" />
+              <Gauge className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-semibold text-foreground/80 tracking-tight">Blending Wells</span>
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">{blendingWells.length} tagged</span>
+            <span className="text-xs text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">{blendingWells.length} tagged</span>
           </div>
           {blendingWells.length ? (
             // Two-column responsive grid on desktop cuts scrolling once a plant
@@ -586,16 +586,16 @@ function BlendingRow({
   if (inputMode === 'raw') {
     if (volume !== '' && deltaRaw != null) {
       previewLine = (
-        <>Δ <span className={`font-semibold ${deltaRaw >= 0 ? 'text-violet-700 dark:text-violet-400' : 'text-destructive'}`}>{fmtNum(deltaRaw)} m³</span> will be saved</>
+        <>Δ <span className={`font-semibold ${deltaRaw >= 0 ? 'text-kpi-ro' : 'text-destructive'}`}>{fmtNum(deltaRaw)} m³</span> will be saved</>
       );
     } else if (isBaselineRaw) {
       previewLine = (
-        <>First reading — <span className="font-semibold text-violet-700 dark:text-violet-400">{fmtNum(+volume)} m³</span> will be saved as baseline</>
+        <>First reading — <span className="font-semibold text-kpi-ro">{fmtNum(+volume)} m³</span> will be saved as baseline</>
       );
     }
   } else if (volume !== '' && +volume > 0) {
     previewLine = (
-      <><span className="font-semibold text-violet-700 dark:text-violet-400">{fmtNum(+volume)} m³</span> will be saved for today</>
+      <><span className="font-semibold text-kpi-ro">{fmtNum(+volume)} m³</span> will be saved for today</>
     );
   }
 
@@ -672,7 +672,7 @@ function BlendingRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium break-words">{well.name}</span>
-            <Badge className="bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 font-normal text-[10px]">Blending</Badge>
+            <Badge className="bg-kpi-ro/15 text-kpi-ro border-kpi-ro hover:bg-kpi-ro/15 font-normal text-2xs">Blending</Badge>
           </div>
         </div>
         {/* History + date always in top-right, never behind name */}
@@ -685,7 +685,7 @@ function BlendingRow({
           )}
           <label className="cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -740,17 +740,17 @@ function BlendingRow({
         </div>
 
         {chipState === 'logged' && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 shrink-0">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-accent-soft text-accent shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-current" />Logged today
           </span>
         )}
         {chipState === 'ready' && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 shrink-0">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-kpi-ro/15 text-kpi-ro shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-current" />Ready to save
           </span>
         )}
         {chipState === 'pending' && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 shrink-0">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-warn-soft text-warn shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-current" />Not logged
           </span>
         )}
@@ -762,17 +762,17 @@ function BlendingRow({
       <div className="relative flex bg-muted rounded-lg p-0.5 h-8">
         <div
           aria-hidden="true"
-          className={`absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-violet-600 shadow-sm transition-transform duration-200 ease-out ${inputMode === 'raw' ? 'translate-x-full' : 'translate-x-0'}`}
+          className={`absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-kpi-ro shadow-sm transition-transform duration-200 ease-out ${inputMode === 'raw' ? 'translate-x-full' : 'translate-x-0'}`}
         />
         <button
           type="button"
           onClick={() => switchMode('direct')}
-          className={`relative z-10 flex-1 text-[11px] font-medium rounded-md transition-colors ${inputMode === 'direct' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`relative z-10 flex-1 text-xs font-medium rounded-md transition-colors ${inputMode === 'direct' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
         >Direct m³</button>
         <button
           type="button"
           onClick={() => switchMode('raw')}
-          className={`relative z-10 flex-1 text-[11px] font-medium rounded-md transition-colors ${inputMode === 'raw' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`relative z-10 flex-1 text-xs font-medium rounded-md transition-colors ${inputMode === 'raw' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
         >Raw Meter</button>
       </div>
 
@@ -785,17 +785,17 @@ function BlendingRow({
             disabled={saving}
             testId={`blending-input-${well.id}`}
           />
-          <div className="text-[11px] text-muted-foreground px-0.5">
+          <div className="text-xs text-muted-foreground px-0.5">
             prev: <span className="font-mono-num">{prevCumulative != null ? fmtNum(prevCumulative) : '—'}</span>
           </div>
         </div>
       ) : (
         <div className="relative">
-          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-violet-600 pointer-events-none" />
+          <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-ro pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={volume}
             onChange={(e) => setVolume(e.target.value)}
             placeholder={inputMode === 'raw' ? 'Cumulative meter reading' : 'Blending m³'}
-            className="h-9 pl-7 w-full border-violet-300 focus-visible:ring-violet-300 bg-violet-50/40 dark:bg-violet-950/20"
+            className="h-9 pl-7 w-full border-kpi-ro focus-visible:ring-violet-300 bg-kpi-ro/40"
             data-testid={`blending-input-${well.id}`} />
         </div>
       )}
@@ -804,31 +804,31 @@ function BlendingRow({
           made prominent (previously a muted 10px line, raw-mode only, easy
           to miss). Now covers both modes and sits right above the button. */}
       {previewLine && (
-        <div className="flex items-center gap-1 text-[13px] px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800/40">
+        <div className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-kpi-ro/15 border border-kpi-ro">
           {previewLine}
         </div>
       )}
 
       {/* Row 5: Save button — full-width on mobile */}
       <Button onClick={save} disabled={saving || !volumeChanged}
-        className={isMobile ? 'w-full h-11 text-sm bg-teal-700 text-white hover:bg-teal-800 active:bg-teal-900 shadow-sm' : 'h-9 px-4 text-xs w-full bg-teal-700 text-white hover:bg-teal-800'}>
+        className={isMobile ? 'w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-white hover:bg-primary/90'}>
         {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : 'Save'}
       </Button>
 
       {/* Warning banner */}
       {volume !== '' && (blendBelowPrev || blendHighVol) && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
           {blendBelowPrev && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Reading is below the previous value — possible meter rollback or data entry error.
             </span>
           )}
           {blendHighVol && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               Volume is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the reference — unusually high.
             </span>
           )}

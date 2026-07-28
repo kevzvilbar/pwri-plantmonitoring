@@ -128,7 +128,7 @@ export function BudgetTab() {
           <Card className="p-3">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-semibold">Monthly budget vs actual</h4>
-              <span className="text-[10px] text-muted-foreground">Manager/Admin only</span>
+              <span className="text-2xs text-muted-foreground">Manager/Admin only</span>
             </div>
 
             {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full my-2" />)}
@@ -143,12 +143,12 @@ export function BudgetTab() {
                       <div className="text-xs font-medium">{r.label}</div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-[10px]">Power budget ₱</Label>
+                          <Label className="text-2xs">Power budget ₱</Label>
                           <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
                             value={editV.power} onChange={(e) => setEditV({ ...editV, power: e.target.value })} />
                         </div>
                         <div>
-                          <Label className="text-[10px]">Chem budget ₱</Label>
+                          <Label className="text-2xs">Chem budget ₱</Label>
                           <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
                             value={editV.chem} onChange={(e) => setEditV({ ...editV, chem: e.target.value })} />
                         </div>
@@ -157,7 +157,7 @@ export function BudgetTab() {
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={cancelEdit} disabled={saving}>
                           <X className="h-3 w-3" /> Cancel
                         </Button>
-                        <Button size="sm" className="h-7 text-xs gap-1 bg-teal-700 hover:bg-teal-800 text-white" onClick={() => save(r.month)} disabled={saving}>
+                        <Button size="sm" className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-white" onClick={() => save(r.month)} disabled={saving}>
                           {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
                         </Button>
                       </div>
@@ -166,23 +166,23 @@ export function BudgetTab() {
                     <div className="grid grid-cols-[56px_1fr_1fr_72px_28px] gap-2 items-center text-xs">
                       <div className="font-mono-num">{r.label}</div>
                       <div>
-                        <div className="text-[10px] text-muted-foreground">Budget ₱{fmtNum(r.powerBudget, 0)}</div>
+                        <div className="text-2xs text-muted-foreground">Budget ₱{fmtNum(r.powerBudget, 0)}</div>
                         <div className="font-mono-num font-medium">₱{fmtNum(r.powerActual, 0)}</div>
                         {plant?.has_solar && (
-                          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <div className="text-2xs text-muted-foreground flex items-center gap-1">
                             <Sun className="h-2.5 w-2.5" />
                             ₱{fmtNum(r.solarOffset, 0)} offset{r.solarSharePct != null ? ` · ${r.solarSharePct.toFixed(0)}% of load` : ''}
                           </div>
                         )}
                       </div>
                       <div>
-                        <div className="text-[10px] text-muted-foreground">Budget ₱{fmtNum(r.chemBudget, 0)}</div>
+                        <div className="text-2xs text-muted-foreground">Budget ₱{fmtNum(r.chemBudget, 0)}</div>
                         <div className="font-mono-num font-medium">₱{fmtNum(r.chemActual, 0)}</div>
                       </div>
                       <div>
                         {r.variancePct != null
                           ? <StatusPill tone={tone}>{r.variancePct >= 0 ? '+' : ''}{r.variancePct.toFixed(1)}%</StatusPill>
-                          : <span className="text-muted-foreground text-[10px]">No budget</span>}
+                          : <span className="text-muted-foreground text-2xs">No budget</span>}
                       </div>
                       <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground"
                         title="Edit budget" aria-label={`Edit budget for ${r.label}`} onClick={() => startEdit(r)}>
@@ -201,7 +201,7 @@ export function BudgetTab() {
               <div className="flex gap-1">
                 {(['total', 'power', 'chem'] as Metric[]).map((m) => (
                   <Button key={m} size="sm" variant="outline"
-                    className={`h-7 text-xs ${metric === m ? 'bg-teal-700 hover:bg-teal-800 text-white border-teal-700' : ''}`}
+                    className={`h-7 text-xs ${metric === m ? 'bg-primary hover:bg-primary/90 text-white border-primary' : ''}`}
                     onClick={() => setMetric(m)}>
                     {m === 'total' ? 'Total' : m === 'power' ? 'Power' : 'Chemicals'}
                   </Button>

@@ -72,10 +72,10 @@ export function ProductMetersStat({ plantId }: { plantId: string }) {
   return (
     <div>
       <div className="font-mono-num text-lg font-bold">
-        <span className={active === total && total > 0 ? 'text-emerald-300' : active > 0 ? 'text-emerald-300' : 'opacity-70'}>{active}</span>
+        <span className={active === total && total > 0 ? 'text-accent' : active > 0 ? 'text-accent' : 'opacity-70'}>{active}</span>
         <span className="opacity-40 font-normal text-base">/{total}</span>
       </div>
-      <div className="opacity-40 text-[10px] mt-0.5">active / total</div>
+      <div className="opacity-40 text-2xs mt-0.5">active / total</div>
     </div>
   );
 }
@@ -301,7 +301,7 @@ export function AssignLocatorsDialog({
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Droplet className="h-4 w-4 text-teal-600" />
+            <Droplet className="h-4 w-4 text-primary" />
             Assign Locators
           </DialogTitle>
         </DialogHeader>
@@ -326,7 +326,7 @@ export function AssignLocatorsDialog({
 
               return (
                 <div key={l.id} className={`rounded-md border transition-colors ${
-                  checked ? 'border-teal-300 bg-teal-50/60 dark:border-teal-700 dark:bg-teal-950/20' : 'border-border'
+                  checked ? 'border-primary bg-primary-soft/60' : 'border-border'
                 }`}>
                   {/* Row header — checkbox + name + "Has meter" toggle */}
                   <label className="flex items-center gap-2.5 p-2.5 cursor-pointer">
@@ -339,12 +339,12 @@ export function AssignLocatorsDialog({
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{l.name}</div>
                       {takenByOther && (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                        <div className="text-2xs text-warn">
                           Assigned to another meter
                         </div>
                       )}
                     </div>
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${l.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground/40'}`} />
                   </label>
 
                   {/* "Has meter" toggle — only visible when this locator is selected */}
@@ -353,7 +353,7 @@ export function AssignLocatorsDialog({
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="text-xs font-medium">Has physical meter</p>
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-2xs text-muted-foreground">
                             Turn off for derived locators (residual = mother meter − siblings)
                           </p>
                         </div>
@@ -367,15 +367,15 @@ export function AssignLocatorsDialog({
                       {/* Mirror-to-production section — only when derived */}
                       {isDer && (
                         <div className="rounded-md bg-muted/40 border border-border/60 px-2.5 py-2 space-y-2">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                             Counts as production elsewhere?
                           </p>
-                          <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          <p className="text-2xs text-muted-foreground leading-relaxed">
                             Mirror this derived value into a product meter on another plant so both plants' NRW calculations remain consistent.
                           </p>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <Label className="text-[10px]">Target plant</Label>
+                              <Label className="text-2xs">Target plant</Label>
                               <Select
                                 value={mirror?.plantId ?? ''}
                                 onValueChange={async (pid) => {
@@ -396,7 +396,7 @@ export function AssignLocatorsDialog({
                               </Select>
                             </div>
                             <div>
-                              <Label className="text-[10px]">Target meter</Label>
+                              <Label className="text-2xs">Target meter</Label>
                               <Select
                                 value={mirror?.meterId ?? ''}
                                 disabled={!mirror?.plantId}
@@ -423,11 +423,11 @@ export function AssignLocatorsDialog({
                               given the toggleDerived guard above, but kept as a defensive
                               display check); otherwise confirm the slot is filled as expected. */}
                           {derivedCount > 1 ? (
-                            <p className="text-[10px] text-red-600 dark:text-red-400">
+                            <p className="text-2xs text-danger">
                               ⚠ More than one locator here is marked derived — only one is allowed per product meter. Turn the others back on ("Has physical meter").
                             </p>
                           ) : (
-                            <p className="text-[10px] text-muted-foreground">
+                            <p className="text-2xs text-muted-foreground">
                               ✓ Using this product meter's one allowed derived-locator slot.
                             </p>
                           )}
@@ -850,7 +850,7 @@ export function ProductMetersCard({ plant }: { plant: any }) {
 
       {/* Subtle refetch dot — never displaces list items */}
       {isFetching && !!meters && (
-        <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse" aria-hidden />
+        <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
       )}
 
       {/* ── Meter cards — clickable to view history ── */}
@@ -884,16 +884,16 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (canEdit) toggleStatus(m); }}
                     title={canEdit ? `Click to toggle (currently ${m.status ?? 'Active'})` : (m.status ?? 'Active')}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full border transition-colors ${
                       (m.status ?? 'Active') === 'Active'
-                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        ? 'text-accent bg-accent-soft border-accent hover:bg-accent-soft'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                     } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${(m.status ?? 'Active') === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
                     {m.status ?? 'Active'}
                   </button>
-                  <TrendingUp className={`h-3.5 w-3.5 transition-colors ${selectedMeter === m.id ? 'text-teal-600' : 'text-muted-foreground/40'}`} />
+                  <TrendingUp className={`h-3.5 w-3.5 transition-colors ${selectedMeter === m.id ? 'text-primary' : 'text-muted-foreground/40'}`} />
                 </div>
               </div>
 
@@ -903,26 +903,26 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                 if (!supplied.length) return (
                   <div className="mt-1.5 flex items-center gap-1">
                     <Droplet className="h-3 w-3 text-muted-foreground/40" />
-                    <span className="text-[11px] text-muted-foreground/60 italic">No locators assigned</span>
+                    <span className="text-xs text-muted-foreground/60 italic">No locators assigned</span>
                   </div>
                 );
                 const visible  = supplied.slice(0, 3);
                 const overflow = supplied.length - 3;
                 return (
                   <div className="mt-1.5 flex flex-wrap gap-1 items-center">
-                    <Droplet className="h-3 w-3 text-teal-500 shrink-0" />
+                    <Droplet className="h-3 w-3 text-primary shrink-0" />
                     {visible.map((l: any) => (
-                      <span key={l.id} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border ${
+                      <span key={l.id} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-2xs border ${
                         l.is_derived
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                          : 'bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800'
+                          ? 'bg-warn-soft text-warn border-warn'
+                          : 'bg-primary-soft text-primary border-primary'
                       }`} title={l.is_derived ? `${l.name} — derived (no physical meter; residual computed by cron sweep)` : l.name}>
                         {l.is_derived && <span className="font-bold opacity-70">~</span>}
                         {l.name}
                       </span>
                     ))}
                     {overflow > 0 && (
-                      <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
+                      <span className="text-2xs text-muted-foreground">+{overflow} more</span>
                     )}
                   </div>
                 );
@@ -933,7 +933,7 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                 {/* Assign locators */}
                 <Button
                   size="sm" variant="ghost"
-                  className="h-7 w-7 p-0 rounded-full text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                  className="h-7 w-7 p-0 rounded-full text-primary hover:text-primary/90 hover:bg-primary-soft"
                   title="Assign locators"
                   onClick={() => setAssignTarget(m)}
                   data-testid={`assign-locators-${m.id}`}
@@ -958,7 +958,7 @@ export function ProductMetersCard({ plant }: { plant: any }) {
             <div className="mt-3 pt-3 border-t space-y-3" onClick={(e) => e.stopPropagation()}>
               <MeterDetailButton
                 label="Product Meter"
-                icon={<Gauge className="h-4 w-4 text-blue-500" />}
+                icon={<Gauge className="h-4 w-4 text-info" />}
                 fields={[
                   { label: 'Brand', value: m.meter_brand },
                   { label: 'Size', value: m.meter_size ? `${m.meter_size} in` : null },
@@ -1109,7 +1109,7 @@ function ProductMeterNameInlineBase({
           }}
           autoFocus
         />
-        <Button size="sm" className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700 text-white" onClick={saveName} disabled={busy}>
+        <Button size="sm" className="h-7 px-2 text-xs bg-primary hover:bg-primary/90 text-white" onClick={saveName} disabled={busy}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
         </Button>
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full" onClick={() => { setEditing(false); setNameInput(meter.name ?? ''); }}>
@@ -1128,7 +1128,7 @@ function ProductMeterNameInlineBase({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="italic text-amber-600 dark:text-amber-400 hover:underline focus:outline-none"
+              className="italic text-warn hover:underline focus:outline-none"
               title="No name set — click to rename"
             >
               Product Meter {fallbackIndex ?? ''} (click to rename)
