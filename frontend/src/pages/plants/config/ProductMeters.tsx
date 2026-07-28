@@ -173,9 +173,9 @@ export function AssignLocatorsDialog({
     enabled: locatorIds.length > 0,
     queryFn: async () => {
       const { data } = await (supabase.from('product_meters' as any) as any)
-        .select('id, plant_id, derived_from_locator_id')
+        .select('id, plant_id, derived_from_locator_id, is_derived')
         .in('derived_from_locator_id', locatorIds);
-      return (data ?? []) as Array<{ id: string; plant_id: string; derived_from_locator_id: string }>;
+      return (data ?? []) as Array<{ id: string; plant_id: string; derived_from_locator_id: string; is_derived: boolean }>;
     },
   });
 
@@ -214,6 +214,17 @@ export function AssignLocatorsDialog({
   }, [existingMirrors]);
 
   const [busy, setBusy] = useState(false);
+
+  // Locators whose mirror target row exists (derived_from_locator_id points
+  // back here) but is_derived is false on that row — the exact broken state
+  // the pre-fix silent-failure bug could leave behind (see fn_set_product_
+  // meter_mirror migration note and the save() comment below). Looks
+  // identical to a healthy mirror in this dialog otherwise, since the
+  // "Target plant/meter" selects only reflect derived_from_locator_id.
+  const mirrorNeedsRepair = useMemo(
+    () => new Set((existingMirrors ?? []).filter(r => !r.is_derived).map(r => r.derived_from_locator_id)),
+    [existingMirrors],
+  );
 
   // How many locators in the current selection are marked as derived?
   // The DB (partial unique index) enforces max 1, but we also guard in the UI.
@@ -278,13 +289,28 @@ export function AssignLocatorsDialog({
       }
 
       // Set up or clear mirror product_meter targets
+      // FIX (2026-07-28): this used to be a plain
+      // supabase.from('product_meters').update(...) call — product_meters'
+      // RLS (user_has_plant_access(plant_id)) is scoped to the TARGET row's
+      // plant, not the plant this dialog is open on, so it silently matched
+      // zero rows whenever the current Manager didn't separately have access
+      // to the target plant (e.g. configuring SRP's HAMAS to mirror into
+      // Mambaling, without also being assigned to Mambaling). No error was
+      // ever thrown — "Locator assignments saved" showed regardless. Routed
+      // through fn_set_product_meter_mirror (SECURITY DEFINER) instead, and
+      // its result is now actually checked.
       for (const [locId, mirror] of Object.entries(mirrorMap)) {
         if (!selected.has(locId) || !derivedMap[locId]) continue;
         if (!mirror.meterId) continue;
-        // Mark the target meter as derived, pointing back to this locator
-        await (supabase.from('product_meters' as any) as any)
-          .update({ is_derived: true, derived_from_locator_id: locId } as any)
-          .eq('id', mirror.meterId);
+        const { error } = await supabase.rpc('fn_set_product_meter_mirror' as any, {
+          p_meter_id: mirror.meterId,
+          p_derived_from_locator_id: locId,
+        } as any);
+        if (error) {
+          throw new Error(
+            `Could not wire the mirror target for "${locators.find((l: any) => l.id === locId)?.name ?? locId}": ${error.message}`,
+          );
+        }
       }
 
       toast.success('Locator assignments saved');
@@ -425,6 +451,11 @@ export function AssignLocatorsDialog({
                           {derivedCount > 1 ? (
                             <p className="text-2xs text-danger">
                               ⚠ More than one locator here is marked derived — only one is allowed per product meter. Turn the others back on ("Has physical meter").
+                            </p>
+                          ) : mirrorNeedsRepair.has(l.id) ? (
+                            <p className="text-2xs text-danger">
+                              ⚠ This mirror link is broken — the target meter isn't marked derived, so it's still showing an editable input and won't receive HAMAS-style
+                              mirrored values. Click Save below to repair it.
                             </p>
                           ) : (
                             <p className="text-2xs text-muted-foreground">
