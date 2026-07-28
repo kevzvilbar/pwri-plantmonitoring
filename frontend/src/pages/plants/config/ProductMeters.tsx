@@ -760,10 +760,10 @@ export function ProductMetersCard({ plant }: { plant: any }) {
   const { data: plantLocators } = useQuery({
     queryKey: ['product-meters-plant-locators', plant.id],
     queryFn: async () => {
-      let { data, error } = await supabase.from('locators').select('id, name, status, product_meter_id, is_derived').eq('plant_id', plant.id).order('name');
+      let { data, error } = await supabase.from('locators').select('id, name, status, product_meter_id, is_derived, default_input_mode').eq('plant_id', plant.id).order('name');
       if (error && error.message?.includes('column')) {
         ({ data, error } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plant.id).order('name'));
-        if (!error && data) data = (data as any[]).map((l) => ({ ...l, is_derived: false }));
+        if (!error && data) data = (data as any[]).map((l) => ({ ...l, is_derived: false, default_input_mode: 'raw' }));
       }
       return (data ?? []) as any[];
     },
@@ -895,6 +895,14 @@ export function ProductMetersCard({ plant }: { plant: any }) {
           }`}
           data-testid={`product-meter-card-${m.id}`}
         >
+          {(() => {
+          // Locators this meter supplies ("siblings" — AssignLocatorsDialog's
+          // product_meter_id link). Computed once per card and reused by both
+          // the chip badges below and the Historical Consumption chart's
+          // sibling-total + NRW% overlay.
+          const supplied = (plantLocators ?? []).filter((l: any) => l.product_meter_id === m.id);
+          return (
+          <>
           <div className="flex items-start gap-2">
             <div
               className="flex-1 min-w-0 cursor-pointer"
@@ -930,7 +938,6 @@ export function ProductMetersCard({ plant }: { plant: any }) {
 
               {/* ── Supplied locators chips ── */}
               {(() => {
-                const supplied = (plantLocators ?? []).filter((l: any) => l.product_meter_id === m.id);
                 if (!supplied.length) return (
                   <div className="mt-1.5 flex items-center gap-1">
                     <Droplet className="h-3 w-3 text-muted-foreground/40" />
@@ -1010,9 +1017,21 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                   </Button>
                 )}
               </MeterDetailButton>
-              <EntityHistoryChart entityId={m.id} entityType="product_meter" entityName={m.name ?? 'Meter'} />
+              <EntityHistoryChart
+                entityId={m.id}
+                entityType="product_meter"
+                entityName={m.name ?? 'Meter'}
+                siblingLocators={supplied.map((l: any) => ({
+                  id: l.id,
+                  name: l.name,
+                  defaultInputMode: l.default_input_mode === 'direct' ? 'direct' : 'raw',
+                }))}
+              />
             </div>
           )}
+          </>
+          );
+          })()}
         </Card>
       ))}
 

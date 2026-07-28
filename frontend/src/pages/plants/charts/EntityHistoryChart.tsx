@@ -29,21 +29,41 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
-import { fmtNum } from '@/lib/calculations';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Activity } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
+import { fmtNum, calc, nrwColor, ALERTS } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 
 
+// Same palette as the plant-wide NRW chart in components/dashboard/TrendChart.tsx
+// (C_PRODUCTION/C_CONSUMPTION/C_NRW there) — kept as local literals rather than a
+// cross-file import so this component doesn't reach into Dashboard internals.
+const C_PRODUCTION  = '#22c55e';  // green-500  — mother meter's own volume
+const C_CONSUMPTION = '#3b82f6';  // blue-500   — sibling locators' combined volume
+const C_NRW         = '#eab308';  // yellow-500 — non-revenue water %
+
 export interface HistoryRow { date: string; consumption: number; reading?: number; }
+
+/** A locator "supplied" by a mother/product meter — i.e. one of its siblings
+ *  per AssignLocatorsDialog's product_meter_id link. Used to overlay the
+ *  siblings' combined consumption and derive a meter-level NRW% alongside
+ *  the mother meter's own Historical Consumption chart. */
+export interface SiblingLocator {
+  id: string;
+  name: string;
+  /** locator.default_input_mode — 'direct' means current_reading already IS
+   *  the period's volume (e.g. a derived/residual locator like HAMAS). */
+  defaultInputMode?: 'raw' | 'direct';
+}
 
 export function EntityHistoryChart({
   entityId,
   entityType,
   entityName,
   defaultInputMode = 'raw',
+  siblingLocators,
 }: {
   entityId: string;
   entityType: 'locator' | 'well' | 'product_meter';
@@ -55,9 +75,22 @@ export function EntityHistoryChart({
    *  Total/Avg stats. Defaults to 'raw' (existing behavior) for every other
    *  caller, including all product_meter usage. */
   defaultInputMode?: 'raw' | 'direct';
+  /** Only meaningful for entityType === 'product_meter'. The locators this
+   *  mother meter supplies (AssignLocatorsDialog). When present, the chart
+   *  overlays the siblings' combined daily consumption and a meter-level
+   *  NRW% — same formula as the plant-wide Dashboard NRW (calc.nrw), scoped
+   *  to just this meter and its own siblings. */
+  siblingLocators?: SiblingLocator[];
 }) {
   const isDirectMode = (entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct';
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const hasSiblings = entityType === 'product_meter' && !!siblingLocators?.length;
+  const siblingIds = useMemo(() => (siblingLocators ?? []).map(l => l.id), [siblingLocators]);
+  const siblingModeById = useMemo(() => {
+    const map = new Map<string, 'raw' | 'direct'>();
+    (siblingLocators ?? []).forEach(l => map.set(l.id, l.defaultInputMode === 'direct' ? 'direct' : 'raw'));
+    return map;
+  }, [siblingLocators]);
 
   const { data: rows = [], isLoading } = useQuery<HistoryRow[]>({
     queryKey: ['entity-history', entityType, entityId, range, defaultInputMode],
@@ -127,10 +160,84 @@ export function EntityHistoryChart({
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [rows]);
 
+  // ─── Sibling locators (this mother meter's AssignLocatorsDialog picks) ──────
+  // One batched query across all sibling locator_readings for the same range,
+  // aggregated to a per-date total exactly like `aggregated` above but summed
+  // across locators instead of kept per-entity. Each locator's own raw/direct
+  // input mode is honored (siblingModeById) so a mixed group (e.g. a normal
+  // metered zone alongside a direct-input bulk zone) totals correctly.
+  const { data: siblingRows = [], isLoading: siblingsLoading } = useQuery<{ date: string; consumption: number }[]>({
+    queryKey: ['entity-history-siblings', entityId, range, siblingIds.join(',')],
+    enabled: hasSiblings,
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString();
+      const { data } = await supabase
+        .from('locator_readings')
+        .select('locator_id, reading_datetime, current_reading, previous_reading, daily_volume')
+        .in('locator_id', siblingIds)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+
+      return (data ?? []).map((r: any) => {
+        const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
+        const isDirect = siblingModeById.get(r.locator_id) === 'direct';
+        let consumption = 0;
+        if (isDirect) {
+          consumption = r.current_reading != null ? +r.current_reading : 0;
+        } else if (r.daily_volume != null && +r.daily_volume > 0) {
+          consumption = +r.daily_volume;
+        } else if (r.current_reading != null && r.previous_reading != null) {
+          consumption = Math.max(0, +r.current_reading - +r.previous_reading);
+        }
+        return { date: dateStr, consumption };
+      }).filter(r => r.date);
+    },
+    staleTime: 60_000,
+  });
+
+  // Sum across all siblings per date (a day may have several locators reporting)
+  const siblingByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    siblingRows.forEach(r => map.set(r.date, (map.get(r.date) ?? 0) + r.consumption));
+    return map;
+  }, [siblingRows]);
+
+  const totalSiblingConsumption = useMemo(
+    () => siblingRows.reduce((s, r) => s + r.consumption, 0),
+    [siblingRows],
+  );
+
+  // Chart data: mother meter's own dates, each with its siblings' total for
+  // that same date (0 when siblings had no reading that day) and a per-day
+  // NRW% — same calc.nrw(production, consumption) the plant-wide Dashboard
+  // NRW chart uses, just scoped to this one meter and its own siblings.
+  const chartData = useMemo(() => {
+    if (!hasSiblings) return aggregated;
+    return aggregated.map(r => {
+      const siblingTotal = +(siblingByDate.get(r.date) ?? 0).toFixed(2);
+      return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal) };
+    });
+  }, [aggregated, hasSiblings, siblingByDate]);
+
+  // Period NRW% — totals across the whole selected range, mirroring how the
+  // Readings/Total/Avg-day stats above are also period aggregates rather
+  // than a per-day average of an already-noisy daily ratio.
+  const periodNrw = hasSiblings ? calc.nrw(
+    aggregated.reduce((s, r) => s + r.consumption, 0),
+    totalSiblingConsumption,
+  ) : null;
+
   const exportCSV = () => {
     if (!aggregated.length) { toast.error('No data to export'); return; }
-    const header = 'date,consumption_m3,reading';
-    const lines = aggregated.map(r => `${r.date},${r.consumption},${r.reading ?? ''}`);
+    const header = hasSiblings
+      ? 'date,consumption_m3,reading,locators_total_m3,nrw_pct'
+      : 'date,consumption_m3,reading';
+    const lines = (hasSiblings ? chartData : aggregated).map((r: any) =>
+      hasSiblings
+        ? `${r.date},${r.consumption},${r.reading ?? ''},${r.siblingTotal ?? ''},${r.nrw ?? ''}`
+        : `${r.date},${r.consumption},${r.reading ?? ''}`
+    );
     const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -150,9 +257,9 @@ export function EntityHistoryChart({
       <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
         <p className="font-semibold text-foreground mb-1">{label}</p>
         {payload.map((p: any) => (
-          <p key={p.name} style={{ color: p.color }}>
-            {p.name === 'consumption' ? 'Consumption' : 'Reading'}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
-            {p.name === 'consumption' ? ' m³' : ''}
+          <p key={p.dataKey} style={{ color: p.color }}>
+            {p.name}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
+            {p.dataKey === 'nrw' ? '%' : ' m³'}
           </p>
         ))}
       </div>
@@ -212,6 +319,36 @@ export function EntityHistoryChart({
         </div>
       )}
 
+      {/* Sibling locators total + meter-level NRW% — same calc.nrw() the
+          plant-wide Dashboard NRW card uses, scoped to this meter's own
+          assigned locators (AssignLocatorsDialog). */}
+      {hasSiblings && aggregated.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">
+              Locators Total {siblingsLoading && <Loader2 className="inline h-2.5 w-2.5 animate-spin ml-0.5" />}
+            </div>
+            <div className="font-mono font-semibold text-base" style={{ color: C_CONSUMPTION }}>
+              {fmtNum(totalSiblingConsumption)}
+            </div>
+            <div className="text-muted-foreground text-[9px]">m³ · {siblingLocators!.length} locator{siblingLocators!.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div className={`rounded-lg p-2 text-center bg-muted/40`}>
+            <div className="text-muted-foreground text-[10px] uppercase tracking-wide flex items-center justify-center gap-1">
+              <Activity className="h-2.5 w-2.5 opacity-60" /> NRW
+            </div>
+            <div
+              className="font-mono font-semibold text-base"
+              style={{ color: periodNrw == null ? undefined : `hsl(var(--${nrwColor(periodNrw)}))` }}
+            >
+              {periodNrw == null ? '—' : periodNrw}
+              <span className="text-2xs font-sans text-muted-foreground ml-0.5">%</span>
+            </div>
+            <div className="text-muted-foreground text-[9px]">limit {ALERTS.nrw_green_max}%</div>
+          </div>
+        </div>
+      )}
+
       {/* Chart */}
       {isLoading ? (
         <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
@@ -221,6 +358,41 @@ export function EntityHistoryChart({
         <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
           <BarChart2 className="h-8 w-8 opacity-30" />
           <p>No readings in this period</p>
+        </div>
+      ) : hasSiblings ? (
+        <div className="h-56 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / chartData.length))}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                interval="preserveStartEnd"
+                angle={-30}
+                textAnchor="end"
+                height={36}
+              />
+              <YAxis
+                yAxisId="vol"
+                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                width={38}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+              />
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fontSize: 9, fill: C_NRW }}
+                width={30}
+                tickFormatter={(v: number) => `${v}%`}
+              />
+              <Tooltip content={customTooltip} />
+              <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
+              <Bar yAxisId="vol" dataKey="consumption" fill={C_PRODUCTION} name="Mother Meter" radius={[2,2,0,0]} />
+              <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
+              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
       ) : (
         <div className="h-52 w-full">
@@ -242,7 +414,7 @@ export function EntityHistoryChart({
                 tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
               />
               <Tooltip content={customTooltip} />
-              <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="consumption" radius={[2,2,0,0]} />
+              <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="Consumption" radius={[2,2,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
