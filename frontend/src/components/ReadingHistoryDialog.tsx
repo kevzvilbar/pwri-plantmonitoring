@@ -65,7 +65,7 @@ export interface HistoryEditState {
 }
 
 export function ReadingHistoryDialog({ entityName, module, entityId, plantId, assetMeterSerial, multiplier = 1,
-  gridMeterCount: gridMeterCountProp = 1, gridMeterNames = [], gridMultipliers = [], meterFilter, onClose }: {
+  gridMeterCount: gridMeterCountProp = 1, gridMeterNames = [], gridMultipliers = [], meterFilter, defaultInputMode = 'raw', onClose }: {
   entityName: string;
   module: HistoryModule;
   entityId: string;
@@ -84,8 +84,15 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   gridMultipliers?: number[];
   /** When set, scopes the power history to a single meter (solar or grid-N). */
   meterFilter?: { type: 'solar'; idx: number } | { type: 'grid'; idx: number };
+  /** From locator.default_input_mode / well.default_input_mode.
+   *  'direct' -> the entered value already IS the period's volume (no prior
+   *  reading to diff against), so no Δ column is computed or shown — only
+   *  meaningful for module 'locator' | 'well'. Defaults to 'raw' (the
+   *  existing cumulative-meter behavior) so every other caller is unaffected. */
+  defaultInputMode?: 'raw' | 'direct';
   onClose: () => void;
 }) {
+  const isDirectMode = (module === 'locator' || module === 'well') && defaultInputMode === 'direct';
   const qc = useQueryClient();
   const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
@@ -576,7 +583,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 onClick={() => { setDays(d as any); setEditRow(null); }}
                 className={[
                   'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                  days === d ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  days === d ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 {label}
@@ -586,7 +593,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               onClick={() => { setDays('custom'); setEditRow(null); }}
               className={[
                 'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                days === 'custom' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                days === 'custom' ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >
               Custom
@@ -610,7 +617,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 onChange={e => setCustomTo(e.target.value)}
                 className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
-              <Button size="sm" className="h-7 px-3 text-xs bg-primary text-white hover:bg-primary/90"
+              <Button size="sm" className="h-7 px-3 text-xs bg-teal-700 text-white hover:bg-teal-800"
                 onClick={() => { setAppliedFrom(customFrom); setAppliedTo(customTo); setEditRow(null); }}>
                 Apply
               </Button>
@@ -624,14 +631,14 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <p className="font-medium text-foreground">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">Date &amp; Time</Label>
+                <Label className="text-[11px]">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
                   className="h-8 text-xs" />
               </div>
               <div>
-                <Label className="text-xs">
-                  {module === 'well' ? 'Water (unitless)' : module === 'locator' ? 'Reading' : module === 'blending' ? 'Volume (m³)' : 'Grid Power Reading (kWh)'}
+                <Label className="text-[11px]">
+                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Volume (m³)' : 'Grid Power Reading (kWh)'}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })}
@@ -639,7 +646,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               </div>
               {module === 'well' && (
                 <div>
-                  <Label className="text-xs">Power Meter (kWh)</Label>
+                  <Label className="text-[11px]">Power Meter (kWh)</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -647,7 +654,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-xs">TDS (ppm)</Label>
+                  <Label className="text-[11px]">TDS (ppm)</Label>
                   <Input type="number" step="any" value={editRow.value4 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value4: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -655,7 +662,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-xs">NTU</Label>
+                  <Label className="text-[11px]">NTU</Label>
                   <Input type="number" step="any" value={editRow.value6 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -663,7 +670,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-xs">Pressure (psi)</Label>
+                  <Label className="text-[11px]">Pressure (psi)</Label>
                   <Input type="number" step="any" value={editRow.value5 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -671,7 +678,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'power' && (
                 <div>
-                  <Label className="text-xs">Solar Power Reading (kWh)</Label>
+                  <Label className="text-[11px]">Solar Power Reading (kWh)</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -692,12 +699,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                   }}
                   className="h-3.5 w-3.5 accent-orange-500"
                 />
-                <span className="text-xs text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
+                <span className="text-[11px] text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
               </label>
             )}
             <div className="flex gap-2">
               <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
-                className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
+                className="bg-teal-700 text-white hover:bg-teal-800 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">
@@ -730,6 +737,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           </div>
         )}
 
+        {isDirectMode && (
+          <div className="flex items-center gap-1.5 rounded-md bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/50 px-2.5 py-1.5 text-xs text-teal-800 dark:text-teal-300">
+            <Droplet className="h-3 w-3 shrink-0" />
+            This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-auto max-h-[520px] rounded border text-xs">
           {isLoading ? (
@@ -757,13 +771,24 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     </th>
                   )}
                   <th className="px-3 py-2 font-medium">Date & Time</th>
-                  {module === 'locator' && <>
+                  {module === 'locator' && (isDirectMode ? <>
+                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
+                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
+                    <th className="px-3 py-2 font-medium">Flags</th>
+                  </> : <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
                     <th className="px-3 py-2 font-medium">Flags</th>
-                  </>}
-                  {module === 'well' && <>
+                  </>)}
+                  {module === 'well' && (isDirectMode ? <>
+                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
+                    <th className="px-2 py-2 font-medium text-center">Repl.</th>
+                    <th className="px-3 py-2 font-medium text-right">Power (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
+                    <th className="px-3 py-2 font-medium text-right">NTU</th>
+                    <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
+                  </> : <>
                     <th className="px-3 py-2 font-medium text-right">Water</th>
                     <th className="px-3 py-2 font-medium text-right">Δ</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
@@ -771,7 +796,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right">TDS (ppm)</th>
                     <th className="px-3 py-2 font-medium text-right">NTU</th>
                     <th className="px-3 py-2 font-medium text-right">Pressure (psi)</th>
-                  </>}
+                  </>)}
                   {module === 'blending' && <>
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
@@ -782,7 +807,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center text-slate-500">×</th>
-                    <th className="px-3 py-2 font-medium text-right text-info">Power (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right text-blue-700 dark:text-blue-400">Power (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
                   </>}
                   {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
@@ -832,13 +857,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                           'disabled:opacity-40 disabled:cursor-not-allowed',
                           isMeterReplacement
-                            ? 'bg-kpi-solar border-kpi-solar text-white hover:bg-kpi-solar/90'
-                            : 'border-input bg-background hover:border-kpi-solar/90 hover:bg-kpi-solar/15',
+                            ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+                            : 'border-input bg-background hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
                         ].join(' ')}
                       >
                         {isToggling
                           ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          : isMeterReplacement ? <span className="text-3xs font-bold leading-none">✓</span> : null
+                          : isMeterReplacement ? <span className="text-[9px] font-bold leading-none">✓</span> : null
                         }
                       </button>
                     </td>
@@ -894,8 +919,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <tr key={r.id ?? i}
                           className={[
                             'border-t',
-                            isEditing  ? 'bg-primary-soft/60'
-                            : isRepl   ? 'bg-kpi-solar/40'
+                            isEditing  ? 'bg-teal-50/60 dark:bg-teal-950/20'
+                            : isRepl   ? 'bg-orange-50/40 dark:bg-orange-950/10'
                             : 'hover:bg-muted/40',
                           ].join(' ')}
                         >
@@ -909,7 +934,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             <span className="flex items-center gap-1.5">
                               {dateStr}
                               {isRepl && (
-                                <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-warn bg-warn-soft' : 'text-kpi-solar bg-kpi-solar/15'}`}>
+                                <span className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30' : 'text-orange-600 bg-orange-100 dark:bg-orange-900/30'}`}>
                                   repl.
                                 </span>
                               )}
@@ -918,25 +943,25 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           {/* Meter column placeholder (hidden in filtered view) */}
                           <td />
                           {/* Reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-xs">
-                            <span className={isSolar ? 'text-warn' : 'text-info'}>
+                          <td className="px-3 py-1.5 text-right font-mono-num text-[11px]">
+                            <span className={isSolar ? 'text-yellow-600' : 'text-blue-600'}>
                               {curr != null ? fmtNum(curr) : '—'}
                             </span>
                           </td>
                           {/* Δ raw */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-xs">
+                          <td className="px-3 py-1.5 text-right font-mono-num text-[11px]">
                             {isRepl
-                              ? <span className="text-kpi-solar font-medium">0</span>
+                              ? <span className="text-orange-500 font-medium">0</span>
                               : rawDelta != null ? fmtNum(rawDelta) : '—'
                             }
                           </td>
                           {/* × multiplier */}
-                          <td className="px-2 py-1.5 text-center font-mono-num text-slate-500 text-2xs">
+                          <td className="px-2 py-1.5 text-center font-mono-num text-slate-500 text-[10px]">
                             {mMult !== 1 ? `×${mMult}` : '×1'}
                           </td>
                           {/* Effective kWh */}
-                          <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-xs',
-                            effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-warn' : 'text-info',
+                          <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-[11px]',
+                            effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-yellow-700 dark:text-yellow-400' : 'text-blue-700 dark:text-blue-400',
                           ].join(' ')}>
                             {effective != null ? fmtNum(effective) : '—'}
                           </td>
@@ -950,12 +975,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               className={['inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                                 'disabled:opacity-40 disabled:cursor-not-allowed',
                                 isRepl
-                                  ? (isSolar ? 'bg-warn border-warn' : 'bg-info border-info') + ' text-white'
-                                  : 'border-input bg-background hover:border-info/90 hover:bg-info-soft',
+                                  ? (isSolar ? 'bg-yellow-500 border-yellow-500' : 'bg-blue-500 border-blue-500') + ' text-white'
+                                  : 'border-input bg-background hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20',
                               ].join(' ')}
                             >
                               {(isTogglingGrid || isTogglingSolar) ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
+                                : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null}
                             </button>
                           </td>
                           {canEditDelete && (
@@ -983,8 +1008,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {/* ── Date header row ── */}
                         <tr className={[
                           'border-t',
-                          isEditing ? 'bg-primary-soft/60'
-                          : isGridRepl ? 'bg-kpi-solar/40'
+                          isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20'
+                          : isGridRepl ? 'bg-orange-50/40 dark:bg-orange-950/10'
                           : 'bg-muted/20',
                         ].join(' ')}>
                           {canEditDelete && (
@@ -1001,12 +1026,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             <span className="flex items-center gap-1.5">
                               {dateStr}
                               {isGridRepl && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
                                   grid repl.
                                 </span>
                               )}
                               {isSolarRepl && (
-                                <span className="text-3xs font-semibold uppercase tracking-wide text-warn bg-warn-soft px-1 py-0.5 rounded leading-none">
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-1 py-0.5 rounded leading-none">
                                   solar repl.
                                 </span>
                               )}
@@ -1029,30 +1054,30 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               {canEditDelete && <td />}
                               {/* Meter label */}
                               <td className="px-3 py-1 pl-6">
-                                <span className="flex items-center gap-1 text-xs">
-                                  <GridPylonIcon className="h-2.5 w-2.5 text-info shrink-0" />
+                                <span className="flex items-center gap-1 text-[11px]">
+                                  <GridPylonIcon className="h-2.5 w-2.5 text-blue-400 shrink-0" />
                                   <span className="text-muted-foreground truncate">{mLabel}</span>
                                 </span>
                               </td>
                               {/* Reading */}
-                              <td className="px-3 py-1 text-right font-mono-num text-info text-xs">
+                              <td className="px-3 py-1 text-right font-mono-num text-blue-600 text-[11px]">
                                 {curr != null ? fmtNum(curr) : '—'}
                               </td>
                               {/* Δ raw */}
-                              <td className="px-3 py-1 text-right font-mono-num text-xs">
+                              <td className="px-3 py-1 text-right font-mono-num text-[11px]">
                                 {isGridRepl
-                                  ? <span className="text-kpi-solar font-medium">0</span>
+                                  ? <span className="text-orange-500 font-medium">0</span>
                                   : rawDelta != null ? fmtNum(rawDelta) : '—'
                                 }
                               </td>
                               {/* × multiplier */}
-                              <td className="px-2 py-1 text-center font-mono-num text-slate-500 text-2xs">
+                              <td className="px-2 py-1 text-center font-mono-num text-slate-500 text-[10px]">
                                 {mMult !== 1 ? `×${mMult}` : '×1'}
                               </td>
                               {/* Effective kWh */}
                               <td className={[
-                                'px-3 py-1 text-right font-mono-num font-medium text-xs',
-                                effective != null && effective < 0 ? 'text-destructive' : 'text-info',
+                                'px-3 py-1 text-right font-mono-num font-medium text-[11px]',
+                                effective != null && effective < 0 ? 'text-destructive' : 'text-blue-700 dark:text-blue-400',
                               ].join(' ')}>
                                 {effective != null ? fmtNum(effective) : '—'}
                               </td>
@@ -1068,13 +1093,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                       'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                                       'disabled:opacity-40 disabled:cursor-not-allowed',
                                       isGridRepl
-                                        ? 'bg-info border-info text-white hover:bg-info/90'
-                                        : 'border-input bg-background hover:border-info/90 hover:bg-info-soft',
+                                        ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600'
+                                        : 'border-input bg-background hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20',
                                     ].join(' ')}
                                   >
                                     {isTogglingGrid
                                       ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                      : isGridRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
+                                      : isGridRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
                                     }
                                   </button>
                                 )}
@@ -1089,23 +1114,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             {canEditDelete && <td />}
                             {/* Meter label */}
                             <td className="px-3 py-1 pl-6">
-                              <span className="flex items-center gap-1 text-xs">
-                                <span className="text-warn text-xs leading-none">☀</span>
+                              <span className="flex items-center gap-1 text-[11px]">
+                                <span className="text-yellow-500 text-xs leading-none">☀</span>
                                 <span className="text-muted-foreground">Solar</span>
                               </span>
                             </td>
                             {/* Reading */}
-                            <td className="px-3 py-1 text-right font-mono-num text-warn text-xs">
+                            <td className="px-3 py-1 text-right font-mono-num text-yellow-600 text-[11px]">
                               {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
                             </td>
                             {/* Δ Solar */}
-                            <td className="px-3 py-1 text-right font-mono-num text-xs">
+                            <td className="px-3 py-1 text-right font-mono-num text-[11px]">
                               {isSolarRepl
-                                ? <span className="text-kpi-solar font-medium">0</span>
+                                ? <span className="text-orange-500 font-medium">0</span>
                                 : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                                  ? <span className="text-warn">{fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)}</span>
+                                  ? <span className="text-yellow-600">{fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)}</span>
                                   : r.daily_solar_kwh != null && +r.daily_solar_kwh > 0
-                                    ? <span className="text-warn">{fmtNum(+r.daily_solar_kwh)}</span>
+                                    ? <span className="text-yellow-600">{fmtNum(+r.daily_solar_kwh)}</span>
                                     : '—'
                               }
                             </td>
@@ -1124,13 +1149,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                   'inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                                   'disabled:opacity-40 disabled:cursor-not-allowed',
                                   isSolarRepl
-                                    ? 'bg-warn border-warn text-white hover:bg-warn/90'
-                                    : 'border-input bg-background hover:border-warn/90 hover:bg-warn-soft',
+                                    ? 'bg-yellow-500 border-yellow-500 text-white hover:bg-yellow-600'
+                                    : 'border-input bg-background hover:border-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20',
                                 ].join(' ')}
                               >
                                 {isTogglingSolar
                                   ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                  : isSolarRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
+                                  : isSolarRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
                                 }
                               </button>
                             </td>
@@ -1146,8 +1171,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       key={r.id ?? i}
                       className={[
                         'border-t',
-                        isEditing      ? 'bg-primary-soft/60'
-                        : isMeterReplacement ? 'bg-kpi-solar/40'
+                        isEditing      ? 'bg-teal-50/60 dark:bg-teal-950/20'
+                        : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
                         : 'hover:bg-muted/40',
                       ].join(' ')}
                     >
@@ -1165,32 +1190,53 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <span className="flex items-center gap-1.5">
                           {dateStr}
                           {isMeterReplacement && (
-                            <span className="text-3xs font-semibold uppercase tracking-wide text-kpi-solar bg-kpi-solar/15 px-1 py-0.5 rounded leading-none">
+                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
                               repl.
                             </span>
                           )}
                         </span>
                       </td>
 
-                      {module === 'locator' && <>
+                      {module === 'locator' && (isDirectMode ? <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                        {replCell}
+                        <td className="px-3 py-1.5">
+                          {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
+                        </td>
+                      </> : <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0</span>
+                            ? <span className="text-orange-500 font-medium">0</span>
                             : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
                           }
                         </td>
                         {replCell}
                         <td className="px-3 py-1.5">
-                          {r.off_location_flag && <span className="text-warn font-medium">off-loc</span>}
+                          {r.off_location_flag && <span className="text-amber-600 font-medium">off-loc</span>}
                         </td>
-                      </>}
+                      </>)}
 
-                      {module === 'well' && <>
+                      {module === 'well' && (isDirectMode ? <>
+                        <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                        {replCell}
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.power_meter_reading != null ? fmtNum(r.power_meter_reading) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.tds_ppm != null ? fmtNum(r.tds_ppm) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {(r as any).turbidity_ntu != null ? (+((r as any).turbidity_ntu)).toFixed(2) : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-num">
+                          {r.pressure_psi != null ? fmtNum(r.pressure_psi) : '—'}
+                        </td>
+                      </> : <>
                         <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
-                            ? <span className="text-kpi-solar font-medium">0</span>
+                            ? <span className="text-orange-500 font-medium">0</span>
                             : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
                           }
                         </td>
@@ -1207,7 +1253,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {r.pressure_psi != null ? fmtNum(r.pressure_psi) : '—'}
                         </td>
-                      </>}
+                      </>)}
 
                       {module === 'blending' && <>
                         <td className="px-3 py-1.5 text-right font-mono-num text-muted-foreground">
@@ -1249,7 +1295,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           )}
         </div>
 
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-[10px] text-muted-foreground">
           {days === 'custom'
             ? `Showing ${appliedFrom} → ${appliedTo}`
             : `Showing up to ${days} days of history`

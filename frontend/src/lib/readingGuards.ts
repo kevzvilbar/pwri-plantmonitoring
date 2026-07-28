@@ -52,6 +52,13 @@ export const SPIKE_MULTIPLIER = 2.0;
  *   persisting is_meter_rollover=true and meter_rollover_max on the saved
  *   row so daily_volume is computed from the true wrap delta instead of
  *   being clamped to zero.
+ * @param inputMode 'raw' (default) = currentReading is a cumulative totalizer,
+ *   so a lower value than the last confirmed reading is a real anomaly
+ *   ("backward"). 'direct' = currentReading already IS the period's volume
+ *   (e.g. HAMAS) — a lower value than yesterday is ordinary day-to-day
+ *   variation, not a fault, so the backward check is skipped entirely, and
+ *   the spike check compares the volume itself (not a reading-to-reading
+ *   diff) against the average.
  */
 export async function evaluateReadingGuard(
   entityType: ReadingEntityType,
@@ -64,6 +71,7 @@ export async function evaluateReadingGuard(
   isEstimated = false,
   avgFlowRate: number | null = null,
   isMeterRollover = false,
+  inputMode: 'raw' | 'direct' = 'raw',
 ): Promise<GuardResult> {
   const table = entityType === 'locator' ? 'locator_readings' : 'well_readings';
   const entityCol = entityType === 'locator' ? 'locator_id' : 'well_id';
@@ -103,8 +111,11 @@ export async function evaluateReadingGuard(
   const prevReading: number | null = lastGood?.length ? Number(lastGood[0].current_reading) : null;
   const prevDt: Date | null = lastGood?.length ? new Date(lastGood[0].reading_datetime) : null;
 
-  // ── 3. Backward reading check ─────────────────────────────────────────────
+  // ── 3. Backward reading check — 'raw' (cumulative) mode only ──────────────
+  // For 'direct' mode, currentReading already IS the period's volume, so a
+  // lower value than yesterday is ordinary day-to-day variation, not a fault.
   if (
+    inputMode === 'raw' &&
     prevReading !== null &&
     currentReading < prevReading &&
     !isMeterReplacement &&
@@ -120,7 +131,17 @@ export async function evaluateReadingGuard(
   }
 
   // ── 4. Spike check ────────────────────────────────────────────────────────
-  if (prevReading !== null && prevDt !== null && avgFlowRate !== null && avgFlowRate > 0) {
+  if (inputMode === 'direct') {
+    // currentReading already IS the volume — compare it directly, no diff.
+    if (avgFlowRate !== null && avgFlowRate > 0 && currentReading > avgFlowRate * SPIKE_MULTIPLIER) {
+      const pctAbove = Math.round((currentReading / avgFlowRate - 1) * 100);
+      return {
+        status: 'pending_review',
+        reason: 'spike',
+        detail: `Volume ${currentReading.toLocaleString()} m³ is ${pctAbove}% above the ${avgFlowRate.toLocaleString()} m³ average. Sent for supervisor review.`,
+      };
+    }
+  } else if (prevReading !== null && prevDt !== null && avgFlowRate !== null && avgFlowRate > 0) {
     const volume = currentReading - prevReading;
     const hoursElapsed =
       (readingDatetime.getTime() - prevDt.getTime()) / 3_600_000;
