@@ -181,6 +181,31 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
+  // Locators to treat as "direct volume" for the stat cards below — either the
+  // manager-configured default_input_mode='direct' toggle, OR any is_derived
+  // (residual/mirrored) locator such as the SRP↔Mambaling HAMAS pair: its
+  // current_reading is a computed residual or a manual override, never a
+  // cumulative meter value. Without this, the stat cards trust
+  // locator_readings.daily_volume, which is only correct if previous_reading
+  // was zeroed for these rows — true for fn_sweep_derived_meters()'s own
+  // writes, NOT guaranteed for a manual override entered through the normal
+  // reading form. Mirrors the isDirectMode branch in EntityHistoryChart.tsx.
+  const { data: _directLocatorIds } = useQuery({
+    queryKey: ['dash-locator-direct-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return new Set<string>();
+      const { data } = await supabase
+        .from('locators').select('id,default_input_mode,is_derived')
+        .in('plant_id', plantIds).eq('status', 'Active');
+      return new Set(
+        (data ?? [])
+          .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
+          .map((l: any) => l.id as string),
+      );
+    },
+    enabled: plantIds.length > 0,
+  });
+
   const { data: _wellIds } = useQuery({
     queryKey: ['dash-well-ids', plantIds],
     queryFn: async () => {
@@ -829,8 +854,8 @@ export default function Dashboard() {
 
   const consumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(todayLocators ?? [], 'locator_id', 'daily_volume'), _todayKey,
-  ), [todayLocators, _todayKey]);
+    computePivotFromReadingsNoCache(todayLocators ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _todayKey,
+  ), [todayLocators, _todayKey, _directLocatorIds]);
 
   // Compute daily grid kWh from raw meter readings. Priority order mirrors TrendChart exactly:
   //   1. Raw JSONB multi-meter delta × per-meter CT multiplier
@@ -937,8 +962,8 @@ export default function Dashboard() {
 
   const yConsumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
-    computePivotFromReadingsNoCache(yLocators ?? [], 'locator_id', 'daily_volume'), _yesterdayKey,
-  ), [yLocators, _yesterdayKey]);
+    computePivotFromReadingsNoCache(yLocators ?? [], 'locator_id', 'daily_volume', _directLocatorIds), _yesterdayKey,
+  ), [yLocators, _yesterdayKey, _directLocatorIds]);
 
   const { kwh: yKwh } = computePowerKwh(yPower?.rows ?? [], yPower?.prevRows ?? [], dashPowerConfigMap);
   const dProduction = pctDelta(production, yProduction);

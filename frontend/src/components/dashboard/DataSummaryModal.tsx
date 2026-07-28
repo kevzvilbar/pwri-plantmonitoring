@@ -70,6 +70,12 @@ export function computePivotFromReadingsNoCache(
   readings: any[],
   entityKeyField: string,
   dailyVolumeField: string | null,
+  // IDs (e.g. locator_id) whose default_input_mode = 'direct' — current_reading
+  // already IS the period's volume for these, so daily_volume/diff math must be
+  // skipped entirely. Mirrors EntityHistoryChart.tsx's isDirectMode branch.
+  // Safe to pass the same locator-ID set to well/meter pivots too: those IDs
+  // never collide with locator IDs, so it's a no-op for other entity types.
+  directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   readings.forEach((r) => {
@@ -79,6 +85,7 @@ export function computePivotFromReadingsNoCache(
   });
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
+    const isDirect = directModeIds?.has(entityKey) ?? false;
     const sorted = [...rows].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
@@ -99,7 +106,12 @@ export function computePivotFromReadingsNoCache(
         return;
       }
       let delta = 0;
-      if (dailyVolumeField && r[dailyVolumeField] != null) {
+      if (isDirect) {
+        // Direct mode: current_reading already IS the period's volume — no
+        // diff, no dependence on the DB's daily_volume/previous_reading.
+        delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
+        lastReading.set(entityKey, +r.current_reading);
+      } else if (dailyVolumeField && r[dailyVolumeField] != null) {
         // Clamp to 0: a negative daily_volume is a corrupt stored value
         // (e.g. partial write, rollback). Matches TrendChart's buildEntityPivot
         // and the computeEntityDeltas fix — all three paths must be consistent.
@@ -148,6 +160,8 @@ function computePivotFromReadings(
   readings: any[],
   entityKeyField: string,
   dailyVolumeField: string | null,
+  // See computePivotFromReadingsNoCache above — same semantics.
+  directModeIds?: Set<string>,
 ): Map<string, Map<string, number>> {
   const byEntity = new Map<string, any[]>();
   readings.forEach((r) => {
@@ -157,6 +171,7 @@ function computePivotFromReadings(
   });
   const pivot = new Map<string, Map<string, number>>();
   byEntity.forEach((rows, entityKey) => {
+    const isDirect = directModeIds?.has(entityKey) ?? false;
     const sorted = [...rows].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
@@ -174,6 +189,21 @@ function computePivotFromReadings(
       if (afterRepl.has(entityKey)) {
         lastReading.set(entityKey, +r.current_reading);
         afterRepl.delete(entityKey);
+        return;
+      }
+
+      if (isDirect) {
+        // Direct mode: current_reading already IS the period's volume.
+        // Bypass deltaCache entirely — a cached/stored entry may have been
+        // seeded (via hydrateFromStoredDeltas) from the DB's diff-based
+        // daily_volume before the DB-side fix, so trusting it here would
+        // reproduce the same bug. Write the correct value back afterwards
+        // so later lookups for this entity+date get the right number too.
+        const delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
+        lastReading.set(entityKey, +r.current_reading);
+        deltaCache.set(entityKey, dateKey, delta, 'computed');
+        const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
+        pivot.get(dateKey)!.set(entityKey, prev + delta);
         return;
       }
 
@@ -275,7 +305,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await supabase
-        .from('locators').select('id,name,code,plant_id')
+        .from('locators').select('id,name,code,plant_id,default_input_mode,is_derived')
         .in('plant_id', plantIds).eq('status', 'Active');
       return (data ?? []) as any[];
     },
@@ -285,6 +315,22 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   });
 
   const locatorIds = useMemo(() => (locators ?? []).map((l: any) => l.id), [locators]);
+
+  // Locators to treat as "direct volume" for pivot purposes — either the
+  // manager-configured default_input_mode='direct' toggle, OR any is_derived
+  // (residual/mirrored) locator such as the SRP↔Mambaling HAMAS pair: its
+  // current_reading is a computed residual or a manual override, never a
+  // cumulative meter value, whether the sweep (fn_sweep_derived_meters, which
+  // always writes previous_reading=0) or a human wrote it. See
+  // computePivotFromReadingsNoCache above and EntityHistoryChart.tsx.
+  const directLocatorIds = useMemo(
+    () => new Set(
+      (locators ?? [])
+        .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
+        .map((l: any) => l.id),
+    ),
+    [locators],
+  );
 
   const { data: consReadings, isLoading: consLoading } = useQuery({
     queryKey: ['dsm-cons-readings', locatorIds, fromStr, toStr],
@@ -344,7 +390,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       const pb = plantCodeById.get(b.plant_id) ?? '';
       return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
     });
-    const pivot = computePivotFromReadingsNoCache(consReadings ?? [], 'locator_id', 'daily_volume');
+    const pivot = computePivotFromReadingsNoCache(consReadings ?? [], 'locator_id', 'daily_volume', directLocatorIds);
 
     // Track which (dateKey, locatorId) cells come from estimated rows so the
     // table can render them with a distinct "~" indicator and tooltip.
@@ -365,7 +411,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       cur.setDate(cur.getDate() + 1);
     }
     return { dates: allDates, entities: sortedLocs, pivot, estimatedKeys };
-  }, [locators, consReadings, plantCodeById, fromStr, toStr]);
+  }, [locators, consReadings, plantCodeById, fromStr, toStr, directLocatorIds]);
 
   const prodPivot = useMemo(() => {
     const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {

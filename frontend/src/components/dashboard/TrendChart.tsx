@@ -110,6 +110,11 @@ function resolveReadingDelta(r: any): number {
 function buildEntityPivot(
   readings: any[],
   entityField: string,
+  // IDs (e.g. locator_id) whose default_input_mode = 'direct' — current_reading
+  // already IS the period's volume for these, so daily_volume/diff math must be
+  // skipped. Mirrors EntityHistoryChart.tsx's isDirectMode branch. Safe to pass
+  // the same locator-ID set to well/meter pivots too — no ID collision risk.
+  directModeIds?: Set<string>,
 ): { pivot: Map<string, Map<string, number>>; dateKeys: string[] } {
   const pivot = new Map<string, Map<string, number>>();
   // Sequential lastSeen: tracks the actual last current_reading per entity so
@@ -130,7 +135,12 @@ function buildEntityPivot(
     const entityId = r[entityField] ?? '__';
 
     let vol: number;
-    if (r.daily_volume != null) {
+    if (directModeIds?.has(entityId)) {
+      // Direct mode: current_reading already IS the period's volume — no
+      // diff, no dependence on daily_volume/previous_reading.
+      vol = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
+      if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
+    } else if (r.daily_volume != null) {
       // Ground-truth operator/cached delta — use directly.
       vol = Math.max(0, +r.daily_volume);
       // Keep lastSeen in sync so a subsequent null-daily_volume row can delta
@@ -540,6 +550,7 @@ function DataSummaryPopup({
   roReadings,
   permeateIsProductionPlants,
   locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
+  directLocatorIds,
 }: {
   open: boolean;
   onClose: () => void;
@@ -557,6 +568,9 @@ function DataSummaryPopup({
   wellNames?: Map<string, string>;
   plantNames?: Map<string, string>;
   roTrainNames?: Map<string, string>;
+  // Locators to treat as direct-volume — default_input_mode='direct' or
+  // is_derived (e.g. SRP↔Mambaling HAMAS). See buildEntityPivot.
+  directLocatorIds?: Set<string>;
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');
 
@@ -722,7 +736,8 @@ function DataSummaryPopup({
   const consPivotResult = useMemo(() => buildEntityPivot(
     [...(filteredLocReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
     'locator_id',
-  ), [filteredLocReadings]);
+    directLocatorIds,
+  ), [filteredLocReadings, directLocatorIds]);
   const consPivot = consPivotResult.pivot;
   const consDateKeys = consPivotResult.dateKeys;
 
@@ -1289,6 +1304,32 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsLocReadings,
   });
 
+  // Locators whose default_input_mode = 'direct' OR is_derived = true — the
+  // latter covers residual/mirrored locators like the SRP↔Mambaling HAMAS
+  // pair, whose current_reading is a computed residual or a manual override,
+  // never a cumulative meter value. Passed into computeEntityDeltas/
+  // buildEntityPivot below so the chart line, the Overview table, and the
+  // Data Summary popup all agree with the Locator detail page's
+  // EntityHistoryChart, instead of trusting locator_readings.daily_volume
+  // (only guaranteed correct for fn_sweep_derived_meters()'s own writes,
+  // which always zero previous_reading — not guaranteed for a manual
+  // override entered through the normal reading form).
+  const { data: _directLocatorIds } = useQuery({
+    queryKey: ['trend-loc-direct-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return new Set<string>();
+      const { data } = await supabase
+        .from('locators').select('id,default_input_mode,is_derived')
+        .in('plant_id', plantIds).eq('status', 'Active');
+      return new Set(
+        (data ?? [])
+          .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
+          .map((l: any) => l.id as string),
+      );
+    },
+    enabled: plantIds.length > 0 && needsLocReadings,
+  });
+
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
     queryFn: async () => {
@@ -1742,7 +1783,13 @@ export function TrendChart({
       readings: any[],
       entityKeyField: string,
       dailyVolumeField: string | null,
-      options?: { skipAfterRepl?: boolean },
+      options?: {
+        skipAfterRepl?: boolean;
+        // IDs (e.g. locator_id) whose default_input_mode = 'direct' —
+        // current_reading already IS the period's volume for these. Mirrors
+        // EntityHistoryChart.tsx's isDirectMode branch.
+        directModeIds?: Set<string>;
+      },
     ): { r: any; delta: number; rawDelta: number | null; isMeterReplacement: boolean }[] {
       // skipAfterRepl=true: the replacement row already sets lastReading to the
       // new meter's starting value, so the very next reading can diff against it
@@ -1751,6 +1798,7 @@ export function TrendChart({
       // zeroed as a safety net for meter types where the replacement reading may
       // not be a reliable baseline (locators, wells, product meters).
       const skipAfterRepl = options?.skipAfterRepl ?? false;
+      const directModeIds = options?.directModeIds;
 
       const sorted = [...readings].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
@@ -1773,6 +1821,14 @@ export function TrendChart({
           lastReading.set(entityKey, +r.current_reading);
           afterRepl.delete(entityKey);
           return { r, delta: 0, rawDelta: null, isMeterReplacement: false };
+        }
+
+        if (directModeIds?.has(entityKey)) {
+          // Direct mode: current_reading already IS the period's volume — no
+          // diff, no dependence on daily_volume/previous_reading.
+          const delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
+          lastReading.set(entityKey, +r.current_reading);
+          return { r, delta, rawDelta: null, isMeterReplacement: false };
         }
 
         if (dailyVolumeField && r[dailyVolumeField] != null) {
@@ -1940,7 +1996,7 @@ export function TrendChart({
     // Consumption = sum of locator (distribution/endpoint) meter deltas.
     // NOTE: locReadings are now fetched via locator_id (not plant_id) so all
     // plants return data correctly — see the two-step query above.
-    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume').forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
+    computeEntityDeltas(locReadings ?? [], 'locator_id', 'daily_volume', { directModeIds: _directLocatorIds }).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
       const row = ensure(key, dt.getTime());
@@ -2197,7 +2253,7 @@ export function TrendChart({
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, powerConfigMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
-      permeateIsProductionPlants, _trainPlantMap, endKey]);
+      permeateIsProductionPlants, _trainPlantMap, endKey, _directLocatorIds]);
 
   // Pre-filtered chart rows for the kwh stacked bar — mirrors PowerChart's
   // chartRows useMemo: maps source filter into solarKwh/gridKwh so bars with
@@ -2348,7 +2404,7 @@ export function TrendChart({
     const sorted = [...sourceReadings].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, entityField);
+    const { pivot, dateKeys } = buildEntityPivot(sorted, entityField, _directLocatorIds);
     if (dateKeys.length === 0) return [];
     const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
     return allDates.map((dateKey) => {
@@ -2359,7 +2415,7 @@ export function TrendChart({
       row._total = visibleEntities.reduce((s, { id }) => s + (pivot.get(dateKey)?.get(id) ?? 0), 0);
       return row;
     });
-  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities]);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities, _directLocatorIds]);
 
   // drillupData: one row per month — grouped bars (not stacked) per entity
   const drillupData = useMemo(() => {
@@ -2418,9 +2474,9 @@ export function TrendChart({
     const sorted = [...(locReadings ?? [])].sort(
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id');
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id', _directLocatorIds);
     return buildMonthRows(pivot, dateKeys);
-  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities]);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities, _directLocatorIds]);
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -3514,6 +3570,7 @@ export function TrendChart({
           wellNames={wellNames}
           plantNames={plantNames}
           roTrainNames={roTrainNames}
+          directLocatorIds={_directLocatorIds}
         />
       )}
 
