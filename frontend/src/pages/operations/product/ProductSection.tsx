@@ -66,9 +66,20 @@ export function ProductForm() {
       if (!plantId) return [];
       let { data, error } = await supabase
         .from('product_meters' as any)
-        .select('id, name, status, sort_order, meter_serial, created_at')
+        .select('id, name, status, sort_order, meter_serial, is_derived, derived_from_locator_id, created_at')
         .eq('plant_id', plantId)
         .order('sort_order', { ascending: true });
+      // is_derived / derived_from_locator_id missing (pre-2026-07-22 migration DB) → retry without them.
+      // Needed so ProductMeterRow can tell a mirrored meter (e.g. Mambaling's HAMAS, mirrored
+      // from SRP's derived HAMAS locator) apart from a normally-read meter and hide the editable
+      // reading input for it — see the is_derived branch in ProductMeterRow below.
+      if (error?.message?.includes('is_derived') || error?.message?.includes('derived_from_locator_id')) {
+        ({ data, error } = await supabase
+          .from('product_meters' as any)
+          .select('id, name, status, sort_order, meter_serial, created_at')
+          .eq('plant_id', plantId)
+          .order('sort_order', { ascending: true }));
+      }
       // meter_serial missing (pre-2026-07-27 migration DB) → retry without it
       if (error?.message?.includes('meter_serial')) {
         ({ data, error } = await supabase
@@ -161,6 +172,33 @@ export function ProductForm() {
     return result;
   }, [recentProductReadings]);
 
+  // Source locator for any mirrored (is_derived) product meters in this plant —
+  // e.g. Mambaling's "HAMAS" meter mirrors SRP's derived "HAMAS (Mambaling)" locator
+  // (product_meters.derived_from_locator_id → locators.id, possibly cross-plant).
+  // Resolved here (not per-row) to avoid an N+1 query per meter.
+  const derivedLocatorIds = useMemo(
+    () => [...new Set((meters ?? []).map((m: any) => m.derived_from_locator_id).filter(Boolean))],
+    [meters],
+  );
+  const { data: mirrorSourceLocators } = useQuery({
+    queryKey: ['product-meter-mirror-sources', derivedLocatorIds.join(',')],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('locators').select('id, name, plant_id').in('id', derivedLocatorIds as string[]);
+      return (data ?? []) as any[];
+    },
+    enabled: derivedLocatorIds.length > 0,
+  });
+  const mirrorSourceById = useMemo(() => {
+    const plantNameById: Record<string, string> = {};
+    for (const p of plants ?? []) plantNameById[p.id] = p.name;
+    const m: Record<string, { locatorName: string; plantName: string }> = {};
+    for (const l of mirrorSourceLocators ?? []) {
+      m[l.id] = { locatorName: l.name, plantName: plantNameById[l.plant_id] ?? 'another plant' };
+    }
+    return m;
+  }, [mirrorSourceLocators, plants]);
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
     qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
@@ -242,6 +280,7 @@ export function ProductForm() {
                     userId={user?.id ?? null}
                     canEdit={canEdit}
                     onSaved={invalidate}
+                    mirrorSource={m.derived_from_locator_id ? mirrorSourceById[m.derived_from_locator_id] : null}
                   />
                 )}
               />
@@ -417,7 +456,7 @@ function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded:
 // ── Product meter row ─────────────────────────────────────────────────────────
 
 function ProductMeterRow({
-  meter, plantId, latest, avgVol, userId, canEdit, onSaved,
+  meter, plantId, latest, avgVol, userId, canEdit, onSaved, mirrorSource,
 }: {
   meter: any;
   plantId: string;
@@ -426,6 +465,7 @@ function ProductMeterRow({
   userId: string | null;
   canEdit: boolean;
   onSaved: () => void;
+  mirrorSource?: { locatorName: string; plantName: string } | null;
 }) {
   const isMobile = useIsMobile();
   const [reading, setReading] = useState('');
@@ -487,6 +527,58 @@ function ProductMeterRow({
     setReading(''); setSaving(false); onSaved();
   };
 
+  // ── Mirrored product meter (no physical meter) — GAP FIX (2026-07-28) ─────
+  // Meters with derived_from_locator_id (e.g. Mambaling's HAMAS, mirrored from
+  // SRP's derived "HAMAS (Mambaling)" locator — see fn_sweep_derived_meters()'s
+  // mirror loop in 20260727_hamas_phase2_sweep_function.sql) have their
+  // product_meter_readings written by the sweep, not by an operator. Rendering
+  // the normal editable input here would let an operator type in a value the
+  // next sweep run then either sits alongside (double-counting) or silently
+  // overwrites — the exact gap already fixed on the locator side in
+  // LocatorSection.tsx's 2026-07-25 GAP FIX; applying the same fix here.
+  if (meter.is_derived) {
+    return (
+      <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+            <Gauge className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="text-sm font-medium truncate">{meter.name}</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+              ~ Mirrored
+            </span>
+          </div>
+          {canEdit && (
+            <Button
+              variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg text-muted-foreground shrink-0"
+              onClick={() => setShowHistory(true)} title="View computed reading history"
+            >
+              <History className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500 mt-0.5" />
+          <span>
+            No physical meter here — this value is mirrored
+            {mirrorSource
+              ? <> from <span className="font-medium text-foreground/80">{mirrorSource.locatorName}</span> at {mirrorSource.plantName}</>
+              : ' from a derived locator on another plant'}
+            , computed automatically on a schedule.{' '}
+            {latest ? (
+              <>Last received: <span className="font-mono-num font-medium text-foreground/80">{fmtNum(latest.daily_volume ?? latest.current_reading)} m³</span> on {new Date(latest.reading_datetime).toLocaleDateString()}.</>
+            ) : (
+              <>No reading received yet — it lands here once the source locator is linked and the next sweep runs.</>
+            )}
+          </span>
+        </div>
+
+        {showHistory && (
+          <ProductMeterHistoryDialog meter={meter} plantId={plantId} onClose={() => setShowHistory(false)} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
