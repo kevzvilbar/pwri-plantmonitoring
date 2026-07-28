@@ -393,7 +393,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
             {/* ── Inline history chart ── */}
             {selectedLocator === l.id && (
               <div className="mt-3 pt-3 border-t">
-                <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} />
+                <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} defaultInputMode={l.default_input_mode === 'direct' ? 'direct' : 'raw'} />
               </div>
             )}
           </Card>
@@ -562,7 +562,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
 
       {/* Historical Consumption Chart */}
       <Card className="p-3">
-        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} />
+        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'} />
       </Card>
 
       {/* Replacement history */}
