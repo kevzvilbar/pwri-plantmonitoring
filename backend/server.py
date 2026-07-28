@@ -99,7 +99,10 @@ api_router = APIRouter(prefix="/api")
 # many-account abuse.
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+# slowapi's own documented pattern; Starlette's stub wants a handler typed for
+# the base Exception, slowapi's is typed for RateLimitExceeded specifically -
+# a stub-variance mismatch between the two packages, not a runtime issue.
 AI_RATE_LIMIT = "20/minute"
 
 
@@ -271,9 +274,9 @@ async def ai_delete_session(request: Request, session_id: str, authorization: Op
     db = supa()
     if db:
         owner_row = (
-            db.table("ai_chat_sessions").select("user_id").eq("session_id", session_id).maybeSingle().execute()
+            db.table("ai_chat_sessions").select("user_id").eq("session_id", session_id).maybe_single().execute()
         )
-        owner_id = (owner_row.data or {}).get("user_id")
+        owner_id = ((owner_row.data if owner_row else None) or {}).get("user_id")
         if owner_id and owner_id != caller["user_id"] and "Admin" not in caller.get("roles", []):
             raise HTTPException(403, "You do not have access to this session")
         db.table("ai_chat_sessions").delete().eq("session_id", session_id).execute()

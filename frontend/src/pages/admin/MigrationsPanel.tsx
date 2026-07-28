@@ -748,7 +748,7 @@ export function MigrationsPanel() {
           return (
             <Card
               key={f.filename}
-              className={`p-3 border-l-4 ${
+              className={`p-3 border-l-2 ${
                 f.status === 'pending'
                   ? 'border-l-rose-500/70'
                   : f.status === 'partial'

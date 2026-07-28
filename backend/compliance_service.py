@@ -82,8 +82,8 @@ async def get_thresholds(db, scope: str = "global") -> Thresholds:
         return DEFAULTS
     try:
         client = create_client(url, key)
-        res = client.table("compliance_thresholds").select("*").eq("scope", scope).maybeSingle().execute()
-        doc = res.data
+        res = client.table("compliance_thresholds").select("*").eq("scope", scope).maybe_single().execute()
+        doc = res.data if res else None
         if not doc:
             if scope != "global":
                 return await get_thresholds(db, "global")

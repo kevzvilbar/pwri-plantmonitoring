@@ -328,8 +328,17 @@ def ensure_entity(
         if target == "wells":
             base["has_power_meter"] = False
         try:
-            ins = client.table(table).insert(base).select("id").single().execute()
-            return (ins.data or {}).get("id"), True
+            # NOTE: `.select()`/`.single()` are not chainable after `.insert()`
+            # on this postgrest-py version — insert() already returns the
+            # inserted row(s) as representation data by default, so just
+            # read `.data` directly instead of chaining further query
+            # builder methods that don't exist on the insert response.
+            ins = client.table(table).insert(base).execute()
+            rows = ins.data or []
+            new_id = rows[0].get("id") if rows else None
+            if not new_id:
+                raise RuntimeError(f"Insert into {table!r} returned no id")
+            return new_id, True
         except Exception as ins_err:  # noqa: BLE001
             # Likely a race winning a unique constraint — re-select.
             log.info(

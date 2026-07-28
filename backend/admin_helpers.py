@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from fastapi import HTTPException
+from postgrest.types import CountMethod
 from supabase import Client, create_client
 
 log = logging.getLogger(__name__)
@@ -138,8 +139,8 @@ def caller_identity(access_token: str) -> dict[str, Any]:
     try:
         prof = client.table("user_profiles").select(
             "first_name,last_name,username",
-        ).eq("id", user_id).maybeSingle().execute()
-        data = prof.data or {}
+        ).eq("id", user_id).maybe_single().execute()
+        data = (prof.data if prof else None) or {}
         label = (
             " ".join(filter(None, [data.get("first_name"), data.get("last_name")])).strip()
             or data.get("username")
@@ -165,7 +166,7 @@ def count_refs(client: Client, table: str, column: str, value: Any) -> int:
     try:
         res = (
             client.table(table)
-            .select("id", count="exact", head=True)
+            .select("id", count=CountMethod.exact, head=True)
             .eq(column, value)
             .execute()
         )
@@ -254,10 +255,10 @@ def resolve_plant_by_name(client: Client, name: str) -> Optional[dict[str, Any]]
             client.table("plants")
             .select("id,name")
             .eq("name", name)
-            .maybeSingle()
+            .maybe_single()
             .execute()
         )
-        return res.data or None
+        return (res.data if res else None) or None
     except Exception as e:  # noqa: BLE001
         log.exception("plant lookup failed for %s", name)
         raise HTTPException(status_code=500, detail=f"Lookup failed for '{name}': {e}")

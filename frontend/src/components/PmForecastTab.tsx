@@ -174,7 +174,7 @@ export function PmForecastTab() {
 
       {result && (
         <Card className={cn(
-          'p-4 border-l-4',
+          'p-4 border-l-2',
           !result.recommended_next_date ? 'border-slate-300'
             : isOverdue(result.recommended_next_date) ? 'border-danger bg-danger-soft/40'
             : isSoon(result.recommended_next_date) ? 'border-warn bg-warn-soft/40'

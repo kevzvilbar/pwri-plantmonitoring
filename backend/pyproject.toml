@@ -29,3 +29,9 @@ dependencies = [
     "supafunc>=0.9,<1.0",
     "uvicorn==0.25.0",
 ]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+# _retired_regression_service.py lives under docs/archive/ now (not a .py
+# file), so no exclude is needed here.

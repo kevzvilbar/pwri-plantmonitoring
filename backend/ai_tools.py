@@ -130,7 +130,7 @@ def _inject_hints(
             "incidents": "occurred_at",
             "checklist_executions": "execution_date",
         }
-        table = plan.get("table")
+        table = str(plan.get("table") or "")
         tcol = tcol_map.get(table)
         if tcol:
             has_time = any(f.get("column") == tcol for f in filters)
@@ -219,10 +219,10 @@ async def chat_with_tools(
         from ai_service import _supa_client as _ai_supa_client
         sb = _ai_supa_client()
         if sb:
-            existing = []
+            existing: list[dict[str, Any]] = []
             try:
-                res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybeSingle().execute()
-                if res.data:
+                res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybe_single().execute()
+                if res and res.data:
                     existing = res.data.get("messages") or []
             except Exception:
                 pass

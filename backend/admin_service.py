@@ -33,6 +33,7 @@ import logging
 from typing import Any, Optional
 
 from fastapi import HTTPException
+from postgrest.types import CountMethod
 from supabase import Client
 
 from admin_helpers import (
@@ -154,7 +155,7 @@ def plant_dependencies(client: Client, plant_id: str) -> dict[str, Any]:
     try:
         res = (
             client.table("user_profiles")
-            .select("id", count="exact", head=True)
+            .select("id", count=CountMethod.exact, head=True)
             .contains("plant_assignments", [plant_id])
             .execute()
         )
@@ -180,10 +181,10 @@ def _entity_label(client: Client, kind: str, entity_id: str) -> Optional[str]:
                 client.table("user_profiles")
                 .select("first_name,last_name,username")
                 .eq("id", entity_id)
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
-            d = row.data or {}
+            d = (row.data if row else None) or {}
             return (
                 " ".join(filter(None, [d.get("first_name"), d.get("last_name")])).strip()
                 or d.get("username")
@@ -193,10 +194,10 @@ def _entity_label(client: Client, kind: str, entity_id: str) -> Optional[str]:
                 client.table("plants")
                 .select("name")
                 .eq("id", entity_id)
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
-            return (row.data or {}).get("name")
+            return ((row.data if row else None) or {}).get("name")
     except Exception:
         log.debug("entity label lookup failed", exc_info=True)
     return None
@@ -239,7 +240,7 @@ def _clear_no_cascade_children(
 
             res = (
                 client.table(table)
-                .delete(count="exact")
+                .delete(count=CountMethod.exact)
                 .eq("plant_id", plant_id)
                 .execute()
             )

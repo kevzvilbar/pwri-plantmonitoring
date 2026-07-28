@@ -194,6 +194,7 @@ async def seed_from_urls(
 
         # ---------- Well-meter sheets ingestion ----------
         if source in ("auto", "meter") and can_write_supabase:
+            assert sb is not None  # guaranteed by can_write_supabase's definition above
             try:
                 parsed = parse_xlsx(content)
                 existing_wells = _load_existing_wells(sb, plant_id)

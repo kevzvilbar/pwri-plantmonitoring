@@ -176,7 +176,7 @@ function TypingIndicator() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
+          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-pulse"
           style={{ animationDelay: `${i * 150}ms`, animationDuration: '900ms' }}
         />
       ))}
@@ -1528,7 +1528,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                   return (
                     <tr key={`team:${plant.id}`} className="border-b hover:bg-muted/20 transition-colors">
                       <td className="px-3 py-1 sticky left-0 z-10 bg-background"
-                        style={{ borderLeft: `3px solid ${accent.line}` }}>
+                        style={{ borderLeft: `2px solid ${accent.line}` }}>
                         <div className="flex items-center gap-1.5">
                           <Building2 className={cn('h-3 w-3 shrink-0', accent.text)} />
                           <span className={cn('font-semibold text-xs', accent.text)}>{plant.name}</span>
@@ -1561,7 +1561,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                       className="border-b cursor-pointer select-none hover:bg-muted/40 transition-colors"
                       onClick={() => togglePlant(plant.id)}>
                       <td className="px-3 py-2 sticky left-0 z-10 bg-background"
-                        style={{ borderLeft: `3px solid ${accent.line}` }}>
+                        style={{ borderLeft: `2px solid ${accent.line}` }}>
                         <div className="flex items-center gap-1.5">
                           <ChevronRight className={cn('h-3.5 w-3.5 transition-transform shrink-0',
                             accent.text, isExpanded && 'rotate-90')} />
@@ -1604,7 +1604,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
                         <tr key={`op:${matKey}`}
                           className="border-b hover:bg-muted/20 transition-colors">
                           <td className="px-3 py-1 sticky left-0 z-10 bg-background pl-8"
-                            style={{ borderLeft: `3px solid ${accent.line}` }}>
+                            style={{ borderLeft: `2px solid ${accent.line}` }}>
                             <div className="flex items-center gap-1.5">
                               <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-3xs font-bold text-white shrink-0', avatarColor(op.id))}>
                                 {initials(op)}

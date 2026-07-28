@@ -48,13 +48,16 @@ jobs:
         working-directory: backend
         # E501 (line too long) and W503 (line break before binary op) are
         # pre-existing style choices — ignore them to avoid noise, fix others.
-        run: flake8 . --max-line-length=120 --extend-ignore=E501,W503 --exclude=_retired_regression_service.py
+        run: flake8 . --max-line-length=120 --extend-ignore=E501,W503
 
       - name: Type-check (mypy)
         working-directory: backend
         # --ignore-missing-imports because several deps lack stubs
-        run: mypy . --ignore-missing-imports --exclude _retired_regression_service.py || true
-        # `|| true` makes mypy non-blocking for now; remove once stubs are added
+        run: mypy .
+        # Blocking as of 2026-07-29: codebase is mypy-clean (pydantic.mypy
+        # plugin configured in pyproject.toml). Keep it that way rather than
+        # reintroducing `|| true` - the errors this caught weren't stub noise,
+        # they included a live AttributeError bug in production endpoints.
 
       - name: Run tests
         working-directory: backend

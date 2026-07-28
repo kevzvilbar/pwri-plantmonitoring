@@ -49,7 +49,7 @@ export function PlantsPanel() {
         return (
           <Card
             key={p.id}
-            className={`p-3 border-l-4 transition-colors ${
+            className={`p-3 border-l-2 transition-colors ${
               active
                 ? 'border-l-emerald-500/70 bg-gradient-to-r from-accent-soft/40 to-transparent'
                 : 'border-l-muted-foreground/40 bg-muted/20 opacity-90'

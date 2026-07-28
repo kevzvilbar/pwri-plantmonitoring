@@ -822,7 +822,7 @@ export default function Compliance() {
               {/* Status banner + compliance score */}
               <div className="flex gap-3 items-stretch">
                 <Card className={cn(
-                  'p-3 border-l-4 flex-1',
+                  'p-3 border-l-2 flex-1',
                   result.violations.length === 0
                     ? 'border-accent bg-accent-soft/50'
                     : result.violations.some((v) => v.severity === 'high')
@@ -1090,7 +1090,7 @@ export default function Compliance() {
           {/* What-if violations live preview */}
           {whatIfViolations !== null && (
             <Card className={cn(
-              'p-3 border-l-4',
+              'p-3 border-l-2',
               whatIfViolations.length === 0
                 ? 'border-accent bg-accent-soft/50'
                 : whatIfViolations.some((v) => v.severity === 'high')

@@ -104,7 +104,7 @@ class ChatResponse(BaseModel):
 
 
 class AnomalyRequest(BaseModel):
-    readings: list[dict[str, Any]] = Field(..., min_items=0, max_items=2000)
+    readings: list[dict[str, Any]] = Field(..., min_length=0, max_length=2000)
     provider: Optional[str] = None
     model: Optional[str] = None
 
@@ -245,8 +245,8 @@ async def chat_turn(
     sb = _supa_client()
     if sb:
         try:
-            res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybeSingle().execute()
-            doc = res.data
+            res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybe_single().execute()
+            doc = res.data if res else None
             if doc:
                 # PERF FIX: Only load the most recent messages to prevent history bloat
                 msg_list = doc.get("messages") or []
@@ -272,9 +272,9 @@ async def chat_turn(
     if sb:
         try:
             # Fetch existing messages list and append
-            res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybeSingle().execute()
-            existing = []
-            if res.data:
+            res = sb.table("ai_chat_sessions").select("messages").eq("session_id", session_id).maybe_single().execute()
+            existing: list[dict[str, Any]] = []
+            if res and res.data:
                 existing = res.data.get("messages") or []
 
             # PERF FIX: Trim old messages to keep array bounded
@@ -334,8 +334,8 @@ async def get_session(db, session_id: str, caller: Optional[dict[str, Any]] = No
     if sb is None:
         return {"session_id": session_id, "messages": []}
     try:
-        res = sb.table("ai_chat_sessions").select("*").eq("session_id", session_id).maybeSingle().execute()
-        doc = res.data
+        res = sb.table("ai_chat_sessions").select("*").eq("session_id", session_id).maybe_single().execute()
+        doc = res.data if res else None
         if not doc:
             return {"session_id": session_id, "messages": []}
         owner_id = doc.get("user_id")
