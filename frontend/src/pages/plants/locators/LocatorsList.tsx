@@ -109,25 +109,24 @@ export function LocatorsList({ plantId }: { plantId: string }) {
     await applyLocatorStatusChange(l, 'Active');
   };
 
-  // ── Meter lock/disconnect state ─────────────────────────────────────────
+  // ── Meter lock state ─────────────────────────────────────────────────────
   // Separate from status (Active/Inactive) on purpose — see
   // 20260728_locator_lock_status.sql. A locator stays Active (and keeps
-  // showing up for reading entry in Operations) while its meter is locked
-  // or disconnected; that's what lets movement against it get caught.
-  const [locatorLockTarget, setLocatorLockTarget] =
-    useState<{ locator: any; newLockStatus: 'locked' | 'disconnected' } | null>(null);
+  // showing up for reading entry in Operations) while its meter is locked;
+  // that's what lets movement against it get caught.
+  const [locatorLockTarget, setLocatorLockTarget] = useState<any | null>(null);
   const [locatorLockBusy, setLocatorLockBusy] = useState(false);
 
   const applyLocatorLockStatus = async (
     l: any,
-    newLockStatus: 'normal' | 'locked' | 'disconnected',
+    newIsLocked: boolean,
     reasonCategory?: ReasonCategory,
     reasonDetail?: string,
   ) => {
-    // payload typed `any` — lock_status isn't in the generated Supabase types
+    // payload typed `any` — is_locked isn't in the generated Supabase types
     // yet (types.ts is already stale for several recent locators columns;
     // see the same pattern in LocatorDialogs.tsx submit()).
-    const payload: any = { lock_status: newLockStatus };
+    const payload: any = { is_locked: newIsLocked };
     const { error } = await supabase.from('locators').update(payload).eq('id', l.id);
     if (error) { toast.error(friendlyError(error)); return; }
     await logStatusChange({
@@ -136,29 +135,26 @@ export function LocatorsList({ plantId }: { plantId: string }) {
       entity_type: 'Locator',
       entity_id: l.id,
       entity_label: l.name,
-      from_status: l.lock_status ?? 'normal',
-      to_status: newLockStatus,
+      from_status: l.is_locked ? 'locked' : 'normal',
+      to_status: newIsLocked ? 'locked' : 'normal',
       timestamp: new Date().toISOString(),
       reason_category: reasonCategory ?? null,
       reason_detail: reasonDetail || null,
     });
     qc.invalidateQueries({ queryKey: ['locators', plantId] });
-    toast.success(
-      newLockStatus === 'normal' ? `${l.name}: meter marked normal` : `${l.name}: meter marked ${newLockStatus}`
-    );
+    toast.success(newIsLocked ? `${l.name}: meter marked locked` : `${l.name}: meter marked normal`);
   };
 
-  // Marking locked/disconnected requires a reason (mirrors toggleLocatorStatus
-  // above for Active → Inactive); clearing back to normal doesn't, same as
-  // Inactive → Active doesn't.
-  const handleLockStatusChange = (l: any, newLockStatus: 'normal' | 'locked' | 'disconnected') => {
+  // Checking the box requires a reason (mirrors toggleLocatorStatus above for
+  // Active → Inactive); unchecking doesn't, same as Inactive → Active doesn't.
+  const handleLockCheckboxChange = (l: any, checked: boolean) => {
     if (!isManager) return;
-    if (newLockStatus === (l.lock_status ?? 'normal')) return;
-    if (newLockStatus === 'normal') {
-      applyLocatorLockStatus(l, 'normal');
+    if (checked === !!l.is_locked) return;
+    if (!checked) {
+      applyLocatorLockStatus(l, false);
       return;
     }
-    setLocatorLockTarget({ locator: l, newLockStatus });
+    setLocatorLockTarget(l);
   };
 
   const { data: locators } = useQuery({
@@ -327,41 +323,34 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                         </div>
                       );
                     })()}
-                    {/* Meter lock/disconnect state — independent of the
-                        Active/Inactive status pill to the right. Managers
-                        get a select to change it (opens a reason dialog
-                        going TO locked/disconnected, same as marking a
-                        locator Inactive); everyone else sees a read-only
-                        badge and only when it's not the normal case. */}
+                    {/* Meter lock state — independent of the Active/Inactive
+                        status pill to the right. Managers get a checkbox to
+                        toggle it (checking it opens a reason dialog, same as
+                        marking a locator Inactive); everyone else sees a
+                        read-only badge, and only when it's checked. */}
                     {isManager ? (
-                      <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                        <Select
-                          value={l.lock_status ?? 'normal'}
-                          onValueChange={(v) => handleLockStatusChange(l, v as 'normal' | 'locked' | 'disconnected')}
-                        >
-                          <SelectTrigger
-                            className={`h-6 w-auto text-[10px] px-1.5 gap-1 ${
-                              l.lock_status && l.lock_status !== 'normal'
-                                ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
-                                : 'text-muted-foreground border-dashed'
-                            }`}
-                            data-testid={`locator-lock-select-${l.id}`}
-                          >
-                            <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="normal">Meter normal</SelectItem>
-                            <SelectItem value="locked">Meter locked</SelectItem>
-                            <SelectItem value="disconnected">Meter disconnected</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <label
+                        className={`mt-1 inline-flex items-center gap-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-pointer ${
+                          l.is_locked
+                            ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
+                            : 'text-muted-foreground border-dashed'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={!!l.is_locked}
+                          onCheckedChange={(checked) => handleLockCheckboxChange(l, checked === true)}
+                          className="h-3 w-3"
+                          data-testid={`locator-lock-checkbox-${l.id}`}
+                        />
+                        <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+                        Meter locked
+                      </label>
                     ) : (
-                      l.lock_status && l.lock_status !== 'normal' && (
+                      l.is_locked && (
                         <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900">
                           <ShieldAlert className="h-2.5 w-2.5" />
-                          {l.lock_status === 'disconnected' ? 'Meter disconnected' : 'Meter locked'}
+                          Meter locked
                         </div>
                       )
                     )}
@@ -404,7 +393,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
             {/* ── Inline history chart ── */}
             {selectedLocator === l.id && (
               <div className="mt-3 pt-3 border-t">
-                <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} defaultInputMode={l.default_input_mode === 'direct' ? 'direct' : 'raw'} />
+                <EntityHistoryChart entityId={l.id} entityType="locator" entityName={l.name} />
               </div>
             )}
           </Card>
@@ -455,14 +444,14 @@ export function LocatorsList({ plantId }: { plantId: string }) {
       <ReasonDialog
         open={!!locatorLockTarget}
         onOpenChange={(o) => !o && setLocatorLockTarget(null)}
-        title={`Mark "${locatorLockTarget?.locator.name}" as meter ${locatorLockTarget?.newLockStatus}?`}
-        description="Reading entry stays open for this locator — any meaningful volume movement while it's marked locked or disconnected will be flagged for review, not blocked."
-        confirmLabel={locatorLockTarget?.newLockStatus === 'disconnected' ? 'Mark Disconnected' : 'Mark Locked'}
+        title={`Mark "${locatorLockTarget?.name}" meter locked?`}
+        description="Reading entry stays open for this locator — any meaningful volume movement while it's marked locked will be flagged for review, not blocked."
+        confirmLabel="Mark Locked"
         busy={locatorLockBusy}
         onConfirm={async (category, detail) => {
           if (!locatorLockTarget) return;
           setLocatorLockBusy(true);
-          await applyLocatorLockStatus(locatorLockTarget.locator, locatorLockTarget.newLockStatus, category, detail);
+          await applyLocatorLockStatus(locatorLockTarget, true, category, detail);
           setLocatorLockBusy(false);
           setLocatorLockTarget(null);
         }}
@@ -573,7 +562,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
 
       {/* Historical Consumption Chart */}
       <Card className="p-3">
-        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'} />
+        <EntityHistoryChart entityId={locatorId} entityType="locator" entityName={locator.name} />
       </Card>
 
       {/* Replacement history */}

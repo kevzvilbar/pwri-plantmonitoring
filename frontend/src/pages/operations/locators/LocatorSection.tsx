@@ -727,13 +727,13 @@ function LocatorRow({
       setSaving(true);
       const guard = await evaluateReadingGuard(
         'locator', locator.id, plantId, userId,
-        // SUPERSEDES the 2026-07-27 "previous + cur" workaround: that fix
-        // tried to make direct-mode readings look like a cumulative value so
-        // the (raw-mode-only) generic guard math wouldn't misfire on them.
-        // evaluateReadingGuard now branches on inputMode natively, so the
-        // real typed volume can be passed straight through.
-        cur,
-        new Date(customDt), false, false, avgVol, false, locInputMode,
+        // BUG FIX (2026-07-27): this used to be `previous ?? cur`, which for
+        // direct mode passed the *unchanged* previous cumulative value —
+        // guaranteed to look like a zero-volume day to spike/backward
+        // detection, so it silently never fired for direct-mode entries.
+        // The projected new cumulative is previous + the typed volume.
+        locInputMode === 'direct' ? (previous ?? 0) + cur : cur,
+        new Date(customDt), false, false, avgVol,
       );
       setSaving(false);
 
@@ -769,12 +769,15 @@ function LocatorRow({
     const payload: any = locInputMode === 'direct'
       ? {
           locator_id: locator.id, plant_id: plantId,
-          // current_reading IS the typed volume for direct mode — no need to
-          // fake a cumulative value. fn_locator_reading_integrity() (as of
-          // the 2026-07-28 input-mode-aware fix) and the History view both
-          // read locators.default_input_mode directly, so there's no longer
-          // any generic cumulative-meter logic here to work around.
-          current_reading: cur,
+          // BUG FIX (2026-07-27): this used to be `previous ?? cur`, which for
+          // any locator with reading history resubmitted the OLD cumulative
+          // value unchanged — the DB trigger then sets previous_reading to
+          // that same value, so the generated daily_volume computed to 0,
+          // silently discarding whatever volume the operator typed. The
+          // stored current_reading must be previous + the typed volume so
+          // daily_volume = current_reading - previous_reading = the typed
+          // value, same as it would if 0 for a first-ever reading.
+          current_reading: (previous ?? 0) + cur,
           // previous_reading: owned by DB trigger — DO NOT send from client
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
@@ -995,7 +998,6 @@ function LocatorRow({
             entityId={locator.id}
             plantId={plantId}
             assetMeterSerial={locator.meter_serial}
-            defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'}
             onClose={() => setShowHistory(false)}
           />
         )}
@@ -1111,17 +1113,16 @@ function LocatorRow({
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
-          {/* Meter lock/disconnect state — separate concept from the
-              supervisor-approval "Locked" badge further down this card.
-              Intentionally a different icon (ShieldAlert, not Lock) and
-              tone so the two never look like the same thing. Always shown
-              while lock_status != 'normal', not just when there's a
-              reading today, so it stays visible even on a day nobody's
-              logged anything yet. */}
-          {locator.lock_status && locator.lock_status !== 'normal' && (
+          {/* Meter lock state — separate concept from the supervisor-approval
+              "Locked" badge further down this card. Intentionally a
+              different icon (ShieldAlert, not Lock) and tone so the two
+              never look like the same thing. Always shown while is_locked,
+              not just when there's a reading today, so it stays visible
+              even on a day nobody's logged anything yet. */}
+          {locator.is_locked && (
             <StatusPill tone="danger">
               <ShieldAlert className="h-3 w-3" />
-              {locator.lock_status === 'disconnected' ? 'meter disconnected' : 'meter locked'}
+              meter locked
             </StatusPill>
           )}
           {lastToday?.off_location_flag && (
@@ -1280,7 +1281,6 @@ function LocatorRow({
           entityId={locator.id}
           plantId={plantId}
           assetMeterSerial={locator.meter_serial}
-          defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'}
           onClose={() => setShowHistory(false)}
         />
       )}
