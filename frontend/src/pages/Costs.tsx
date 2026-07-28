@@ -572,7 +572,7 @@ function ChemicalPrices() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
   const canEdit = isManager || isAdmin;
-  const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Caustic Soda', 'HCl', 'SLS'];
+  const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
   // ── Add form state ───────────────────────────────────────────────────────────

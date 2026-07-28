@@ -47,8 +47,35 @@ const DOSING_TO_CHEMICAL_NAME: Record<DosingCol, string> = {
   free_chlorine_reagent_pcs: 'Free Cl Reagent',
 };
 
+// Unit each dosing column is actually recorded in — baked into the column
+// name itself (chlorine_**kg**, anti_scalant_**l**, ...). Used to reject a
+// price entered under the same chemical name but a different unit; without
+// this a "Chlorine (g)" price would get multiplied straight into a kg
+// quantity and silently overstate cost by 1000x.
+const DOSING_UNIT: Record<DosingCol, string> = {
+  chlorine_kg: 'kg',
+  smbs_kg: 'kg',
+  soda_ash_kg: 'kg',
+  anti_scalant_l: 'l',
+  free_chlorine_reagent_pcs: 'pcs',
+};
+
 function normalizeName(s: string) {
   return s.trim().toLowerCase();
+}
+
+// The Costs page saves chemical_name as "<name> (<unit>)", e.g.
+// "Chlorine (kg)" — see the `submit()` handler in Costs.tsx. That unit
+// suffix isn't a separate column, it's baked into this one free-text
+// field, so a lookup keyed on the bare label ("chlorine") never matched
+// the stored value ("chlorine (kg)") and every chemical fell through to
+// `unpricedChemicals` regardless of how many prices were on file. Parse
+// the unit back out here so matching works, and keep it so a wrong-unit
+// price can be caught instead of silently mis-costed.
+const NAME_UNIT_RE = /^(.*?)\s*\(([^()]+)\)\s*$/;
+function parsePriceName(raw: string): { base: string; unit: string | null } {
+  const m = raw.match(NAME_UNIT_RE);
+  return m ? { base: m[1].trim(), unit: m[2].trim().toLowerCase() } : { base: raw.trim(), unit: null };
 }
 
 export function useCostComposition(plantIds: string[], days: number) {
@@ -88,10 +115,13 @@ export function useCostComposition(plantIds: string[], days: number) {
 
       // Latest price per chemical name as of the period end (prices are
       // global, not per-plant, matching how the Costs page manages them).
-      const latestPrice = new Map<string, number>();
+      // Keyed on the *base* name with the "(unit)" suffix parsed off, since
+      // that's what's actually stored — see parsePriceName() above.
+      const latestPrice = new Map<string, { price: number; unit: string | null }>();
       for (const row of priceRows) {
-        const key = normalizeName(row.chemical_name as string);
-        if (!latestPrice.has(key)) latestPrice.set(key, Number(row.unit_price) || 0);
+        const { base, unit } = parsePriceName(row.chemical_name as string);
+        const key = normalizeName(base);
+        if (!latestPrice.has(key)) latestPrice.set(key, { price: Number(row.unit_price) || 0, unit });
       }
 
       const powerTotal = costRows.reduce((s, r) => s + (Number(r.power_cost) || 0), 0);
@@ -114,12 +144,19 @@ export function useCostComposition(plantIds: string[], days: number) {
         const qty = qtyTotals[col];
         if (!qty) continue;
         const label = DOSING_TO_CHEMICAL_NAME[col];
-        const price = latestPrice.get(normalizeName(label));
-        if (price == null) {
+        const entry = latestPrice.get(normalizeName(label));
+        if (entry == null) {
           unpricedChemicals.push(label);
           continue;
         }
-        const value = Math.round(qty * price * 100) / 100;
+        const expectedUnit = DOSING_UNIT[col];
+        if (entry.unit && entry.unit !== expectedUnit) {
+          // A price is on file, just not in the unit this quantity is
+          // logged in — surface why instead of guessing at a conversion.
+          unpricedChemicals.push(`${label} (priced in ${entry.unit}, need ${expectedUnit})`);
+          continue;
+        }
+        const value = Math.round(qty * entry.price * 100) / 100;
         pricedChemTotal += value;
         chemChildren.push({ name: label, value });
       }
