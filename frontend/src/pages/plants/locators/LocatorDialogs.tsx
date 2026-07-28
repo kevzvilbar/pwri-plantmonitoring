@@ -75,6 +75,11 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
     meter_installed_date: locator.meter_installed_date ?? '', gps_lat: locator.gps_lat?.toString() ?? '', gps_lng: locator.gps_lng?.toString() ?? '',
     product_meter_id: locator.product_meter_id ?? '',
     default_input_mode: (locator.default_input_mode === 'direct' ? 'direct' : 'raw') as 'raw' | 'direct',
+    // Hamas-style derived locator — see supabase/migrations/20260722_mother_meter_derived.sql
+    // and 20260727_hamas_phase2_sweep_function.sql. is_derived + derived_from_meter_id were
+    // previously only settable by hand-editing the row in Supabase; this exposes them here.
+    is_derived: !!locator.is_derived,
+    derived_from_meter_id: locator.derived_from_meter_id ?? '',
   });
   const [locating, setLocating] = useState(false);
 
@@ -88,6 +93,25 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
         .select('id, name').eq('plant_id', locator.plant_id).order('sort_order', { ascending: true });
       return (data ?? []) as any[];
     },
+  });
+
+  // Mother-meter candidates for "Derived from" — deliberately NOT scoped to
+  // locator.plant_id. The whole point of the Hamas/Mambaling case is that the
+  // mother meter can live on a different plant than the derived locator, so
+  // this needs every product meter across every plant, labeled with its
+  // plant name so two same-named meters on different plants aren't ambiguous.
+  const { data: allMetersForDerive } = useQuery({
+    queryKey: ['locator-dialog-all-product-meters-for-derive'],
+    queryFn: async () => {
+      const [{ data: meters }, { data: plants }] = await Promise.all([
+        (supabase.from('product_meters' as any) as any).select('id, name, plant_id').order('name', { ascending: true }),
+        (supabase.from('plants' as any) as any).select('id, name'),
+      ]);
+      const plantNameById: Record<string, string> = {};
+      (plants ?? []).forEach((p: any) => { plantNameById[p.id] = p.name; });
+      return (meters ?? []).map((m: any) => ({ ...m, plantName: plantNameById[m.plant_id] ?? 'Unknown plant' })) as any[];
+    },
+    enabled: true,
   });
 
   const useMyLocation = async () => {
@@ -109,6 +133,14 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
 
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
+    // A derived locator has no physical meter to read — it MUST know which
+    // mother meter to subtract siblings from, or fn_sweep_derived_meters()
+    // silently skips it (is_derived=true AND derived_from_meter_id IS NOT NULL
+    // is the exact WHERE clause the sweep function filters on).
+    if (form.is_derived && !form.derived_from_meter_id) {
+      toast.error('Pick the mother meter this locator is derived from');
+      return;
+    }
     const payload: any = {
       name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
@@ -121,6 +153,20 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
     // Omitting the key entirely avoids a schema-cache crash if the column doesn't exist yet.
     if (form.product_meter_id || locator.product_meter_id != null) {
       payload.product_meter_id = form.product_meter_id || null;
+    }
+    // Same defensive pattern for the derive fields — these are the newest
+    // columns on this table, most likely to hit a stale PostgREST schema
+    // cache if the migration was just applied.
+    if (form.is_derived !== !!locator.is_derived) {
+      payload.is_derived = form.is_derived;
+    }
+    if (form.derived_from_meter_id !== (locator.derived_from_meter_id ?? '')) {
+      payload.derived_from_meter_id = form.derived_from_meter_id || null;
+    }
+    // Turning is_derived off should also clear the now-meaningless mother-meter
+    // link rather than leaving a dangling reference an admin has to notice later.
+    if (form.is_derived === false && locator.derived_from_meter_id != null) {
+      payload.derived_from_meter_id = null;
     }
     const { error } = await supabase.from('locators').update(payload).eq('id', locator.id);
     if (error) { toast.error(friendlyError(error)); return; }
@@ -178,17 +224,75 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               could look like it was in a different mode depending on who was
               entering data and on which device. This is now a deliberate,
               plant-config-owned choice a Manager/Admin makes once. */}
-          <div>
-            <Label>Reading entry mode</Label>
-            <Select value={form.default_input_mode} onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="raw">Raw meter — operator enters the cumulative reading</SelectItem>
-                <SelectItem value="direct">Direct m³ — operator enters the day's volume</SelectItem>
-              </SelectContent>
-            </Select>
+          {!form.is_derived && (
+            <div>
+              <Label>Reading entry mode</Label>
+              <Select value={form.default_input_mode} onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="raw">Raw meter — operator enters the cumulative reading</SelectItem>
+                  <SelectItem value="direct">Direct m³ — operator enters the day's volume</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Derived (Hamas-style) wiring — the toggle + mother-meter picker
+              this dialog was missing. Previously the only way to stand up a
+              new "no physical meter, computed as a residual" locator was to
+              hand-edit is_derived / derived_from_meter_id directly in
+              Supabase. See supabase/migrations/20260727_hamas_phase2_sweep_function.sql
+              for exactly how these two columns get consumed by the sweep,
+              and .../phase3_review_flags_and_notify.sql for how edits to the
+              mother meter or a sibling locator flag this locator for review. */}
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="locator-is-derived"
+                checked={form.is_derived}
+                onCheckedChange={(c) => setForm({ ...form, is_derived: c === true })}
+              />
+              <Label htmlFor="locator-is-derived" className="cursor-pointer">
+                This locator has no physical meter (derived / Hamas-style)
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Its daily volume is computed automatically as{' '}
+              <span className="font-medium text-foreground/80">mother meter − sibling locators</span>,
+              on a schedule and on demand via "Recalculate now" in Operations → Locator.
+              Manual entry is disabled — use the Override button there instead if the
+              computed value ever needs correcting by hand.
+            </p>
+            {form.is_derived && (
+              <div>
+                <Label>Derived from (mother meter) *</Label>
+                <Select
+                  value={form.derived_from_meter_id || '__none__'}
+                  onValueChange={(v) => setForm({ ...form, derived_from_meter_id: v === '__none__' ? '' : v })}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select the mother meter…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select…</span>
+                    </SelectItem>
+                    {(allMetersForDerive ?? []).map((m: any) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name} <span className="text-muted-foreground">— {m.plantName}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Can be a meter on a different plant — this is exactly how Hamas (SRP)
+                  derives from the Mambaling product meter today. Sibling locators are
+                  everything else whose "Supplied by" above points at the same mother meter.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* GPS row — editable inputs + clickable map link + use-my-location */}
@@ -228,7 +332,11 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
 }
 
 export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '', product_meter_id: '' });
+  const [form, setForm] = useState({
+    name: '', address: '', meter_brand: '', meter_size: '', meter_serial: '', meter_installed_date: '', gps_lat: '', gps_lng: '', product_meter_id: '',
+    // See the matching block in EditLocatorDialog above for the full explanation.
+    is_derived: false, derived_from_meter_id: '',
+  });
   const [locating, setLocating] = useState(false);
 
   // Product meters for "Supplied by" select
@@ -240,6 +348,21 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
       const { data } = await (supabase.from('product_meters' as any) as any)
         .select('id, name').eq('plant_id', plantId).order('sort_order', { ascending: true });
       return (data ?? []) as any[];
+    },
+  });
+
+  // Deliberately NOT scoped to plantId — see the matching query in
+  // EditLocatorDialog for why the mother meter can live on another plant.
+  const { data: allMetersForDerive } = useQuery({
+    queryKey: ['locator-dialog-all-product-meters-for-derive'],
+    queryFn: async () => {
+      const [{ data: meters }, { data: plants }] = await Promise.all([
+        (supabase.from('product_meters' as any) as any).select('id, name, plant_id').order('name', { ascending: true }),
+        (supabase.from('plants' as any) as any).select('id, name'),
+      ]);
+      const plantNameById: Record<string, string> = {};
+      (plants ?? []).forEach((p: any) => { plantNameById[p.id] = p.name; });
+      return (meters ?? []).map((m: any) => ({ ...m, plantName: plantNameById[m.plant_id] ?? 'Unknown plant' })) as any[];
     },
   });
 
@@ -264,6 +387,10 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
 
   const submit = async () => {
     if (!form.name) { toast.error('Name Required'); return; }
+    if (form.is_derived && !form.derived_from_meter_id) {
+      toast.error('Pick the mother meter this locator is derived from');
+      return;
+    }
     const payload: any = {
       plant_id: plantId, name: form.name, address: form.address || null, location_desc: form.address || null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
@@ -271,6 +398,10 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
     };
     if (form.product_meter_id) payload.product_meter_id = form.product_meter_id;
+    if (form.is_derived) {
+      payload.is_derived = true;
+      payload.derived_from_meter_id = form.derived_from_meter_id;
+    }
     const { error } = await supabase.from('locators').insert(payload);
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Locator Added'); onClose();
@@ -317,6 +448,53 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
               </Select>
             </div>
           )}
+
+          {/* Derived (Hamas-style) wiring — see the matching block + comment
+              in EditLocatorDialog above for the full explanation. */}
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="add-locator-is-derived"
+                checked={form.is_derived}
+                onCheckedChange={(c) => setForm({ ...form, is_derived: c === true })}
+              />
+              <Label htmlFor="add-locator-is-derived" className="cursor-pointer">
+                This locator has no physical meter (derived / Hamas-style)
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Its daily volume will be computed automatically as{' '}
+              <span className="font-medium text-foreground/80">mother meter − sibling locators</span>{' '}
+              once readings exist for both sides. No manual entry needed after saving.
+            </p>
+            {form.is_derived && (
+              <div>
+                <Label>Derived from (mother meter) *</Label>
+                <Select
+                  value={form.derived_from_meter_id || '__none__'}
+                  onValueChange={(v) => setForm({ ...form, derived_from_meter_id: v === '__none__' ? '' : v })}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select the mother meter…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select…</span>
+                    </SelectItem>
+                    {(allMetersForDerive ?? []).map((m: any) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name} <span className="text-muted-foreground">— {m.plantName}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Can be a meter on a different plant. Sibling locators are everything
+                  else whose own "Supplied by" above points at this same meter.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* GPS row */}
           <div>
