@@ -6,11 +6,13 @@
 //    blank "—" for any cell that has a reason on file
 //
 // Keep this list in sync with the CHECK constraints on entity_status_audit_log
-// and reading_gap_reasons (see 20260719_offline_reason_tracking.sql).
+// and reading_gap_reasons (see 20260719_offline_reason_tracking.sql and
+// 20260728_locator_lock_status.sql).
 
 export const REASON_CATEGORIES = [
   { value: 'pump_problem', label: 'Pump problem' },
   { value: 'locked_meter', label: 'Locked / inaccessible meter' },
+  { value: 'disconnected_meter', label: 'Disconnected meter' },
   { value: 'equipment_malfunction', label: 'Equipment malfunction' },
   { value: 'maintenance', label: 'Under maintenance' },
   { value: 'access_issue', label: 'Access issue' },

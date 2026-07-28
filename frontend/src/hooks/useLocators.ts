@@ -25,6 +25,13 @@ export interface Locator {
   meter_serial: string | null;
   meter_installed_date: string | null;
   status: 'Active' | 'Inactive';
+  /**
+   * Physical meter access state — independent of `status`. See
+   * 20260728_locator_lock_status.sql: a locator can be Active AND locked at
+   * the same time, and reading entry must stay open in that case so
+   * movement while locked/disconnected can be caught.
+   */
+  lock_status: 'normal' | 'locked' | 'disconnected';
   created_at: string;
   updated_at: string;
 }

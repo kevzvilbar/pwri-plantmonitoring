@@ -24,7 +24,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -1111,6 +1111,19 @@ function LocatorRow({
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
+          {/* Meter lock/disconnect state — separate concept from the
+              supervisor-approval "Locked" badge further down this card.
+              Intentionally a different icon (ShieldAlert, not Lock) and
+              tone so the two never look like the same thing. Always shown
+              while lock_status != 'normal', not just when there's a
+              reading today, so it stays visible even on a day nobody's
+              logged anything yet. */}
+          {locator.lock_status && locator.lock_status !== 'normal' && (
+            <StatusPill tone="danger">
+              <ShieldAlert className="h-3 w-3" />
+              {locator.lock_status === 'disconnected' ? 'meter disconnected' : 'meter locked'}
+            </StatusPill>
+          )}
           {lastToday?.off_location_flag && (
             <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off-site</StatusPill>
           )}

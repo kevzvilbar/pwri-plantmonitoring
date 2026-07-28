@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -107,6 +107,58 @@ export function LocatorsList({ plantId }: { plantId: string }) {
       return;
     }
     await applyLocatorStatusChange(l, 'Active');
+  };
+
+  // ── Meter lock/disconnect state ─────────────────────────────────────────
+  // Separate from status (Active/Inactive) on purpose — see
+  // 20260728_locator_lock_status.sql. A locator stays Active (and keeps
+  // showing up for reading entry in Operations) while its meter is locked
+  // or disconnected; that's what lets movement against it get caught.
+  const [locatorLockTarget, setLocatorLockTarget] =
+    useState<{ locator: any; newLockStatus: 'locked' | 'disconnected' } | null>(null);
+  const [locatorLockBusy, setLocatorLockBusy] = useState(false);
+
+  const applyLocatorLockStatus = async (
+    l: any,
+    newLockStatus: 'normal' | 'locked' | 'disconnected',
+    reasonCategory?: ReasonCategory,
+    reasonDetail?: string,
+  ) => {
+    // payload typed `any` — lock_status isn't in the generated Supabase types
+    // yet (types.ts is already stale for several recent locators columns;
+    // see the same pattern in LocatorDialogs.tsx submit()).
+    const payload: any = { lock_status: newLockStatus };
+    const { error } = await supabase.from('locators').update(payload).eq('id', l.id);
+    if (error) { toast.error(friendlyError(error)); return; }
+    await logStatusChange({
+      user_id: activeOperator?.id ?? user?.id ?? null,
+      plant_id: l.plant_id,
+      entity_type: 'Locator',
+      entity_id: l.id,
+      entity_label: l.name,
+      from_status: l.lock_status ?? 'normal',
+      to_status: newLockStatus,
+      timestamp: new Date().toISOString(),
+      reason_category: reasonCategory ?? null,
+      reason_detail: reasonDetail || null,
+    });
+    qc.invalidateQueries({ queryKey: ['locators', plantId] });
+    toast.success(
+      newLockStatus === 'normal' ? `${l.name}: meter marked normal` : `${l.name}: meter marked ${newLockStatus}`
+    );
+  };
+
+  // Marking locked/disconnected requires a reason (mirrors toggleLocatorStatus
+  // above for Active → Inactive); clearing back to normal doesn't, same as
+  // Inactive → Active doesn't.
+  const handleLockStatusChange = (l: any, newLockStatus: 'normal' | 'locked' | 'disconnected') => {
+    if (!isManager) return;
+    if (newLockStatus === (l.lock_status ?? 'normal')) return;
+    if (newLockStatus === 'normal') {
+      applyLocatorLockStatus(l, 'normal');
+      return;
+    }
+    setLocatorLockTarget({ locator: l, newLockStatus });
   };
 
   const { data: locators } = useQuery({
@@ -275,6 +327,44 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                         </div>
                       );
                     })()}
+                    {/* Meter lock/disconnect state — independent of the
+                        Active/Inactive status pill to the right. Managers
+                        get a select to change it (opens a reason dialog
+                        going TO locked/disconnected, same as marking a
+                        locator Inactive); everyone else sees a read-only
+                        badge and only when it's not the normal case. */}
+                    {isManager ? (
+                      <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={l.lock_status ?? 'normal'}
+                          onValueChange={(v) => handleLockStatusChange(l, v as 'normal' | 'locked' | 'disconnected')}
+                        >
+                          <SelectTrigger
+                            className={`h-6 w-auto text-[10px] px-1.5 gap-1 ${
+                              l.lock_status && l.lock_status !== 'normal'
+                                ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
+                                : 'text-muted-foreground border-dashed'
+                            }`}
+                            data-testid={`locator-lock-select-${l.id}`}
+                          >
+                            <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">Meter normal</SelectItem>
+                            <SelectItem value="locked">Meter locked</SelectItem>
+                            <SelectItem value="disconnected">Meter disconnected</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      l.lock_status && l.lock_status !== 'normal' && (
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900">
+                          <ShieldAlert className="h-2.5 w-2.5" />
+                          {l.lock_status === 'disconnected' ? 'Meter disconnected' : 'Meter locked'}
+                        </div>
+                      )
+                    )}
                   </div>
                   <button
                     type="button"
@@ -359,6 +449,22 @@ export function LocatorsList({ plantId }: { plantId: string }) {
           await applyLocatorStatusChange(locatorOfflineTarget, 'Inactive', category, detail);
           setLocatorOfflineBusy(false);
           setLocatorOfflineTarget(null);
+        }}
+      />
+
+      <ReasonDialog
+        open={!!locatorLockTarget}
+        onOpenChange={(o) => !o && setLocatorLockTarget(null)}
+        title={`Mark "${locatorLockTarget?.locator.name}" as meter ${locatorLockTarget?.newLockStatus}?`}
+        description="Reading entry stays open for this locator — any meaningful volume movement while it's marked locked or disconnected will be flagged for review, not blocked."
+        confirmLabel={locatorLockTarget?.newLockStatus === 'disconnected' ? 'Mark Disconnected' : 'Mark Locked'}
+        busy={locatorLockBusy}
+        onConfirm={async (category, detail) => {
+          if (!locatorLockTarget) return;
+          setLocatorLockBusy(true);
+          await applyLocatorLockStatus(locatorLockTarget.locator, locatorLockTarget.newLockStatus, category, detail);
+          setLocatorLockBusy(false);
+          setLocatorLockTarget(null);
         }}
       />
 
