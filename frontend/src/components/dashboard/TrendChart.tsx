@@ -1496,7 +1496,7 @@ export function TrendChart({
     queryKey: ['plant-meter-config-permeate', plantIds],
     queryFn: async () => {
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id, config')
+        .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
       const permeateCounts = new Set<string>();
       // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate')
@@ -1507,7 +1507,18 @@ export function TrendChart({
       // (Step 2) — they stay OUT of this set.
       const productExcluded = new Set<string>();
       (data ?? []).forEach((row: any) => {
-        if (row.config?.permeate_is_production) permeateCounts.add(row.plant_id);
+        // Checks all locations the flag can live in — this file previously only
+        // checked config.permeate_is_production, which misses plants whose config
+        // was saved before the top-level column existed (or after a write that
+        // only reached one of the two) — same 3-way check as Dashboard.tsx and
+        // DataSummaryModal.tsx use, unified here so a plant can't appear "on" in
+        // one view and "off" in another.
+        if (
+          row.permeate_is_production === true ||
+          row.config?.permeate_is_production === true ||
+          row.config?.ro_production_source === 'permeate' ||
+          row.config?.ro_production_source === 'both'
+        ) permeateCounts.add(row.plant_id);
         if (row.config?.ro_production_source === 'permeate') productExcluded.add(row.plant_id);
       });
       return { permeateCounts, productExcluded };

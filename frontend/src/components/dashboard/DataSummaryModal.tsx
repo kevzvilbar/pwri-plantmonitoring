@@ -398,12 +398,21 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   });
 
   // Plants whose RO permeate delta should be pulled in as (part of) production.
-  // Checks the real column first (kept in sync by the DB trigger — see the
-  // plant_meter_config migration), falling back to the config JSONB blob for
-  // rows written before that trigger existed.
+  // Checks all locations the flag can live in — top-level column (kept in sync
+  // by the DB trigger — see the plant_meter_config migration), the config
+  // JSONB blob's own permeate_is_production (rows written before that trigger
+  // existed), and ro_production_source itself as a last-resort fallback.
+  // Matches Dashboard.tsx's permeateProductionPlantIds exactly — previously
+  // this file was missing the ro_production_source checks, so a plant could
+  // show correctly on the Dashboard stat card while still defaulting to
+  // product-meter-only here.
   const permeateIsProductionPlantIds = useMemo(
     () => (modalMeterConfigs ?? [])
-      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
+      .filter((c: any) =>
+        c.permeate_is_production === true ||
+        c.config?.permeate_is_production === true ||
+        c.config?.ro_production_source === 'permeate' ||
+        c.config?.ro_production_source === 'both')
       .map((c: any) => c.plant_id as string),
     [modalMeterConfigs],
   );
