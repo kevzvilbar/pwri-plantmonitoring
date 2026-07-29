@@ -41,16 +41,19 @@ import {
 } from '../shared';
 import { useBlendingWells } from '../shared';
 
+// Blending wells are always metered — there is no such thing as a blending
+// source with no physical meter, so daily volume is always derived as a
+// delta between two cumulative readings. volume_m3 is no longer an accepted
+// direct-entry column; raw_meter_reading is required on every row.
 const BLENDING_SCHEMA =
-  'well_name*,  raw_meter_reading (cumulative) | volume_m3* (daily m³),  ' +
-  'previous_reading (prev cumulative — raw mode only; auto-detected if omitted),  ' +
+  'well_name*,  raw_meter_reading* (cumulative),  ' +
+  'previous_reading (prev cumulative — auto-detected if omitted),  ' +
   'event_date (YYYY-MM-DD),  reading_datetime (YYYY-MM-DDTHH:mm)';
 
 const BLENDING_TEMPLATE_ROW = {
   well_name:          'Well #2',
-  raw_meter_reading:  '12345.00',   // ← provide this (cumulative) …
-  previous_reading:   '12195.00',   //   … and optionally the previous cumulative value
-  volume_m3:          '',           //   OR provide volume_m3 (daily m³) instead
+  raw_meter_reading:  '12345.00',   // ← required: current cumulative meter reading
+  previous_reading:   '12195.00',   //   optional: previous cumulative value (auto-detected if omitted)
   event_date:         '2024-06-15',
   reading_datetime:   '2024-06-15T08:30',
 };
@@ -60,16 +63,11 @@ export function validateBlendingRow(r: Record<string, string>, i: number): strin
   if (!r.well_name?.trim()) e.push(`Row ${i}: well_name is required`);
 
   const hasRaw = !!r.raw_meter_reading?.trim();
-  const hasVol = !!r.volume_m3?.trim();
 
-  if (!hasRaw && !hasVol)
-    e.push(`Row ${i}: provide raw_meter_reading (cumulative meter) or volume_m3 (daily m³) — one is required`);
-  if (hasRaw && hasVol)
-    e.push(`Row ${i}: provide raw_meter_reading OR volume_m3, not both`);
+  if (!hasRaw)
+    e.push(`Row ${i}: raw_meter_reading (cumulative meter) is required — blending wells are metered, volume is always computed as a delta`);
   if (hasRaw && (isNaN(Number(r.raw_meter_reading)) || Number(r.raw_meter_reading) < 0))
     e.push(`Row ${i}: raw_meter_reading must be a non-negative number`);
-  if (hasVol && (isNaN(Number(r.volume_m3)) || Number(r.volume_m3) <= 0))
-    e.push(`Row ${i}: volume_m3 must be a positive number`);
   if (r.previous_reading?.trim() && isNaN(Number(r.previous_reading)))
     e.push(`Row ${i}: previous_reading must be a number`);
   if (r.event_date && isNaN(Date.parse(r.event_date)))
@@ -137,46 +135,45 @@ async function insertBlendingReadings(
       : new Date().toISOString().slice(0, 10);
 
     // ── Compute the volume_m3 value to store ──────────────────────────────
-    let storeVol: number;
-    const isRawRow = !!r.raw_meter_reading?.trim();
-
-    if (isRawRow) {
-      const curRaw = +r.raw_meter_reading;
-      initPrevRaw(wellId);
-
-      // Determine previous: explicit CSV column wins, then batch-tracked, then localStorage
-      const prevRaw: number | null =
-        r.previous_reading?.trim() ? +r.previous_reading
-        : prevRawByWell[wellId] ?? null;
-
-      if (prevRaw == null) {
-        // No prior reading available → baseline: store raw value as first volume entry
-        // (mirrors manual raw-mode behaviour for first-ever reading on a well)
-        storeVol = curRaw;
-      } else {
-        storeVol = curRaw - prevRaw;
-        if (storeVol < 0) {
-          errors.push(
-            `${r.well_name} @ ${eventDate}: negative delta ${storeVol.toFixed(2)} m³ ` +
-            `(raw ${curRaw} − prev ${prevRaw}) — meter rollback? Row skipped.`,
-          );
-          continue;
-        }
-        if (storeVol === 0) {
-          errors.push(
-            `${r.well_name} @ ${eventDate}: delta is 0 (current reading equals previous ${curRaw}). Row skipped.`,
-          );
-          continue;
-        }
-      }
-
-      // Advance the batch tracker so the next row for this well uses this reading
-      prevRawByWell[wellId] = curRaw;
-      pendingRawPersist[wellId] = { reading: curRaw, date: eventDate };
-    } else {
-      // Direct m³ mode — use volume_m3 as-is
-      storeVol = +r.volume_m3;
+    // Blending wells are always metered, so volume is always the delta between
+    // this reading and the previous cumulative reading — never a direct entry.
+    if (!r.raw_meter_reading?.trim()) {
+      errors.push(`${r.well_name} @ ${eventDate}: raw_meter_reading is required — row skipped.`);
+      continue;
     }
+    let storeVol: number;
+    const curRaw = +r.raw_meter_reading;
+    initPrevRaw(wellId);
+
+    // Determine previous: explicit CSV column wins, then batch-tracked, then localStorage
+    const prevRaw: number | null =
+      r.previous_reading?.trim() ? +r.previous_reading
+      : prevRawByWell[wellId] ?? null;
+
+    if (prevRaw == null) {
+      // No prior reading available → baseline: store raw value as first volume entry
+      // (mirrors manual raw-mode behaviour for first-ever reading on a well)
+      storeVol = curRaw;
+    } else {
+      storeVol = curRaw - prevRaw;
+      if (storeVol < 0) {
+        errors.push(
+          `${r.well_name} @ ${eventDate}: negative delta ${storeVol.toFixed(2)} m³ ` +
+          `(raw ${curRaw} − prev ${prevRaw}) — meter rollback? Row skipped.`,
+        );
+        continue;
+      }
+      if (storeVol === 0) {
+        errors.push(
+          `${r.well_name} @ ${eventDate}: delta is 0 (current reading equals previous ${curRaw}). Row skipped.`,
+        );
+        continue;
+      }
+    }
+
+    // Advance the batch tracker so the next row for this well uses this reading
+    prevRawByWell[wellId] = curRaw;
+    pendingRawPersist[wellId] = { reading: curRaw, date: eventDate };
 
     if (!(storeVol > 0)) {
       errors.push(`${r.well_name} @ ${eventDate}: computed volume must be positive (got ${storeVol}). Row skipped.`);
@@ -213,15 +210,15 @@ async function insertBlendingReadings(
       if (existingRec?.length) {
         ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
           .update({ volume_m3: storeVol, plant_id: plantId, well_name: r.well_name, plant_name: plantName,
-            ...(_rdIso ? { reading_datetime: _rdIso } : {}),
-            ...(isRawRow ? { raw_meter_reading: +r.raw_meter_reading } : {}) })
+            raw_meter_reading: curRaw,
+            ...(_rdIso ? { reading_datetime: _rdIso } : {}) })
           .eq('id', existingRec[0].id));
       } else {
         ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
           .insert({ well_id: wellId, plant_id: plantId, well_name: r.well_name, plant_name: plantName,
             event_date: eventDate,
             ...(_rdIso ? { reading_datetime: _rdIso } : {}),
-            volume_m3: storeVol, ...(isRawRow ? { raw_meter_reading: +r.raw_meter_reading } : {}) }));
+            volume_m3: storeVol, raw_meter_reading: curRaw }));
       }
       if (insErr) throw new Error(insErr.message);
       count++;
@@ -442,31 +439,18 @@ export function BlendingForm() {
 }
 
 // ─── Blending per-well localStorage keys ─────────────────────────────────────
-// BUG FIX #2: persist the user's chosen input mode (raw vs direct) across
-// re-mounts / tab switches so it doesn't silently reset to 'direct' each time.
-// BUG FIX #3: persist the last cumulative meter reading entered in raw mode
-// so the Δ calculation and "prev" hint are correct on the next visit.
+// Blending wells are always metered — there's no raw/direct mode choice to
+// persist any more, only the last cumulative meter reading entered, so the
+// Δ calculation and "prev" hint are correct on the next visit.
 // The DB only stores the computed daily-volume delta — it has no cumulative
 // column — so localStorage is the only reliable source for the previous raw value.
-function getBlendingModeKey(wellId: string) { return `blending-mode-${wellId}`; }
 function getBlendingRawKey(wellId: string)  { return `blending-raw-${wellId}`; }
-
-function readPersistedMode(wellId: string): 'raw' | 'direct' {
-  try {
-    const v = localStorage.getItem(getBlendingModeKey(wellId));
-    return v === 'raw' ? 'raw' : 'direct';
-  } catch { return 'direct'; }
-}
 
 function readPersistedRaw(wellId: string): { reading: number; date: string } | null {
   try {
     const v = localStorage.getItem(getBlendingRawKey(wellId));
     return v ? JSON.parse(v) : null;
   } catch { return null; }
-}
-
-function persistMode(wellId: string, mode: 'raw' | 'direct') {
-  try { localStorage.setItem(getBlendingModeKey(wellId), mode); } catch { /* best-effort persist — ignore */ }
 }
 
 function persistRaw(wellId: string, reading: number, date: string) {
@@ -498,25 +482,22 @@ function BlendingRow({
   const [justSaved, setJustSaved] = useState(false);
   const setVolume = (v: string) => { setVolumeRaw(v); setJustSaved(false); };
 
-  // BUG FIX #2: initialise from localStorage so the mode survives remounts/navigation.
-  const [inputMode, setInputMode] = useState<'raw' | 'direct'>(() => readPersistedMode(well.id));
-
-  // BUG FIX #3: the previous *cumulative* meter reading is not stored in the DB
-  // (the DB only keeps the computed daily-volume delta). Read it from localStorage
-  // where it was written on the last successful raw-mode save for this well.
+  // Blending wells are always metered — there is no direct-volume input mode.
+  // The previous *cumulative* meter reading is not stored in the DB (the DB
+  // only keeps the computed daily-volume delta). Read it from localStorage
+  // where it was written on the last successful save for this well.
   const [prevRawReading, setPrevRawReading] = useState<{ reading: number; date: string } | null>(
     () => readPersistedRaw(well.id),
   );
 
-  // Pre-fill the drum with the last persisted raw reading (raw mode) so the
-  // operator starts from the real odometer value and rolls only the changed digits.
+  // Pre-fill the drum with the last persisted raw reading so the operator
+  // starts from the real odometer value and rolls only the changed digits.
   // Priority: localStorage (most recent) → DB latest raw_meter_reading (fallback for
   // new devices / cleared storage) → nothing (first-ever entry).
   // Race-condition fix: same pattern as LocatorRow / WellRow — track last auto-fill
   // in a ref so a poll-driven update to prevRawReading also updates the drum when
   // the user hasn't yet typed anything.
   useEffect(() => {
-    if (inputMode !== 'raw') return;
     const src = prevRawReading?.reading ?? dbLatestRaw?.reading ?? null;
     if (src == null) return;
     const expected = src.toFixed(2);
@@ -524,53 +505,31 @@ function BlendingRow({
       setVolumeRaw(expected);
       lastPrefilledBlend.current = expected;
     }
-  }, [prevRawReading, dbLatestRaw, inputMode, volume]);
+  }, [prevRawReading, dbLatestRaw, volume]);
 
-  // Pre-fill with today's already-logged volume for direct mode.
-  useEffect(() => {
-    if (volume === '' && todayVolume > 0 && inputMode === 'direct') {
-      setVolumeRaw(todayVolume.toFixed(2));
-    }
-  }, [todayVolume, volume, inputMode]);
-
-  // BUG FIX #2: persist the chosen mode and clear the input field.
-  const switchMode = (m: 'raw' | 'direct') => {
-    setInputMode(m);
-    setVolume('');
-    persistMode(well.id, m);
-  };
-
-  // BUG FIX #3: Δ for raw mode uses the persisted cumulative reading first,
-  // then the DB-fetched raw_meter_reading (for cross-device consistency),
-  // finally falling back to the API-supplied previousVolume (daily m³ — less accurate
-  // for cumulative meters, but better than showing nothing).
+  // Δ uses the persisted cumulative reading first, then the DB-fetched
+  // raw_meter_reading (for cross-device consistency), finally falling back to
+  // the API-supplied previousVolume (daily m³ — less accurate for cumulative
+  // meters, but better than showing nothing).
   const prevCumulative: number | null =
     prevRawReading?.reading ?? dbLatestRaw?.reading ?? previousVolume ?? null;
 
-  const deltaRaw = inputMode === 'raw' && volume !== ''
+  const deltaRaw = volume !== ''
     ? prevCumulative != null ? +volume - prevCumulative : null
     : null;
 
-  // BUG FIX #1: Save was permanently disabled in raw mode whenever there was no
-  // prior reading (deltaRaw == null) — e.g. first entry ever for this well.
-  // Fix: allow saving a baseline reading (storeVol = +volume) when no prev exists.
-  // Also guard direct mode against saving 0 m³.
-  const isBaselineRaw = inputMode === 'raw' && prevCumulative == null && volume !== '' && +volume > 0;
-  const volumeChanged = volume !== '' && (
-    inputMode === 'raw'
-      ? isBaselineRaw || (deltaRaw != null && deltaRaw > 0)  // allow baseline entry
-      : +volume > 0 && +volume !== todayVolume               // guard against saving 0
-  );
+  // Allow saving a baseline reading (storeVol = +volume) when no prior
+  // cumulative reading exists yet — e.g. first entry ever for this well.
+  const isBaselineRaw = prevCumulative == null && volume !== '' && +volume > 0;
+  const volumeChanged = volume !== '' && (isBaselineRaw || (deltaRaw != null && deltaRaw > 0));
 
   // ── Warning flags (mirrors well / locator logic) ───────────────────────────
-  // Negative delta: raw mode reading goes below previous cumulative.
-  const blendBelowPrev = inputMode === 'raw' && deltaRaw != null && deltaRaw < 0;
+  const blendBelowPrev = deltaRaw != null && deltaRaw < 0;
   // Above-average: compare current entry volume against avgVol (or previousVolume as
   // fallback reference) scaled by the shared ALERTS multiplier.
-  const blendVolToCheck = inputMode === 'raw' ? (deltaRaw ?? null) : (volume !== '' ? +volume : null);
   const avgRef = avgVol ?? previousVolume;
-  const blendHighVol = avgRef != null && blendVolToCheck != null
-    && blendVolToCheck > avgRef * ALERTS.avg_multiplier_warn;
+  const blendHighVol = avgRef != null && deltaRaw != null
+    && deltaRaw > avgRef * ALERTS.avg_multiplier_warn;
 
   // ── Status chip: "Not logged" → "Ready to save" → "Logged today" ──────────
   // Replaces having to parse "prev: — · today: 0 m³ logged" — the color alone
@@ -578,39 +537,27 @@ function BlendingRow({
   const chipState: 'pending' | 'ready' | 'logged' =
     (todayVolume > 0 || justSaved) ? 'logged' : volumeChanged ? 'ready' : 'pending';
 
-  // ── Live preview of what Save will actually commit — brought back and made
-  // prominent (it existed before as a muted, easy-to-miss 10px line under the
-  // raw-mode input only). Direct mode gets one too now, since "what will
-  // actually be saved" is just as worth previewing there.
+  // ── Live preview of what Save will actually commit ─────────────────────────
   let previewLine: React.ReactNode = null;
-  if (inputMode === 'raw') {
-    if (volume !== '' && deltaRaw != null) {
-      previewLine = (
-        <>Δ <span className={`font-semibold ${deltaRaw >= 0 ? 'text-kpi-ro' : 'text-destructive'}`}>{fmtNum(deltaRaw)} m³</span> will be saved</>
-      );
-    } else if (isBaselineRaw) {
-      previewLine = (
-        <>First reading — <span className="font-semibold text-kpi-ro">{fmtNum(+volume)} m³</span> will be saved as baseline</>
-      );
-    }
-  } else if (volume !== '' && +volume > 0) {
+  if (volume !== '' && deltaRaw != null) {
     previewLine = (
-      <><span className="font-semibold text-kpi-ro">{fmtNum(+volume)} m³</span> will be saved for today</>
+      <>Δ <span className={`font-semibold ${deltaRaw >= 0 ? 'text-kpi-ro' : 'text-destructive'}`}>{fmtNum(deltaRaw)} m³</span> will be saved</>
+    );
+  } else if (isBaselineRaw) {
+    previewLine = (
+      <>First reading — <span className="font-semibold text-kpi-ro">{fmtNum(+volume)} m³</span> will be saved as baseline</>
     );
   }
 
   const save = async () => {
     const eventDate = customDt.slice(0, 10);
 
-    // BUG FIX #1 cont.: when no previous cumulative reading exists (baseline),
-    // store the raw meter reading itself as the daily volume for this first entry.
-    const storeVol = inputMode === 'raw'
-      ? (deltaRaw != null ? deltaRaw : +volume)   // baseline → store full reading
-      : +volume;
+    // When no previous cumulative reading exists (baseline), store the raw
+    // meter reading itself as the daily volume for this first entry.
+    const storeVol = deltaRaw != null ? deltaRaw : +volume;
 
     if (!volume || !(storeVol > 0)) {
-      // BUG FIX #4a: more descriptive error in raw mode (negative delta case).
-      if (inputMode === 'raw' && deltaRaw != null && deltaRaw <= 0) {
+      if (deltaRaw != null && deltaRaw <= 0) {
         toast.error(`${well.name}: current reading must be greater than the previous (${fmtNum(prevCumulative!)})`);
       } else {
         toast.error(`${well.name}: enter a positive blending volume`);
@@ -629,32 +576,29 @@ function BlendingRow({
         ({ error } = await (supabase.from('blending_events' as any) as any)
           .update({ volume_m3: storeVol, plant_id: plantId, well_name: well.name, plant_name: plantName,
             reading_datetime: new Date(customDt).toISOString(),
-            ...(inputMode === 'raw' ? { raw_meter_reading: +volume } : {}) })
+            raw_meter_reading: +volume })
           .eq('id', existing[0].id));
       } else {
         ({ error } = await (supabase.from('blending_events' as any) as any)
           .insert({ well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
             event_date: eventDate, reading_datetime: new Date(customDt).toISOString(),
-            volume_m3: storeVol,
-            ...(inputMode === 'raw' ? { raw_meter_reading: +volume } : {}) }));
+            volume_m3: storeVol, raw_meter_reading: +volume }));
       }
       if (error) throw error;
 
-      // BUG FIX #3 cont.: persist the cumulative meter reading locally so the
-      // next raw-mode save can compute the correct Δ.
-      if (inputMode === 'raw') {
-        persistRaw(well.id, +volume, eventDate);
-        setPrevRawReading({ reading: +volume, date: eventDate });
-        // Reset the pre-fill guard so the drum auto-fills with the new "prev"
-        // value after setVolume('') clears the input.
-        lastPrefilledBlend.current = null;
-      }
+      // Persist the cumulative meter reading locally so the next save can
+      // compute the correct Δ.
+      persistRaw(well.id, +volume, eventDate);
+      setPrevRawReading({ reading: +volume, date: eventDate });
+      // Reset the pre-fill guard so the drum auto-fills with the new "prev"
+      // value after setVolume('') clears the input.
+      lastPrefilledBlend.current = null;
 
       toast.success(`${well.name}: blending volume saved (${fmtNum(storeVol)} m³)`);
       setVolume('');
       setJustSaved(true);
 
-      // BUG FIX #4b: invalidate dashboard so stat cards refresh immediately.
+      // Invalidate dashboard so stat cards refresh immediately.
       invalidateWellDash(qc, [well.id]);
       onSaved();
     } catch (e) {
@@ -711,29 +655,18 @@ function BlendingRow({
           color reads at a glance, the text alongside it keeps the real numbers. */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xs text-muted-foreground">
-          {inputMode === 'raw' ? (
-            <>
-              {/* Priority: localStorage → DB raw_meter_reading → daily vol fallback */}
-              prev meter: <span className="font-mono-num" title={
-                prevRawReading
-                  ? `Last cumulative reading on ${prevRawReading.date}`
-                  : dbLatestRaw
-                    ? `Last cumulative reading on ${dbLatestRaw.date} (from DB)`
-                    : previousDate ? `Last entry on ${previousDate} (daily vol)` : 'No prior reading'
-              }>
-                {prevCumulative != null ? fmtNum(prevCumulative) : '—'}
-              </span>
-              {(prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate) && (
-                <span className="text-muted-foreground/60 ml-1">({prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate})</span>
-              )}
-            </>
-          ) : (
-            <>
-              prev: <span className="font-mono-num" title={previousDate ? `last entry on ${previousDate}` : 'no prior blending entry'}>
-                {previousVolume == null ? '—' : `${fmtNum(previousVolume)} m³`}
-              </span>
-              {previousDate && <span className="text-muted-foreground/60 ml-1">({previousDate})</span>}
-            </>
+          {/* Priority: localStorage → DB raw_meter_reading → daily vol fallback */}
+          prev meter: <span className="font-mono-num" title={
+            prevRawReading
+              ? `Last cumulative reading on ${prevRawReading.date}`
+              : dbLatestRaw
+                ? `Last cumulative reading on ${dbLatestRaw.date} (from DB)`
+                : previousDate ? `Last entry on ${previousDate} (daily vol)` : 'No prior reading'
+          }>
+            {prevCumulative != null ? fmtNum(prevCumulative) : '—'}
+          </span>
+          {(prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate) && (
+            <span className="text-muted-foreground/60 ml-1">({prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate})</span>
           )}
           <span className="mx-1">·</span>
           today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span>
@@ -756,28 +689,10 @@ function BlendingRow({
         )}
       </div>
 
-      {/* Row 3: Direct m³ / Raw meter — animated sliding toggle. Same two
-          states as before (flat competing buttons), now reads as one setting
-          with two positions rather than two buttons fighting for attention. */}
-      <div className="relative flex bg-muted rounded-lg p-0.5 h-8">
-        <div
-          aria-hidden="true"
-          className={`absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-kpi-ro shadow-sm transition-transform duration-200 ease-out ${inputMode === 'raw' ? 'translate-x-full' : 'translate-x-0'}`}
-        />
-        <button
-          type="button"
-          onClick={() => switchMode('direct')}
-          className={`relative z-10 flex-1 text-xs font-medium rounded-md transition-colors ${inputMode === 'direct' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
-        >Direct m³</button>
-        <button
-          type="button"
-          onClick={() => switchMode('raw')}
-          className={`relative z-10 flex-1 text-xs font-medium rounded-md transition-colors ${inputMode === 'raw' ? 'text-white' : 'text-muted-foreground hover:text-foreground'}`}
-        >Raw Meter</button>
-      </div>
-
-      {/* Row 4: Input — drum roller (mobile + raw) or regular input */}
-      {isMobile && inputMode === 'raw' ? (
+      {/* Row 3: Input — drum roller (mobile) or regular input. Blending wells
+          are always metered, so this is always a cumulative meter reading —
+          there is no direct-volume alternative to switch to. */}
+      {isMobile ? (
         <div className="space-y-1">
           <OdometerRollerInput
             value={volume} onChange={setVolume}
@@ -794,15 +709,14 @@ function BlendingRow({
           <Droplet className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-ro pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={volume}
             onChange={(e) => setVolume(e.target.value)}
-            placeholder={inputMode === 'raw' ? 'Cumulative meter reading' : 'Blending m³'}
+            placeholder="Cumulative meter reading"
             className="h-9 pl-7 w-full border-kpi-ro focus-visible:ring-violet-300 bg-kpi-ro/40"
             data-testid={`blending-input-${well.id}`} />
         </div>
       )}
 
-      {/* Live preview of what Save will actually commit — brought back and
-          made prominent (previously a muted 10px line, raw-mode only, easy
-          to miss). Now covers both modes and sits right above the button. */}
+      {/* Live preview of what Save will actually commit — sits right above
+          the button so the Δ that's about to be written is never a surprise. */}
       {previewLine && (
         <div className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-kpi-ro/15 border border-kpi-ro">
           {previewLine}
