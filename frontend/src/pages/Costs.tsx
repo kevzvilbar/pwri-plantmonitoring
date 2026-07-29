@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
 import { BudgetTab } from '@/components/costs/BudgetTab';
+import { CostsFiltersTab } from '@/components/costs/CostsFiltersTab';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
 import { downloadCSV } from '@/lib/csv';
@@ -537,6 +538,40 @@ async function insertBillingRows(
   return { count, errors };
 }
 
+// ─── Filters tab wrapper ──────────────────────────────────────────────────
+// CostsFiltersTab itself is plant-scoped (plantId/plantName/filterHousingType
+// as props, no picker of its own) so it can be reused per-train elsewhere
+// later. Here on the Costs page it needs the same self-contained
+// PlantPicker + role check every other tab manages independently — same
+// pattern as BudgetTab above.
+function FiltersTab() {
+  const { isManager, isAdmin } = useAuth();
+  const { selectedPlantId } = useAppStore();
+  const { data: plants } = usePlants();
+  const [plantId, setPlantId] = useState(selectedPlantId ?? '');
+
+  const plant = plants?.find((p) => p.id === plantId);
+  const canEdit = isManager || isAdmin;
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3">
+        <Label className="text-xs">Plant</Label>
+        <PlantPicker value={plantId} onChange={setPlantId} />
+      </Card>
+      {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
+      {plantId && plant && (
+        <CostsFiltersTab
+          plantId={plantId}
+          plantName={plant.name}
+          filterHousingType={plant.filter_housing_type}
+          canEdit={canEdit}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Costs() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'rollup';
@@ -546,13 +581,14 @@ export default function Costs() {
   const canViewBudget = isManager || isAdmin;
   return (
     <div className="space-y-4 animate-fade-in">
-      <PageHeader title="Costs" subtitle="Production cost, power bills & tariffs, chemical prices" />
+      <PageHeader title="Costs" subtitle="Production cost, power bills & tariffs, chemical & filter prices" />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })}>
-        <TabsList className={`grid ${canViewBudget ? 'grid-cols-5' : 'grid-cols-4'} w-full h-auto bg-muted rounded-xl p-1`}>
+        <TabsList className={`grid ${canViewBudget ? 'grid-cols-6' : 'grid-cols-5'} w-full h-auto bg-muted rounded-xl p-1`}>
           <TabsTrigger value="rollup" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Rollup</TabsTrigger>
           <TabsTrigger value="power" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Power</TabsTrigger>
           <TabsTrigger value="compare" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Compare</TabsTrigger>
           <TabsTrigger value="prices" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Prices</TabsTrigger>
+          <TabsTrigger value="filters" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Filters</TabsTrigger>
           {canViewBudget && (
             <TabsTrigger value="budget" className="text-xs sm:text-sm py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm">Budget</TabsTrigger>
           )}
@@ -562,6 +598,7 @@ export default function Costs() {
         {/* "tariff" and "bills" tabs removed — both merged into the Power tab */}
         <TabsContent value="compare" className="mt-3"><Compare /></TabsContent>
         <TabsContent value="prices" className="mt-3"><ChemicalPrices /></TabsContent>
+        <TabsContent value="filters" className="mt-3"><FiltersTab /></TabsContent>
         {canViewBudget && <TabsContent value="budget" className="mt-3"><BudgetTab /></TabsContent>}
       </Tabs>
     </div>

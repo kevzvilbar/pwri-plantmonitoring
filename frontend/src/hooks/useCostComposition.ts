@@ -1,10 +1,17 @@
 // Aggregates cost data into a hierarchy suitable for the Cost Composition
-// Sunburst: Cost -> {Power, Chemicals} -> individual chemical ($).
+// Sunburst: Cost -> {Power, Chemicals, Filters} -> individual chemical /
+// filter housing type ($).
 //
-// Ring 1 (Power / Chemicals) comes straight from `production_costs`, which
-// already splits every day into power_cost / chem_cost. Ring 2 is new: it
-// prices out each of the five chemical_dosing_logs quantity columns using
-// the latest chemical_prices.unit_price as of the period's end date.
+// Ring 1 (Power / Chemicals / Filters) comes straight from
+// `production_costs`, which splits every day into power_cost / chem_cost /
+// filter_cost (filter_cost added by 20260729_filter_replacements.sql, kept
+// in sync via trigger from filter_replacements — see that migration).
+// Ring 2 under Chemicals prices out each of the five chemical_dosing_logs
+// quantity columns using the latest chemical_prices.unit_price as of the
+// period's end date. Ring 2 under Filters splits filter_cost by
+// filter_housing_type (Cartridge Filter / Bag Filter) straight from the
+// filter_replacements rows in the period — no separate "price list" to
+// join against, since filter cost is already logged per-event.
 //
 // chemical_prices.chemical_name is free text the user enters on the Costs
 // page (see the `KNOWN` preset list there: 'Chlorine', 'SMBS', 'Anti
@@ -30,6 +37,8 @@ export interface CostComposition {
   pricedChemTotal: number;
   hasChemBreakdown: boolean;
   unpricedChemicals: string[];
+  filterCostTotal: number;
+  hasFilterBreakdown: boolean;
 }
 
 const DOSING_QTY_COLUMNS = [
@@ -89,10 +98,10 @@ export function useCostComposition(plantIds: string[], days: number) {
       const sinceIsoDatetime = `${sinceStr}T00:00:00`;
       const todayIsoDatetime = `${todayStr}T23:59:59`;
 
-      const [costRes, dosingRes, priceRes] = await Promise.all([
+      const [costRes, dosingRes, priceRes, filterRes] = await Promise.all([
         supabase
           .from('production_costs')
-          .select('plant_id, power_cost, chem_cost')
+          .select('plant_id, power_cost, chem_cost, filter_cost')
           .in('plant_id', plantIds)
           .gte('cost_date', sinceStr)
           .lte('cost_date', todayStr),
@@ -107,11 +116,21 @@ export function useCostComposition(plantIds: string[], days: number) {
           .select('chemical_name, unit_price, effective_date')
           .lte('effective_date', todayStr)
           .order('effective_date', { ascending: false }),
+        // Filters' Ring 2 doesn't need a price-list join like Chemicals does —
+        // total_cost is already stored per replacement event, so we can group
+        // straight from filter_replacements instead of pricing anything out.
+        supabase
+          .from('filter_replacements')
+          .select('plant_id, filter_housing_type, total_cost, replacement_date')
+          .in('plant_id', plantIds)
+          .gte('replacement_date', sinceStr)
+          .lte('replacement_date', todayStr),
       ]);
 
       const costRows = costRes.data ?? [];
       const dosingRows = dosingRes.data ?? [];
       const priceRows = priceRes.data ?? [];
+      const filterRows = filterRes.data ?? [];
 
       // Latest price per chemical name as of the period end (prices are
       // global, not per-plant, matching how the Costs page manages them).
@@ -126,6 +145,19 @@ export function useCostComposition(plantIds: string[], days: number) {
 
       const powerTotal = costRows.reduce((s, r) => s + (Number(r.power_cost) || 0), 0);
       const chemCostTotal = costRows.reduce((s, r) => s + (Number(r.chem_cost) || 0), 0);
+      const filterCostTotal = costRows.reduce((s, r) => s + (Number((r as Record<string, unknown>).filter_cost) || 0), 0);
+
+      // Group replacement events by housing type for the Filters ring —
+      // at most two children (Cartridge Filter / Bag Filter), so no need for
+      // the unpriced-item bookkeeping Chemicals needs.
+      const filterByType = new Map<string, number>();
+      for (const row of filterRows) {
+        const key = row.filter_housing_type as string;
+        filterByType.set(key, (filterByType.get(key) ?? 0) + (Number(row.total_cost) || 0));
+      }
+      const filterChildren: CostSunburstNode[] = Array.from(filterByType.entries())
+        .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }));
+      const hasFilterBreakdown = filterChildren.length > 0;
 
       const qtyTotals: Record<DosingCol, number> = {
         chlorine_kg: 0, anti_scalant_l: 0, smbs_kg: 0, soda_ash_kg: 0, free_chlorine_reagent_pcs: 0,
@@ -172,11 +204,17 @@ export function useCostComposition(plantIds: string[], days: number) {
             value: Math.round((hasChemBreakdown ? pricedChemTotal : chemCostTotal) * 100) / 100,
             children: hasChemBreakdown ? chemChildren : undefined,
           },
+          {
+            name: 'Filters',
+            value: Math.round(filterCostTotal * 100) / 100,
+            children: hasFilterBreakdown ? filterChildren : undefined,
+          },
         ],
       };
 
       return {
         root, powerTotal, chemCostTotal, pricedChemTotal, hasChemBreakdown, unpricedChemicals,
+        filterCostTotal, hasFilterBreakdown,
       };
     },
     enabled: plantIds.length > 0,

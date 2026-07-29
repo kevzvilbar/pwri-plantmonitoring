@@ -1,7 +1,8 @@
-// Cost Composition Sunburst: Cost -> {Power, Chemicals} -> individual
-// chemical ($). Built with d3-hierarchy (partition layout) + d3-shape (arc
-// path generator) for the math only — all DOM is rendered through React
-// JSX, not d3-selection, so it behaves like any other React component.
+// Cost Composition Sunburst: Cost -> {Power, Chemicals, Filters} ->
+// individual chemical / filter housing type ($). Built with d3-hierarchy
+// (partition layout) + d3-shape (arc path generator) for the math only —
+// all DOM is rendered through React JSX, not d3-selection, so it behaves
+// like any other React component.
 //
 // Layout mirrors the rest of the dashboard's compact chart cards (`p-3`
 // Card, 13px bold title row) instead of the generic shadcn Card
@@ -11,7 +12,9 @@
 // was no per-chemical price breakdown to show. Power/Chemicals use the
 // same accent colors (--chart-6 / --highlight) as the Power Cost / Chemical
 // Cost stat cards right above this on the Dashboard, so the sunburst reads
-// as a continuation of those tiles rather than an unrelated chart.
+// as a continuation of those tiles rather than an unrelated chart. Filters
+// gets --chart-4 (violet) — unused elsewhere on this chart, and distinct
+// from both neighbors at a glance.
 //
 // Zoom: clicking a ring segment (or its legend row) re-centers the layout
 // on that node by recomputing every node's angular span relative to the
@@ -51,6 +54,7 @@ const SIZE = 220;
 // regardless of which slice happens to be bigger this period.
 const POWER_COLOR = 'hsl(var(--chart-6))';
 const CHEM_COLOR = 'hsl(var(--highlight))';
+const FILTER_COLOR = 'hsl(var(--chart-4))';
 
 function peso(n: number) {
   return `₱${fmtNum(n)}`;
@@ -121,7 +125,7 @@ export function CostSunburst({ plantIds }: Props) {
   const colorFor = (d: RNode): string => {
     let n: RNode = d;
     while (n.depth > 1 && n.parent) n = n.parent as RNode;
-    return n.data.name === 'Power' ? POWER_COLOR : CHEM_COLOR;
+    return n.data.name === 'Power' ? POWER_COLOR : n.data.name === 'Chemicals' ? CHEM_COLOR : FILTER_COLOR;
   };
   const opacityFor = (d: RNode) => {
     const rel = d.depth - (focus?.depth ?? 0);
