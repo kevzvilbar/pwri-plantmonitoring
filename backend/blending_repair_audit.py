@@ -43,10 +43,11 @@ USAGE
   python blending_repair_audit.py --apply
 
 Requires SUPABASE_URL and SUPABASE_ANON_KEY in the environment (same as the
-backend server — see supa_client.py). The 20260729_blending_events_meter_
-columns.sql migration must already be applied — it adds the UPDATE policy
-this script needs to write corrections, and without it every write here will
-silently affect 0 rows.
+backend server — see supa_client.py). Both 20260729_blending_events_meter_
+columns.sql (adds the UPDATE policy this script needs to write corrections)
+and 20260729_blending_previous_reading_trigger.sql (adds previous_reading —
+this script's --apply path writes it explicitly for every row it fixes, see
+that migration's header for why) must already be applied before using --apply.
 """
 from __future__ import annotations
 
@@ -115,7 +116,7 @@ def analyze(rows: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:
 
             if looks_cumulative:
                 delta = round(vol - prev_vol, 2)
-                fixable.append({**r, "corrected_volume_m3": delta, "was_stored_as": vol})
+                fixable.append({**r, "corrected_volume_m3": delta, "was_stored_as": vol, "resolved_previous_reading": prev_vol})
             else:
                 # Either the first row in a run (nothing to diff against) or
                 # the series went down / reset — both need a human to decide
@@ -150,7 +151,8 @@ def apply_fixes(db: Client, fixable: list[dict]) -> None:
         print("Nothing to apply.")
         return
     print(f"\nAbout to UPDATE {len(fixable)} row(s): volume_m3 → corrected Δ, "
-          f"raw_meter_reading → the value currently stored in volume_m3 (it was the real meter reading).")
+          f"raw_meter_reading → the value currently stored in volume_m3 (it was the real meter reading), "
+          f"previous_reading → the prior row's true cumulative value.")
     confirm = input("Type 'apply' to proceed, anything else to cancel: ")
     if confirm.strip().lower() != "apply":
         print("Cancelled — no changes made.")
@@ -163,6 +165,14 @@ def apply_fixes(db: Client, fixable: list[dict]) -> None:
                 .update({
                     "volume_m3": r["corrected_volume_m3"],
                     "raw_meter_reading": r["was_stored_as"],
+                    # Required as of 20260729_blending_previous_reading_trigger.sql —
+                    # trg_blending_set_reading only auto-resolves previous_reading on
+                    # INSERT, never UPDATE, and this row's actual predecessor in the
+                    # table may still have raw_meter_reading = NULL at this point (it
+                    # hasn't been fixed/reviewed yet), so leaving this unset would let
+                    # the trigger treat the row as a fresh baseline and re-zero the
+                    # delta computed above.
+                    "previous_reading": r["resolved_previous_reading"],
                 })
                 .eq("id", r["id"])
                 .execute()

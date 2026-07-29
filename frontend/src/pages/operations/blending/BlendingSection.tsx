@@ -93,8 +93,11 @@ async function insertBlendingReadings(
   //   2. Last raw_meter_reading processed for this well earlier in this batch
   //      (rows are sorted chronologically before processing)
   //   3. localStorage value persisted by manual BlendingRow entries or prior imports
-  // If nothing is found → baseline entry: store the raw value as volume_m3 directly
-  // (same behaviour as the manual raw-mode save with no prior reading).
+  // If nothing is found here, previous_reading is simply omitted from the
+  // write — trg_blending_set_reading (20260729_blending_previous_reading_
+  // trigger.sql) resolves it from the well's own history on INSERT, or
+  // correctly treats it as a genuine baseline (0 m³ logged) if none exists
+  // anywhere. Nothing here ever stores the raw reading itself as a volume.
   const prevRawByWell: Record<string, number | null> = {};
 
   const initPrevRaw = (wellId: string) => {
@@ -134,14 +137,14 @@ async function insertBlendingReadings(
       ? `${_parsedEvent.getFullYear()}-${String(_parsedEvent.getMonth() + 1).padStart(2, '0')}-${String(_parsedEvent.getDate()).padStart(2, '0')}`
       : new Date().toISOString().slice(0, 10);
 
-    // ── Compute the volume_m3 value to store ──────────────────────────────
-    // Blending wells are always metered, so volume is always the delta between
-    // this reading and the previous cumulative reading — never a direct entry.
+    // ── Client-side delta preview — this is validation only now (fast,
+    // per-row error messages before a round trip), not what actually gets
+    // stored. trg_blending_set_reading (20260729_blending_previous_reading_
+    // trigger.sql) owns volume_m3 server-side; the client never writes it.
     if (!r.raw_meter_reading?.trim()) {
       errors.push(`${r.well_name} @ ${eventDate}: raw_meter_reading is required — row skipped.`);
       continue;
     }
-    let storeVol: number;
     const curRaw = +r.raw_meter_reading;
     initPrevRaw(wellId);
 
@@ -150,20 +153,16 @@ async function insertBlendingReadings(
       r.previous_reading?.trim() ? +r.previous_reading
       : prevRawByWell[wellId] ?? null;
 
-    if (prevRaw == null) {
-      // No prior reading available → baseline: store raw value as first volume entry
-      // (mirrors manual raw-mode behaviour for first-ever reading on a well)
-      storeVol = curRaw;
-    } else {
-      storeVol = curRaw - prevRaw;
-      if (storeVol < 0) {
+    if (prevRaw != null) {
+      const previewDelta = curRaw - prevRaw;
+      if (previewDelta < 0) {
         errors.push(
-          `${r.well_name} @ ${eventDate}: negative delta ${storeVol.toFixed(2)} m³ ` +
+          `${r.well_name} @ ${eventDate}: negative delta ${previewDelta.toFixed(2)} m³ ` +
           `(raw ${curRaw} − prev ${prevRaw}) — meter rollback? Row skipped.`,
         );
         continue;
       }
-      if (storeVol === 0) {
+      if (previewDelta === 0) {
         errors.push(
           `${r.well_name} @ ${eventDate}: delta is 0 (current reading equals previous ${curRaw}). Row skipped.`,
         );
@@ -174,11 +173,6 @@ async function insertBlendingReadings(
     // Advance the batch tracker so the next row for this well uses this reading
     prevRawByWell[wellId] = curRaw;
     pendingRawPersist[wellId] = { reading: curRaw, date: eventDate };
-
-    if (!(storeVol > 0)) {
-      errors.push(`${r.well_name} @ ${eventDate}: computed volume must be positive (got ${storeVol}). Row skipped.`);
-      continue;
-    }
 
     // ── Duplicate check: same well + same event_date ───────────────────────
     try {
@@ -209,16 +203,18 @@ async function insertBlendingReadings(
       let insErr: any;
       if (existingRec?.length) {
         ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
-          .update({ volume_m3: storeVol, plant_id: plantId, well_name: r.well_name, plant_name: plantName,
+          .update({ plant_id: plantId, well_name: r.well_name, plant_name: plantName,
             raw_meter_reading: curRaw,
-            ...(_rdIso ? { reading_datetime: _rdIso } : {}) })
+            ...(_rdIso ? { reading_datetime: _rdIso } : {}),
+            ...(prevRaw != null ? { previous_reading: prevRaw } : {}) })
           .eq('id', existingRec[0].id));
       } else {
         ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
           .insert({ well_id: wellId, plant_id: plantId, well_name: r.well_name, plant_name: plantName,
             event_date: eventDate,
             ...(_rdIso ? { reading_datetime: _rdIso } : {}),
-            volume_m3: storeVol, raw_meter_reading: curRaw }));
+            raw_meter_reading: curRaw,
+            ...(prevRaw != null ? { previous_reading: prevRaw } : {}) }));
       }
       if (insErr) throw new Error(insErr.message);
       count++;
@@ -552,8 +548,11 @@ function BlendingRow({
   const save = async () => {
     const eventDate = customDt.slice(0, 10);
 
-    // When no previous cumulative reading exists (baseline), store the raw
-    // meter reading itself as the daily volume for this first entry.
+    // Client-side preview/guard only — mirrors deltaRaw when a previous
+    // reading is known, or the raw entry itself as a placeholder when this
+    // looks like a first-ever reading. What actually gets stored is decided
+    // server-side by trg_blending_set_reading, which correctly logs 0 m³ for
+    // a genuine baseline rather than the full reading.
     const storeVol = deltaRaw != null ? deltaRaw : +volume;
 
     if (!volume || !(storeVol > 0)) {
@@ -573,8 +572,13 @@ function BlendingRow({
         .select('id').eq('well_id', well.id).eq('event_date', eventDate).limit(1);
       let error: any;
       if (existing?.length) {
+        // previous_reading intentionally omitted on UPDATE — carries forward
+        // unchanged (trg_blending_set_reading only auto-resolves it on
+        // INSERT), so correcting a typo'd reading here never re-baselines it.
+        // volume_m3 is never sent; the trigger recomputes it from
+        // raw_meter_reading / previous_reading on every write.
         ({ error } = await (supabase.from('blending_events' as any) as any)
-          .update({ volume_m3: storeVol, plant_id: plantId, well_name: well.name, plant_name: plantName,
+          .update({ plant_id: plantId, well_name: well.name, plant_name: plantName,
             reading_datetime: new Date(customDt).toISOString(),
             raw_meter_reading: +volume })
           .eq('id', existing[0].id));
@@ -582,19 +586,21 @@ function BlendingRow({
         ({ error } = await (supabase.from('blending_events' as any) as any)
           .insert({ well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
             event_date: eventDate, reading_datetime: new Date(customDt).toISOString(),
-            volume_m3: storeVol, raw_meter_reading: +volume }));
+            raw_meter_reading: +volume,
+            ...(prevCumulative != null ? { previous_reading: prevCumulative } : {}) }));
       }
       if (error) throw error;
 
       // Persist the cumulative meter reading locally so the next save can
-      // compute the correct Δ.
+      // compute the correct Δ. Purely a same-device UX cache now — the
+      // trigger is the actual source of truth for what gets stored.
       persistRaw(well.id, +volume, eventDate);
       setPrevRawReading({ reading: +volume, date: eventDate });
       // Reset the pre-fill guard so the drum auto-fills with the new "prev"
       // value after setVolume('') clears the input.
       lastPrefilledBlend.current = null;
 
-      toast.success(`${well.name}: blending volume saved (${fmtNum(storeVol)} m³)`);
+      toast.success(`${well.name}: meter reading saved${deltaRaw != null ? ` (Δ ${fmtNum(deltaRaw)} m³)` : ''}`);
       setVolume('');
       setJustSaved(true);
 

@@ -283,7 +283,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     } else if (module === 'blending') {
       const eventDt = r.event_date ?? r.noted_at ?? '';
       const blendDtStr = eventDt ? format(new Date(eventDt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
-      setEditRow({ id: r.id, datetime: blendDtStr, value: String(r.volume_m3 ?? ''), isMeterReplacement: !!r.is_meter_replacement });
+      setEditRow({ id: r.id, datetime: blendDtStr, value: String(r.raw_meter_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
     }
   };
 
@@ -530,14 +530,14 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 
     if (module === 'blending') {
       const blendPayload: Record<string, any> = {
-        volume_m3: +editRow.value,
+        raw_meter_reading: +editRow.value,
         event_date: editRow.datetime.slice(0, 10),
+        reading_datetime: new Date(editRow.datetime).toISOString(),
         is_meter_replacement: !!editRow.isMeterReplacement,
-        // Preserve raw_meter_reading from the original row if available; editor
-        // only changes volume_m3 so we copy it forward unchanged.
-        ...(rows?.find((r: any) => r.id === editRow.id)?.raw_meter_reading != null
-          ? { raw_meter_reading: rows.find((r: any) => r.id === editRow.id).raw_meter_reading }
-          : {}),
+        // previous_reading intentionally omitted — trg_blending_set_reading
+        // (20260729_blending_previous_reading_trigger.sql) only auto-resolves
+        // it on INSERT, so it carries forward unchanged on UPDATE and
+        // volume_m3 is recomputed from it plus the corrected raw_meter_reading.
       };
       const { error: _ue, count: _uc } = await (supabase.from('blending_events' as any) as any)
         .update(blendPayload, { count: 'exact' })
@@ -638,7 +638,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               </div>
               <div>
                 <Label className="text-[11px]">
-                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Volume (m³)' : 'Grid Power Reading (kWh)'}
+                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : 'Grid Power Reading (kWh)'}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })}
