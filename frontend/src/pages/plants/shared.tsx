@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 // ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
 // Plants.tsx owns recomputePermeateDeltas — the authoritative DB write for
 // permeate_meter_delta.  After each successful UPDATE we also call
@@ -299,6 +299,12 @@ export const DEFAULT_METER_CONFIG: PlantMeterConfig = {
 };
 
 export const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantId}`;
+// Marker key: present only when the last saveConfig() call could NOT reach
+// Supabase and fell back to localStorage-only. Dashboard.tsx / TrendChart.tsx /
+// DataSummaryModal.tsx all read plant_meter_config straight from Supabase (not
+// through this hook), so a config stuck behind this marker is invisible to
+// every production/consumption calculation until it actually syncs.
+const UNSYNCED_CONFIG_LS = (plantId: string) => `plant_meter_config_unsynced_${plantId}`;
 
 /**
  * One-time forward migration: if a stored config still has the old scalar
@@ -347,14 +353,74 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     },
   });
 
+  const [isLocalOnly, setIsLocalOnly] = useState(false);
+
+  useEffect(() => {
+    if (!plantId) { setIsLocalOnly(false); return; }
+    try { setIsLocalOnly(localStorage.getItem(UNSYNCED_CONFIG_LS(plantId)) !== null); }
+    catch { setIsLocalOnly(false); }
+  }, [plantId]);
+
+  // Push payload used by both saveConfig and the retry effect below — always
+  // writes permeate_is_production as a real top-level column, not just inside
+  // the jsonb blob. Don't rely solely on trg_sync_permeate_is_production (added
+  // in 20260729_plant_meter_config_and_both_production_source.sql) to mirror it
+  // server-side — that migration has to be run manually against this project's
+  // DB (see its own header comment) and may not have landed live yet.
+  // Dashboard.tsx / TrendChart.tsx / DataSummaryModal.tsx all select and filter
+  // on this top-level column directly.
+  const pushToDb = useCallback(async (cfg: PlantMeterConfig) => {
+    const { error } = await (supabase.from('plant_meter_config' as any) as any)
+      .upsert(
+        {
+          plant_id: plantId,
+          config: cfg,
+          permeate_is_production: cfg.permeate_is_production,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'plant_id' },
+      );
+    return !error;
+  }, [plantId]);
+
+  // ── Retry-on-load ───────────────────────────────────────────────────────
+  // If a previous saveConfig() couldn't reach Supabase (missing table, RLS
+  // block, offline device) it's marked local-only via UNSYNCED_CONFIG_LS.
+  // Every time this hook mounts/re-mounts for a plant with that marker set,
+  // silently retry the push — so a config that was only ever "saved" in one
+  // operator's browser has a chance to reach the DB (and every screen that
+  // reads it directly) without anyone having to notice and re-save by hand.
+  useEffect(() => {
+    if (!plantId) return;
+    let cancelled = false;
+    (async () => {
+      let pendingRaw: string | null = null;
+      try { pendingRaw = localStorage.getItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
+      if (!pendingRaw) return;
+      try {
+        const pending = migrateMeterConfig(JSON.parse(pendingRaw));
+        const ok = await pushToDb(pending);
+        if (ok && !cancelled) {
+          try { localStorage.removeItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
+          setIsLocalOnly(false);
+          qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
+          qc.invalidateQueries();
+          toast.success('A meter configuration change that was saved locally has now synced to the database.');
+        }
+      } catch { /* still unreachable — leave the marker, try again next visit */ }
+    })();
+    return () => { cancelled = true; };
+  }, [plantId, qc, pushToDb]);
+
   const saveConfig = async (next: PlantMeterConfig) => {
     let savedToDb = false;
+    try { savedToDb = await pushToDb(next); } catch { /* table missing */ }
     try {
-      const { error } = await (supabase.from('plant_meter_config' as any) as any)
-        .upsert({ plant_id: plantId, config: next, updated_at: new Date().toISOString() }, { onConflict: 'plant_id' });
-      if (!error) savedToDb = true;
-    } catch { /* table missing */ }
-    try { localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next)); } catch { /* ignore */ }
+      localStorage.setItem(METER_CONFIG_LS(plantId!), JSON.stringify(next));
+      if (savedToDb) localStorage.removeItem(UNSYNCED_CONFIG_LS(plantId!));
+      else localStorage.setItem(UNSYNCED_CONFIG_LS(plantId!), JSON.stringify(next));
+    } catch { /* ignore */ }
+    setIsLocalOnly(!savedToDb);
     qc.setQueryData(['plant-meter-config', plantId], next);
     qc.invalidateQueries({ queryKey: ['plant-meter-config', plantId] });
     // Propagate config change to Dashboard, TrendChart, and DataSummaryModal immediately.
@@ -371,7 +437,7 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
     return savedToDb;
   };
 
-  return { config: config ?? DEFAULT_METER_CONFIG, isLoading, saveConfig };
+  return { config: config ?? DEFAULT_METER_CONFIG, isLoading, saveConfig, isLocalOnly };
 }
 
 // ─── CIP Chemicals Section ────────────────────────────────────────────────────

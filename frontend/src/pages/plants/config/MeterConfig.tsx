@@ -401,7 +401,7 @@ function LocatorGroupRealitySync({
 export function PlantMeterConfigCard({ plant }: { plant: any }) {
   const { isManager, isAdmin } = useAuth();
   const canEdit = isManager || isAdmin;
-  const { config: savedConfig, isLoading, saveConfig } = usePlantMeterConfig(plant.id);
+  const { config: savedConfig, isLoading, saveConfig, isLocalOnly } = usePlantMeterConfig(plant.id);
   const qc = useQueryClient();
   const [cfg, setCfg] = useState<PlantMeterConfig>(DEFAULT_METER_CONFIG);
   const [saving, setSaving] = useState(false);
@@ -480,7 +480,19 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
     const savedToDb = await saveConfig(cfg);
     setSaving(false);
-    toast.success(savedToDb ? 'Meter configuration saved' : 'Meter configuration saved (local — run migration to persist to DB)');
+    if (savedToDb) {
+      toast.success('Meter configuration saved');
+    } else {
+      // NOT a success — the change only reached this browser's localStorage.
+      // Dashboard, TrendChart, and the Data Summary modal all read this
+      // config straight from Supabase, so production/consumption totals
+      // elsewhere will NOT reflect this change until it actually syncs
+      // (retried automatically in the background — see usePlantMeterConfig).
+      toast.warning('Saved on this device only — not yet in the database', {
+        description: 'Other screens (Dashboard, Production totals) won\'t show this change until it syncs. It will retry automatically.',
+        duration: 10000,
+      });
+    }
   };
 
   if (isLoading) return (
@@ -533,6 +545,17 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
       {open && (
         <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+          {isLocalOnly && (
+            <div className="mt-4 flex items-start gap-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-3 py-2">
+              <span className="mt-0.5">⚠</span>
+              <span>
+                A saved change to this plant's configuration hasn't reached the database yet — it's stored
+                only on this device. Dashboard, Trend, and Production totals elsewhere won't reflect it until
+                it syncs. This retries automatically in the background; keep this app open on this device for
+                it to take effect, or ask an admin to check the <code className="font-mono">plant_meter_config</code> table/RLS setup.
+              </span>
+            </div>
+          )}
           {/* ══ SECTION: RO Trains ══ */}
           <div className="pt-4">
             <div className="flex items-center gap-2 mb-3">
