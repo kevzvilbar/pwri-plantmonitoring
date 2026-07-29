@@ -1377,6 +1377,23 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             {tab === 'current' && `${currentPivotData.entities.length} entities · ${currentPivotData.dates.length} days`}
           </span>
         </div>
+        {/* ── TEMPORARY DIAGNOSTIC ─────────────────────────────────────────────
+            Shows exactly what this modal fetched from plant_meter_config, so we
+            can confirm whether a saved production-source change is actually
+            reaching this query or not, instead of guessing. Safe to delete once
+            the Mambaling RO-permeate issue is root-caused. */}
+        {tab === 'production' && (
+          <div className="px-4 py-1.5 text-2xs font-mono text-muted-foreground bg-warn-soft/40 border-t border-warn/30 break-all">
+            DEBUG plant_meter_config rows fetched for {plantIds.length} plant id(s) [{plantIds.join(', ')}]:{' '}
+            {configLoading
+              ? 'loading…'
+              : (modalMeterConfigs ?? []).length === 0
+                ? 'ZERO ROWS RETURNED — either no config row exists for this plant yet, or an RLS policy is silently blocking the read (Supabase returns [] on a blocked SELECT, not an error)'
+                : (modalMeterConfigs ?? []).map((c: any) =>
+                    `[plant_id=${c.plant_id}] column permeate_is_production=${String(c.permeate_is_production)} · config.permeate_is_production=${String(c.config?.permeate_is_production)} · config.ro_production_source=${String(c.config?.ro_production_source)}`,
+                  ).join('   |   ')}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
