@@ -380,6 +380,48 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     refetchInterval: open ? 30_000 : false,
   });
 
+  // ── Plant meter config (production source) — must be declared before
+  // prodPivot below, which reads productExcludedPlantIds to filter out
+  // exclusive-permeate plants' product meters.
+  const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
+    queryKey: ['dsm-meter-configs', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+        .select('plant_id,permeate_is_production,config')
+        .in('plant_id', plantIds);
+      return (data ?? []) as any[];
+    },
+    enabled: open && plantIds.length > 0,
+    staleTime: 0,
+    refetchInterval: open ? 30_000 : false,
+  });
+
+  // Plants whose RO permeate delta should be pulled in as (part of) production.
+  // Checks the real column first (kept in sync by the DB trigger — see the
+  // plant_meter_config migration), falling back to the config JSONB blob for
+  // rows written before that trigger existed.
+  const permeateIsProductionPlantIds = useMemo(
+    () => (modalMeterConfigs ?? [])
+      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
+      .map((c: any) => c.plant_id as string),
+    [modalMeterConfigs],
+  );
+
+  // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate') —
+  // their product meter reads the SAME water as the permeate meter, so it must
+  // be excluded from the pivot to avoid double-counting. Plants in 'both' mode
+  // keep their product meter AND their permeate delta (two real sources, summed).
+  // Mirrors the equivalent split in TrendChart.tsx / Dashboard.tsx.
+  const productExcludedPlantIds = useMemo(
+    () => new Set<string>(
+      (modalMeterConfigs ?? [])
+        .filter((c: any) => c.config?.ro_production_source === 'permeate')
+        .map((c: any) => c.plant_id as string),
+    ),
+    [modalMeterConfigs],
+  );
+
   // ── Build pivot: rows = dates, columns = entities ──────────────────────────
   // computePivotFromReadings mirrors TrendChart computeEntityDeltas so
   // meter-replacement rows and their successors are correctly zeroed.
@@ -456,45 +498,6 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   // instead of re-deriving deltas from permeate_meter (cumulative), which caused
   // the "millions delta" spike seen when the first row in the date range had no
   // prior reading and its cumulative value was treated as a single-day delta.
-  const { data: modalMeterConfigs, isLoading: configLoading } = useQuery({
-    queryKey: ['dsm-meter-configs', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return [] as any[];
-      const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id,permeate_is_production,config')
-        .in('plant_id', plantIds);
-      return (data ?? []) as any[];
-    },
-    enabled: open && plantIds.length > 0,
-    staleTime: 0,
-    refetchInterval: open ? 30_000 : false,
-  });
-
-  // Plants whose RO permeate delta should be pulled in as (part of) production.
-  // Checks the real column first (kept in sync by the DB trigger — see the
-  // plant_meter_config migration), falling back to the config JSONB blob for
-  // rows written before that trigger existed.
-  const permeateIsProductionPlantIds = useMemo(
-    () => (modalMeterConfigs ?? [])
-      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
-      .map((c: any) => c.plant_id as string),
-    [modalMeterConfigs],
-  );
-
-  // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate') —
-  // their product meter reads the SAME water as the permeate meter, so it must
-  // be excluded from the pivot to avoid double-counting. Plants in 'both' mode
-  // keep their product meter AND their permeate delta (two real sources, summed).
-  // Mirrors the equivalent split in TrendChart.tsx / Dashboard.tsx.
-  const productExcludedPlantIds = useMemo(
-    () => new Set<string>(
-      (modalMeterConfigs ?? [])
-        .filter((c: any) => c.config?.ro_production_source === 'permeate')
-        .map((c: any) => c.plant_id as string),
-    ),
-    [modalMeterConfigs],
-  );
-
   // RO train meta — for column headers (train_number, plant_id)
   const { data: roTrainsMeta, isLoading: trainsLoading } = useQuery({
     queryKey: ['dsm-ro-trains', permeateIsProductionPlantIds],
