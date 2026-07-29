@@ -22,10 +22,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import {
   FilterHousingType,
   getLastUnitPrice,
+  getPriceListEntry,
   logFilterReplacement,
+  syncPriceToPriceList,
 } from "@/lib/filterReplacements";
 
 interface Props {
@@ -48,6 +51,7 @@ export function FilterReplacementDialog({
   onLogged,
 }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,17 +64,43 @@ export function FilterReplacementDialog({
   const [supplier, setSupplier] = useState("");
   const [remarks, setRemarks] = useState("");
 
-  // Prefill unit price with whatever was last paid for this plant + housing
-  // type, so Manager/Admin isn't retyping a known price every time.
+  // Where the prefilled unit price came from — shown as a small hint so
+  // Manager/Admin knows whether they're looking at the maintained Prices
+  // list or a guess from past replacements.
+  const [priceSource, setPriceSource] = useState<"price-list" | "history" | null>(null);
+  const [priceListUnit, setPriceListUnit] = useState<string>("pcs");
+
+  // Prefill unit price. Tries the Costs → Prices tab first (the shared,
+  // Manager/Admin-maintained price list — see lib/filterReplacements.ts's
+  // getPriceListEntry), and only falls back to whatever was last paid on
+  // THIS plant's own replacement history if nothing's listed there yet.
   useEffect(() => {
     if (!open) return;
-    getLastUnitPrice(plantId, filterHousingType)
-      .then((price) => {
-        if (price != null) setUnitPrice(String(price));
+    setPriceSource(null);
+    let cancelled = false;
+
+    getPriceListEntry(filterHousingType)
+      .then((entry) => {
+        if (cancelled) return;
+        if (entry) {
+          setUnitPrice(String(entry.price));
+          setPriceListUnit(entry.unit);
+          setPriceSource("price-list");
+          return;
+        }
+        return getLastUnitPrice(plantId, filterHousingType).then((price) => {
+          if (cancelled || price == null) return;
+          setUnitPrice(String(price));
+          setPriceSource("history");
+        });
       })
       .catch(() => {
         /* non-fatal — leave blank for manual entry */
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, plantId, filterHousingType]);
 
   const qtyNum = Number(quantity) || 0;
@@ -84,6 +114,7 @@ export function FilterReplacementDialog({
     setAvgDp("");
     setSupplier("");
     setRemarks("");
+    setPriceSource(null);
   };
 
   const handleSubmit = async () => {
@@ -110,9 +141,26 @@ export function FilterReplacementDialog({
         remarks: remarks || null,
       });
 
+      // Two-way wiring: mirror this price back into the Prices tab if it's
+      // new information (no entry yet, or it differs from the one on file).
+      // Non-fatal if it fails — the replacement itself is already saved.
+      let priceSynced = false;
+      try {
+        priceSynced = await syncPriceToPriceList({
+          housingType: filterHousingType,
+          unitPrice: priceNum,
+          effectiveDate: replacementDate,
+          updatedBy: user?.id ?? null,
+        });
+      } catch {
+        /* non-fatal */
+      }
+
       toast({
         title: "Replacement logged",
-        description: `₱${totalCost.toLocaleString()} recorded for ${plantName}.`,
+        description: priceSynced
+          ? `₱${totalCost.toLocaleString()} recorded for ${plantName}. Prices tab updated too.`
+          : `₱${totalCost.toLocaleString()} recorded for ${plantName}.`,
       });
       resetForm();
       setOpen(false);
@@ -181,9 +229,22 @@ export function FilterReplacementDialog({
                 min={0}
                 step="0.01"
                 value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
+                onChange={(e) => {
+                  setUnitPrice(e.target.value);
+                  setPriceSource(null); // manually overridden — no longer "from" either source
+                }}
                 data-testid="filter-replacement-unit-price"
               />
+              {priceSource === "price-list" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  From Prices tab (₱/{priceListUnit})
+                </p>
+              )}
+              {priceSource === "history" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  From last replacement — not yet in Prices tab
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="avg-dp">ΔP at change (psi, optional)</Label>

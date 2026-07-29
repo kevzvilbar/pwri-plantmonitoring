@@ -9,6 +9,23 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type FilterHousingType = "Cartridge Filter" | "Bag Filter";
 
+// Shared vocabulary for filter items, used by both the Prices tab
+// (pages/Costs.tsx's ChemicalPrices, which lets Manager/Admin price these
+// alongside chemicals in chemical_prices) and this file's price-list
+// lookup/sync below.
+export const FILTER_ITEMS = ["Bag Filter", "Cartridge Filter"] as const;
+export const FILTER_UNITS = ["pcs", "set"] as const;
+
+/** True if a stored chemical_prices.chemical_name (e.g. "Bag Filter (pcs)")
+ *  is one of the filter items rather than a chemical. Derived from the name
+ *  string rather than a DB column — chemical_prices has no category column,
+ *  and this keeps the distinction working for every row already on file
+ *  without a migration. */
+export function isFilterPriceEntry(storedName: string | null | undefined): boolean {
+  if (!storedName) return false;
+  return FILTER_ITEMS.some((f) => storedName === f || storedName.startsWith(`${f} (`));
+}
+
 export interface FilterReplacement {
   id: string;
   plant_id: string;
@@ -71,6 +88,8 @@ export async function listFilterReplacements(params: {
 /**
  * Prefills the log dialog with whatever price was last paid for this
  * plant + housing type, so Manager/Admin isn't retyping known prices.
+ * This is the fallback source — see getPriceListEntry() below, which is
+ * tried first.
  */
 export async function getLastUnitPrice(
   plantId: string,
@@ -87,6 +106,76 @@ export async function getLastUnitPrice(
 
   if (error) throw error;
   return data?.unit_price ?? null;
+}
+
+// ── Two-way wiring with Costs → Prices (chemical_prices) ─────────────────────
+//
+// The Prices tab (pages/Costs.tsx's ChemicalPrices component) now lets
+// Manager/Admin maintain "Bag Filter" / "Cartridge Filter" prices alongside
+// chemicals, storing the unit inline in the name — e.g. "Bag Filter (pcs)".
+// chemical_prices is a global list (no plant_id column), so lookups here are
+// by housing type only, same as the price list itself.
+
+export interface PriceListEntry {
+  price: number;
+  unit: string;
+  effective_date: string;
+}
+
+/**
+ * Reads the most recent price for this filter housing type from the Prices
+ * tab. This is tried BEFORE this plant's own replacement history, so a price
+ * a Manager/Admin sets in Prices flows straight into this dialog.
+ */
+export async function getPriceListEntry(
+  housingType: FilterHousingType
+): Promise<PriceListEntry | null> {
+  const { data, error } = await supabase
+    .from("chemical_prices")
+    .select("chemical_name, unit_price, effective_date")
+    .ilike("chemical_name", `${housingType} (%`)
+    .order("effective_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const unitMatch = /\(([^)]+)\)\s*$/.exec(data.chemical_name ?? "");
+  return {
+    price: Number(data.unit_price),
+    unit: unitMatch?.[1]?.trim() || "pcs",
+    effective_date: data.effective_date,
+  };
+}
+
+/**
+ * The other half of the wiring: after a replacement is logged, mirror its
+ * price back into the Prices tab — but only when it's actually new
+ * information (no entry yet, or the price paid differs from the one on
+ * file), so Price History doesn't fill up with a duplicate row every time
+ * the same known price is logged again. Returns true when a new price row
+ * was written.
+ */
+export async function syncPriceToPriceList(params: {
+  housingType: FilterHousingType;
+  unitPrice: number;
+  effectiveDate: string;
+  updatedBy?: string | null;
+}): Promise<boolean> {
+  const existing = await getPriceListEntry(params.housingType);
+  if (existing && Number(existing.price) === Number(params.unitPrice)) {
+    return false;
+  }
+  const unit = existing?.unit || "pcs";
+  const { error } = await supabase.from("chemical_prices").insert({
+    chemical_name: `${params.housingType} (${unit})`,
+    unit_price: params.unitPrice,
+    effective_date: params.effectiveDate,
+    updated_by: params.updatedBy ?? null,
+  });
+  if (error) throw error;
+  return true;
 }
 
 export async function logFilterReplacement(

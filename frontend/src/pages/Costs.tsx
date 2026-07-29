@@ -10,7 +10,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,6 +25,7 @@ import { BudgetTab } from '@/components/costs/BudgetTab';
 import { CostsFiltersTab } from '@/components/costs/CostsFiltersTab';
 import { useMonthlyOpex, opexVarianceTone } from '@/hooks/useOpexBudget';
 import { fmtNum } from '@/lib/calculations';
+import { FILTER_ITEMS, FILTER_UNITS, isFilterPriceEntry } from '@/lib/filterReplacements';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -605,15 +607,38 @@ export default function Costs() {
   );
 }
 
+// Filter items selectable from the same "Add price" form as chemicals.
+// FILTER_ITEMS/FILTER_UNITS/isFilterPriceEntry live in lib/filterReplacements
+// (not here) so FilterReplacementDialog can import the exact same labels
+// when it looks up / writes back to this same chemical_prices list — see
+// that file's getPriceListEntry()/syncPriceToPriceList() — and so this page
+// component doesn't export non-component values (breaks fast refresh).
+
 function ChemicalPrices() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
   const canEdit = isManager || isAdmin;
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
+  const isFilterSelected = (name: string) => (FILTER_ITEMS as readonly string[]).includes(name);
 
   // ── Add form state ───────────────────────────────────────────────────────────
   const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+
+  // Switching the item resets the unit to something that actually makes
+  // sense for it — filters are priced per pcs/set, never per kg or L, and
+  // vice versa. Keeps whatever the user had picked when it's still valid.
+  const handleItemChange = (name: string) => {
+    setV((prev) => {
+      const nowFilter = isFilterSelected(name);
+      const filterUnits: readonly string[] = FILTER_UNITS;
+      return {
+        ...prev,
+        chemical_name: name,
+        unit: nowFilter ? (filterUnits.includes(prev.unit) ? prev.unit : 'pcs') : (prev.unit === 'set' ? 'kg' : prev.unit),
+      };
+    });
+  };
 
   // ── Inline edit state ────────────────────────────────────────────────────────
   const [editId, setEditId]     = useState<string | null>(null);
@@ -633,7 +658,7 @@ function ChemicalPrices() {
   const submit = async () => {
     const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
     const finalUnit = v.unit === '__custom__' ? v.customUnit.trim() : v.unit;
-    if (!finalName || !v.unit_price || !finalUnit) { toast.error('Chemical, unit and price required'); return; }
+    if (!finalName || !v.unit_price || !finalUnit) { toast.error('Item, unit and price required'); return; }
     const { error } = await supabase.from('chemical_prices').insert({
       chemical_name: `${finalName} (${finalUnit})`, unit_price: +v.unit_price,
       effective_date: v.effective_date, updated_by: user?.id,
@@ -663,7 +688,7 @@ function ChemicalPrices() {
     if (!editId) return;
     const price = parseFloat(editV.unit_price);
     if (!editV.chemical_name.trim() || isNaN(price) || price < 0 || !editV.effective_date) {
-      toast.error('Chemical name, price (≥ 0) and date are required');
+      toast.error('Item name, price (≥ 0) and date are required');
       return;
     }
     setSaving(true);
@@ -701,11 +726,18 @@ function ChemicalPrices() {
         <h4 className="text-sm font-semibold">Add price</h4>
         <div className="grid grid-cols-2 gap-2">
           <div className="col-span-2">
-            <Label className="text-xs">Chemical</Label>
-            <Select value={v.chemical_name} onValueChange={(x) => setV({ ...v, chemical_name: x })}>
-              <SelectTrigger><SelectValue placeholder="Pick chemical" /></SelectTrigger>
+            <Label className="text-xs">Item</Label>
+            <Select value={v.chemical_name} onValueChange={handleItemChange}>
+              <SelectTrigger><SelectValue placeholder="Pick item" /></SelectTrigger>
               <SelectContent>
-                {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                <SelectGroup>
+                  <SelectLabel>Chemicals</SelectLabel>
+                  {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Filters</SelectLabel>
+                  {FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectGroup>
                 <SelectItem value="__custom__">+ Custom…</SelectItem>
               </SelectContent>
             </Select>
@@ -718,12 +750,20 @@ function ChemicalPrices() {
             <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                <SelectItem value="__custom__">+ Custom…</SelectItem>
+                {isFilterSelected(v.chemical_name)
+                  ? FILTER_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)
+                  : <>
+                      {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      <SelectItem value="__custom__">+ Custom…</SelectItem>
+                    </>
+                }
               </SelectContent>
             </Select>
-            {v.unit === '__custom__' && (
+            {v.unit === '__custom__' && !isFilterSelected(v.chemical_name) && (
               <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
+            )}
+            {isFilterSelected(v.chemical_name) && (
+              <p className="text-2xs text-muted-foreground mt-1">Filters are priced per piece or per set, not by weight/volume.</p>
             )}
           </div>
           <div>
@@ -747,7 +787,7 @@ function ChemicalPrices() {
 
         {/* Column headers */}
         <div className={`grid gap-2 text-2xs text-muted-foreground pb-1 border-b ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
-          <div>Chemical</div>
+          <div>Item</div>
           <div className="text-right">Price</div>
           <div className="text-right">Date</div>
           {canEdit && <div />}
@@ -775,7 +815,7 @@ function ChemicalPrices() {
                     className="h-7 text-xs"
                     value={editV.chemical_name}
                     onChange={(e) => setEditV({ ...editV, chemical_name: e.target.value })}
-                    placeholder="Chemical name"
+                    placeholder="Item name"
                   />
                   <Input
                     className="h-7 text-xs font-mono-num"
@@ -851,9 +891,18 @@ function ChemicalPrices() {
           }
 
           // ── Normal read row ──────────────────────────────────────────────
+          const isFilter = isFilterPriceEntry(p.chemical_name);
           return (
             <div key={p.id} className={`grid gap-2 text-xs py-1.5 border-b last:border-0 items-center ${canEdit ? 'grid-cols-[1fr_90px_80px_56px]' : 'grid-cols-[1fr_100px_90px]'}`}>
-              <span>{p.chemical_name}</span>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate">{p.chemical_name}</span>
+                <Badge
+                  variant="outline"
+                  className={`shrink-0 text-2xs px-1.5 py-0 font-normal ${isFilter ? 'border-amber-300 text-amber-700 bg-amber-50' : 'border-sky-300 text-sky-700 bg-sky-50'}`}
+                >
+                  {isFilter ? 'Filter' : 'Chemical'}
+                </Badge>
+              </span>
               <span className="font-mono-num font-semibold text-right">₱{(+p.unit_price).toFixed(2)}</span>
               <span className="text-muted-foreground font-mono-num text-right">{p.effective_date}</span>
               {canEdit && (
