@@ -511,11 +511,13 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             {!open && (
               <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>RO: {roFlags}</span>
-                <span>Prod: {cfg.ro_production_source === 'permeate'
-                  ? `Permeate${cfg.permeate_is_production
-                      ? ` (${cfg.permeate_production_periods?.length ?? 0} period${(cfg.permeate_production_periods?.length ?? 0) !== 1 ? 's' : ''}${cfg.permeate_cutoff_enabled ? `, cut-off ${cfg.permeate_cutoff_time || '00:20'}` : ', no cut-off'})`
-                      : ''}`
-                  : 'Product meter'}</span>
+                <span>Prod: {cfg.ro_production_source === 'both'
+                  ? `Product meter + Permeate${cfg.permeate_is_production ? '' : ' (⚠ permeate switch off)'}`
+                  : cfg.ro_production_source === 'permeate'
+                    ? `Permeate${cfg.permeate_is_production
+                        ? ` (${cfg.permeate_production_periods?.length ?? 0} period${(cfg.permeate_production_periods?.length ?? 0) !== 1 ? 's' : ''}${cfg.permeate_cutoff_enabled ? `, cut-off ${cfg.permeate_cutoff_time || '00:20'}` : ', no cut-off'})`
+                        : ''}`
+                    : 'Product meter'}</span>
                 {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
                 <span>{cfg.has_solar && cfg.has_grid ? 'Solar + Grid' : cfg.has_solar ? 'Solar' : 'Grid'}</span>
                 <span>Loc: {cfg.locator_readings_per_day ?? 3}×/day</span>
@@ -580,10 +582,11 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
           {/* ── Production source ── */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Production volume source</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {([
                 { val: 'product', label: 'Dedicated product meter', sub: 'Separate meter for finished product' },
                 { val: 'permeate', label: 'Permeate meter = production', sub: 'No product meter — permeate IS production' },
+                { val: 'both', label: 'Product meter + Permeate', sub: 'Two independent sources — totals are added together' },
               ] as const).map(opt => (
                 <label key={opt.val} className={[
                   'flex items-center gap-3 p-3 rounded-lg border transition-colors',
@@ -599,15 +602,31 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                   </div>
                   {canEdit && (
                     <input type="radio" className="sr-only" checked={cfg.ro_production_source === opt.val}
-                      onChange={() => update({ ro_production_source: opt.val })} />
+                      onChange={() => update({
+                        ro_production_source: opt.val,
+                        // Selecting 'permeate' or 'both' always needs RO permeate deltas
+                        // pulled into production — flip the switch in the same click so
+                        // choosing a source here can't silently leave permeate excluded
+                        // (the exact gap that leaves Total Prod. blank for a plant like
+                        // this — see MeterConfig summary badge below once saved).
+                        permeate_is_production: opt.val !== 'product',
+                      })} />
                   )}
                 </label>
               ))}
             </div>
+            {cfg.ro_production_source === 'both' && (
+              <p className="mt-2 text-xs text-warn bg-warn-soft border border-warn rounded-md px-2.5 py-1.5">
+                Only pick this if the product meter and the permeate meter measure <em>different</em> water
+                (e.g. a bulk/mirrored meter from another plant, plus this plant's own RO output). If they
+                measure the same water twice, use "Permeate meter = production" instead — otherwise Total
+                Production and NRW % will be inflated.
+              </p>
+            )}
           </div>
 
           {/* ── Permeate = Production: periods + cut-off (manager only) ── */}
-          {cfg.ro_production_source === 'permeate' && (() => {
+          {(cfg.ro_production_source === 'permeate' || cfg.ro_production_source === 'both') && (() => {
             // ── helpers (scoped inside the IIFE so they're co-located with the UI) ──
 
             const periods: PermeateProductionPeriod[] = cfg.permeate_production_periods ?? [];

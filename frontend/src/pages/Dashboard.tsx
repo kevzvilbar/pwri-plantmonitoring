@@ -284,7 +284,7 @@ export default function Dashboard() {
       // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
@@ -318,20 +318,36 @@ export default function Dashboard() {
     staleTime: 60_000, // config rarely changes — cache for 1 min
   });
 
-  // Plant IDs that use the RO permeate meter as their production source.
-  // Checks all three possible locations where the flag can be stored:
+  // Plant IDs that use the RO permeate meter as (part of) their production source.
+  // Checks all locations where the flag can be stored:
   //   1. Top-level column  permeate_is_production (primary — matches DataSummaryModal)
-  //   2. JSONB config blob config.permeate_is_production (legacy path)
-  //   3. JSONB config blob config.ro_production_source === 'permeate' (Plants.tsx radio)
+  //   2. JSONB config blob config.permeate_is_production (legacy path; also the
+  //      path 'both'-mode plants rely on — MeterConfig.tsx auto-sets this true
+  //      whenever ro_production_source is 'permeate' or 'both')
+  //   3. JSONB config blob config.ro_production_source === 'permeate' | 'both'
+  //      (belt-and-suspenders in case #2 is stale from a direct DB edit)
   const permeateProductionPlantIds = useMemo(() => {
     return (plantMeterConfigs ?? [])
       .filter((row: any) =>
         row.permeate_is_production === true ||
         row.config?.permeate_is_production === true ||
-        row.config?.ro_production_source === 'permeate'
+        row.config?.ro_production_source === 'permeate' ||
+        row.config?.ro_production_source === 'both'
       )
       .map((row: any) => row.plant_id as string);
   }, [plantMeterConfigs]);
+
+  // Plants in EXCLUSIVE permeate mode — their product meter reads the same
+  // water the RO permeate meter already counts, so `meterTotal` below must
+  // exclude their product-meter readings to avoid double-counting. Plants in
+  // 'both' mode (two genuinely independent sources) are NOT in this set —
+  // their product meter reading stays in meterTotal AND their permeate delta
+  // is added via roPermeateProduction, matching TrendChart.tsx / DataSummaryModal.tsx.
+  const productExcludedPlantIds = useMemo(() => new Set<string>(
+    (plantMeterConfigs ?? [])
+      .filter((row: any) => row.config?.ro_production_source === 'permeate')
+      .map((row: any) => row.plant_id as string),
+  ), [plantMeterConfigs]);
 
   // ── Step 1: Resolve RO train IDs for permeate-production plants ─────────────
   // CRITICAL FIX (mirrors TrendChart.tsx line 1070):
@@ -518,7 +534,7 @@ export default function Dashboard() {
       const meterIds = (meters ?? []).map((m: any) => m.id);
       if (!meterIds.length) return [];
       const { data } = await (supabase.from('product_meter_readings' as any) as any)
-        .select('meter_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
+        .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
@@ -826,17 +842,25 @@ export default function Dashboard() {
     }, 0),
   [yRoPermeate, _yesterdayKey]);
 
-  // Production = product meter delta  +  RO permeate delta (permeate_is_production plants).
+  // Production = product meter delta (excluding exclusive-permeate plants)
+  //            + RO permeate delta (permeate_is_production plants).
   // Fallback: when neither source has data today, sum permeate_meter_delta across
   // ALL trains for the selected plants — "how much treated water left the membranes."
   // This ensures the Production Volume card never shows 0 just because product meters
   // haven't been configured or haven't been read yet today.
   const production = useMemo(() => {
+    // Exclude readings from plants in EXCLUSIVE permeate mode — their product
+    // meter reads the same water roPermeateProduction already counts below.
+    // Plants in 'both' mode are NOT excluded here — they have two genuinely
+    // independent sources, so their product meter reading is summed in.
+    const meterReadingsForProduction = (todayProductMeters ?? []).filter(
+      (r: any) => !productExcludedPlantIds.has(r.plant_id),
+    );
     // FIX: Use no-cache variant so the stat-card computation does not write
     // transient single-day deltas into deltaCache, which would be picked up
     // by DataSummaryModal's multi-day pivot and produce wrong totals.
     const meterTotal = pivotDayTotal(
-      computePivotFromReadingsNoCache(todayProductMeters ?? [], 'meter_id', 'daily_volume'), _todayKey,
+      computePivotFromReadingsNoCache(meterReadingsForProduction, 'meter_id', 'daily_volume'), _todayKey,
     );
     const combined = meterTotal + roPermeateProduction;
     if (combined > 0) return combined;
@@ -850,7 +874,7 @@ export default function Dashboard() {
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0);
     return fallbackTotal;
-  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds]);
+  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds]);
 
   const consumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
@@ -956,9 +980,14 @@ export default function Dashboard() {
   const yProduction = useMemo(() =>
     pivotDayTotal(
       // FIX: Use no-cache variant — see production useMemo comment above.
-      computePivotFromReadingsNoCache(yProductMeters ?? [], 'meter_id', 'daily_volume'), _yesterdayKey,
+      // Same exclusion as `production` above — exclude exclusive-permeate
+      // plants' product meter so yesterday's total stays comparable to today's.
+      computePivotFromReadingsNoCache(
+        (yProductMeters ?? []).filter((r: any) => !productExcludedPlantIds.has(r.plant_id)),
+        'meter_id', 'daily_volume',
+      ), _yesterdayKey,
     ) + yRoPermeateProduction,
-  [yProductMeters, _yesterdayKey, yRoPermeateProduction]);
+  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds]);
 
   const yConsumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.

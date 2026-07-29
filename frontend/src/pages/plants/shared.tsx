@@ -192,8 +192,17 @@ export interface PlantMeterConfig {
   ro_has_feed_meter: boolean;
   ro_has_permeate_meter: boolean;
   ro_has_reject_meter: boolean;
-  // RO production source
-  ro_production_source: 'permeate' | 'product';
+  // RO production source.
+  //   'product'   — dedicated product meter only (default)
+  //   'permeate'  — RO permeate meter IS production; product meter (if any)
+  //                 is EXCLUDED from the total to avoid double-counting the
+  //                 same water on both meters.
+  //   'both'      — plant has two genuinely independent production inputs
+  //                 (e.g. a dedicated/mirrored product meter PLUS its own RO
+  //                 permeate) that must be ADDED together for Total
+  //                 Production. Only use this when the two meters measure
+  //                 different water — see MeterConfig.tsx warning copy.
+  ro_production_source: 'permeate' | 'product' | 'both';
   // Per-train utility meters
   ro_has_per_train_electricity: boolean;
   ro_has_per_train_water: boolean;

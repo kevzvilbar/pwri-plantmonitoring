@@ -414,15 +414,25 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   }, [locators, consReadings, plantCodeById, fromStr, toStr, directLocatorIds]);
 
   const prodPivot = useMemo(() => {
-    const sortedMeters = [...(productMeters ?? [])].sort((a, b) => {
-      const pa = plantCodeById.get(a.plant_id) ?? '';
-      const pb = plantCodeById.get(b.plant_id) ?? '';
-      return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
-    });
-    const pivot = computePivotFromReadingsNoCache(prodReadings ?? [], 'meter_id', 'daily_volume');
+    // Drop meters belonging to plants in EXCLUSIVE permeate mode — their
+    // product meter reads the same water the RO permeate meter already
+    // counts, so including both here would double-count that plant's output.
+    const includedMeters = (productMeters ?? []).filter(
+      (m: any) => !productExcludedPlantIds.has(m.plant_id),
+    );
+    const includedMeterIds = new Set(includedMeters.map((m: any) => m.id));
+    const sortedMeters = [...includedMeters]
+      .map((m: any) => ({ ...m, _source: 'meter' as const }))
+      .sort((a, b) => {
+        const pa = plantCodeById.get(a.plant_id) ?? '';
+        const pb = plantCodeById.get(b.plant_id) ?? '';
+        return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
+      });
+    const includedReadings = (prodReadings ?? []).filter((r: any) => includedMeterIds.has(r.meter_id));
+    const pivot = computePivotFromReadingsNoCache(includedReadings, 'meter_id', 'daily_volume');
 
     const estimatedKeys = new Set<string>();
-    (prodReadings ?? []).forEach((r: any) => {
+    includedReadings.forEach((r: any) => {
       if (r.is_estimated) {
         const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
         estimatedKeys.add(`${dk}__${r.meter_id}`);
@@ -438,7 +448,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       cur2.setDate(cur2.getDate() + 1);
     }
     return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
-  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr]);
+  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr, productExcludedPlantIds]);
 
   // ── RO permeate production (plants with permeate_is_production = true) ─────
   // This is the path that respects recalculateTrainDeltas.
@@ -451,7 +461,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
-        .select('plant_id,permeate_is_production')
+        .select('plant_id,permeate_is_production,config')
         .in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
@@ -460,10 +470,28 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     refetchInterval: open ? 30_000 : false,
   });
 
+  // Plants whose RO permeate delta should be pulled in as (part of) production.
+  // Checks the real column first (kept in sync by the DB trigger — see the
+  // plant_meter_config migration), falling back to the config JSONB blob for
+  // rows written before that trigger existed.
   const permeateIsProductionPlantIds = useMemo(
     () => (modalMeterConfigs ?? [])
-      .filter((c: any) => c.permeate_is_production)
+      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
       .map((c: any) => c.plant_id as string),
+    [modalMeterConfigs],
+  );
+
+  // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate') —
+  // their product meter reads the SAME water as the permeate meter, so it must
+  // be excluded from the pivot to avoid double-counting. Plants in 'both' mode
+  // keep their product meter AND their permeate delta (two real sources, summed).
+  // Mirrors the equivalent split in TrendChart.tsx / Dashboard.tsx.
+  const productExcludedPlantIds = useMemo(
+    () => new Set<string>(
+      (modalMeterConfigs ?? [])
+        .filter((c: any) => c.config?.ro_production_source === 'permeate')
+        .map((c: any) => c.plant_id as string),
+    ),
     [modalMeterConfigs],
   );
 
@@ -521,11 +549,13 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   //   computeRoPermPivot (called from the DataSummaryModal which fetches raw
   //   permeate_meter columns).  Dashboard stat cards use this lighter pivot.
   const roProdPivot = useMemo(() => {
-    const sortedTrains = [...(roTrainsMeta ?? [])].sort((a, b) => {
-      const pa = plantCodeById.get(a.plant_id) ?? '';
-      const pb = plantCodeById.get(b.plant_id) ?? '';
-      return pa.localeCompare(pb) || (a.train_number ?? 0) - (b.train_number ?? 0);
-    });
+    const sortedTrains = [...(roTrainsMeta ?? [])]
+      .map((t: any) => ({ ...t, _source: 'ro' as const }))
+      .sort((a, b) => {
+        const pa = plantCodeById.get(a.plant_id) ?? '';
+        const pb = plantCodeById.get(b.plant_id) ?? '';
+        return pa.localeCompare(pb) || (a.train_number ?? 0) - (b.train_number ?? 0);
+      });
 
     const pivot = new Map<string, Map<string, number>>();
 
@@ -565,26 +595,41 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     return { dates: allDates, entities: sortedTrains, pivot };
   }, [roTrainsMeta, roMeterReadings, plantCodeById, fromStr, toStr]);
 
-  // For the 'both' (Prod. vs Consum.) tab we need daily totals from both sides.
-  //
   // BUG FIX — race condition:
   // modalMeterConfigs can be `undefined` on the very first render after the modal
   // opens, even though `configLoading` is already `false` (TanStack Query sets
   // isPending=true only after the query key resolves to "loading" state, but
   // there is a 1-tick gap where the query hasn't been scheduled yet).
-  // If we evaluate `useRoProd` while configs are undefined we get an empty
-  // permeateIsProductionPlantIds array → useRoProd = false → the "Prod. vs
-  // Consum." tab renders using prodPivot (product meters) while the
-  // "Production" detail tab correctly uses roProdPivot (RO trains) once data
-  // arrives.  This caused the two tabs to show different production numbers.
-  //
-  // Fix: treat configs as "not yet ready" until the array is defined, and
-  // block rendering (isLoading=true) until then.
+  // Treat configs as "not yet ready" until the array is defined, and block
+  // rendering (isLoading=true) until then, so the merged pivot below never
+  // briefly renders with an incomplete plant list.
   const configsReady = !configLoading && modalMeterConfigs !== undefined;
-  const useRoProd    = configsReady && permeateIsProductionPlantIds.length > 0;
 
-  const prodDataLoading = !configsReady
-    || (useRoProd ? (roLoading || trainsLoading) : (metersLoading || prodLoading));
+  // ── Combined production pivot ───────────────────────────────────────────
+  // Merges product-meter entities (prodPivot already excludes plants in
+  // EXCLUSIVE permeate mode — see productExcludedPlantIds above) with
+  // RO-train entities (only fetched for plants with permeate_is_production
+  // = true) into ONE entity list + ONE pivot map. A plant in 'both' mode
+  // therefore shows its product meter column AND its RO train column(s)
+  // side by side, with Total Prod. summing across all of them — matching
+  // Dashboard.tsx's stat-card math instead of switching sources wholesale.
+  const combinedProdPivot = useMemo(() => {
+    const entities = [...prodPivot.entities, ...roProdPivot.entities];
+    const dates = prodPivot.dates; // same fromStr→toStr range as roProdPivot
+    const pivot = new Map<string, Map<string, number>>();
+    dates.forEach((d) => {
+      const merged = new Map<string, number>();
+      prodPivot.pivot.get(d)?.forEach((v, k) => merged.set(k, v));
+      roProdPivot.pivot.get(d)?.forEach((v, k) => merged.set(k, v));
+      pivot.set(d, merged);
+    });
+    return { dates, entities, pivot, estimatedKeys: prodPivot.estimatedKeys };
+  }, [prodPivot, roProdPivot]);
+
+  const hasRoEntities    = combinedProdPivot.entities.some((e: any) => e._source === 'ro');
+  const hasMeterEntities = combinedProdPivot.entities.some((e: any) => e._source === 'meter');
+
+  const prodDataLoading = !configsReady || metersLoading || prodLoading || roLoading || trainsLoading;
   const isLoading = tab === 'consumption'
     ? (locatorsLoading || consLoading)
     : tab === 'production'
@@ -596,9 +641,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   // Active pivot data for the detail tabs
   const { dates, entities, pivot, estimatedKeys } = tab === 'consumption'
     ? consPivot
-    : useRoProd
-      ? { ...roProdPivot, estimatedKeys: new Set<string>() }
-      : prodPivot;
+    : combinedProdPivot;
 
   const entityIdField = 'id';
 
@@ -625,13 +668,12 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   // "Prod. vs Consum." shows exactly the same numbers as the "Production" and
   // "Consumption" detail tabs — no independent recomputation in the IIFE.
   const prodGrandTotal = useMemo(() => {
-    const activePivot = useRoProd ? roProdPivot : prodPivot;
-    return activePivot.entities.reduce(
+    return combinedProdPivot.entities.reduce(
       (s: number, e: any) =>
-        s + activePivot.dates.reduce((ds: number, d: string) => ds + (activePivot.pivot.get(d)?.get(e.id) ?? 0), 0),
+        s + combinedProdPivot.dates.reduce((ds: number, d: string) => ds + (combinedProdPivot.pivot.get(d)?.get(e.id) ?? 0), 0),
       0,
     );
-  }, [useRoProd, roProdPivot, prodPivot]);
+  }, [combinedProdPivot]);
 
   const consGrandTotal = useMemo(
     () =>
@@ -715,9 +757,24 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     return { dates: roProdPivot.dates, entities: roProdPivot.entities, pivot };
   }, [roCurrentReadings, roProdPivot.dates, roProdPivot.entities]);
 
+  // Combined current-readings pivot — same merge as combinedProdPivot, but for
+  // raw (absolute) meter values instead of daily deltas.
+  const combinedProdCurrentPivot = useMemo(() => {
+    const entities = [...prodCurrentPivot.entities, ...roCurrentPivot.entities];
+    const dates = prodCurrentPivot.dates;
+    const pivot = new Map<string, Map<string, number>>();
+    dates.forEach((d) => {
+      const merged = new Map<string, number>();
+      prodCurrentPivot.pivot.get(d)?.forEach((v, k) => merged.set(k, v));
+      roCurrentPivot.pivot.get(d)?.forEach((v, k) => merged.set(k, v));
+      pivot.set(d, merged);
+    });
+    return { dates, entities, pivot };
+  }, [prodCurrentPivot, roCurrentPivot]);
+
   // Active current-readings pivot for the 'current' tab
   const currentPivotData = currentSide === 'production'
-    ? (useRoProd ? roCurrentPivot : prodCurrentPivot)
+    ? combinedProdCurrentPivot
     : consCurrentPivot;
 
   return (
@@ -796,7 +853,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                     : 'border-border text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
-                {s === 'consumption' ? 'Consumption' : (useRoProd ? 'Production (RO)' : 'Production')}
+                {s === 'consumption' ? 'Consumption' : 'Production'}
               </button>
             ))}
           </div>
@@ -829,7 +886,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             // Use the production pivot as the single canonical date list (fromStr→toStr).
             // Avoid a union that can gain phantom dates if the two pivot memos recompute
             // at slightly different times or have readings outside the selected range.
-            const activeProdPivot = useRoProd ? roProdPivot : prodPivot;
+            const activeProdPivot = combinedProdPivot;
             // Canonical date list: production pivot dates (same fromStr→toStr as cons pivot).
             const allDates = activeProdPivot.dates;
 
@@ -895,7 +952,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
           {/* ── Production / Consumption detail tabs ── */}
           {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length === 0 && (
             <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
-              No {tab === 'consumption' ? 'locators' : useRoProd ? 'RO trains' : 'product meters'} found.
+              No {tab === 'consumption' ? 'locators' : 'product meters or RO trains'} found.
             </div>
           )}
           {!isLoading && (tab === 'production' || tab === 'consumption') && entities.length > 0 && dates.length === 0 && (
@@ -913,8 +970,12 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                     Date
                   </th>
                   {entities.map((e, i) => {
-                    // RO train columns: "RO{train_number}" header; product meter / locator: name/code
-                    const isRoTrain = tab === 'production' && useRoProd;
+                    // Production tab can now mix product-meter columns and RO-train
+                    // columns for a single plant ('both' mode) — check the entity
+                    // itself (tagged _source during pivot construction) rather than
+                    // a single modal-wide flag. "RO{train_number}" header for RO
+                    // trains; product meter / locator: name/code.
+                    const isRoTrain = tab === 'production' && (e as any)._source === 'ro';
                     const label = isRoTrain
                       ? `RO${e.train_number ?? i + 1}`
                       : (e.name ?? e.code ?? `#${i + 1}`);
@@ -1012,7 +1073,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             {(() => {
               const inlineCurrPivot = tab === 'consumption'
                 ? consCurrentPivot
-                : (useRoProd ? roCurrentPivot : prodCurrentPivot);
+                : combinedProdCurrentPivot;
               const icEntities = inlineCurrPivot.entities;
               const icDates    = inlineCurrPivot.dates;
               const icPivot    = inlineCurrPivot.pivot;
@@ -1042,7 +1103,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                           Date
                         </th>
                         {icEntities.map((e: any, i: number) => {
-                          const isRoTrain = tab === 'production' && useRoProd;
+                          const isRoTrain = tab === 'production' && e._source === 'ro';
                           const label    = isRoTrain ? `RO${e.train_number ?? i + 1}` : (e.name ?? e.code ?? `#${i + 1}`);
                           const sublabel = plantCodeById.get(e.plant_id) ?? '';
                           return (
@@ -1177,7 +1238,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
                       Date
                     </th>
                     {crEntities.map((e: any, i: number) => {
-                      const isRoTrain = currentSide === 'production' && useRoProd;
+                      const isRoTrain = currentSide === 'production' && e._source === 'ro';
                       const label    = isRoTrain ? `RO${e.train_number ?? i + 1}` : (e.name ?? e.code ?? `#${i + 1}`);
                       const sublabel = plantCodeById.get(e.plant_id) ?? '';
                       return (
@@ -1285,9 +1346,11 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
           {tab === 'both' && <><Activity className="h-3 w-3 text-primary" /> Production vs Consumption — daily totals (m³) · NRW % = (Prod − Cons) ÷ Prod</>}
           {tab === 'consumption' && <><Receipt className="h-3 w-3 text-highlight" /> Consumption — delta volume (m³) per locator · Current Readings — raw meter values per locator per day</>}
           {tab === 'production' && (
-            useRoProd
-              ? <><Droplet className="h-3 w-3 text-primary" /> Production — permeate_meter_delta (m³) per RO train · Current Readings — raw permeate meter per train per day</>
-              : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter · Current Readings — raw meter values per meter per day</>
+            hasRoEntities && hasMeterEntities
+              ? <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter + permeate_meter_delta (m³) per RO train, summed · Current Readings — raw meter values per entity per day</>
+              : hasRoEntities
+                ? <><Droplet className="h-3 w-3 text-primary" /> Production — permeate_meter_delta (m³) per RO train · Current Readings — raw permeate meter per train per day</>
+                : <><Droplet className="h-3 w-3 text-primary" /> Production — delta volume (m³) per product meter · Current Readings — raw meter values per meter per day</>
           )}
           {(tab === 'production' || tab === 'consumption') && estimatedKeys.size > 0 && (
             <span className="flex items-center gap-1 ml-3 text-warn">
@@ -1299,12 +1362,14 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
             <><Gauge className="h-3 w-3 text-muted-foreground" /> Current Readings — latest raw meter value per entity per day (absolute, not delta)</>
           )}
           <span className="ml-auto">
-            {tab === 'both' && `${(useRoProd ? roProdPivot : prodPivot).dates.length} days in range`}
+            {tab === 'both' && `${combinedProdPivot.dates.length} days in range`}
             {tab === 'consumption' && `${entities.length} locators · ${dates.length} days`}
             {tab === 'production' && (
-              useRoProd
-                ? `${roProdPivot.entities.length} RO trains · ${roProdPivot.dates.length} days`
-                : `${entities.length} meters · ${dates.length} days`
+              hasRoEntities && hasMeterEntities
+                ? `${combinedProdPivot.entities.length} meters/trains · ${combinedProdPivot.dates.length} days`
+                : hasRoEntities
+                  ? `${combinedProdPivot.entities.length} RO trains · ${combinedProdPivot.dates.length} days`
+                  : `${combinedProdPivot.entities.length} meters · ${combinedProdPivot.dates.length} days`
             )}
             {tab === 'current' && `${currentPivotData.entities.length} entities · ${currentPivotData.dates.length} days`}
           </span>

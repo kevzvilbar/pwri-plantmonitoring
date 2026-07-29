@@ -1492,20 +1492,30 @@ export function TrendChart({
   // permeate_is_production lives at config.permeate_is_production inside that blob.
   // Permeate production config per plant — includes cut-off and date range settings.
   // Returns both a Set (for fast membership checks) and a detailed Map for bucketing.
-  const { data: permeateIsProductionPlants } = useQuery({
+  const { data: permeateConfigData } = useQuery({
     queryKey: ['plant-meter-config-permeate', plantIds],
     queryFn: async () => {
       const { data } = await (supabase.from('plant_meter_config' as any) as any)
         .select('plant_id, config')
         .in('plant_id', plantIds);
-      const set = new Set<string>();
+      const permeateCounts = new Set<string>();
+      // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate')
+      // measure the same water on their product meter as on the RO permeate
+      // meter — Step 1 below must exclude their product-meter readings to avoid
+      // double-counting. Plants in 'both' mode have two independent sources and
+      // keep BOTH their product meter reading (Step 1) and their permeate delta
+      // (Step 2) — they stay OUT of this set.
+      const productExcluded = new Set<string>();
       (data ?? []).forEach((row: any) => {
-        if (row.config?.permeate_is_production) set.add(row.plant_id);
+        if (row.config?.permeate_is_production) permeateCounts.add(row.plant_id);
+        if (row.config?.ro_production_source === 'permeate') productExcluded.add(row.plant_id);
       });
-      return set;
+      return { permeateCounts, productExcluded };
     },
     enabled: plantIds.length > 0 && needsPermeateProduction,
   });
+  const permeateIsProductionPlants = permeateConfigData?.permeateCounts;
+  const productExcludedPlants      = permeateConfigData?.productExcluded;
 
 
   // Power readings — fetches the full ordered history for each plant so
@@ -1895,9 +1905,13 @@ export function TrendChart({
     // Both contributions accumulate into the same `production` field so the line
     // stays a single unified series.
 
-    // Step 1: accumulate product meter readings only for plants that use a product meter.
+    // Step 1: accumulate product meter readings for plants that use a product
+    // meter — i.e. everyone EXCEPT plants in exclusive 'permeate' mode (whose
+    // product meter reads the same water the RO permeate meter already counts
+    // in Step 2). Plants in 'both' mode fall through here on purpose — their
+    // product meter is a genuinely separate source and must be summed in.
     computeEntityDeltas(
-      (productReadings ?? []).filter((r: any) => !(permeateIsProductionPlants?.has(r.plant_id))),
+      (productReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
       'meter_id',
       'daily_volume',
     ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
