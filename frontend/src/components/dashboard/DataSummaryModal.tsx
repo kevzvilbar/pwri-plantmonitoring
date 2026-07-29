@@ -398,34 +398,41 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   });
 
   // Plants whose RO permeate delta should be pulled in as (part of) production.
-  // Checks all locations the flag can live in — top-level column (kept in sync
-  // by the DB trigger — see the plant_meter_config migration), the config
-  // JSONB blob's own permeate_is_production (rows written before that trigger
-  // existed), and ro_production_source itself as a last-resort fallback.
-  // Matches Dashboard.tsx's permeateProductionPlantIds exactly — previously
-  // this file was missing the ro_production_source checks, so a plant could
-  // show correctly on the Dashboard stat card while still defaulting to
-  // product-meter-only here.
+  // permeate_is_production is a DB-trigger-maintained mirror of
+  // config.permeate_is_production (fn_sync_permeate_is_production fires on every
+  // write — see the plant_meter_config migration), so the two can never
+  // legitimately disagree; checking both is just harmless redundancy for rows
+  // written before that trigger existed.
+  //
+  // ro_production_source is deliberately NOT part of this check. It describes
+  // the *intended* mode, not whether permeate is currently active — a plant can
+  // have ro_production_source: 'both' while permeate_is_production is off (see
+  // MeterConfig.tsx's own "⚠ permeate switch off" warning badge for this exact,
+  // valid, intentional state, e.g. a temporary pause). Treating
+  // ro_production_source as a fallback here was a bug introduced in an earlier
+  // pass: it silently overrode that explicit "off" and re-activated permeate
+  // production the admin had just paused.
   const permeateIsProductionPlantIds = useMemo(
     () => (modalMeterConfigs ?? [])
-      .filter((c: any) =>
-        c.permeate_is_production === true ||
-        c.config?.permeate_is_production === true ||
-        c.config?.ro_production_source === 'permeate' ||
-        c.config?.ro_production_source === 'both')
+      .filter((c: any) => c.permeate_is_production === true || c.config?.permeate_is_production === true)
       .map((c: any) => c.plant_id as string),
     [modalMeterConfigs],
   );
 
-  // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate') —
-  // their product meter reads the SAME water as the permeate meter, so it must
-  // be excluded from the pivot to avoid double-counting. Plants in 'both' mode
-  // keep their product meter AND their permeate delta (two real sources, summed).
+  // Plants in EXCLUSIVE permeate mode (ro_production_source === 'permeate') AND
+  // where permeate is actually active right now — their product meter reads the
+  // SAME water as the permeate meter, so it must be excluded from the pivot to
+  // avoid double-counting. Requiring permeate_is_production here too matters:
+  // without it, a plant with ro_production_source: 'permeate' but the switch
+  // paused would lose its product meter AND get no permeate credit — zero
+  // production shown, which is worse than double-counting.
   // Mirrors the equivalent split in TrendChart.tsx / Dashboard.tsx.
   const productExcludedPlantIds = useMemo(
     () => new Set<string>(
       (modalMeterConfigs ?? [])
-        .filter((c: any) => c.config?.ro_production_source === 'permeate')
+        .filter((c: any) =>
+          c.config?.ro_production_source === 'permeate' &&
+          (c.permeate_is_production === true || c.config?.permeate_is_production === true))
         .map((c: any) => c.plant_id as string),
     ),
     [modalMeterConfigs],
