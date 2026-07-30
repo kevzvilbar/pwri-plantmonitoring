@@ -287,6 +287,55 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     }
   };
 
+  // Re-walk the full previous_reading chain for this locator, in chronological
+  // order, and persist any link that's drifted from what's actually stored.
+  //
+  // Root cause this guards against: previous_reading is written once at insert
+  // time and nothing in this dialog's edit/delete/toggle handlers ever kept it
+  // in sync afterwards — editing an earlier reading's value, deleting a
+  // reading, or clearing a meter-replacement flag all change who a downstream
+  // row's real predecessor is, but the downstream row's stored previous_reading
+  // was never told. Because locator_readings.daily_volume is a GENERATED
+  // ALWAYS AS (current_reading - previous_reading) column, a stale
+  // previous_reading silently produces a wrong daily_volume with no error from
+  // Postgres — nothing here or in the DB flags it. That wrong daily_volume then
+  // feeds straight into fn_sweep_derived_meters' residual calc for any derived
+  // locator sharing this locator as a sibling/mother, corrupting the derived
+  // value even though the sweep function itself is correct.
+  //
+  // The Admin/Data-Analyst-only "Data Corrections" workflow already repairs
+  // this via the fn_cascade_reading_correction RPC when it's used — but that
+  // RPC is role-gated and this dialog's inline edit/delete (canEditDelete is
+  // unconditionally true here) never calls it. This mirrors the same forward
+  // walk as a plain client-side resync instead, so it works under whatever
+  // role/RLS already permits editing a single row through this dialog.
+  const resyncLocatorChain = async (locatorId: string) => {
+    const { data: all, error } = await supabase
+      .from('locator_readings')
+      .select('id, current_reading, previous_reading, reading_datetime')
+      .eq('locator_id', locatorId)
+      .order('reading_datetime', { ascending: true });
+    if (error || !all) return;
+
+    let last: number | null = null;
+    const updates: { id: string; previous_reading: number | null }[] = [];
+    for (const row of all as any[]) {
+      const newPrev = last;
+      if (row.previous_reading !== newPrev) {
+        updates.push({ id: row.id, previous_reading: newPrev });
+      }
+      last = +row.current_reading;
+    }
+    if (updates.length) {
+      // daily_volume is intentionally omitted — GENERATED ALWAYS AS recomputes
+      // it automatically once previous_reading is corrected.
+      await Promise.all(updates.map(u => supabase
+        .from('locator_readings')
+        .update({ previous_reading: u.previous_reading } as any)
+        .eq('id', u.id)));
+    }
+  };
+
   // One-click toggle for shared (non-power) meter replacement.
   // For well/locator, CHECKING opens ReplaceMeterDialog so the swap gets
   // logged (old/new brand, size, serial, installed date) instead of just
@@ -305,9 +354,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       ({ error } = await (supabase.from('well_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
       // is_meter_replacement may not exist yet (pending migration) — silently skip toggle
       if (error?.message?.includes('does not exist')) error = null;
-    } else if (module === 'locator')
+    } else if (module === 'locator') {
       ({ error } = await (supabase.from('locator_readings') as any).update({ is_meter_replacement: next }).eq('id', r.id));
-    else if (module === 'blending') {
+      if (!error) await resyncLocatorChain(entityId);
+    } else if (module === 'blending') {
       ({ error } = await (supabase.from('blending_events' as any) as any).update({ is_meter_replacement: next }).eq('id', r.id));
       // Column may not exist yet — silently skip (graceful degradation)
       if (error?.message?.includes('does not exist') || error?.message?.includes('is_meter_replacement')) error = null;
@@ -393,8 +443,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     let error: any = null;
     if (module === 'well')
       ({ error } = await supabase.from('well_readings').delete().in('id', ids));
-    else if (module === 'locator')
+    else if (module === 'locator') {
       ({ error } = await supabase.from('locator_readings').delete().in('id', ids));
+      if (!error) await resyncLocatorChain(entityId);
+    }
     else if (module === 'power')
       ({ error } = await supabase.from('power_readings').delete().in('id', ids));
     else if (module === 'blending') {
@@ -419,7 +471,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     setDeletingId(id);
     let error: any = null;
     if (module === 'well') ({ error } = await supabase.from('well_readings').delete().eq('id', id));
-    else if (module === 'locator') ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
+    else if (module === 'locator') {
+      ({ error } = await supabase.from('locator_readings').delete().eq('id', id));
+      if (!error) await resyncLocatorChain(entityId);
+    }
     else if (module === 'power') ({ error } = await supabase.from('power_readings').delete().eq('id', id));
     else if (module === 'blending') {
       const { error: _be, count: _bc } = await (supabase.from('blending_events' as any) as any)
@@ -482,6 +537,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         is_meter_replacement: !!editRow.isMeterReplacement,
         // daily_volume intentionally omitted — DB recomputes it automatically.
       }).eq('id', editRow.id));
+      if (!error) await resyncLocatorChain(entityId);
     } else if (module === 'power') {
       // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
       // totals would drift after any history correction.  Re-derive it the same way
