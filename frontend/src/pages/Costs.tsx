@@ -617,24 +617,40 @@ export default function Costs() {
 function ChemicalPrices() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
+  const { selectedPlantId } = useAppStore();
   const canEdit = isManager || isAdmin;
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
   // ── Add form state ───────────────────────────────────────────────────────────
-  const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+  // plant_id/provider are only used when itemCategory === 'power' (power_tariffs
+  // is plant-scoped, unlike the global chemical_prices table the rest of this
+  // form writes to) — kept in the same state object so the form has one place
+  // to reset/reason about.
+  const [v, setV] = useState({
+    chemical_name: '', custom: '', unit: 'kg', customUnit: '',
+    unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd'),
+    plant_id: selectedPlantId ?? '', provider: '',
+  });
 
-  // Chemical/Filter toggle above the Item dropdown — picked up after
+  // Chemical/Filter/Power toggle above the Item dropdown — picked up after
   // feedback that scrolling past 8 chemicals to reach Bag/Cartridge Filter
   // (previously grouped in one long list) wasn't convenient. Now the
   // dropdown only ever lists the ~2–9 items in the selected category, so it
-  // never needs to scroll.
-  const [itemCategory, setItemCategory] = useState<'chemical' | 'filter'>('chemical');
+  // never needs to scroll. "Power" isn't an item pick at all — it's wired
+  // straight to the same power_tariffs table the Power tab's bill-derived
+  // tariffs already live in, so a rate entered here shows up there too.
+  const [itemCategory, setItemCategory] = useState<'chemical' | 'filter' | 'power'>('chemical');
 
-  const switchCategory = (cat: 'chemical' | 'filter') => {
+  const switchCategory = (cat: 'chemical' | 'filter' | 'power') => {
     if (cat === itemCategory) return;
     setItemCategory(cat);
-    setV((prev) => ({ ...prev, chemical_name: '', custom: '', unit: cat === 'filter' ? 'pcs' : 'kg' }));
+    setV((prev) => ({
+      ...prev,
+      chemical_name: '',
+      custom: '',
+      unit: cat === 'filter' ? 'pcs' : cat === 'power' ? 'kWh' : 'kg',
+    }));
   };
 
   // Picking an item resets the unit to something that actually makes sense
@@ -665,8 +681,36 @@ function ChemicalPrices() {
     queryFn: async () => (await supabase.from('chemical_prices').select('*').order('effective_date', { ascending: false }).limit(50)).data ?? [],
   });
 
+  // Same queryKey shape the Power tab's own tariff history uses (['tariffs', plantId])
+  // so a rate saved from either place invalidates/refetches the other's view too.
+  const { data: recentTariffs } = useQuery({
+    queryKey: ['tariffs', v.plant_id],
+    queryFn: async () => v.plant_id ? (await supabase.from('power_tariffs').select('*').eq('plant_id', v.plant_id).order('effective_date', { ascending: false }).limit(5)).data ?? [] : [],
+    enabled: itemCategory === 'power' && !!v.plant_id,
+  });
+
   // ── Add new price ────────────────────────────────────────────────────────────
   const submit = async () => {
+    if (itemCategory === 'power') {
+      if (!v.plant_id) { toast.error('Select a plant'); return; }
+      if (!v.unit_price) { toast.error('Rate per kWh is required'); return; }
+      const { error } = await supabase.from('power_tariffs').insert({
+        plant_id: v.plant_id,
+        effective_date: v.effective_date,
+        rate_per_kwh: +v.unit_price,
+        provider: v.provider.trim() || null,
+        remarks: 'Entered from Costs → Prices',
+        created_by: user?.id,
+      });
+      if (error) { toast.error(friendlyError(error)); return; }
+      toast.success('Power rate added');
+      setV((prev) => ({ ...prev, provider: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') }));
+      // Same queryKey the Power tab reads from — its Tariff history card
+      // will show this rate next time it's rendered.
+      qc.invalidateQueries({ queryKey: ['tariffs', v.plant_id] });
+      return;
+    }
+
     const finalName = v.chemical_name === '__custom__' ? v.custom.trim() : v.chemical_name;
     const finalUnit = v.unit === '__custom__' ? v.customUnit.trim() : v.unit;
     if (!finalName || !v.unit_price || !finalUnit) { toast.error('Item, unit and price required'); return; }
@@ -676,7 +720,7 @@ function ChemicalPrices() {
     });
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success('Price added');
-    setV({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
+    setV((prev) => ({ ...prev, chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') }));
     qc.invalidateQueries({ queryKey: ['chem-prices'] });
     qc.invalidateQueries({ queryKey: ['chem-current-prices'] });
   };
@@ -738,7 +782,7 @@ function ChemicalPrices() {
         <div className="grid grid-cols-2 gap-2">
           <div className="col-span-2">
             <div className="flex items-center justify-between mb-1">
-              <Label className="text-xs">Item</Label>
+              <Label className="text-xs">{itemCategory === 'power' ? 'Plant' : 'Item'}</Label>
               <div className="inline-flex rounded-md border bg-muted p-0.5" role="tablist" aria-label="Item category">
                 <button
                   type="button"
@@ -758,47 +802,73 @@ function ChemicalPrices() {
                 >
                   Filters
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={itemCategory === 'power'}
+                  onClick={() => switchCategory('power')}
+                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'power' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Power
+                </button>
               </div>
             </div>
-            <Select value={v.chemical_name} onValueChange={handleItemChange}>
-              <SelectTrigger><SelectValue placeholder={itemCategory === 'filter' ? 'Pick filter' : 'Pick chemical'} /></SelectTrigger>
-              <SelectContent>
-                {itemCategory === 'chemical'
-                  ? <>
-                      {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      <SelectItem value="__custom__">+ Custom…</SelectItem>
-                    </>
-                  : FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)
-                }
-              </SelectContent>
-            </Select>
-            {v.chemical_name === '__custom__' && (
-              <Input className="mt-2" placeholder="Custom name" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} />
+            {itemCategory === 'power' ? (
+              <>
+                <PlantPicker value={v.plant_id} onChange={(id) => setV({ ...v, plant_id: id })} />
+                <p className="text-2xs text-muted-foreground mt-1">
+                  Wired to the same tariff record the Power tab derives from bills — this just lets you set a rate directly.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select value={v.chemical_name} onValueChange={handleItemChange}>
+                  <SelectTrigger><SelectValue placeholder={itemCategory === 'filter' ? 'Pick filter' : 'Pick chemical'} /></SelectTrigger>
+                  <SelectContent>
+                    {itemCategory === 'chemical'
+                      ? <>
+                          {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          <SelectItem value="__custom__">+ Custom…</SelectItem>
+                        </>
+                      : FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+                {v.chemical_name === '__custom__' && (
+                  <Input className="mt-2" placeholder="Custom name" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} />
+                )}
+              </>
             )}
           </div>
           <div>
-            <Label className="text-xs">Unit</Label>
-            <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {itemCategory === 'filter'
-                  ? FILTER_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)
-                  : <>
-                      {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                      <SelectItem value="__custom__">+ Custom…</SelectItem>
-                    </>
-                }
-              </SelectContent>
-            </Select>
-            {v.unit === '__custom__' && itemCategory === 'chemical' && (
-              <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
-            )}
-            {itemCategory === 'filter' && (
-              <p className="text-2xs text-muted-foreground mt-1">Filters are priced per piece or per set, not by weight/volume.</p>
+            <Label className="text-xs">{itemCategory === 'power' ? 'Provider (optional)' : 'Unit'}</Label>
+            {itemCategory === 'power' ? (
+              <Input placeholder="VECO / NGCP" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} />
+            ) : (
+              <>
+                <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {itemCategory === 'filter'
+                      ? FILTER_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)
+                      : <>
+                          {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                          <SelectItem value="__custom__">+ Custom…</SelectItem>
+                        </>
+                    }
+                  </SelectContent>
+                </Select>
+                {v.unit === '__custom__' && itemCategory === 'chemical' && (
+                  <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
+                )}
+                {itemCategory === 'filter' && (
+                  <p className="text-2xs text-muted-foreground mt-1">Filters are priced per piece or per set, not by weight/volume.</p>
+                )}
+              </>
             )}
           </div>
           <div>
-            <Label className="text-xs">Price ₱ / {v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit}</Label>
+            <Label className="text-xs">Price ₱ / {itemCategory === 'power' ? 'kWh' : (v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit)}</Label>
             <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} />
           </div>
           <div className="col-span-2">
@@ -807,6 +877,21 @@ function ChemicalPrices() {
           </div>
         </div>
         <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-white" size="sm">Add price</Button>
+
+        {itemCategory === 'power' && v.plant_id && (
+          <div className="pt-1 border-t">
+            <div className="text-2xs uppercase tracking-wide text-muted-foreground font-semibold mt-2 mb-1">Recent rates for this plant</div>
+            <div className="space-y-1">
+              {recentTariffs?.map((t: any) => (
+                <div key={t.id} className="flex justify-between items-center text-xs py-1">
+                  <span className="text-muted-foreground">{t.effective_date}{t.provider ? ` · ${t.provider}` : ''}</span>
+                  <span className="font-mono-num font-semibold">₱{(+t.rate_per_kwh).toFixed(4)}/kWh</span>
+                </div>
+              ))}
+              {!recentTariffs?.length && <p className="text-xs text-center text-muted-foreground py-1">No rates on file yet for this plant</p>}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── Price history table ────────────────────────────────────────────── */}
