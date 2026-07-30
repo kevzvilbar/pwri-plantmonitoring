@@ -758,7 +758,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       }
       const { data, error } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, reading_datetime, is_meter_replacement')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -768,7 +768,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       // to the base columns so the dialog still loads.
       const { data: fallback } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, reading_datetime')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -943,7 +943,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })} className="h-8 text-xs" />
               </div>
               <div>
-                <Label className="text-xs">Reading</Label>
+                <Label className="text-xs">{meter.is_derived ? 'Volume (m³)' : 'Reading'}</Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" />
               </div>
@@ -955,6 +955,19 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
               </Button>
               <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
             </div>
+          </div>
+        )}
+
+        {/* Derived (mirrored) meters have no physical counter — the sweep writes
+            that day's already-computed volume straight into current_reading and
+            resets previous_reading to 0 each run (see fn_sweep_derived_meters'
+            mirror loop), so there is no real cumulative delta to take between
+            rows. Mirrors the isDirectMode banner/column pattern already used for
+            direct-input locators & wells in the shared ReadingHistoryDialog. */}
+        {meter.is_derived && (
+          <div className="flex items-center gap-1.5 rounded-md bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/50 px-2.5 py-1.5 text-xs text-teal-800 dark:text-teal-300">
+            <Droplet className="h-3 w-3 shrink-0" />
+            This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
           </div>
         )}
 
@@ -974,8 +987,14 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
               <thead className="bg-muted sticky top-0">
                 <tr>
                   <th className="px-3 py-2 font-medium">Date & Time</th>
-                  <th className="px-3 py-2 font-medium text-right">Reading</th>
-                  <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
+                  {meter.is_derived ? (
+                    <th className="px-3 py-2 font-medium text-right">Volume (m³)</th>
+                  ) : (
+                    <>
+                      <th className="px-3 py-2 font-medium text-right">Reading</th>
+                      <th className="px-3 py-2 font-medium text-right">Production (m³)</th>
+                    </>
+                  )}
                   <th className="px-2 py-2 font-medium text-center">Repl.</th>
                   <th className="px-2 py-2 font-medium text-center w-16">Actions</th>
                 </tr>
@@ -1018,13 +1037,21 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                           )}
                         </span>
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono-num text-primary">
-                        {isMeterReplacement
-                          ? <span className="text-kpi-solar font-medium">0</span>
-                          : vol != null ? fmtNum(vol) : '—'
-                        }
-                      </td>
+                      {meter.is_derived ? (
+                        <td className="px-3 py-1.5 text-right font-mono-num text-primary">
+                          {fmtNum(r.daily_volume ?? r.current_reading)}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-1.5 text-right font-mono-num">{fmtNum(r.current_reading)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono-num text-primary">
+                            {isMeterReplacement
+                              ? <span className="text-kpi-solar font-medium">0</span>
+                              : vol != null ? fmtNum(vol) : '—'
+                            }
+                          </td>
+                        </>
+                      )}
                       <td className="px-2 py-1.5 text-center">
                         <button
                           title={isMeterReplacement ? 'Meter replacement — click to unmark' : 'Mark as meter replacement (zeroes production)'}
