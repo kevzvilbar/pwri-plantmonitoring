@@ -158,14 +158,26 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       }
 
       if (module === 'locator') {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('locator_readings')
           .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return data ?? [];
+        if (!error) return data ?? [];
+        // Fallback: base columns only (is_meter_replacement may not exist yet in
+        // this environment — avoid the PostgREST schema-cache error taking the
+        // whole dialog down to zero rows, matching the well/power/blending
+        // branches above).
+        const { data: fallback } = await supabase
+          .from('locator_readings')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag')
+          .eq('locator_id', entityId)
+          .gte('reading_datetime', sinceDate)
+          .lt('reading_datetime', untilNextDay)
+          .order('reading_datetime', { ascending: false });
+        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false }));
       }
       if (module === 'well') {
         const { data, error } = await supabase
