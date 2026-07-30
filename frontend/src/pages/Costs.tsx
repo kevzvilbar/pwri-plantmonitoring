@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -620,22 +620,33 @@ function ChemicalPrices() {
   const canEdit = isManager || isAdmin;
   const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
-  const isFilterSelected = (name: string) => (FILTER_ITEMS as readonly string[]).includes(name);
 
   // ── Add form state ───────────────────────────────────────────────────────────
   const [v, setV] = useState({ chemical_name: '', custom: '', unit: 'kg', customUnit: '', unit_price: '', effective_date: format(new Date(), 'yyyy-MM-dd') });
 
-  // Switching the item resets the unit to something that actually makes
-  // sense for it — filters are priced per pcs/set, never per kg or L, and
-  // vice versa. Keeps whatever the user had picked when it's still valid.
+  // Chemical/Filter toggle above the Item dropdown — picked up after
+  // feedback that scrolling past 8 chemicals to reach Bag/Cartridge Filter
+  // (previously grouped in one long list) wasn't convenient. Now the
+  // dropdown only ever lists the ~2–9 items in the selected category, so it
+  // never needs to scroll.
+  const [itemCategory, setItemCategory] = useState<'chemical' | 'filter'>('chemical');
+
+  const switchCategory = (cat: 'chemical' | 'filter') => {
+    if (cat === itemCategory) return;
+    setItemCategory(cat);
+    setV((prev) => ({ ...prev, chemical_name: '', custom: '', unit: cat === 'filter' ? 'pcs' : 'kg' }));
+  };
+
+  // Picking an item resets the unit to something that actually makes sense
+  // for its category — filters are priced per pcs/set, never per kg or L,
+  // and vice versa. Keeps whatever the user had picked when it's still valid.
   const handleItemChange = (name: string) => {
     setV((prev) => {
-      const nowFilter = isFilterSelected(name);
       const filterUnits: readonly string[] = FILTER_UNITS;
       return {
         ...prev,
         chemical_name: name,
-        unit: nowFilter ? (filterUnits.includes(prev.unit) ? prev.unit : 'pcs') : (prev.unit === 'set' ? 'kg' : prev.unit),
+        unit: itemCategory === 'filter' ? (filterUnits.includes(prev.unit) ? prev.unit : 'pcs') : (prev.unit === 'set' ? 'kg' : prev.unit),
       };
     });
   };
@@ -726,19 +737,39 @@ function ChemicalPrices() {
         <h4 className="text-sm font-semibold">Add price</h4>
         <div className="grid grid-cols-2 gap-2">
           <div className="col-span-2">
-            <Label className="text-xs">Item</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs">Item</Label>
+              <div className="inline-flex rounded-md border bg-muted p-0.5" role="tablist" aria-label="Item category">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={itemCategory === 'chemical'}
+                  onClick={() => switchCategory('chemical')}
+                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'chemical' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Chemicals
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={itemCategory === 'filter'}
+                  onClick={() => switchCategory('filter')}
+                  className={`px-2.5 py-1 text-2xs font-medium rounded transition-colors ${itemCategory === 'filter' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Filters
+                </button>
+              </div>
+            </div>
             <Select value={v.chemical_name} onValueChange={handleItemChange}>
-              <SelectTrigger><SelectValue placeholder="Pick item" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={itemCategory === 'filter' ? 'Pick filter' : 'Pick chemical'} /></SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Chemicals</SelectLabel>
-                  {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel>Filters</SelectLabel>
-                  {FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectGroup>
-                <SelectItem value="__custom__">+ Custom…</SelectItem>
+                {itemCategory === 'chemical'
+                  ? <>
+                      {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      <SelectItem value="__custom__">+ Custom…</SelectItem>
+                    </>
+                  : FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)
+                }
               </SelectContent>
             </Select>
             {v.chemical_name === '__custom__' && (
@@ -750,7 +781,7 @@ function ChemicalPrices() {
             <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {isFilterSelected(v.chemical_name)
+                {itemCategory === 'filter'
                   ? FILTER_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)
                   : <>
                       {UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
@@ -759,10 +790,10 @@ function ChemicalPrices() {
                 }
               </SelectContent>
             </Select>
-            {v.unit === '__custom__' && !isFilterSelected(v.chemical_name) && (
+            {v.unit === '__custom__' && itemCategory === 'chemical' && (
               <Input className="mt-2" placeholder="e.g. drum" value={v.customUnit} onChange={(e) => setV({ ...v, customUnit: e.target.value })} />
             )}
-            {isFilterSelected(v.chemical_name) && (
+            {itemCategory === 'filter' && (
               <p className="text-2xs text-muted-foreground mt-1">Filters are priced per piece or per set, not by weight/volume.</p>
             )}
           </div>
