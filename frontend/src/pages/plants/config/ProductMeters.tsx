@@ -260,11 +260,22 @@ export function AssignLocatorsDialog({
 
     try {
       // Assign selected locators to this meter (+ is_derived flag)
+      //
+      // BUGFIX (2026-07-30): this used to set is_derived without ever touching
+      // default_input_mode, which is NOT NULL DEFAULT 'raw' on this table — so a
+      // locator assigned here as derived (no physical meter) could still be left
+      // rendering as a raw cumulative meter everywhere else (ReadingHistoryDialog,
+      // EntityHistoryChart). trg_force_direct_mode (Phase 6) now guards this at
+      // the DB layer too, but we set it explicitly here as well so the change is
+      // reflected without waiting on a refetch. See
+      // 20260730_hamas_phase6_default_input_mode_guard.sql for the full context.
       for (const l of toAssign) {
         const isDer = !!derivedMap[l.id];
+        const payload: any = { product_meter_id: meter.id, is_derived: isDer, derived_from_meter_id: isDer ? meter.id : null };
+        if (isDer) payload.default_input_mode = 'direct';
         const { error } = await supabase
           .from('locators')
-          .update({ product_meter_id: meter.id, is_derived: isDer, derived_from_meter_id: isDer ? meter.id : null } as any)
+          .update(payload)
           .eq('id', l.id);
         if (error && !error.message.includes('column')) throw error;
       }
@@ -274,8 +285,14 @@ export function AssignLocatorsDialog({
         const isDer = !!derivedMap[l.id];
         const wasD  = !!l.is_derived;
         if (isDer !== wasD) {
+          // Keep default_input_mode in lockstep with is_derived in both directions:
+          // becoming derived forces 'direct' (also DB-enforced now, see above), and
+          // *leaving* derived status resets it to 'raw' — the trigger deliberately
+          // does NOT do this half, since a locator coming off derived status needs
+          // an admin decision, not a silent guess, but leaving it on 'direct' with
+          // a real physical meter attached would be just as wrong as the original bug.
           await supabase.from('locators')
-            .update({ is_derived: isDer, derived_from_meter_id: isDer ? meter.id : null } as any)
+            .update({ is_derived: isDer, derived_from_meter_id: isDer ? meter.id : null, default_input_mode: isDer ? 'direct' : 'raw' } as any)
             .eq('id', l.id);
         }
       }
@@ -286,6 +303,16 @@ export function AssignLocatorsDialog({
           .update({ product_meter_id: null, is_derived: false, derived_from_meter_id: null } as any)
           .in('id', toUnassign.map((l: any) => l.id));
         if (error && !error.message.includes('column')) throw error;
+
+        // Same reset as above, scoped to only the ones that were actually derived —
+        // a plain (never-derived) locator being unassigned here shouldn't have its
+        // input mode touched at all.
+        const unassignWasDerivedIds = toUnassign.filter((l: any) => l.is_derived).map((l: any) => l.id);
+        if (unassignWasDerivedIds.length) {
+          await supabase.from('locators')
+            .update({ default_input_mode: 'raw' } as any)
+            .in('id', unassignWasDerivedIds);
+        }
       }
 
       // Set up or clear mirror product_meter targets

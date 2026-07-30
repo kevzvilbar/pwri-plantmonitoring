@@ -223,21 +223,37 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               localStorage-per-device one (Blending tab), so the same meter
               could look like it was in a different mode depending on who was
               entering data and on which device. This is now a deliberate,
-              plant-config-owned choice a Manager/Admin makes once. */}
-          {!form.is_derived && (
-            <div>
-              <Label>Reading entry mode</Label>
-              <Select value={form.default_input_mode} onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="raw">Raw meter — operator enters the cumulative reading</SelectItem>
-                  <SelectItem value="direct">Direct m³ — operator enters the day's volume</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+              plant-config-owned choice a Manager/Admin makes once.
+
+              BUGFIX (2026-07-30): this used to be hidden entirely whenever
+              is_derived was checked, which meant the underlying value never
+              got updated and could silently stay 'raw' (see the checkbox's
+              onCheckedChange above, and 20260730_hamas_phase6_default_input_mode_guard.sql).
+              Kept visible but disabled/locked here instead, so an admin can
+              actually see the mode is Direct rather than wondering where the
+              control went. */}
+          <div>
+            <Label>Reading entry mode</Label>
+            <Select
+              value={form.is_derived ? 'direct' : form.default_input_mode}
+              disabled={form.is_derived}
+              onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="raw">Raw meter — operator enters the cumulative reading</SelectItem>
+                <SelectItem value="direct">Direct m³ — operator enters the day's volume</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.is_derived && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Locked to Direct — this locator has no physical meter, so there's no
+                cumulative reading to enter or diff against.
+              </p>
+            )}
+          </div>
 
           {/* Derived (Hamas-style) wiring — the toggle + mother-meter picker
               this dialog was missing. Previously the only way to stand up a
@@ -252,7 +268,20 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               <Checkbox
                 id="locator-is-derived"
                 checked={form.is_derived}
-                onCheckedChange={(c) => setForm({ ...form, is_derived: c === true })}
+                onCheckedChange={(c) => setForm(f => ({
+                  ...f,
+                  is_derived: c === true,
+                  // BUGFIX (2026-07-30): a derived locator has no meter to enter a
+                  // cumulative reading against, so its entry mode must be 'direct'.
+                  // This used to only hide the <Select> below without ever touching
+                  // its value, so a locator could become derived while quietly
+                  // staying on 'raw' underneath — exactly the state Hamas (SRP) was
+                  // found in (see 20260730_hamas_phase6_default_input_mode_guard.sql).
+                  // The DB now also enforces this via trg_force_direct_mode; this
+                  // just keeps the form's own state (and the disabled <Select> below)
+                  // honest without waiting on a refetch.
+                  default_input_mode: c === true ? 'direct' : f.default_input_mode,
+                }))}
               />
               <Label htmlFor="locator-is-derived" className="cursor-pointer">
                 This locator has no physical meter (derived / Hamas-style)
@@ -401,6 +430,13 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
     if (form.is_derived) {
       payload.is_derived = true;
       payload.derived_from_meter_id = form.derived_from_meter_id;
+      // BUGFIX (2026-07-30): default_input_mode is NOT NULL DEFAULT 'raw' on this
+      // table, and this dialog never exposed a raw/direct picker at creation time,
+      // so a brand-new derived locator used to insert straight into 'raw' mode with
+      // no way to fix it here. trg_force_direct_mode (Phase 6) would catch this on
+      // the DB side regardless, but setting it explicitly avoids relying on that
+      // alone for a fresh row. See 20260730_hamas_phase6_default_input_mode_guard.sql.
+      payload.default_input_mode = 'direct';
     }
     const { error } = await supabase.from('locators').insert(payload);
     if (error) { toast.error(friendlyError(error)); return; }
