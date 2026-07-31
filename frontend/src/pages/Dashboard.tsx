@@ -50,7 +50,6 @@ import { NRWGaugeCard }        from '@/components/dashboard/NRWGaugeCard';
 import { ReadingCoverageCard } from '@/components/dashboard/ReadingCoverageCard';
 import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
-import { ComplianceRadarCard } from '@/components/dashboard/ComplianceRadarCard';
 import { DataCompletenessRadarCard } from '@/components/dashboard/DataCompletenessRadarCard';
 import { CostSunburst }        from '@/components/dashboard/CostSunburst';
 
@@ -1592,7 +1591,7 @@ export default function Dashboard() {
         clusterId="cost"
       />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ComplianceRadarCard plantIds={plantIds} />
+        <DataCompletenessRadarCard plantIds={plantIds} />
         <CostSunburst plantIds={plantIds} />
       </div>
 
@@ -1602,14 +1601,9 @@ export default function Dashboard() {
 
       {/* Blending Volume sits immediately below the trend chart in the same cluster.
           Alerts have moved to the TopBar notification bell (see useEffect above). */}
-      {/* ④ Data completeness radar  +  Reading coverage — same theme, paired side-by-side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <DataCompletenessRadarCard plantIds={plantIds} />
+      {/* ④ Reading coverage  +  ⑤ PM due soon  +  ⑥ Pending review — side-by-side on sm+ */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ReadingCoverageCard plantIds={plantIds} />
-      </div>
-
-      {/* ⑤ PM due soon  +  ⑥ Pending review — side-by-side on sm+ */}
-      <div className="grid gap-3 sm:grid-cols-2">
         <PMDueSoonCard       plantIds={plantIds} />
         <PendingReviewCard   plantIds={plantIds} />
       </div>
