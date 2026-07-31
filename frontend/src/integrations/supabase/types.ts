@@ -81,6 +81,13 @@ export type Database = {
             foreignKeyName: "afm_readings_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "afm_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -93,53 +100,140 @@ export type Database = {
           },
         ]
       }
+      ai_chat_sessions: {
+        Row: {
+          messages: Json
+          session_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          messages?: Json
+          session_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          messages?: Json
+          session_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      archived_plant_data: {
+        Row: {
+          archived_at: string
+          archived_by: string | null
+          id: string
+          payload: Json
+          plant_id: string
+          plant_name: string | null
+          reason: string | null
+          source_row_id: string | null
+          source_table: string
+        }
+        Insert: {
+          archived_at?: string
+          archived_by?: string | null
+          id?: string
+          payload: Json
+          plant_id: string
+          plant_name?: string | null
+          reason?: string | null
+          source_row_id?: string | null
+          source_table: string
+        }
+        Update: {
+          archived_at?: string
+          archived_by?: string | null
+          id?: string
+          payload?: Json
+          plant_id?: string
+          plant_name?: string | null
+          reason?: string | null
+          source_row_id?: string | null
+          source_table?: string
+        }
+        Relationships: []
+      }
+      blending_events: {
+        Row: {
+          event_date: string
+          id: string
+          is_meter_replacement: boolean | null
+          noted_at: string
+          plant_id: string
+          plant_name: string | null
+          previous_reading: number | null
+          raw_meter_reading: number | null
+          reading_datetime: string | null
+          volume_m3: number
+          well_id: string
+          well_name: string | null
+        }
+        Insert: {
+          event_date: string
+          id?: string
+          is_meter_replacement?: boolean | null
+          noted_at?: string
+          plant_id: string
+          plant_name?: string | null
+          previous_reading?: number | null
+          raw_meter_reading?: number | null
+          reading_datetime?: string | null
+          volume_m3?: number
+          well_id: string
+          well_name?: string | null
+        }
+        Update: {
+          event_date?: string
+          id?: string
+          is_meter_replacement?: boolean | null
+          noted_at?: string
+          plant_id?: string
+          plant_name?: string | null
+          previous_reading?: number | null
+          raw_meter_reading?: number | null
+          reading_datetime?: string | null
+          volume_m3?: number
+          well_id?: string
+          well_name?: string | null
+        }
+        Relationships: []
+      }
       blending_wells: {
         Row: {
           id: string
-          well_id: string
-          plant_id: string
-          well_name: string | null
-          plant_name: string | null
-          tagged_by: string | null
-          tagged_at: string
           note: string | null
+          plant_id: string
+          plant_name: string | null
+          tagged_at: string
+          tagged_by: string | null
+          well_id: string
+          well_name: string | null
         }
         Insert: {
           id?: string
-          well_id: string
-          plant_id: string
-          well_name?: string | null
-          plant_name?: string | null
-          tagged_by?: string | null
-          tagged_at?: string
           note?: string | null
+          plant_id: string
+          plant_name?: string | null
+          tagged_at?: string
+          tagged_by?: string | null
+          well_id: string
+          well_name?: string | null
         }
         Update: {
           id?: string
-          well_id?: string
-          plant_id?: string
-          well_name?: string | null
-          plant_name?: string | null
-          tagged_by?: string | null
-          tagged_at?: string
           note?: string | null
+          plant_id?: string
+          plant_name?: string | null
+          tagged_at?: string
+          tagged_by?: string | null
+          well_id?: string
+          well_name?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "blending_wells_well_id_fkey"
-            columns: ["well_id"]
-            isOneToOne: true
-            referencedRelation: "wells"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "blending_wells_plant_id_fkey"
-            columns: ["plant_id"]
-            isOneToOne: false
-            referencedRelation: "plants"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       cartridge_readings: {
         Row: {
@@ -196,6 +290,13 @@ export type Database = {
             foreignKeyName: "cartridge_readings_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "cartridge_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -204,6 +305,112 @@ export type Database = {
             columns: ["train_id"]
             isOneToOne: false
             referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_audit_log: {
+        Row: {
+          id: string
+          recipient_id: string
+          sender_id: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          recipient_id: string
+          sender_id: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          recipient_id?: string
+          sender_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_audit_log_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_audit_log_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_audit_log_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_audit_log_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          body: string
+          expires_at: string
+          id: string
+          recipient_id: string
+          sender_id: string
+          sent_at: string
+        }
+        Insert: {
+          body: string
+          expires_at?: string
+          id?: string
+          recipient_id: string
+          sender_id: string
+          sent_at?: string
+        }
+        Update: {
+          body?: string
+          expires_at?: string
+          id?: string
+          recipient_id?: string
+          sender_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_messages_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -246,6 +453,13 @@ export type Database = {
           template_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "checklist_executions_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "checklist_executions_completed_by_fkey"
             columns: ["completed_by"]
@@ -317,6 +531,13 @@ export type Database = {
             foreignKeyName: "checklist_step_executions_completed_by_fkey"
             columns: ["completed_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "checklist_step_executions_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -378,6 +599,13 @@ export type Database = {
           schedule_start_date?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "checklist_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "checklist_templates_created_by_fkey"
             columns: ["created_by"]
@@ -499,6 +727,13 @@ export type Database = {
             foreignKeyName: "chemical_dosing_logs_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chemical_dosing_logs_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -574,6 +809,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "chemical_prices_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "chemical_prices_updated_by_fkey"
             columns: ["updated_by"]
@@ -673,6 +915,13 @@ export type Database = {
             foreignKeyName: "cip_logs_conducted_by_fkey"
             columns: ["conducted_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "cip_logs_conducted_by_fkey"
+            columns: ["conducted_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -688,6 +937,38 @@ export type Database = {
             columns: ["train_id"]
             isOneToOne: false
             referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compliance_snapshots: {
+        Row: {
+          evaluated_at: string
+          id: string
+          plant_id: string | null
+          summary: string | null
+          violations: Json
+        }
+        Insert: {
+          evaluated_at?: string
+          id?: string
+          plant_id?: string | null
+          summary?: string | null
+          violations?: Json
+        }
+        Update: {
+          evaluated_at?: string
+          id?: string
+          plant_id?: string | null
+          summary?: string | null
+          violations?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_snapshots_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
             referencedColumns: ["id"]
           },
         ]
@@ -712,6 +993,93 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      correction_requests: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          original_value: number
+          plant_id: string
+          proposed_value: number
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          source_id: string
+          source_table: string
+          status: string
+          submitted_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          original_value: number
+          plant_id: string
+          proposed_value: number
+          reason: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source_id: string
+          source_table: string
+          status?: string
+          submitted_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          original_value?: number
+          plant_id?: string
+          proposed_value?: number
+          reason?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source_id?: string
+          source_table?: string
+          status?: string
+          submitted_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "correction_requests_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correction_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "correction_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correction_requests_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "correction_requests_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_plant_summary: {
         Row: {
@@ -799,45 +1167,154 @@ export type Database = {
           },
         ]
       }
+      deletion_audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          created_at: string
+          dependencies: Json | null
+          entity_id: string
+          entity_label: string | null
+          id: string
+          kind: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          dependencies?: Json | null
+          entity_id: string
+          entity_label?: string | null
+          id?: string
+          kind: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          dependencies?: Json | null
+          entity_id?: string
+          entity_label?: string | null
+          id?: string
+          kind?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      derived_meter_sweep_log: {
+        Row: {
+          changed: boolean
+          date_key: string
+          id: string
+          locator_id: string
+          mirror_meter_id: string | null
+          mirror_reading_id: string | null
+          new_value: number | null
+          old_value: number | null
+          reading_id: string | null
+          swept_at: string
+        }
+        Insert: {
+          changed?: boolean
+          date_key: string
+          id?: string
+          locator_id: string
+          mirror_meter_id?: string | null
+          mirror_reading_id?: string | null
+          new_value?: number | null
+          old_value?: number | null
+          reading_id?: string | null
+          swept_at?: string
+        }
+        Update: {
+          changed?: boolean
+          date_key?: string
+          id?: string
+          locator_id?: string
+          mirror_meter_id?: string | null
+          mirror_reading_id?: string | null
+          new_value?: number | null
+          old_value?: number | null
+          reading_id?: string | null
+          swept_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "derived_meter_sweep_log_locator_id_fkey"
+            columns: ["locator_id"]
+            isOneToOne: false
+            referencedRelation: "locators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_mirror_meter_id_fkey"
+            columns: ["mirror_meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_mirror_reading_id_fkey"
+            columns: ["mirror_reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_mirror_reading_id_fkey"
+            columns: ["mirror_reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "locator_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "derived_meter_sweep_log_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "locator_readings_clean"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       downtime_events: {
         Row: {
-          addressed: boolean
-          cause: string
           created_at: string
+          description: string | null
           duration_hrs: number
           event_date: string
           id: string
-          notes: string | null
-          plant_id: string
-          recorded_by: string | null
-          resolution: string | null
-          updated_at: string
+          plant_id: string | null
+          subsystem: string | null
         }
         Insert: {
-          addressed?: boolean
-          cause: string
           created_at?: string
+          description?: string | null
           duration_hrs?: number
-          event_date?: string
+          event_date: string
           id?: string
-          notes?: string | null
-          plant_id: string
-          recorded_by?: string | null
-          resolution?: string | null
-          updated_at?: string
+          plant_id?: string | null
+          subsystem?: string | null
         }
         Update: {
-          addressed?: boolean
-          cause?: string
           created_at?: string
+          description?: string | null
           duration_hrs?: number
           event_date?: string
           id?: string
-          notes?: string | null
-          plant_id?: string
-          recorded_by?: string | null
-          resolution?: string | null
-          updated_at?: string
+          plant_id?: string | null
+          subsystem?: string | null
         }
         Relationships: [
           {
@@ -845,13 +1322,6 @@ export type Database = {
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "downtime_events_recorded_by_fkey"
-            columns: ["recorded_by"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -926,46 +1396,43 @@ export type Database = {
       }
       entity_status_audit_log: {
         Row: {
-          id: string
-          user_id: string | null
-          plant_id: string
-          entity_type: string
           entity_id: string
           entity_label: string | null
+          entity_type: string
           from_status: string
-          to_status: string
+          id: string
+          plant_id: string | null
           reason_category: string | null
           reason_detail: string | null
           timestamp: string
-          created_at: string
+          to_status: string
+          user_id: string | null
         }
         Insert: {
-          id?: string
-          user_id?: string | null
-          plant_id: string
-          entity_type: string
           entity_id: string
           entity_label?: string | null
+          entity_type: string
           from_status: string
-          to_status: string
+          id?: string
+          plant_id?: string | null
           reason_category?: string | null
           reason_detail?: string | null
           timestamp?: string
-          created_at?: string
+          to_status: string
+          user_id?: string | null
         }
         Update: {
-          id?: string
-          user_id?: string | null
-          plant_id?: string
-          entity_type?: string
           entity_id?: string
           entity_label?: string | null
+          entity_type?: string
           from_status?: string
-          to_status?: string
+          id?: string
+          plant_id?: string | null
           reason_category?: string | null
           reason_detail?: string | null
           timestamp?: string
-          created_at?: string
+          to_status?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -976,6 +1443,151 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      filter_unit_prices: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          filter_housing_type: string
+          id: string
+          plant_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          filter_housing_type: string
+          id?: string
+          plant_id: string
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          filter_housing_type?: string
+          id?: string
+          plant_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filter_unit_prices_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_analysis: {
+        Row: {
+          actor_label: string | null
+          actor_user_id: string | null
+          ai_model: string | null
+          ai_provider: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decisions: Json | null
+          file_kind: string | null
+          file_size: number | null
+          filename: string
+          id: string
+          plant_id: string | null
+          reason: string | null
+          status: string
+          sync_summary: Json | null
+          tables: Json
+          wellmeter_detected: boolean
+        }
+        Insert: {
+          actor_label?: string | null
+          actor_user_id?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decisions?: Json | null
+          file_kind?: string | null
+          file_size?: number | null
+          filename: string
+          id?: string
+          plant_id?: string | null
+          reason?: string | null
+          status?: string
+          sync_summary?: Json | null
+          tables: Json
+          wellmeter_detected?: boolean
+        }
+        Update: {
+          actor_label?: string | null
+          actor_user_id?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decisions?: Json | null
+          file_kind?: string | null
+          file_size?: number | null
+          filename?: string
+          id?: string
+          plant_id?: string | null
+          reason?: string | null
+          status?: string
+          sync_summary?: Json | null
+          tables?: Json
+          wellmeter_detected?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_analysis_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_audit_log: {
+        Row: {
+          file_name: string | null
+          id: string
+          module: string | null
+          plant_id: string | null
+          row_count: number | null
+          schema_errors: Json | null
+          schema_valid: boolean | null
+          timestamp: string | null
+          user_id: string | null
+        }
+        Insert: {
+          file_name?: string | null
+          id?: string
+          module?: string | null
+          plant_id?: string | null
+          row_count?: number | null
+          schema_errors?: Json | null
+          schema_valid?: boolean | null
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          file_name?: string | null
+          id?: string
+          module?: string | null
+          plant_id?: string | null
+          row_count?: number | null
+          schema_errors?: Json | null
+          schema_valid?: boolean | null
+          timestamp?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       incidents: {
         Row: {
@@ -1067,6 +1679,13 @@ export type Database = {
             foreignKeyName: "incidents_closed_by_fkey"
             columns: ["closed_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "incidents_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1081,6 +1700,13 @@ export type Database = {
             foreignKeyName: "incidents_resolved_by_fkey"
             columns: ["resolved_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "incidents_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1088,7 +1714,46 @@ export type Database = {
             foreignKeyName: "incidents_who_reporter_fkey"
             columns: ["who_reporter"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "incidents_who_reporter_fkey"
+            columns: ["who_reporter"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locator_derived_review_flags: {
+        Row: {
+          date_key: string
+          flagged_at: string
+          id: string
+          locator_id: string
+          resolved_at: string | null
+        }
+        Insert: {
+          date_key: string
+          flagged_at?: string
+          id?: string
+          locator_id: string
+          resolved_at?: string | null
+        }
+        Update: {
+          date_key?: string
+          flagged_at?: string
+          id?: string
+          locator_id?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locator_derived_review_flags_locator_id_fkey"
+            columns: ["locator_id"]
+            isOneToOne: false
+            referencedRelation: "locators"
             referencedColumns: ["id"]
           },
         ]
@@ -1108,7 +1773,6 @@ export type Database = {
           old_meter_serial: string | null
           old_meter_size: string | null
           plant_id: string
-          /** Links back to the locator_readings row that triggered this replacement (if any). */
           reading_id: string | null
           remarks: string | null
           replaced_by: string | null
@@ -1175,6 +1839,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "locator_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "locator_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "locator_meter_replacements_replaced_by_fkey"
             columns: ["replaced_by"]
             isOneToOne: false
@@ -1193,9 +1871,11 @@ export type Database = {
           id: string
           is_estimated: boolean
           is_meter_replacement: boolean | null
+          is_meter_rollover: boolean
+          locator_id: string
           locked_at: string | null
           locked_by: string | null
-          locator_id: string
+          meter_rollover_max: number | null
           norm_status: string | null
           off_location_flag: boolean
           plant_id: string
@@ -1213,9 +1893,11 @@ export type Database = {
           id?: string
           is_estimated?: boolean
           is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locator_id: string
           locked_at?: string | null
           locked_by?: string | null
-          locator_id: string
+          meter_rollover_max?: number | null
           norm_status?: string | null
           off_location_flag?: boolean
           plant_id: string
@@ -1233,9 +1915,11 @@ export type Database = {
           id?: string
           is_estimated?: boolean
           is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locator_id?: string
           locked_at?: string | null
           locked_by?: string | null
-          locator_id?: string
+          meter_rollover_max?: number | null
           norm_status?: string | null
           off_location_flag?: boolean
           plant_id?: string
@@ -1253,11 +1937,32 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "locator_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "locator_readings_recorded_by_fkey"
@@ -1272,9 +1977,13 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          default_input_mode: string
+          derived_from_meter_id: string | null
           gps_lat: number | null
           gps_lng: number | null
           id: string
+          is_derived: boolean
+          is_locked: boolean
           location_desc: string | null
           meter_brand: string | null
           meter_installed_date: string | null
@@ -1282,15 +1991,20 @@ export type Database = {
           meter_size: string | null
           name: string
           plant_id: string
+          product_meter_id: string | null
           status: Database["public"]["Enums"]["plant_status"]
           updated_at: string
         }
         Insert: {
           address?: string | null
           created_at?: string
+          default_input_mode?: string
+          derived_from_meter_id?: string | null
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_derived?: boolean
+          is_locked?: boolean
           location_desc?: string | null
           meter_brand?: string | null
           meter_installed_date?: string | null
@@ -1298,15 +2012,20 @@ export type Database = {
           meter_size?: string | null
           name: string
           plant_id: string
+          product_meter_id?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
         }
         Update: {
           address?: string | null
           created_at?: string
+          default_input_mode?: string
+          derived_from_meter_id?: string | null
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
+          is_derived?: boolean
+          is_locked?: boolean
           location_desc?: string | null
           meter_brand?: string | null
           meter_installed_date?: string | null
@@ -1314,10 +2033,18 @@ export type Database = {
           meter_size?: string | null
           name?: string
           plant_id?: string
+          product_meter_id?: string | null
           status?: Database["public"]["Enums"]["plant_status"]
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "locators_derived_from_meter_id_fkey"
+            columns: ["derived_from_meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "locators_plant_id_fkey"
             columns: ["plant_id"]
@@ -1325,7 +2052,44 @@ export type Database = {
             referencedRelation: "plants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "locators_product_meter_id_fkey"
+            columns: ["product_meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      login_attempts: {
+        Row: {
+          attempted_at: string
+          email: string
+          error_reason: string | null
+          id: string
+          success: boolean
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          email: string
+          error_reason?: string | null
+          id?: string
+          success: boolean
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          email?: string
+          error_reason?: string | null
+          id?: string
+          success?: boolean
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
@@ -1374,15 +2138,296 @@ export type Database = {
           },
         ]
       }
+      operator_switch_log: {
+        Row: {
+          from_operator_id: string | null
+          id: string
+          plant_id: string | null
+          switched_at: string
+          switched_by: string | null
+          to_operator_id: string | null
+        }
+        Insert: {
+          from_operator_id?: string | null
+          id?: string
+          plant_id?: string | null
+          switched_at?: string
+          switched_by?: string | null
+          to_operator_id?: string | null
+        }
+        Update: {
+          from_operator_id?: string | null
+          id?: string
+          plant_id?: string | null
+          switched_at?: string
+          switched_by?: string | null
+          to_operator_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_switch_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_assignment_audit: {
+        Row: {
+          admin_id: string | null
+          changed_at: string
+          created_at: string
+          id: string
+          justification: string | null
+          new_plant_ids: string[]
+          user_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          justification?: string | null
+          new_plant_ids?: string[]
+          user_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          justification?: string | null
+          new_plant_ids?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_assignment_audit_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "plant_assignment_audit_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plant_assignment_audit_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "plant_assignment_audit_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_edit_audit_log: {
+        Row: {
+          created_at: string
+          field_changed: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          plant_id: string
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          field_changed: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          plant_id: string
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          field_changed?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          plant_id?: string
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_edit_audit_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plant_edit_audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "plant_edit_audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_meter_config: {
+        Row: {
+          config: Json
+          permeate_is_production: boolean
+          plant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json
+          permeate_is_production?: boolean
+          plant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json
+          permeate_is_production?: boolean
+          plant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_meter_config_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: true
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_multiplier_cache: {
+        Row: {
+          cached_at: string
+          effective_mult: number
+          invalidated: boolean
+          meter_index: number
+          plant_id: string
+        }
+        Insert: {
+          cached_at?: string
+          effective_mult?: number
+          invalidated?: boolean
+          meter_index?: number
+          plant_id: string
+        }
+        Update: {
+          cached_at?: string
+          effective_mult?: number
+          invalidated?: boolean
+          meter_index?: number
+          plant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_multiplier_cache_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plant_power_config"
+            referencedColumns: ["plant_id"]
+          },
+        ]
+      }
+      plant_power_config: {
+        Row: {
+          grid_meter_count: number
+          grid_meter_multipliers: number[]
+          grid_meter_names: string[]
+          plant_id: string
+          solar_meter_count: number
+          solar_meter_names: string[]
+          updated_at: string
+        }
+        Insert: {
+          grid_meter_count?: number
+          grid_meter_multipliers?: number[]
+          grid_meter_names?: string[]
+          plant_id: string
+          solar_meter_count?: number
+          solar_meter_names?: string[]
+          updated_at?: string
+        }
+        Update: {
+          grid_meter_count?: number
+          grid_meter_multipliers?: number[]
+          grid_meter_names?: string[]
+          plant_id?: string
+          solar_meter_count?: number
+          solar_meter_names?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_power_config_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: true
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plant_topology_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_id: string
+          id: string
+          plant_id: string
+          to_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_id: string
+          id?: string
+          plant_id: string
+          to_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_id?: string
+          id?: string
+          plant_id?: string
+          to_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plant_topology_links_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plants: {
         Row: {
           address: string | null
           backwash_mode: string
           created_at: string
           design_capacity_m3: number | null
-          /** Default filter housing type for this plant: 'Cartridge Filter' | 'Bag Filter'. Per-train rows inherit this when their own column is null. */
           filter_housing_type: string
-          /** Default filter media type for this plant: 'AFM' | 'MMF'. Per-train rows inherit this when their own column is null. */
           filter_media_type: string
           geofence_radius_m: number
           gps_lat: number | null
@@ -1435,6 +2480,64 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      power_meter_changes: {
+        Row: {
+          change_date: string
+          changed_by: string | null
+          created_at: string
+          id: string
+          meter_index: number
+          new_multiplier: number
+          notes: string | null
+          old_multiplier: number
+          plant_id: string
+        }
+        Insert: {
+          change_date: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          meter_index?: number
+          new_multiplier?: number
+          notes?: string | null
+          old_multiplier?: number
+          plant_id: string
+        }
+        Update: {
+          change_date?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          meter_index?: number
+          new_multiplier?: number
+          notes?: string | null
+          old_multiplier?: number
+          plant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "power_meter_changes_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "power_meter_changes_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "power_meter_changes_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       power_readings: {
         Row: {
@@ -1500,51 +2603,14 @@ export type Database = {
             foreignKeyName: "power_readings_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
           },
-        ]
-      }
-      opex_budgets: {
-        Row: {
-          budget_month: string
-          chem_budget: number
-          id: string
-          notes: string | null
-          plant_id: string
-          power_budget: number
-          total_budget: number | null
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          budget_month: string
-          chem_budget?: number
-          id?: string
-          notes?: string | null
-          plant_id: string
-          power_budget?: number
-          total_budget?: number | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          budget_month?: string
-          chem_budget?: number
-          id?: string
-          notes?: string | null
-          plant_id?: string
-          power_budget?: number
-          total_budget?: number | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "opex_budgets_plant_id_fkey"
-            columns: ["plant_id"]
+            foreignKeyName: "power_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
             isOneToOne: false
-            referencedRelation: "plants"
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1593,16 +2659,346 @@ export type Database = {
           },
         ]
       }
+      product_meter_audit_log: {
+        Row: {
+          id: string
+          meter_id: string | null
+          meter_name: string
+          new_value: string | null
+          old_value: string | null
+          plant_id: string | null
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          id?: string
+          meter_id?: string | null
+          meter_name: string
+          new_value?: string | null
+          old_value?: string | null
+          plant_id?: string | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          id?: string
+          meter_id?: string | null
+          meter_name?: string
+          new_value?: string | null
+          old_value?: string | null
+          plant_id?: string | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meter_audit_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meter_readings: {
+        Row: {
+          created_at: string
+          current_reading: number | null
+          daily_volume: number | null
+          id: string
+          is_estimated: boolean
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean
+          locked_at: string | null
+          locked_by: string | null
+          meter_id: string
+          meter_rollover_max: number | null
+          norm_status: string | null
+          plant_id: string
+          previous_reading: number | null
+          production_volume: number | null
+          reading_datetime: string
+          recorded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_reading?: number | null
+          daily_volume?: number | null
+          id?: string
+          is_estimated?: boolean
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_id: string
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          plant_id: string
+          previous_reading?: number | null
+          production_volume?: number | null
+          reading_datetime?: string
+          recorded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_reading?: number | null
+          daily_volume?: number | null
+          id?: string
+          is_estimated?: boolean
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_id?: string
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          plant_id?: string
+          previous_reading?: number | null
+          production_volume?: number | null
+          reading_datetime?: string
+          recorded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meter_replacements: {
+        Row: {
+          created_at: string
+          id: string
+          meter_id: string
+          new_meter_brand: string | null
+          new_meter_initial_reading: number | null
+          new_meter_installed_date: string | null
+          new_meter_serial: string | null
+          new_meter_size: string | null
+          old_meter_brand: string | null
+          old_meter_final_reading: number | null
+          old_meter_serial: string | null
+          old_meter_size: string | null
+          plant_id: string
+          reading_id: string | null
+          remarks: string | null
+          replaced_by: string | null
+          replacement_date: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meter_id: string
+          new_meter_brand?: string | null
+          new_meter_initial_reading?: number | null
+          new_meter_installed_date?: string | null
+          new_meter_serial?: string | null
+          new_meter_size?: string | null
+          old_meter_brand?: string | null
+          old_meter_final_reading?: number | null
+          old_meter_serial?: string | null
+          old_meter_size?: string | null
+          plant_id: string
+          reading_id?: string | null
+          remarks?: string | null
+          replaced_by?: string | null
+          replacement_date: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meter_id?: string
+          new_meter_brand?: string | null
+          new_meter_initial_reading?: number | null
+          new_meter_installed_date?: string | null
+          new_meter_serial?: string | null
+          new_meter_size?: string | null
+          old_meter_brand?: string | null
+          old_meter_final_reading?: number | null
+          old_meter_serial?: string | null
+          old_meter_size?: string | null
+          plant_id?: string
+          reading_id?: string | null
+          remarks?: string | null
+          replaced_by?: string | null
+          replacement_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meter_replacements_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_replacements_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "product_meter_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "product_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_meters: {
+        Row: {
+          created_at: string
+          derived_from_locator_id: string | null
+          id: string
+          is_derived: boolean
+          meter_serial: string | null
+          name: string
+          plant_id: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          derived_from_locator_id?: string | null
+          id?: string
+          is_derived?: boolean
+          meter_serial?: string | null
+          name: string
+          plant_id: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          derived_from_locator_id?: string | null
+          id?: string
+          is_derived?: boolean
+          meter_serial?: string | null
+          name?: string
+          plant_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_meters_derived_from_locator_id_fkey"
+            columns: ["derived_from_locator_id"]
+            isOneToOne: false
+            referencedRelation: "locators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_meters_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_calc_log: {
+        Row: {
+          entry_name: string | null
+          id: string
+          meter_id: string | null
+          meter_name: string | null
+          plant_id: string | null
+          production_volume: number
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          entry_name?: string | null
+          id?: string
+          meter_id?: string | null
+          meter_name?: string | null
+          plant_id?: string | null
+          production_volume: number
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          entry_name?: string | null
+          id?: string
+          meter_id?: string | null
+          meter_name?: string | null
+          plant_id?: string | null
+          production_volume?: number
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_calc_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_costs: {
         Row: {
           chem_cost: number
           cost_date: string
           cost_per_m3: number | null
           driver_notes: string | null
+          filter_cost: number
           id: string
           plant_id: string
           power_cost: number
           production_m3: number
+          solar_cost: number
           total_cost: number | null
           updated_at: string
         }
@@ -1611,10 +3007,12 @@ export type Database = {
           cost_date: string
           cost_per_m3?: number | null
           driver_notes?: string | null
+          filter_cost?: number
           id?: string
           plant_id: string
           power_cost?: number
           production_m3?: number
+          solar_cost?: number
           total_cost?: number | null
           updated_at?: string
         }
@@ -1623,10 +3021,12 @@ export type Database = {
           cost_date?: string
           cost_per_m3?: number | null
           driver_notes?: string | null
+          filter_cost?: number
           id?: string
           plant_id?: string
           power_cost?: number
           production_m3?: number
+          solar_cost?: number
           total_cost?: number | null
           updated_at?: string
         }
@@ -1698,6 +3098,13 @@ export type Database = {
             foreignKeyName: "pump_readings_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "pump_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1710,6 +3117,293 @@ export type Database = {
           },
         ]
       }
+      raw_edit_log: {
+        Row: {
+          column_name: string
+          edited_at: string
+          edited_by: string | null
+          edited_role: string
+          id: string
+          new_value: number | null
+          note: string | null
+          old_value: number | null
+          source_id: string
+          source_table: string
+        }
+        Insert: {
+          column_name: string
+          edited_at?: string
+          edited_by?: string | null
+          edited_role: string
+          id?: string
+          new_value?: number | null
+          note?: string | null
+          old_value?: number | null
+          source_id: string
+          source_table: string
+        }
+        Update: {
+          column_name?: string
+          edited_at?: string
+          edited_by?: string | null
+          edited_role?: string
+          id?: string
+          new_value?: number | null
+          note?: string | null
+          old_value?: number | null
+          source_id?: string
+          source_table?: string
+        }
+        Relationships: []
+      }
+      reading_edit_audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          changes: Json | null
+          edited_at: string
+          id: string
+          plant_id: string | null
+          record_id: string | null
+          table_name: string
+          train_id: string | null
+        }
+        Insert: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          changes?: Json | null
+          edited_at?: string
+          id?: string
+          plant_id?: string | null
+          record_id?: string | null
+          table_name: string
+          train_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          changes?: Json | null
+          edited_at?: string
+          id?: string
+          plant_id?: string | null
+          record_id?: string | null
+          table_name?: string
+          train_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_edit_audit_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reading_gap_reasons: {
+        Row: {
+          entity_id: string
+          entity_type: string
+          gap_date: string
+          id: string
+          logged_at: string
+          logged_by: string | null
+          plant_id: string
+          reason_category: string
+          reason_detail: string | null
+        }
+        Insert: {
+          entity_id: string
+          entity_type: string
+          gap_date: string
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          plant_id: string
+          reason_category: string
+          reason_detail?: string | null
+        }
+        Update: {
+          entity_id?: string
+          entity_type?: string
+          gap_date?: string
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          plant_id?: string
+          reason_category?: string
+          reason_detail?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_gap_reasons_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reading_normalizations: {
+        Row: {
+          action: Database["public"]["Enums"]["reading_norm_action"]
+          adjusted_value: number | null
+          id: string
+          note: string | null
+          original_value: number | null
+          performed_at: string
+          performed_by: string | null
+          performed_role: string
+          retractable: boolean
+          source_id: string
+          source_table: string
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["reading_norm_action"]
+          adjusted_value?: number | null
+          id?: string
+          note?: string | null
+          original_value?: number | null
+          performed_at?: string
+          performed_by?: string | null
+          performed_role: string
+          retractable?: boolean
+          source_id: string
+          source_table: string
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["reading_norm_action"]
+          adjusted_value?: number | null
+          id?: string
+          note?: string | null
+          original_value?: number | null
+          performed_at?: string
+          performed_by?: string | null
+          performed_role?: string
+          retractable?: boolean
+          source_id?: string
+          source_table?: string
+        }
+        Relationships: []
+      }
+      regression_results: {
+        Row: {
+          column_name: string
+          corrections: Json
+          created_at: string
+          created_by: string | null
+          created_role: string
+          date_from: string | null
+          date_to: string | null
+          id: string
+          intercept: number | null
+          plant_id: string | null
+          r_squared: number | null
+          row_count: number
+          slope: number | null
+          source_table: string
+          status: string
+        }
+        Insert: {
+          column_name: string
+          corrections?: Json
+          created_at?: string
+          created_by?: string | null
+          created_role?: string
+          date_from?: string | null
+          date_to?: string | null
+          id?: string
+          intercept?: number | null
+          plant_id?: string | null
+          r_squared?: number | null
+          row_count?: number
+          slope?: number | null
+          source_table: string
+          status?: string
+        }
+        Update: {
+          column_name?: string
+          corrections?: Json
+          created_at?: string
+          created_by?: string | null
+          created_role?: string
+          date_from?: string | null
+          date_to?: string | null
+          id?: string
+          intercept?: number | null
+          plant_id?: string | null
+          r_squared?: number | null
+          row_count?: number
+          slope?: number | null
+          source_table?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regression_results_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ro_plant_users: {
+        Row: {
+          created_at: string
+          id: string
+          plant_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          plant_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          plant_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_plant_users_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "ro_plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ro_plants: {
+        Row: {
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
       ro_pretreatment_readings: {
         Row: {
           afm_units: Json | null
@@ -1717,10 +3411,13 @@ export type Database = {
           backwash_start: string | null
           bag_filters_changed: number | null
           booster_pumps: Json | null
+          cartridge_filter_housings: Json | null
+          cartridges_changed: number
           created_at: string
           filter_housings: Json | null
           hpp_target_pressure_psi: number | null
           id: string
+          incomplete_reason: string | null
           mmf_readings: Json | null
           plant_id: string
           reading_datetime: string
@@ -1734,10 +3431,13 @@ export type Database = {
           backwash_start?: string | null
           bag_filters_changed?: number | null
           booster_pumps?: Json | null
+          cartridge_filter_housings?: Json | null
+          cartridges_changed?: number
           created_at?: string
           filter_housings?: Json | null
           hpp_target_pressure_psi?: number | null
           id?: string
+          incomplete_reason?: string | null
           mmf_readings?: Json | null
           plant_id: string
           reading_datetime?: string
@@ -1751,10 +3451,13 @@ export type Database = {
           backwash_start?: string | null
           bag_filters_changed?: number | null
           booster_pumps?: Json | null
+          cartridge_filter_housings?: Json | null
+          cartridges_changed?: number
           created_at?: string
           filter_housings?: Json | null
           hpp_target_pressure_psi?: number | null
           id?: string
+          incomplete_reason?: string | null
           mmf_readings?: Json | null
           plant_id?: string
           reading_datetime?: string
@@ -1779,6 +3482,120 @@ export type Database = {
           },
         ]
       }
+      ro_train_meter_replacements: {
+        Row: {
+          created_at: string
+          id: string
+          meter_type: string
+          new_meter_brand: string | null
+          new_meter_initial_reading: number | null
+          new_meter_installed_date: string | null
+          new_meter_serial: string | null
+          new_meter_size: string | null
+          old_meter_final_reading: number | null
+          old_meter_serial: string | null
+          plant_id: string
+          reading_id: string | null
+          remarks: string | null
+          replaced_by: string | null
+          replacement_date: string
+          train_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meter_type: string
+          new_meter_brand?: string | null
+          new_meter_initial_reading?: number | null
+          new_meter_installed_date?: string | null
+          new_meter_serial?: string | null
+          new_meter_size?: string | null
+          old_meter_final_reading?: number | null
+          old_meter_serial?: string | null
+          plant_id: string
+          reading_id?: string | null
+          remarks?: string | null
+          replaced_by?: string | null
+          replacement_date: string
+          train_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meter_type?: string
+          new_meter_brand?: string | null
+          new_meter_initial_reading?: number | null
+          new_meter_installed_date?: string | null
+          new_meter_serial?: string | null
+          new_meter_size?: string | null
+          old_meter_final_reading?: number | null
+          old_meter_serial?: string | null
+          plant_id?: string
+          reading_id?: string | null
+          remarks?: string | null
+          replaced_by?: string | null
+          replacement_date?: string
+          train_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_train_meter_replacements_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "ro_train_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "ro_train_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "ro_train_readings_latest"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "v_ro_train_power_allocated"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_meter_replacements_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ro_train_readings: {
         Row: {
           chlorine_residual_mg_l: number | null
@@ -1792,8 +3609,9 @@ export type Database = {
           feed_pressure_psi: number | null
           feed_tds: number | null
           id: string
-          is_meter_replacement: boolean | null
+          incomplete_reason: string | null
           is_feed_meter_replacement: boolean
+          is_meter_replacement: boolean | null
           is_permeate_meter_replacement: boolean
           is_reject_meter_replacement: boolean
           norm_status: string | null
@@ -1840,8 +3658,9 @@ export type Database = {
           feed_pressure_psi?: number | null
           feed_tds?: number | null
           id?: string
-          is_meter_replacement?: boolean | null
+          incomplete_reason?: string | null
           is_feed_meter_replacement?: boolean
+          is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
           is_reject_meter_replacement?: boolean
           norm_status?: string | null
@@ -1888,8 +3707,9 @@ export type Database = {
           feed_pressure_psi?: number | null
           feed_tds?: number | null
           id?: string
-          is_meter_replacement?: boolean | null
+          incomplete_reason?: string | null
           is_feed_meter_replacement?: boolean
+          is_meter_replacement?: boolean | null
           is_permeate_meter_replacement?: boolean
           is_reject_meter_replacement?: boolean
           norm_status?: string | null
@@ -1936,6 +3756,13 @@ export type Database = {
             foreignKeyName: "ro_train_readings_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1951,14 +3778,12 @@ export type Database = {
       ro_trains: {
         Row: {
           created_at: string
-          /** Per-train filter housing type override. Null = inherit from plants.filter_housing_type. */
-          filter_housing_type: string | null
-          /** Per-train filter media type override. Null = inherit from plants.filter_media_type. */
-          filter_media_type: string | null
           feed_meter_brand: string | null
-          feed_meter_size: string | null
-          feed_meter_serial: string | null
           feed_meter_installed_date: string | null
+          feed_meter_serial: string | null
+          feed_meter_size: string | null
+          filter_housing_type: string | null
+          filter_media_type: string | null
           id: string
           name: string | null
           num_afm: number
@@ -1968,31 +3793,29 @@ export type Database = {
           num_filter_housings: number
           num_hp_pumps: number
           permeate_meter_brand: string | null
-          permeate_meter_size: string | null
-          permeate_meter_serial: string | null
           permeate_meter_installed_date: string | null
+          permeate_meter_serial: string | null
+          permeate_meter_size: string | null
           plant_id: string
+          product_meter_id: string | null
           reject_meter_brand: string | null
-          reject_meter_size: string | null
-          reject_meter_serial: string | null
           reject_meter_installed_date: string | null
-          /** Same label on trains that share one physical power meter; null = train has its own dedicated meter. */
+          reject_meter_serial: string | null
+          reject_meter_size: string | null
           shared_power_meter_group: string | null
           status: Database["public"]["Enums"]["train_status"]
           train_number: number
           updated_at: string
-          /** FK → wells.id. When set, Dashboard shows the well name instead of the
-           *  train name in "Per Well Source" quality cards (Raw TDS, Raw NTU). */
           well_id: string | null
         }
         Insert: {
           created_at?: string
+          feed_meter_brand?: string | null
+          feed_meter_installed_date?: string | null
+          feed_meter_serial?: string | null
+          feed_meter_size?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
-          feed_meter_brand?: string | null
-          feed_meter_size?: string | null
-          feed_meter_serial?: string | null
-          feed_meter_installed_date?: string | null
           id?: string
           name?: string | null
           num_afm?: number
@@ -2002,14 +3825,15 @@ export type Database = {
           num_filter_housings?: number
           num_hp_pumps?: number
           permeate_meter_brand?: string | null
-          permeate_meter_size?: string | null
-          permeate_meter_serial?: string | null
           permeate_meter_installed_date?: string | null
+          permeate_meter_serial?: string | null
+          permeate_meter_size?: string | null
           plant_id: string
+          product_meter_id?: string | null
           reject_meter_brand?: string | null
-          reject_meter_size?: string | null
-          reject_meter_serial?: string | null
           reject_meter_installed_date?: string | null
+          reject_meter_serial?: string | null
+          reject_meter_size?: string | null
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number: number
@@ -2018,12 +3842,12 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          feed_meter_brand?: string | null
+          feed_meter_installed_date?: string | null
+          feed_meter_serial?: string | null
+          feed_meter_size?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
-          feed_meter_brand?: string | null
-          feed_meter_size?: string | null
-          feed_meter_serial?: string | null
-          feed_meter_installed_date?: string | null
           id?: string
           name?: string | null
           num_afm?: number
@@ -2033,14 +3857,15 @@ export type Database = {
           num_filter_housings?: number
           num_hp_pumps?: number
           permeate_meter_brand?: string | null
-          permeate_meter_size?: string | null
-          permeate_meter_serial?: string | null
           permeate_meter_installed_date?: string | null
+          permeate_meter_serial?: string | null
+          permeate_meter_size?: string | null
           plant_id?: string
+          product_meter_id?: string | null
           reject_meter_brand?: string | null
-          reject_meter_size?: string | null
-          reject_meter_serial?: string | null
           reject_meter_installed_date?: string | null
+          reject_meter_serial?: string | null
+          reject_meter_size?: string | null
           shared_power_meter_group?: string | null
           status?: Database["public"]["Enums"]["train_status"]
           train_number?: number
@@ -2056,6 +3881,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ro_trains_product_meter_id_fkey"
+            columns: ["product_meter_id"]
+            isOneToOne: false
+            referencedRelation: "product_meters"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ro_trains_well_id_fkey"
             columns: ["well_id"]
             isOneToOne: false
@@ -2064,91 +3896,56 @@ export type Database = {
           },
         ]
       }
-      ro_train_meter_replacements: {
+      signup_audit: {
         Row: {
-          id: string
-          train_id: string
-          plant_id: string
-          reading_id: string | null
-          meter_type: string
-          replacement_date: string
-          old_meter_serial: string | null
-          old_meter_final_reading: number | null
-          new_meter_brand: string | null
-          new_meter_size: string | null
-          new_meter_serial: string | null
-          new_meter_initial_reading: number | null
-          new_meter_installed_date: string | null
-          replaced_by: string | null
-          remarks: string | null
           created_at: string
+          designation: string | null
+          device_id: string | null
+          email: string
+          id: string
+          operator_count: number | null
+          plant_ids: string[] | null
+          user_agent: string | null
         }
         Insert: {
-          id?: string
-          train_id: string
-          plant_id: string
-          reading_id?: string | null
-          meter_type: string
-          replacement_date: string
-          old_meter_serial?: string | null
-          old_meter_final_reading?: number | null
-          new_meter_brand?: string | null
-          new_meter_size?: string | null
-          new_meter_serial?: string | null
-          new_meter_initial_reading?: number | null
-          new_meter_installed_date?: string | null
-          replaced_by?: string | null
-          remarks?: string | null
           created_at?: string
+          designation?: string | null
+          device_id?: string | null
+          email: string
+          id?: string
+          operator_count?: number | null
+          plant_ids?: string[] | null
+          user_agent?: string | null
         }
         Update: {
-          id?: string
-          train_id?: string
-          plant_id?: string
-          reading_id?: string | null
-          meter_type?: string
-          replacement_date?: string
-          old_meter_serial?: string | null
-          old_meter_final_reading?: number | null
-          new_meter_brand?: string | null
-          new_meter_size?: string | null
-          new_meter_serial?: string | null
-          new_meter_initial_reading?: number | null
-          new_meter_installed_date?: string | null
-          replaced_by?: string | null
-          remarks?: string | null
           created_at?: string
+          designation?: string | null
+          device_id?: string | null
+          email?: string
+          id?: string
+          operator_count?: number | null
+          plant_ids?: string[] | null
+          user_agent?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "ro_train_meter_replacements_train_id_fkey"
-            columns: ["train_id"]
-            isOneToOne: false
-            referencedRelation: "ro_trains"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ro_train_meter_replacements_plant_id_fkey"
-            columns: ["plant_id"]
-            isOneToOne: false
-            referencedRelation: "plants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ro_train_meter_replacements_reading_id_fkey"
-            columns: ["reading_id"]
-            isOneToOne: false
-            referencedRelation: "ro_train_readings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ro_train_meter_replacements_replaced_by_fkey"
-            columns: ["replaced_by"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      status_checks: {
+        Row: {
+          client_name: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          client_name: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          client_name?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
       }
       train_status_log: {
         Row: {
@@ -2200,6 +3997,7 @@ export type Database = {
           confirmed: boolean
           created_at: string
           designation: string | null
+          email: string | null
           first_name: string | null
           id: string
           immediate_head_id: string | null
@@ -2217,6 +4015,7 @@ export type Database = {
           confirmed?: boolean
           created_at?: string
           designation?: string | null
+          email?: string | null
           first_name?: string | null
           id: string
           immediate_head_id?: string | null
@@ -2234,6 +4033,7 @@ export type Database = {
           confirmed?: boolean
           created_at?: string
           designation?: string | null
+          email?: string | null
           first_name?: string | null
           id?: string
           immediate_head_id?: string | null
@@ -2248,6 +4048,13 @@ export type Database = {
           username?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "user_profiles_immediate_head_id_fkey"
+            columns: ["immediate_head_id"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "user_profiles_immediate_head_id_fkey"
             columns: ["immediate_head_id"]
@@ -2278,6 +4085,42 @@ export type Database = {
         }
         Relationships: []
       }
+      well_blending: {
+        Row: {
+          plant_id: string
+          tagged_at: string
+          tagged_by: string | null
+          well_id: string
+        }
+        Insert: {
+          plant_id: string
+          tagged_at?: string
+          tagged_by?: string | null
+          well_id: string
+        }
+        Update: {
+          plant_id?: string
+          tagged_at?: string
+          tagged_by?: string | null
+          well_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "well_blending_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_blending_well_id_fkey"
+            columns: ["well_id"]
+            isOneToOne: true
+            referencedRelation: "wells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       well_meter_replacements: {
         Row: {
           created_at: string
@@ -2290,7 +4133,6 @@ export type Database = {
           old_final_reading: number | null
           old_serial: string | null
           plant_id: string
-          /** Links back to the well_readings row that triggered this replacement (if any). */
           reading_id: string | null
           remarks: string | null
           replaced_by: string | null
@@ -2347,6 +4189,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "well_meter_replacements_reading_id_fkey"
+            columns: ["reading_id"]
+            isOneToOne: false
+            referencedRelation: "well_readings_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_meter_replacements_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "well_meter_replacements_replaced_by_fkey"
             columns: ["replaced_by"]
             isOneToOne: false
@@ -2366,6 +4222,7 @@ export type Database = {
         Row: {
           created_at: string
           date_gathered: string
+          drilling_depth_m: number | null
           id: string
           motor_hp: number | null
           plant_id: string
@@ -2383,6 +4240,7 @@ export type Database = {
         Insert: {
           created_at?: string
           date_gathered: string
+          drilling_depth_m?: number | null
           id?: string
           motor_hp?: number | null
           plant_id: string
@@ -2400,6 +4258,7 @@ export type Database = {
         Update: {
           created_at?: string
           date_gathered?: string
+          drilling_depth_m?: number | null
           id?: string
           motor_hp?: number | null
           plant_id?: string
@@ -2426,6 +4285,13 @@ export type Database = {
             foreignKeyName: "well_pms_records_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_pms_records_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -2447,10 +4313,11 @@ export type Database = {
           gps_lat: number | null
           gps_lng: number | null
           id: string
-          /** True when this record marks a meter replacement (resets cumulative volume). */
-          is_meter_replacement: boolean
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean
           locked_at: string | null
           locked_by: string | null
+          meter_rollover_max: number | null
           norm_status: string | null
           off_location_flag: boolean
           plant_id: string
@@ -2459,9 +4326,7 @@ export type Database = {
           previous_reading: number | null
           reading_datetime: string
           recorded_by: string | null
-          /** Raw-water TDS at the wellhead (ppm). Entered in Operations → Well row. */
           tds_ppm: number | null
-          /** Raw-water turbidity at the wellhead (NTU). Entered in Operations → Well row. */
           turbidity_ntu: number | null
           well_id: string
         }
@@ -2473,7 +4338,11 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
-          is_meter_replacement?: boolean
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
           norm_status?: string | null
           off_location_flag?: boolean
           plant_id: string
@@ -2494,7 +4363,11 @@ export type Database = {
           gps_lat?: number | null
           gps_lng?: number | null
           id?: string
-          is_meter_replacement?: boolean
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
           norm_status?: string | null
           off_location_flag?: boolean
           plant_id?: string
@@ -2509,11 +4382,32 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "well_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "well_readings_recorded_by_fkey"
@@ -2536,10 +4430,15 @@ export type Database = {
           created_at: string
           diameter: string | null
           drilling_depth_m: number | null
+          electric_meter_brand: string | null
+          electric_meter_installed_date: string | null
+          electric_meter_serial: string | null
+          electric_meter_size: string | null
           gps_lat: number | null
           gps_lng: number | null
           has_power_meter: boolean
           id: string
+          is_blending_well: boolean
           meter_brand: string | null
           meter_installed_date: string | null
           meter_serial: string | null
@@ -2554,10 +4453,15 @@ export type Database = {
           created_at?: string
           diameter?: string | null
           drilling_depth_m?: number | null
+          electric_meter_brand?: string | null
+          electric_meter_installed_date?: string | null
+          electric_meter_serial?: string | null
+          electric_meter_size?: string | null
           gps_lat?: number | null
           gps_lng?: number | null
           has_power_meter?: boolean
           id?: string
+          is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
           meter_serial?: string | null
@@ -2572,10 +4476,15 @@ export type Database = {
           created_at?: string
           diameter?: string | null
           drilling_depth_m?: number | null
+          electric_meter_brand?: string | null
+          electric_meter_installed_date?: string | null
+          electric_meter_serial?: string | null
+          electric_meter_size?: string | null
           gps_lat?: number | null
           gps_lng?: number | null
           has_power_meter?: boolean
           id?: string
+          is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
           meter_serial?: string | null
@@ -2596,197 +4505,224 @@ export type Database = {
           },
         ]
       }
-      product_meters: {
+    }
+    Views: {
+      filter_usage_daily: {
         Row: {
-          id: string
-          name: string
-          plant_id: string
-          status: string
-          sort_order: number | null
-          meter_brand: string | null
-          meter_size: string | null
-          meter_serial: string | null
-          meter_installed_date: string | null
-          gps_lat: number | null
-          gps_lng: number | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          plant_id: string
-          status?: string
-          sort_order?: number | null
-          meter_brand?: string | null
-          meter_size?: string | null
-          meter_serial?: string | null
-          meter_installed_date?: string | null
-          gps_lat?: number | null
-          gps_lng?: number | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          plant_id?: string
-          status?: string
-          sort_order?: number | null
-          meter_brand?: string | null
-          meter_size?: string | null
-          meter_serial?: string | null
-          meter_installed_date?: string | null
-          gps_lat?: number | null
-          gps_lng?: number | null
-          created_at?: string
+          cost: number | null
+          filter_housing_type: string | null
+          id: string | null
+          plant_id: string | null
+          quantity_changed: number | null
+          reading_date: string | null
+          train_id: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "product_meters_plant_id_fkey"
+            foreignKeyName: "ro_pretreatment_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_pretreatment_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
             referencedColumns: ["id"]
           },
         ]
       }
-      product_meter_replacements: {
+      locator_readings_clean: {
         Row: {
-          id: string
-          meter_id: string
-          plant_id: string
-          reading_id: string | null
-          replacement_date: string
-          old_meter_brand: string | null
-          old_meter_size: string | null
-          old_meter_serial: string | null
-          old_meter_final_reading: number | null
-          new_meter_brand: string | null
-          new_meter_size: string | null
-          new_meter_serial: string | null
-          new_meter_initial_reading: number | null
-          new_meter_installed_date: string | null
-          replaced_by: string | null
+          created_at: string | null
+          current_reading: number | null
+          daily_volume: number | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string | null
+          is_estimated: boolean | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locator_id: string | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_rollover_max: number | null
+          norm_status: string | null
+          off_location_flag: boolean | null
+          plant_id: string | null
+          previous_reading: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
           remarks: string | null
-          created_at: string
         }
         Insert: {
-          id?: string
-          meter_id: string
-          plant_id: string
-          reading_id?: string | null
-          replacement_date: string
-          old_meter_brand?: string | null
-          old_meter_size?: string | null
-          old_meter_serial?: string | null
-          old_meter_final_reading?: number | null
-          new_meter_brand?: string | null
-          new_meter_size?: string | null
-          new_meter_serial?: string | null
-          new_meter_initial_reading?: number | null
-          new_meter_installed_date?: string | null
-          replaced_by?: string | null
+          created_at?: string | null
+          current_reading?: number | null
+          daily_volume?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string | null
+          is_estimated?: boolean | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locator_id?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          off_location_flag?: boolean | null
+          plant_id?: string | null
+          previous_reading?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
           remarks?: string | null
-          created_at?: string
         }
         Update: {
-          id?: string
-          meter_id?: string
-          plant_id?: string
-          reading_id?: string | null
-          replacement_date?: string
-          old_meter_brand?: string | null
-          old_meter_size?: string | null
-          old_meter_serial?: string | null
-          old_meter_final_reading?: number | null
-          new_meter_brand?: string | null
-          new_meter_size?: string | null
-          new_meter_serial?: string | null
-          new_meter_initial_reading?: number | null
-          new_meter_installed_date?: string | null
-          replaced_by?: string | null
+          created_at?: string | null
+          current_reading?: number | null
+          daily_volume?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string | null
+          is_estimated?: boolean | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locator_id?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          off_location_flag?: boolean | null
+          plant_id?: string | null
+          previous_reading?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
           remarks?: string | null
-          created_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "product_meter_replacements_meter_id_fkey"
-            columns: ["meter_id"]
+            foreignKeyName: "locator_readings_locator_id_fkey"
+            columns: ["locator_id"]
             isOneToOne: false
-            referencedRelation: "product_meters"
+            referencedRelation: "locators"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "product_meter_replacements_plant_id_fkey"
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "locator_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locator_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "product_meter_replacements_reading_id_fkey"
-            columns: ["reading_id"]
+            foreignKeyName: "locator_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
             isOneToOne: false
-            referencedRelation: "product_meter_readings"
-            referencedColumns: ["id"]
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
           },
           {
-            foreignKeyName: "product_meter_replacements_replaced_by_fkey"
-            columns: ["replaced_by"]
+            foreignKeyName: "locator_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
             isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
       }
-      product_meter_readings: {
+      operator_error_rates_30d: {
         Row: {
-          id: string
-          is_meter_replacement: boolean | null
-          meter_id: string
-          plant_id: string
-          current_reading: number
-          previous_reading: number | null
+          error_count: number | null
+          last_error: string | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: []
+      }
+      product_meter_readings_clean: {
+        Row: {
+          created_at: string | null
+          current_reading: number | null
           daily_volume: number | null
-          production_volume: number | null
-          reading_datetime: string
-          recorded_by: string | null
+          id: string | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_id: string | null
+          meter_rollover_max: number | null
           norm_status: string | null
-          created_at: string
+          plant_id: string | null
+          previous_reading: number | null
+          production_volume: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
         }
         Insert: {
-          id?: string
-          is_meter_replacement?: boolean | null
-          meter_id: string
-          plant_id: string
-          current_reading: number
-          previous_reading?: number | null
+          created_at?: string | null
+          current_reading?: number | null
           daily_volume?: number | null
-          production_volume?: number | null
-          reading_datetime?: string
-          recorded_by?: string | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_id?: string | null
+          meter_rollover_max?: number | null
           norm_status?: string | null
-          created_at?: string
+          plant_id?: string | null
+          previous_reading?: number | null
+          production_volume?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
         }
         Update: {
-          id?: string
-          is_meter_replacement?: boolean | null
-          meter_id?: string
-          plant_id?: string
-          current_reading?: number
-          previous_reading?: number | null
+          created_at?: string | null
+          current_reading?: number | null
           daily_volume?: number | null
-          production_volume?: number | null
-          reading_datetime?: string
-          recorded_by?: string | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_id?: string | null
+          meter_rollover_max?: number | null
           norm_status?: string | null
-          created_at?: string
+          plant_id?: string | null
+          previous_reading?: number | null
+          production_volume?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "product_meter_readings_plant_id_fkey"
-            columns: ["plant_id"]
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
             isOneToOne: false
-            referencedRelation: "plants"
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "product_meter_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2796,92 +4732,8 @@ export type Database = {
             referencedRelation: "product_meters"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      raw_edit_log: {
-        Row: {
-          id: string
-          source_table: string
-          source_id: string
-          column_name: string
-          old_value: number | null
-          new_value: number | null
-          edited_by: string | null
-          edited_role: string
-          edited_at: string
-          note: string | null
-        }
-        Insert: {
-          id?: string
-          source_table: string
-          source_id: string
-          column_name: string
-          old_value?: number | null
-          new_value?: number | null
-          edited_by?: string | null
-          edited_role: string
-          edited_at?: string
-          note?: string | null
-        }
-        Update: {
-          id?: string
-          source_table?: string
-          source_id?: string
-          column_name?: string
-          old_value?: number | null
-          new_value?: number | null
-          edited_by?: string | null
-          edited_role?: string
-          edited_at?: string
-          note?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "raw_edit_log_edited_by_fkey"
-            columns: ["edited_by"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      reading_gap_reasons: {
-        Row: {
-          id: string
-          entity_type: string
-          entity_id: string
-          plant_id: string
-          gap_date: string
-          reason_category: string
-          reason_detail: string | null
-          logged_by: string | null
-          logged_at: string
-        }
-        Insert: {
-          id?: string
-          entity_type: string
-          entity_id: string
-          plant_id: string
-          gap_date: string
-          reason_category: string
-          reason_detail?: string | null
-          logged_by?: string | null
-          logged_at?: string
-        }
-        Update: {
-          id?: string
-          entity_type?: string
-          entity_id?: string
-          plant_id?: string
-          gap_date?: string
-          reason_category?: string
-          reason_detail?: string | null
-          logged_by?: string | null
-          logged_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reading_gap_reasons_plant_id_fkey"
+            foreignKeyName: "product_meter_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
@@ -2889,313 +4741,491 @@ export type Database = {
           },
         ]
       }
-      reading_normalizations: {
+      ro_train_readings_clean: {
         Row: {
-          id: string
-          source_table: string
-          source_id: string
-          action: string
-          original_value: number | null
-          adjusted_value: number | null
-          note: string | null
-          performed_by: string | null
-          performed_role: string
-          performed_at: string
-          retractable: boolean
-        }
-        Insert: {
-          id?: string
-          source_table: string
-          source_id: string
-          action: string
-          original_value?: number | null
-          adjusted_value?: number | null
-          note?: string | null
-          performed_by?: string | null
-          performed_role: string
-          performed_at?: string
-          retractable?: boolean
-        }
-        Update: {
-          id?: string
-          source_table?: string
-          source_id?: string
-          action?: string
-          original_value?: number | null
-          adjusted_value?: number | null
-          note?: string | null
-          performed_by?: string | null
-          performed_role?: string
-          performed_at?: string
-          retractable?: boolean
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reading_normalizations_performed_by_fkey"
-            columns: ["performed_by"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      regression_results: {
-        Row: {
-          id: string
-          source_table: string
-          column_name: string
+          chlorine_residual_mg_l: number | null
+          created_at: string | null
+          dp_psi: number | null
+          feed_flow: number | null
+          feed_meter: number | null
+          feed_meter_delta: number | null
+          feed_meter_prev: number | null
+          feed_ph: number | null
+          feed_pressure_psi: number | null
+          feed_tds: number | null
+          id: string | null
+          is_meter_replacement: boolean | null
+          norm_status: string | null
+          permeate_flow: number | null
+          permeate_meter: number | null
+          permeate_meter_delta: number | null
+          permeate_meter_prev: number | null
+          permeate_ph: number | null
+          permeate_production_date: string | null
+          permeate_tds: number | null
           plant_id: string | null
-          date_from: string | null
-          date_to: string | null
-          created_at: string
-          created_by: string | null
-          created_role: string
-          row_count: number
-          r_squared: number | null
-          slope: number | null
-          intercept: number | null
-          corrections: Json
-          status: string
+          power_avg_kw: number | null
+          power_delta_kwh: number | null
+          power_meter_reading_kwh: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          recovery_pct: number | null
+          reject_flow: number | null
+          reject_meter: number | null
+          reject_meter_delta: number | null
+          reject_meter_prev: number | null
+          reject_ph: number | null
+          reject_pressure_psi: number | null
+          reject_tds: number | null
+          rejection_pct: number | null
+          remarks: string | null
+          salt_passage_pct: number | null
+          shared_power_meter_group: string | null
+          specific_energy_kwh_m3: number | null
+          suction_pressure_psi: number | null
+          temperature_c: number | null
+          train_id: string | null
+          turbidity_ntu: number | null
         }
         Insert: {
-          id?: string
-          source_table: string
-          column_name: string
+          chlorine_residual_mg_l?: number | null
+          created_at?: string | null
+          dp_psi?: number | null
+          feed_flow?: number | null
+          feed_meter?: number | null
+          feed_meter_delta?: number | null
+          feed_meter_prev?: number | null
+          feed_ph?: number | null
+          feed_pressure_psi?: number | null
+          feed_tds?: number | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          norm_status?: string | null
+          permeate_flow?: number | null
+          permeate_meter?: number | null
+          permeate_meter_delta?: number | null
+          permeate_meter_prev?: number | null
+          permeate_ph?: number | null
+          permeate_production_date?: string | null
+          permeate_tds?: number | null
           plant_id?: string | null
-          date_from?: string | null
-          date_to?: string | null
-          created_at?: string
-          created_by?: string | null
-          created_role?: string
-          row_count?: number
-          r_squared?: number | null
-          slope?: number | null
-          intercept?: number | null
-          corrections?: Json
-          status?: string
+          power_avg_kw?: number | null
+          power_delta_kwh?: number | null
+          power_meter_reading_kwh?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
+          recovery_pct?: number | null
+          reject_flow?: number | null
+          reject_meter?: number | null
+          reject_meter_delta?: number | null
+          reject_meter_prev?: number | null
+          reject_ph?: number | null
+          reject_pressure_psi?: number | null
+          reject_tds?: number | null
+          rejection_pct?: number | null
+          remarks?: string | null
+          salt_passage_pct?: number | null
+          shared_power_meter_group?: string | null
+          specific_energy_kwh_m3?: number | null
+          suction_pressure_psi?: number | null
+          temperature_c?: number | null
+          train_id?: string | null
+          turbidity_ntu?: number | null
         }
         Update: {
-          id?: string
-          source_table?: string
-          column_name?: string
+          chlorine_residual_mg_l?: number | null
+          created_at?: string | null
+          dp_psi?: number | null
+          feed_flow?: number | null
+          feed_meter?: number | null
+          feed_meter_delta?: number | null
+          feed_meter_prev?: number | null
+          feed_ph?: number | null
+          feed_pressure_psi?: number | null
+          feed_tds?: number | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          norm_status?: string | null
+          permeate_flow?: number | null
+          permeate_meter?: number | null
+          permeate_meter_delta?: number | null
+          permeate_meter_prev?: number | null
+          permeate_ph?: number | null
+          permeate_production_date?: string | null
+          permeate_tds?: number | null
           plant_id?: string | null
-          date_from?: string | null
-          date_to?: string | null
-          created_at?: string
-          created_by?: string | null
-          created_role?: string
-          row_count?: number
-          r_squared?: number | null
-          slope?: number | null
-          intercept?: number | null
-          corrections?: Json
-          status?: string
+          power_avg_kw?: number | null
+          power_delta_kwh?: number | null
+          power_meter_reading_kwh?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
+          recovery_pct?: number | null
+          reject_flow?: number | null
+          reject_meter?: number | null
+          reject_meter_delta?: number | null
+          reject_meter_prev?: number | null
+          reject_ph?: number | null
+          reject_pressure_psi?: number | null
+          reject_tds?: number | null
+          rejection_pct?: number | null
+          remarks?: string | null
+          salt_passage_pct?: number | null
+          shared_power_meter_group?: string | null
+          specific_energy_kwh_m3?: number | null
+          suction_pressure_psi?: number | null
+          temperature_c?: number | null
+          train_id?: string | null
+          turbidity_ntu?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "regression_results_plant_id_fkey"
+            foreignKeyName: "ro_train_readings_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "regression_results_created_by_fkey"
-            columns: ["created_by"]
+            foreignKeyName: "ro_train_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ro_train_readings_latest: {
+        Row: {
+          chlorine_residual_mg_l: number | null
+          created_at: string | null
+          dp_psi: number | null
+          feed_flow: number | null
+          feed_meter: number | null
+          feed_meter_delta: number | null
+          feed_meter_prev: number | null
+          feed_ph: number | null
+          feed_pressure_psi: number | null
+          feed_tds: number | null
+          id: string | null
+          incomplete_reason: string | null
+          is_meter_replacement: boolean | null
+          norm_status: string | null
+          permeate_flow: number | null
+          permeate_meter: number | null
+          permeate_meter_delta: number | null
+          permeate_meter_prev: number | null
+          permeate_ph: number | null
+          permeate_production_date: string | null
+          permeate_tds: number | null
+          plant_id: string | null
+          power_avg_kw: number | null
+          power_delta_kwh: number | null
+          power_meter_reading_kwh: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          recovery_pct: number | null
+          reject_flow: number | null
+          reject_meter: number | null
+          reject_meter_delta: number | null
+          reject_meter_prev: number | null
+          reject_ph: number | null
+          reject_pressure_psi: number | null
+          reject_tds: number | null
+          rejection_pct: number | null
+          remarks: string | null
+          salt_passage_pct: number | null
+          shared_power_meter_group: string | null
+          specific_energy_kwh_m3: number | null
+          suction_pressure_psi: number | null
+          temperature_c: number | null
+          train_id: string | null
+          turbidity_ntu: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_train_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_power_readings_resolved: {
+        Row: {
+          cache_recalculated_at: string | null
+          cache_stale: boolean | null
+          cached_at: string | null
+          created_at: string | null
+          daily_consumption_kwh: number | null
+          daily_grid_kwh: number | null
+          daily_solar_kwh: number | null
+          grid_kwh_final: number | null
+          grid_meter_readings: Json | null
+          id: string | null
+          is_meter_replacement: boolean | null
+          meter_multiplier: number | null
+          meter_reading_kwh: number | null
+          multiplier: number | null
+          plant_id: string | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          resolved_mult: number | null
+          solar_kwh_final: number | null
+          solar_meter_reading: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "power_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "power_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "power_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
             isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
       }
-    }
-      correction_requests: {
+      v_ro_train_power_allocated: {
         Row: {
-          id: string
-          source_table: string
-          source_id: string
-          plant_id: string
-          submitted_by: string | null
-          original_value: number
-          proposed_value: number
-          reason: string
-          note: string | null
-          status: string
-          resolved_by: string | null
-          resolved_at: string | null
-          resolution_note: string | null
-          created_at: string
+          allocated_power_delta_kwh: number | null
+          group_permeate_total: number | null
+          group_power_delta_kwh: number | null
+          id: string | null
+          permeate_flow: number | null
+          plant_id: string | null
+          raw_power_delta_kwh: number | null
+          reading_datetime: string | null
+          shared_power_meter_group: string | null
+          train_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ro_train_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ro_train_readings_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      well_readings_clean: {
+        Row: {
+          created_at: string | null
+          current_reading: number | null
+          daily_power_kwh: number | null
+          daily_volume: number | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string | null
+          is_meter_replacement: boolean | null
+          is_meter_rollover: boolean | null
+          locked_at: string | null
+          locked_by: string | null
+          meter_rollover_max: number | null
+          norm_status: string | null
+          off_location_flag: boolean | null
+          plant_id: string | null
+          power_meter_reading: number | null
+          pressure_psi: number | null
+          previous_reading: number | null
+          reading_datetime: string | null
+          recorded_by: string | null
+          tds_ppm: number | null
+          turbidity_ntu: number | null
+          well_id: string | null
         }
         Insert: {
-          id?: string
-          source_table: string
-          source_id: string
-          plant_id: string
-          submitted_by?: string | null
-          original_value: number
-          proposed_value: number
-          reason: string
-          note?: string | null
-          status?: string
-          resolved_by?: string | null
-          resolved_at?: string | null
-          resolution_note?: string | null
-          created_at?: string
+          created_at?: string | null
+          current_reading?: number | null
+          daily_power_kwh?: number | null
+          daily_volume?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          off_location_flag?: boolean | null
+          plant_id?: string | null
+          power_meter_reading?: number | null
+          pressure_psi?: number | null
+          previous_reading?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
+          tds_ppm?: number | null
+          turbidity_ntu?: number | null
+          well_id?: string | null
         }
         Update: {
-          id?: string
-          source_table?: string
-          source_id?: string
-          plant_id?: string
-          submitted_by?: string | null
-          original_value?: number
-          proposed_value?: number
-          reason?: string
-          note?: string | null
-          status?: string
-          resolved_by?: string | null
-          resolved_at?: string | null
-          resolution_note?: string | null
-          created_at?: string
+          created_at?: string | null
+          current_reading?: number | null
+          daily_power_kwh?: number | null
+          daily_volume?: number | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string | null
+          is_meter_replacement?: boolean | null
+          is_meter_rollover?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+          meter_rollover_max?: number | null
+          norm_status?: string | null
+          off_location_flag?: boolean | null
+          plant_id?: string | null
+          power_meter_reading?: number | null
+          pressure_psi?: number | null
+          previous_reading?: number | null
+          reading_datetime?: string | null
+          recorded_by?: string | null
+          tds_ppm?: number | null
+          turbidity_ntu?: number | null
+          well_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_readings_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "operator_error_rates_30d"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "well_readings_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "well_readings_well_id_fkey"
+            columns: ["well_id"]
+            isOneToOne: false
+            referencedRelation: "wells"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      plant_assignment_audit: {
-        Row: {
-          id: string
-          user_id: string
-          admin_id: string | null
-          new_plant_ids: string[]
-          justification: string | null
-          changed_at: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          admin_id?: string | null
-          new_plant_ids: string[]
-          justification?: string | null
-          changed_at?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          admin_id?: string | null
-          new_plant_ids?: string[]
-          justification?: string | null
-          changed_at?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      plant_edit_audit_log: {
-        Row: {
-          id: string
-          plant_id: string
-          user_id: string | null
-          field_changed: string
-          old_value: string | null
-          new_value: string | null
-          timestamp: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          plant_id: string
-          user_id?: string | null
-          field_changed: string
-          old_value?: string | null
-          new_value?: string | null
-          timestamp?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          plant_id?: string
-          user_id?: string | null
-          field_changed?: string
-          old_value?: string | null
-          new_value?: string | null
-          timestamp?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      power_meter_changes: {
-        Row: {
-          id: string
-          plant_id: string
-          meter_index: number
-          change_date: string
-          old_multiplier: number
-          new_multiplier: number
-          notes: string | null
-          changed_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          plant_id: string
-          meter_index?: number
-          change_date: string
-          old_multiplier: number
-          new_multiplier: number
-          notes?: string | null
-          changed_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          plant_id?: string
-          meter_index?: number
-          change_date?: string
-          old_multiplier?: number
-          new_multiplier?: number
-          notes?: string | null
-          changed_by?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      signup_audit: {
-        Row: {
-          id: string
-          email: string
-          designation: string | null
-          operator_count: number | null
-          plant_ids: string[] | null
-          device_id: string | null
-          user_agent: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          email: string
-          designation?: string | null
-          operator_count?: number | null
-          plant_ids?: string[] | null
-          device_id?: string | null
-          user_agent?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          email?: string
-          designation?: string | null
-          operator_count?: number | null
-          plant_ids?: string[] | null
-          device_id?: string | null
-          user_agent?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-    Views: {
-      [_ in never]: never
     }
     Functions: {
+      _get_power_multiplier: { Args: { p_plant_id: string }; Returns: number }
+      _recompute_power_row: { Args: { p_id: string }; Returns: undefined }
+      admin_set_user_password: {
+        Args: { _new_password: string; _user_id: string }
+        Returns: undefined
+      }
+      approve_user: {
+        Args: { _approve?: boolean; _user_id: string }
+        Returns: {
+          confirmed: boolean
+          created_at: string
+          designation: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          immediate_head_id: string | null
+          last_name: string | null
+          last_seen_at: string | null
+          middle_name: string | null
+          plant_assignments: string[]
+          profile_complete: boolean
+          status: Database["public"]["Enums"]["profile_status"]
+          suffix: string | null
+          updated_at: string
+          username: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "user_profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      backfill_well_deltas: {
+        Args: never
+        Returns: {
+          rows_fixed: number
+          well_id: string
+        }[]
+      }
       complete_onboarding: {
         Args: {
           _designation: string
@@ -3212,11 +5242,86 @@ export type Database = {
         Args: {
           p_admin_id: string
           p_new_current: number
-          p_reason: string
+          p_reason?: string
           p_row_id: string
           p_table: string
         }
         Returns: Json
+      }
+      fn_compute_daily_plant_summary: {
+        Args: { p_date: string }
+        Returns: Json
+      }
+      fn_filter_unit_price: {
+        Args: { p_as_of: string; p_housing_type: string; p_plant_id: string }
+        Returns: number
+      }
+      fn_locator_cooldown_minutes: {
+        Args: {
+          p_cooldown?: number
+          p_locator_id: string
+          p_plant_id: string
+          p_user_id: string
+        }
+        Returns: number
+      }
+      fn_notify_derived_review: {
+        Args: {
+          _date: string
+          _detail?: string
+          _kind: string
+          _locator_id: string
+        }
+        Returns: undefined
+      }
+      fn_recalc_power_cache: {
+        Args: { p_plant_id: string }
+        Returns: undefined
+      }
+      fn_set_product_meter_mirror: {
+        Args: { p_derived_from_locator_id: string; p_meter_id: string }
+        Returns: undefined
+      }
+      fn_sweep_derived_meters:
+        | { Args: { p_date?: string; p_lookback_days?: number }; Returns: Json }
+        | { Args: { p_lookback_days?: number }; Returns: Json }
+      fn_sweep_derived_meters_for_date: {
+        Args: { p_date: string }
+        Returns: Json
+      }
+      get_all_staff_profiles: {
+        Args: never
+        Returns: {
+          confirmed: boolean
+          created_at: string
+          designation: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          immediate_head_id: string | null
+          last_name: string | null
+          last_seen_at: string | null
+          middle_name: string | null
+          plant_assignments: string[]
+          profile_complete: boolean
+          status: Database["public"]["Enums"]["profile_status"]
+          suffix: string | null
+          updated_at: string
+          username: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "user_profiles"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_all_user_roles: {
+        Args: never
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }[]
       }
       has_role: {
         Args: {
@@ -3227,10 +5332,44 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_manager_or_analyst_or_admin: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      purge_expired_chat_messages: { Args: never; Returns: undefined }
+      recalc_power_cache_for_plant: {
+        Args: { p_plant_id: string }
+        Returns: string
+      }
+      recalculate_all_deltas: {
+        Args: { p_plant_id?: string }
+        Returns: undefined
+      }
+      recompute_costs_for_tariff_window: {
+        Args: { _from: string; _plant: string }
+        Returns: undefined
+      }
       recompute_production_cost: {
         Args: { _date: string; _plant_id: string }
         Returns: undefined
       }
+      recompute_solar_cost: {
+        Args: { _date: string; _plant_id: string }
+        Returns: undefined
+      }
+      refresh_plant_multiplier_cache: {
+        Args: { p_plant_id: string }
+        Returns: undefined
+      }
+      refresh_production_costs: {
+        Args: { p_from?: string; p_plant_id: string; p_to?: string }
+        Returns: undefined
+      }
+      resolve_plant_multiplier: {
+        Args: { p_meter_index: number; p_plant_id: string }
+        Returns: number
+      }
+      touch_last_seen: { Args: never; Returns: undefined }
       update_own_profile: {
         Args: {
           _designation: string
@@ -3250,6 +5389,7 @@ export type Database = {
       incident_status: "Open" | "InProgress" | "Resolved" | "Closed"
       plant_status: "Active" | "Inactive"
       profile_status: "Pending" | "Active" | "Suspended"
+      reading_norm_action: "tag" | "normalize" | "retract"
       severity_level: "Low" | "Medium" | "High" | "Critical"
       train_status: "Running" | "Offline" | "Maintenance"
     }
@@ -3384,6 +5524,7 @@ export const Constants = {
       incident_status: ["Open", "InProgress", "Resolved", "Closed"],
       plant_status: ["Active", "Inactive"],
       profile_status: ["Pending", "Active", "Suspended"],
+      reading_norm_action: ["tag", "normalize", "retract"],
       severity_level: ["Low", "Medium", "High", "Critical"],
       train_status: ["Running", "Offline", "Maintenance"],
     },

@@ -462,16 +462,32 @@ function buildSummary(violations: Violation[]): { headline: string; details: str
 export async function fetchPlantMetrics(
   plantId: string,
   days = 7,
+  from?: string, // yyyy-MM-dd — explicit range start; overrides `days` when given
+  to?: string,   // yyyy-MM-dd — explicit range end; bounds the query when given
 ): Promise<{ metrics: Record<string, number | undefined>; rows: DailyRow[] }> {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  const sinceIso = since.toISOString().slice(0, 10);
+  let sinceIso: string;
+  if (from) {
+    sinceIso = from;
+  } else {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    sinceIso = since.toISOString().slice(0, 10);
+  }
 
-  const { data } = await supabase
+  let query = supabase
     .from('daily_plant_summary')
     .select('*')
     .eq('plant_id', plantId)
-    .gte('summary_date', sinceIso)
+    .gte('summary_date', sinceIso);
+
+  // There was previously no upper bound at all — fine as long as the window
+  // is always "N days back from today", since ordering desc + limit lands on
+  // the most recent rows regardless. A real historical `to` needs an actual
+  // upper bound, or it'll pull rows up through *today* instead of stopping
+  // at `to` — same class of bug as the Cost Composition donut.
+  if (to) query = query.lte('summary_date', to);
+
+  const { data } = await query
     .order('summary_date', { ascending: false })
     .limit(Math.min(days, 14));
 

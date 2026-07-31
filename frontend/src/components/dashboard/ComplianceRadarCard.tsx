@@ -11,6 +11,7 @@
 // and reuses StatusPill + the DM Sans "tnum" numeral treatment that
 // StatCard already uses for every other KPI on this dashboard.
 import { useMemo } from 'react';
+import { format, parseISO } from 'date-fns';
 import { useQueries } from '@tanstack/react-query';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, ResponsiveContainer,
@@ -75,6 +76,19 @@ export function ComplianceRadarCard({ plantIds }: Props) {
   const chartFrom = useAppStore((s) => s.chartFrom);
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
+  // chartFrom/chartTo only reflect the real selection when chartRange is
+  // CUSTOM (rangeKeyToDays ignores them for the preset buttons) — same fix
+  // as CostSunburst/useCostComposition, and the same reason this card was
+  // showing "last 1d" instead of whatever date was actually picked.
+  const isCustomRange = chartRange === 'CUSTOM';
+
+  // Same "last Nd" tell CostSunburst had — show the real dates once they're
+  // actually being used; presets keep "last Nd" since that's still accurate.
+  const rangeLabel = isCustomRange
+    ? (chartFrom === chartTo
+        ? format(parseISO(chartFrom), 'MMM d')
+        : `${format(parseISO(chartFrom), 'MMM d')}–${format(parseISO(chartTo), 'MMM d')}`)
+    : `last ${days}d`;
 
   const activePlants = useMemo(
     () => (plants ?? []).filter((p) => plantIds.includes(p.id)),
@@ -83,10 +97,10 @@ export function ComplianceRadarCard({ plantIds }: Props) {
 
   const results = useQueries({
     queries: activePlants.map((p) => ({
-      queryKey: ['compliance-radar', p.id, days],
+      queryKey: ['compliance-radar', p.id, days, isCustomRange ? chartFrom : null, isCustomRange ? chartTo : null],
       queryFn: async () => {
         const [{ metrics }, thresholds] = await Promise.all([
-          fetchPlantMetrics(p.id, days),
+          fetchPlantMetrics(p.id, days, isCustomRange ? chartFrom : undefined, isCustomRange ? chartTo : undefined),
           loadThresholds(p.id),
         ]);
         return { plant: p, metrics, thresholds };
@@ -144,7 +158,7 @@ export function ComplianceRadarCard({ plantIds }: Props) {
     <Card className="p-3">
       <div className="flex flex-wrap items-center gap-1 mb-2">
         <span className="text-xs font-bold tracking-[-0.01em] text-foreground">Compliance Radar</span>
-        <span className="text-2xs text-muted-foreground ml-auto">actual ÷ threshold · last {days}d</span>
+        <span className="text-2xs text-muted-foreground ml-auto">actual ÷ threshold · {rangeLabel}</span>
       </div>
 
       {isLoading ? (
