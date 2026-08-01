@@ -20,6 +20,8 @@ export interface PlantAlert {
   source: string;
   plantId: string;
   timestamp: number; // Date.now()
+  /** Optional in-app route to navigate to on click — e.g. the train's log page. */
+  linkPath?: string;
 }
 
 /** Map of alertId → Unix ms when the snooze expires */

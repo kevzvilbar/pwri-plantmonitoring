@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -102,6 +103,25 @@ export function PretreatmentAndROLog() {
   // so plantId is intentionally omitted from deps.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+
+  // ── Deep-link from an alert/notification: /ro-trains?tab=pretreat-ro&plant=<id>&train=<id> ──
+  // Takes priority over both sessionStorage and selectedPlantId — clicking an
+  // alert for Train 3 should land on Train 3 even if this tab was last left
+  // on a different train. Runs once per navigation (the params are stripped
+  // from the URL right after, via replace) so it doesn't fight the operator
+  // if they then manually pick a different plant/train.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const deepPlant = searchParams.get('plant');
+    const deepTrain = searchParams.get('train');
+    if (!deepPlant && !deepTrain) return;
+    if (deepPlant) setPlantId(deepPlant);
+    if (deepTrain) setTrainId(deepTrain);
+    const sp = new URLSearchParams(searchParams);
+    sp.delete('plant'); sp.delete('train');
+    setSearchParams(sp, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const plant = useMemo(() => plants?.find((p) => p.id === plantId), [plants, plantId]);
   const isSynchronized = (plant as any)?.backwash_mode === 'synchronized';

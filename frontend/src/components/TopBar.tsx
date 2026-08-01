@@ -327,8 +327,14 @@ export function TopBar() {
                       className={cn(
                         'flex gap-2.5 px-3 py-2.5 border-b border-border/40 last:border-0',
                         sevBgCls(alert.severity),
+                        alert.linkPath ? 'cursor-pointer hover:brightness-95 transition-[filter]' : '',
                       )}
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        // stopPropagation keeps this click from being treated as a
+                        // dropdown "select" — see the DB Notifications rows above.
+                        e.stopPropagation();
+                        if (alert.linkPath) navigate(alert.linkPath);
+                      }}
                     >
                       <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', sevTextCls(alert.severity))} />
                       <div className="flex-1 min-w-0 space-y-0.5">
@@ -338,7 +344,7 @@ export function TopBar() {
                           </span>
                           <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
                             <button
-                              onClick={() => snoozeAlert(alert.id, 60 * 60 * 1000)}
+                              onClick={(e) => { e.stopPropagation(); snoozeAlert(alert.id, 60 * 60 * 1000); }}
                               className="text-muted-foreground/40 hover:text-warn transition-colors"
                               aria-label="Snooze 1 hour"
                               title="Snooze 1 hour"
@@ -346,7 +352,7 @@ export function TopBar() {
                               <Clock className="h-3 w-3" />
                             </button>
                             <button
-                              onClick={() => removeAlerts([alert.id])}
+                              onClick={(e) => { e.stopPropagation(); removeAlerts([alert.id]); }}
                               className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-2xs"
                               aria-label="Dismiss"
                               title="Dismiss"
@@ -370,7 +376,7 @@ export function TopBar() {
                           <span>{format(new Date(alert.timestamp), 'hh:mm aa')}</span>
                           <span>·</span>
                           <button
-                            onClick={() => snoozeAlert(alert.id, 60 * 60 * 1000)}
+                            onClick={(e) => { e.stopPropagation(); snoozeAlert(alert.id, 60 * 60 * 1000); }}
                             className="flex items-center gap-0.5 hover:text-warn transition-colors"
                             title="Snooze 1 hour"
                           >

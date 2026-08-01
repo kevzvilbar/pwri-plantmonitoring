@@ -1460,6 +1460,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     const storeAlerts: PlantAlert[] = [];
+    // Deep-links straight to the flagged train's entry form — see the
+    // ?plant=&train= handling added to ROTrains/index.tsx (tab) and
+    // PretreatmentAndROLog.tsx (plant/train pre-select).
+    const roLink = (pid?: string | null, trainId?: string | null) =>
+      `/ro-trains?tab=pretreat-ro${pid ? `&plant=${pid}` : ''}${trainId ? `&train=${trainId}` : ''}`;
 
     // Train gap warnings — plant_id comes from TrainGap directly
     trainGaps.forEach((g) => {
@@ -1471,6 +1476,7 @@ export default function Dashboard() {
         source:      'RO Trains',
         plantId:     g.plant_id,
         timestamp:   Date.now(),
+        linkPath:    roLink(g.plant_id, g.train_id),
       });
     });
 
@@ -1506,6 +1512,7 @@ export default function Dashboard() {
     latestPerTrain.forEach((r: any) => {
       const pid        = r.plant_id ?? selectedPlantId ?? '';
       const trainLabel = r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : 'Train');
+      const link        = roLink(pid, r.train_id);
       const dp = r.dp_psi ?? 0;
       if (dp > 40) {
         storeAlerts.push({
@@ -1516,6 +1523,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       } else if (dp >= 35) {
         storeAlerts.push({
@@ -1526,6 +1534,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       }
       const tds = r.permeate_tds ?? 0;
@@ -1538,6 +1547,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       } else if (tds >= 500) {
         storeAlerts.push({
@@ -1548,6 +1558,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       }
       if (r.permeate_ph != null && (r.permeate_ph < 6.5 || r.permeate_ph > 8.5)) {
@@ -1559,6 +1570,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       }
       if (r.recovery_pct != null && r.recovery_pct < 70) {
@@ -1570,6 +1582,7 @@ export default function Dashboard() {
           source:      'RO Trains',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    link,
         });
       }
     });
@@ -1585,6 +1598,7 @@ export default function Dashboard() {
           source:      'Chemical Inventory',
           plantId:     c.plant_id ?? selectedPlantId ?? '',
           timestamp:   Date.now(),
+          linkPath:    '/chemicals',
         });
       }
     });
@@ -1599,6 +1613,8 @@ export default function Dashboard() {
         source:      a.kind === 'downtime' ? 'Downtime' : a.kind === 'blending' ? 'Blending' : 'Recovery',
         plantId:     a.plant_id ?? selectedPlantId ?? '',
         timestamp:   a.date ? new Date(a.date).getTime() : Date.now(),
+        // Backend feed doesn't expose a train_id, so this is page-level only.
+        linkPath:    a.kind === 'blending' ? '/operations?tab=blending' : roLink(a.plant_id ?? selectedPlantId),
       });
     });
 
@@ -1612,6 +1628,7 @@ export default function Dashboard() {
         source:      'Pre-Treatment',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
+        linkPath:    roLink(a.plantId, a.trainId),
       });
     });
 
@@ -1625,6 +1642,7 @@ export default function Dashboard() {
         source:      'Booster Pumps',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
+        linkPath:    roLink(a.plantId, a.trainId),
       });
     });
 
@@ -1651,6 +1669,7 @@ export default function Dashboard() {
           source:      'Power',
           plantId:     pid,
           timestamp:   Date.now(),
+          linkPath:    '/operations?tab=power',
         });
       }
     });
@@ -1672,6 +1691,7 @@ export default function Dashboard() {
         source:      'RO Trains',
         plantId:     pid,
         timestamp:   Date.now(),
+        linkPath:    roLink(pid, row.train_id),
       });
     });
 
