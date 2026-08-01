@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DataState } from '@/components/DataState';
+import { Database } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface AuditEntry {
@@ -18,28 +20,67 @@ interface AuditEntry {
   created_at: string;
 }
 
+type AuditLogResult = {
+  entries: AuditEntry[];
+  warning?: string;
+  table_missing?: boolean;
+  /** Which path actually served this data — surfaced in the UI below so a
+   *  backend outage is distinguishable from "genuinely nothing recorded". */
+  source: 'api' | 'supabase';
+};
+
 export function AuditLogPanel() {
   const [kindFilter, setKindFilter] = useState<'all' | 'user' | 'plant'>('all');
-  const { data, isLoading } = useQuery({
+
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-audit-log', kindFilter],
-    queryFn: async () => {
+    queryFn: async (): Promise<AuditLogResult> => {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
       if (!token) throw new Error('Sign in required');
+
       const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
       const qs = kindFilter === 'all' ? '' : `?kind=${kindFilter}`;
-      const res = await fetch(`${base}/api/admin/audit-log${qs}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Audit log fetch failed: ${res.status}`);
-      return (await res.json()) as {
-        count: number;
-        entries: AuditEntry[];
-        warning?: string;
-        table_missing?: boolean;
-      };
+
+      // 1. Try the backend API first — it can enrich results with
+      // table_missing/warning diagnostics a direct table read can't.
+      try {
+        const res = await fetch(`${base}/api/admin/audit-log${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = (await res.json()) as {
+            count: number; entries: AuditEntry[]; warning?: string; table_missing?: boolean;
+          };
+          return { ...json, source: 'api' };
+        }
+      } catch {
+        // network/CORS error (e.g. no backend deployed) — fall through
+      }
+
+      // 2. Direct Supabase read of deletion_audit_log — the same table the
+      // backend route reads. RLS (`is_manager_or_admin`) already restricts
+      // SELECT to admins/managers, so this is safe with the browser's anon
+      // key + the signed-in user's JWT — see
+      // supabase/migrations/20260424_deletion_audit_log.sql.
+      let q = supabase
+        .from('deletion_audit_log' as any)
+        .select('id, kind, entity_id, entity_label, action, actor_user_id, actor_label, reason, dependencies, created_at')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (kindFilter !== 'all') q = q.eq('kind', kindFilter);
+
+      const { data: rows, error: sbError } = await q;
+      if (sbError) {
+        // Both paths failed — table missing, RLS denied, or a genuine
+        // outage. Let this surface as a real error rather than an empty list.
+        throw new Error(sbError.message);
+      }
+      return { entries: (rows ?? []) as unknown as AuditEntry[], source: 'supabase' };
     },
   });
+
+  const usedFallback = data?.source === 'supabase';
 
   return (
     <div className="space-y-2">
@@ -59,6 +100,14 @@ export function AuditLogPanel() {
           </button>
         ))}
       </div>
+
+      {usedFallback && (
+        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground px-0.5">
+          <Database className="h-3 w-3" />
+          Reading directly from the database — the audit API isn't reachable.
+        </div>
+      )}
+
       {data?.table_missing && (
         <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5">
           <strong>Audit log table not yet created.</strong> Run{' '}
@@ -72,41 +121,45 @@ export function AuditLogPanel() {
           Audit log warning: <code>{data.warning}</code>
         </Card>
       )}
-      {isLoading && (
-        <Card className="p-4 text-center text-xs text-muted-foreground">Loading…</Card>
-      )}
-      {(data?.entries ?? []).map((e) => (
-        <Card key={e.id} className="p-3 space-y-1" data-testid={`audit-entry-${e.id}`}>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="capitalize">{e.kind}</Badge>
-              <Badge
-                variant={e.action === 'hard' ? 'destructive' : 'secondary'}
-                className="capitalize"
-              >
-                {e.action === 'hard' ? 'Hard delete' : 'Soft delete'}
-              </Badge>
-              {e.reason?.startsWith('[FORCE]') && (
-                <Badge className="bg-danger text-danger-foreground">FORCE</Badge>
+
+      {(isLoading || (error && !data)) ? (
+        <DataState loading={isLoading} error={!data ? error : undefined} onRetry={() => refetch()} />
+      ) : (
+        <>
+          {(data?.entries ?? []).map((e) => (
+            <Card key={e.id} className="p-3 space-y-1" data-testid={`audit-entry-${e.id}`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="capitalize">{e.kind}</Badge>
+                  <Badge
+                    variant={e.action === 'hard' ? 'destructive' : 'secondary'}
+                    className="capitalize"
+                  >
+                    {e.action === 'hard' ? 'Hard delete' : 'Soft delete'}
+                  </Badge>
+                  {e.reason?.startsWith('[FORCE]') && (
+                    <Badge className="bg-danger text-danger-foreground">FORCE</Badge>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(e.created_at), 'yyyy-MM-dd HH:mm')}
+                </span>
+              </div>
+              <div className="text-sm">
+                <strong>{e.entity_label ?? e.entity_id}</strong>
+                <span className="text-muted-foreground"> · by {e.actor_label ?? e.actor_user_id ?? '—'}</span>
+              </div>
+              {e.reason && (
+                <div className="text-xs text-muted-foreground italic">"{e.reason}"</div>
               )}
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {format(new Date(e.created_at), 'yyyy-MM-dd HH:mm')}
-            </span>
-          </div>
-          <div className="text-sm">
-            <strong>{e.entity_label ?? e.entity_id}</strong>
-            <span className="text-muted-foreground"> · by {e.actor_label ?? e.actor_user_id ?? '—'}</span>
-          </div>
-          {e.reason && (
-            <div className="text-xs text-muted-foreground italic">"{e.reason}"</div>
+            </Card>
+          ))}
+          {(data?.entries?.length ?? 0) === 0 && (
+            <Card className="p-4 text-center text-xs text-muted-foreground">
+              No deletion events recorded yet.
+            </Card>
           )}
-        </Card>
-      ))}
-      {!isLoading && (data?.entries?.length ?? 0) === 0 && (
-        <Card className="p-4 text-center text-xs text-muted-foreground">
-          No deletion events recorded yet.
-        </Card>
+        </>
       )}
     </div>
   );
