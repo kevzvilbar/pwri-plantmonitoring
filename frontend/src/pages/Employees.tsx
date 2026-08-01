@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo, Fragment, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -1044,9 +1045,18 @@ function KpiLegend2() {
 }
 
 function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; plants: any[] }) {
+  const [searchParams] = useSearchParams();
   const [range, setRange] = useState<KpiRange2>('today');
-  const [viewMode, setViewMode] = useState<KpiViewMode>('team');
-  const [expandedPlants, setExpandedPlants] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<KpiViewMode>(
+    () => (searchParams.get('view') === 'individual' ? 'individual' : 'team'),
+  );
+  // Deep-link support: /employees?tab=kpi&view=individual&plant=<id> lands
+  // straight on that plant's operator breakdown, pre-expanded — used by the
+  // Data Completeness Radar's "see who's logging" link on the Dashboard.
+  const [expandedPlants, setExpandedPlants] = useState<Set<string>>(() => {
+    const plantId = searchParams.get('plant');
+    return plantId ? new Set([plantId]) : new Set();
+  });
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -1984,7 +1994,15 @@ function RegisterInfo() {
 // ---------------------------------------------------------------------------
 
 export default function Employees() {
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useTabPersist<'staff' | 'kpi' | 'info'>('tab:employees', 'staff');
+
+  // Deep link (e.g. from the Dashboard's Data Completeness Radar) should win
+  // over whatever tab was last open in this session, not just the default.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'kpi' && tab !== 'kpi') setTab('kpi');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const { data: plants = [] } = usePlants();
 
