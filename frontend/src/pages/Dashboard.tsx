@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
-import type { PlantAlert } from '@/store/appStore';
+import type { PlantAlert, PlantAlertSeverity } from '@/store/appStore';
 // ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
 // deltaCache sits in front of every raw-reading computation.
 //   • Cache hit  → return the stored value instantly (no recomputation).
@@ -14,7 +14,11 @@ import type { PlantAlert } from '@/store/appStore';
 // permeate_meter_delta) so that simple reads never recompute unnecessarily.
 import { deltaCache, hydrateFromStoredDeltas, flushDeltaCache } from '@/lib/deltaCache';
 import { usePlants } from '@/hooks/usePlants';
-import { fmtNum, nrwColor } from '@/lib/calculations';
+import { fmtNum, nrwColor, ALERTS } from '@/lib/calculations';
+import {
+  evaluateROMeterSpike, evaluatePhaseImbalance, evaluatePhaseLoss, dpPsi,
+  type ROMeterKind,
+} from '@/lib/roReadingGuards';
 import { StatusPill } from '@/components/StatusPill';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -631,7 +635,10 @@ export default function Dashboard() {
       if (!_qualityTrainIds.length) return [] as any[];
       const since = subDays(new Date(), 1).toISOString();
       const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
-        .select('train_id,permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,reading_datetime')
+        // feed/permeate/reject_meter_delta added for RO meter spike detection
+        // (roReadingGuards.ts) — same columns PretreatmentAndROLog.tsx already
+        // writes on save, just not previously read back here.
+        .select('id,train_id,permeate_tds,feed_tds,dp_psi,recovery_pct,permeate_ph,turbidity_ntu,reading_datetime,feed_meter_delta,permeate_meter_delta,reject_meter_delta,norm_status')
         .in('train_id', _qualityTrainIds)
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: false });
@@ -653,6 +660,101 @@ export default function Dashboard() {
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
   });
+  // ── Pre-treatment latest reading per train (AFM/MMF + filter housing DP,
+  //    booster pump amperage) ───────────────────────────────────────────────
+  // ro_pretreatment_readings has its own plant_id column (unlike
+  // ro_train_readings) so no two-step train-id resolution is needed here.
+  // Fetches the last 2 rows per train (not just 1) so booster pump amperage
+  // can be compared to its own immediately-prior reading — the same
+  // "vs. last time" pattern already used by permHighWarn in
+  // PretreatmentAndROLog.tsx — without a second round-trip.
+  const { data: recentPretreatment } = useQuery({
+    queryKey: ['dash-pretreatment-recent', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const since = subDays(new Date(), 2).toISOString();
+      const { data, error } = await supabase
+        .from('ro_pretreatment_readings')
+        .select('id,train_id,plant_id,reading_datetime,afm_units,filter_housings,booster_pumps')
+        .in('plant_id', plantIds)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: false });
+      if (error) throw new Error(`ro_pretreatment_readings: ${error.message}`);
+      return (data ?? []) as any[];
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  });
+
+  // ── Pump readings (booster/HPP L1/L2/L3 amps + voltage) — latest per pump ──
+  // pump_readings was previously written only by CSV import/export and never
+  // read back for alerting. Phase imbalance (evaluatePhaseImbalance) needs
+  // only the latest row per pump — no nameplate rating is stored anywhere in
+  // the schema, so an absolute amp/volt ceiling isn't used (see ALERTS
+  // comment in calculations.ts).
+  const { data: latestPumpReadings } = useQuery({
+    queryKey: ['dash-pump-readings-recent', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const since = subDays(new Date(), 1).toISOString();
+      const { data, error } = await supabase
+        .from('pump_readings')
+        .select('id,train_id,plant_id,pump_type,pump_number,reading_datetime,l1_amp,l2_amp,l3_amp,voltage')
+        .in('plant_id', plantIds)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: false });
+      if (error) throw new Error(`pump_readings: ${error.message}`);
+      // Collapse to the single latest row per (train_id, pump_type, pump_number)
+      const latestByPump = new Map<string, any>();
+      (data ?? []).forEach((r: any) => {
+        const key = `${r.train_id}-${r.pump_type}-${r.pump_number}`;
+        if (!latestByPump.has(key)) latestByPump.set(key, r); // first = most recent (DESC order)
+      });
+      return Array.from(latestByPump.values());
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  });
+
+  // ── Power consumption — rolling average for spike detection ──────────────
+  // Last 14 days of daily_consumption_kwh per plant (today excluded — today's
+  // value is what gets compared against this average, so it can't be part of
+  // its own baseline).
+  const { data: powerHistory } = useQuery({
+    queryKey: ['dash-power-history', plantIds, today],
+    queryFn: async () => {
+      if (!plantIds.length) return [] as any[];
+      const since = subDays(new Date(), 14).toISOString();
+      const { data, error } = await supabase
+        .from('power_readings')
+        .select('plant_id,daily_consumption_kwh,reading_datetime')
+        .in('plant_id', plantIds)
+        .gte('reading_datetime', since)
+        .lt('reading_datetime', today)
+        .not('daily_consumption_kwh', 'is', null);
+      if (error) throw new Error(`power_readings (history): ${error.message}`);
+      return (data ?? []) as any[];
+    },
+    enabled: plantIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+  // Plant-average daily kWh over the trailing window, keyed by plant_id.
+  const powerAvgByPlant = useMemo(() => {
+    const sums = new Map<string, { total: number; count: number }>();
+    (powerHistory ?? []).forEach((r: any) => {
+      const v = Number(r.daily_consumption_kwh);
+      if (!Number.isFinite(v) || v <= 0) return;
+      const cur = sums.get(r.plant_id) ?? { total: 0, count: 0 };
+      cur.total += v; cur.count += 1;
+      sums.set(r.plant_id, cur);
+    });
+    const out = new Map<string, number>();
+    sums.forEach((v, k) => out.set(k, v.total / v.count));
+    return out;
+  }, [powerHistory]);
+
   // ── Permeate fallback for production ─────────────────────────────────────────
   // When the selected plants have no product meter readings today AND are not
   // configured as permeate_is_production, the Production Volume card shows 0.
@@ -1218,6 +1320,144 @@ export default function Dashboard() {
     return m;
   }, [plants]);
 
+  // ── RO meter (feed/permeate/reject) spike detection ─────────────────────────
+  // latestRO holds every reading in the past 24h (not deduped to one-per-train
+  // like latestPerTrain below), so each train's rows can be sorted
+  // chronologically and each one compared to its own immediately-prior
+  // reading — same "vs last time" shape as PretreatmentAndROLog.tsx's
+  // permHighWarn, just applied to rows already sitting in the DB (including
+  // ones written before this guard existed, or written via CSV import which
+  // has no client-side guard at all).
+  const roMeterSpikes = useMemo(() => {
+    const byTrain = new Map<string, any[]>();
+    (latestRO ?? []).forEach((r: any) => {
+      const key = String(r.train_id ?? 'unknown');
+      if (!byTrain.has(key)) byTrain.set(key, []);
+      byTrain.get(key)!.push(r);
+    });
+    const spikes: { row: any; kind: ROMeterKind; result: ReturnType<typeof evaluateROMeterSpike> }[] = [];
+    byTrain.forEach((rows) => {
+      const sorted = [...rows].sort(
+        (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+      );
+      for (let i = 1; i < sorted.length; i++) {
+        (['feed', 'permeate', 'reject'] as ROMeterKind[]).forEach((kind) => {
+          const col = `${kind}_meter_delta`;
+          const result = evaluateROMeterSpike(kind, sorted[i][col], sorted[i - 1][col]);
+          if (result.isSpike) spikes.push({ row: sorted[i], kind, result });
+        });
+      }
+    });
+    return spikes;
+  }, [latestRO]);
+
+  // ── Pre-treatment: latest reading per train + booster amperage vs prior ────
+  const pretreatmentAlerts = useMemo(() => {
+    type PretreatAlert = {
+      trainId: string; plantId: string; severity: PlantAlertSeverity;
+      title: string; description: string; idSuffix: string;
+    };
+    const out: PretreatAlert[] = [];
+    const byTrain = new Map<string, any[]>();
+    (recentPretreatment ?? []).forEach((r: any) => {
+      const key = String(r.train_id ?? 'unknown');
+      if (!byTrain.has(key)) byTrain.set(key, []);
+      byTrain.get(key)!.push(r); // already DESC-ordered by the query
+    });
+    byTrain.forEach((rows, trainId) => {
+      const latest = rows[0];
+      const prior = rows[1];
+      const meta = _qualityTrainMeta2.get(trainId);
+      const plantId = latest.plant_id ?? meta?.plant_id ?? '';
+      const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
+
+      // AFM/MMF differential pressure
+      (latest.afm_units ?? []).forEach((u: any) => {
+        const dp = u.dp_psi ?? dpPsi(u.in_psi, u.out_psi);
+        if (dp != null && dp >= ALERTS.pretreatment_afm_dp_max) {
+          out.push({
+            trainId, plantId, severity: 'warning',
+            idSuffix: `afm-dp-${trainId}-${u.unit}`,
+            title: `AFM ${u.unit} DP high: ${dp} psi`,
+            description: `${trainLabel} — AFM/MMF unit ${u.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_afm_dp_max} psi) — backwash likely needed`,
+          });
+        }
+      });
+
+      // Filter housing differential pressure
+      (latest.filter_housings ?? []).forEach((h: any) => {
+        const dp = dpPsi(h.in_psi, h.out_psi);
+        if (dp != null && dp >= ALERTS.pretreatment_filter_housing_dp_max) {
+          out.push({
+            trainId, plantId, severity: 'warning',
+            idSuffix: `housing-dp-${trainId}-${h.unit}`,
+            title: `Filter Housing ${h.unit} DP high: ${dp} psi`,
+            description: `${trainLabel} — filter housing ${h.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_filter_housing_dp_max} psi) — cartridge/bag replacement likely needed`,
+          });
+        }
+      });
+
+      // Booster pump amperage — spike vs. this same unit's prior reading
+      if (prior) {
+        const priorByUnit = new Map<number, any>();
+        (prior.booster_pumps ?? []).forEach((p: any) => { if (p.unit != null) priorByUnit.set(+p.unit, p); });
+        (latest.booster_pumps ?? []).forEach((p: any) => {
+          const amp = p.amperage != null ? +p.amperage : null;
+          const prevAmp = priorByUnit.get(+p.unit)?.amperage ?? null;
+          if (
+            amp != null && prevAmp != null && prevAmp > 1 &&
+            amp > prevAmp * ALERTS.pretreatment_pump_amp_spike_multiplier
+          ) {
+            out.push({
+              trainId, plantId, severity: 'warning',
+              idSuffix: `booster-amp-${trainId}-${p.unit}`,
+              title: `Booster Pump ${p.unit} amperage spike: ${amp}A`,
+              description: `${trainLabel} — booster pump ${p.unit} reading ${amp}A vs. ${prevAmp}A last reading — check for mis-key or pump fault`,
+            });
+          }
+        });
+      }
+    });
+    return out;
+  }, [recentPretreatment, _qualityTrainMeta2]);
+
+  // ── Pump readings: phase imbalance / phase loss ──────────────────────────────
+  const pumpElectricalAlerts = useMemo(() => {
+    type PumpAlert = {
+      trainId: string; plantId: string; severity: PlantAlertSeverity;
+      title: string; description: string; idSuffix: string;
+    };
+    const out: PumpAlert[] = [];
+    (latestPumpReadings ?? []).forEach((r: any) => {
+      const meta = _qualityTrainMeta2.get(r.train_id);
+      const plantId = r.plant_id ?? meta?.plant_id ?? '';
+      const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
+      const pumpLabel = `${r.pump_type === 'Booster' ? 'Booster' : 'HPP'} Pump ${r.pump_number}`;
+
+      const loss = evaluatePhaseLoss(r.l1_amp, r.l2_amp, r.l3_amp);
+      if (loss) {
+        out.push({
+          trainId: r.train_id, plantId, severity: 'critical',
+          idSuffix: `pump-phase-loss-${r.id}`,
+          title: `${pumpLabel}: possible phase loss`,
+          description: `${trainLabel} — one or more phases reading near 0A while others are running (L1 ${r.l1_amp ?? '—'}A / L2 ${r.l2_amp ?? '—'}A / L3 ${r.l3_amp ?? '—'}A)`,
+        });
+      } else {
+        const imbalance = evaluatePhaseImbalance(r.l1_amp, r.l2_amp, r.l3_amp);
+        if (imbalance.tier !== 'ok' && imbalance.pct != null) {
+          out.push({
+            trainId: r.train_id, plantId,
+            severity: imbalance.tier === 'critical' ? 'critical' : 'warning',
+            idSuffix: `pump-imbalance-${r.id}`,
+            title: `${pumpLabel} current imbalance: ${imbalance.pct.toFixed(0)}%`,
+            description: `${trainLabel} — phase current imbalance ${imbalance.pct.toFixed(0)}% (L1 ${r.l1_amp ?? '—'}A / L2 ${r.l2_amp ?? '—'}A / L3 ${r.l3_amp ?? '—'}A) — check motor windings/connections`,
+          });
+        }
+      }
+    });
+    return out;
+  }, [latestPumpReadings, _qualityTrainMeta2]);
+
   useEffect(() => {
     const storeAlerts: PlantAlert[] = [];
 
@@ -1362,6 +1602,79 @@ export default function Dashboard() {
       });
     });
 
+    // Pre-treatment: AFM/MMF + filter housing DP, booster pump amperage spikes
+    pretreatmentAlerts.forEach((a) => {
+      storeAlerts.push({
+        id:          a.idSuffix,
+        severity:    a.severity,
+        title:       a.title,
+        description: a.description,
+        source:      'Pre-Treatment',
+        plantId:     a.plantId || selectedPlantId || '',
+        timestamp:   Date.now(),
+      });
+    });
+
+    // Booster/HPP pump electrical — phase imbalance / possible phase loss
+    pumpElectricalAlerts.forEach((a) => {
+      storeAlerts.push({
+        id:          a.idSuffix,
+        severity:    a.severity,
+        title:       a.title,
+        description: a.description,
+        source:      'Booster Pumps',
+        plantId:     a.plantId || selectedPlantId || '',
+        timestamp:   Date.now(),
+      });
+    });
+
+    // Power consumption — spike vs. this plant's own 14-day rolling average.
+    // Deliberately relative (see ALERTS.power_spike_multiplier comment) —
+    // no absolute kWh ceiling is used since plant sizes vary widely.
+    // Skipped when todayPowerRaw fell back to a stale/prior-day reading
+    // (powerIsStale) — that's not actually today's consumption, so comparing
+    // it to the rolling average would mislabel old data as "today's spike".
+    (powerIsStale ? [] : (todayPower ?? [])).forEach((r: any) => {
+      const pid = r.plant_id ?? selectedPlantId ?? '';
+      const todayKwh = Number(r.daily_consumption_kwh);
+      const avgKwh = powerAvgByPlant.get(pid);
+      if (
+        Number.isFinite(todayKwh) && todayKwh > 0 &&
+        avgKwh != null && avgKwh > 0 &&
+        todayKwh > avgKwh * ALERTS.power_spike_multiplier
+      ) {
+        storeAlerts.push({
+          id:          `power-spike-${pid}-${r.reading_datetime}`,
+          severity:    'warning',
+          title:       `Power spike: ${fmtNum(todayKwh, 0)} kWh`,
+          description: `${plantNameById.get(pid) ?? 'Plant'} — today's consumption ${fmtNum(todayKwh, 0)} kWh is ${Math.round((todayKwh / avgKwh - 1) * 100)}% above the 14-day average (${fmtNum(avgKwh, 0)} kWh)`,
+          source:      'Power',
+          plantId:     pid,
+          timestamp:   Date.now(),
+        });
+      }
+    });
+
+    // RO train meter (feed/permeate/reject) spikes — e.g. a mis-keyed
+    // cumulative meter reading producing a delta orders of magnitude above
+    // the train's normal flow. Root-cause example this catches: permeate
+    // meter jumping from ~660,977 to 2,153,677 in one entry (a 1,493,203 m3
+    // delta / 409,096.71 m3/h implied flow rate) with nothing elsewhere in
+    // the app rejecting or flagging it.
+    roMeterSpikes.forEach(({ row, kind, result }) => {
+      const pid = row.plant_id ?? selectedPlantId ?? '';
+      const trainLabel = row.train_name ?? (row.train_number != null ? `Train ${row.train_number}` : 'Train');
+      storeAlerts.push({
+        id:          `ro-meter-spike-${kind}-${row.id ?? row.train_id}-${row.reading_datetime}`,
+        severity:    'critical',
+        title:       `${result.label} meter reading error`,
+        description: `${trainLabel} — ${result.detail}`,
+        source:      'RO Trains',
+        plantId:     pid,
+        timestamp:   Date.now(),
+      });
+    });
+
     // Deduplicate storeAlerts by ID — keep last write (most severe value wins
     // if the same key was pushed more than once by different code paths).
     if (storeAlerts.length > 0) {
@@ -1370,7 +1683,8 @@ export default function Dashboard() {
       addAlerts(Array.from(dedupedMap.values()));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trainGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached]);
+  }, [trainGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
+      pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById]);
 
   return (
     <div className="space-y-2 sm:space-y-3 animate-fade-in">

@@ -57,6 +57,44 @@ export const ALERTS = {
   geofence_radius_m_default: 100,
   nrw_green_max: 13,
   nrw_amber_max: 16,
+
+  // ── Pre-treatment differential pressure (psi) ──────────────────────────
+  // Mirror the thresholds already used inline in PretreatmentAndROLog.tsx
+  // (afmDp >= 40, cartridge/bag filter housing dpWarn >= 25) so the entry
+  // form's warning colors and the Dashboard/notification alert feed agree
+  // on the same numbers instead of drifting apart.
+  pretreatment_afm_dp_max: 40,
+  pretreatment_filter_housing_dp_max: 25,
+
+  // ── Booster / HPP pump electrical (pump_readings: l1_amp/l2_amp/l3_amp,
+  //    voltage) ─────────────────────────────────────────────────────────
+  // No per-pump nameplate rating is stored anywhere in the schema, so a
+  // single fixed amp/volt ceiling would be wrong for some pumps and useless
+  // for others. Phase imbalance is used instead — it's scale-invariant
+  // (works the same for a 5A pump and a 50A pump) and is a standard motor
+  // protection signal: NEMA MG-1 treats >~10% current imbalance across a
+  // 3-phase motor's phases as a bearing/insulation risk worth investigating.
+  pump_phase_imbalance_warn_pct: 10,
+  pump_phase_imbalance_critical_pct: 20,
+
+  // Booster pump amperage entered on the routine pre-treatment form
+  // (ro_pretreatment_readings.booster_pumps — one scalar amp reading per
+  // unit, no phase breakdown) is flagged the same way the existing
+  // permHighWarn permeate-meter check already works: current reading vs.
+  // that SAME unit's immediately-prior reading, not an absolute ceiling.
+  pretreatment_pump_amp_spike_multiplier: 1.6,
+
+  // ── Daily power consumption ─────────────────────────────────────────────
+  // Spike vs. the plant's own rolling average (same "beyond the limit"
+  // shape as avg_multiplier_warn, kept separate so power's threshold can be
+  // tuned independently of well/locator/product meters).
+  power_spike_multiplier: 2.0,
+
+  // ── RO train meter deltas (feed/permeate/reject) ────────────────────────
+  // Mirrors readingGuards.ts' SPIKE_MULTIPLIER (2.0x) so the live Dashboard
+  // alert scan and the save-time guard in roReadingGuards.ts use the same
+  // definition of "spike" as locator/well meters already do.
+  ro_meter_spike_multiplier: 2.0,
 };
 
 // Haversine distance in meters

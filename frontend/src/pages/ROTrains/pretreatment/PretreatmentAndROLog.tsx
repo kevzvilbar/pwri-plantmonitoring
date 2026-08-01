@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { calc, ALERTS } from '@/lib/calculations';
+import { evaluateROMeterSpike } from '@/lib/roReadingGuards';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -42,7 +43,7 @@ export function PretreatmentAndROLog() {
   // selected on the operator-picker screen or switched via OperatorSwitcher.
   const { activeOperator, isManager } = useAuth();
   const [showImport, setShowImport] = useState(false);
-  const { selectedPlantId } = useAppStore();
+  const { selectedPlantId, addAlerts } = useAppStore();
   const { data: plants } = usePlants();
 
   // Persist plant + train selection across tab switches / browser-focus changes
@@ -163,7 +164,7 @@ export function PretreatmentAndROLog() {
     queryKey: ['ro-prev', trainId],
     enabled: !!trainId,
     queryFn: async () => (await supabase.from('ro_train_readings')
-      .select('reading_datetime, power_meter_reading_kwh, feed_meter, permeate_meter, permeate_meter_delta, reject_meter')
+      .select('reading_datetime, power_meter_reading_kwh, feed_meter, permeate_meter, feed_meter_delta, permeate_meter_delta, reject_meter, reject_meter_delta')
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
@@ -376,13 +377,27 @@ export function PretreatmentAndROLog() {
   const rejDelta   = !isNaN(rejCurr)  && prevRejMeter  != null ? rejCurr  - prevRejMeter  : null;
 
   // ── Water meter reading warnings ─────────────────────────────────────────
+  // evaluateROMeterSpike (roReadingGuards.ts) is the same function the
+  // Dashboard alert scan uses on rows already saved to the DB — using it
+  // here too means a reading flagged at save-time and one flagged later by
+  // the Dashboard scan (e.g. from a CSV import, which has no client guard)
+  // agree on the exact same definition of "spike".
+  const prevFeedDeltaDB: number | null = (prevRO as any)?.feed_meter_delta     ?? null;
   const prevPermDeltaDB: number | null = (prevRO as any)?.permeate_meter_delta ?? null;
+  const prevRejDeltaDB:  number | null = (prevRO as any)?.reject_meter_delta   ?? null;
   // Negative: current reading is below the previous odometer snapshot → rollback or typo.
+  const feedNegWarn  = prevFeedMeter != null && !isNaN(feedCurr) && feedCurr < prevFeedMeter;
   const permNegWarn  = prevPermMeter != null && !isNaN(permCurr) && permCurr < prevPermMeter;
-  // High: new delta is more than 3× the last delta and > 1 m³ (ignore noise).
-  const permHighWarn = !permNegWarn
-    && prevPermDeltaDB != null && prevPermDeltaDB > 0
-    && permDelta != null && permDelta > prevPermDeltaDB * 3 && permDelta > 1;
+  const rejNegWarn   = prevRejMeter  != null && !isNaN(rejCurr)  && rejCurr  < prevRejMeter;
+  const feedSpike = evaluateROMeterSpike('feed',     feedDelta, prevFeedDeltaDB);
+  const permSpike = evaluateROMeterSpike('permeate', permDelta, prevPermDeltaDB);
+  const rejSpike  = evaluateROMeterSpike('reject',   rejDelta,  prevRejDeltaDB);
+  const feedHighWarn = !feedNegWarn && feedSpike.isSpike;
+  const permHighWarn = !permNegWarn && permSpike.isSpike;
+  const rejHighWarn  = !rejNegWarn  && rejSpike.isSpike;
+  // True if ANY of the three meters look like a mis-key — gates the
+  // pending_review flag + confirmation on save, below.
+  const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;
 
   // Dynamic filling: any one missing = sum/diff of the other two (requires at least two streams entered)
   const feedVol  = feedDelta  ?? (permDelta !== null && rejDelta  !== null ? +(permDelta  + rejDelta ).toFixed(3) : null);
@@ -645,14 +660,43 @@ export function PretreatmentAndROLog() {
       // Conditionally included (same pattern as chlorine_residual_mg_l) so
       // un-migrated DBs don't get a null write for an unknown column.
       ...(roIncompleteReason.trim() ? { incomplete_reason: roIncompleteReason.trim() } : {}),
+      // Flag for review when a feed/permeate/reject meter delta looks like a
+      // mis-keyed spike (see anyMeterSpike above). The operator can still
+      // save — this doesn't block them, since the meter really might be
+      // right and the train just ran hard — but the row is marked so it
+      // surfaces in the alert system instead of silently becoming the new
+      // "previous reading" baseline for every reading after it.
+      ...(anyMeterSpike ? { norm_status: 'pending_review' } : {}),
       recorded_by: activeOperator?.id,
     };
     const { data: savedRow, error: roError } = await (supabase
       .from('ro_train_readings')
       .insert(roPayload)
-      .select('permeate_meter_delta,feed_meter_delta')
+      .select('id,permeate_meter_delta,feed_meter_delta')
       .single() as any);
     if (roError) { toast.error(friendlyError(roError)); return; }
+
+    // Surface the meter spike immediately — both a toast for the operator
+    // who just saved it, and a PlantAlert pushed straight into the store so
+    // it shows in the notification bell right away rather than waiting for
+    // Dashboard's next 2-minute alert-scan refetch.
+    if (anyMeterSpike) {
+      const spikes = [
+        feedHighWarn ? feedSpike : null,
+        permHighWarn ? permSpike : null,
+        rejHighWarn  ? rejSpike  : null,
+      ].filter((s): s is NonNullable<typeof s> => !!s);
+      toast.warning(`Saved, but flagged for review: ${spikes.map((s) => s.label).join(', ')} meter reading looks like a spike.`);
+      addAlerts(spikes.map((s) => ({
+        id:          `ro-meter-spike-save-${savedRow?.id ?? trainId}-${s.label}`,
+        severity:    'critical' as const,
+        title:       `${s.label} meter reading error`,
+        description: `${train?.name ?? `Train ${train?.train_number ?? ''}`} — ${s.detail}`,
+        source:      'RO Trains',
+        plantId:     plantId!,
+        timestamp:   Date.now(),
+      })));
+    }
 
     // ── Sync train status in DB only for manual overrides ────────────────────
     // Submitting a reading as Offline writes 'Offline' to the DB (hard lock).
@@ -1662,7 +1706,23 @@ export function PretreatmentAndROLog() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Feed Meter Reading</Label>
-                    <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                    <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className={cn(
+                      "placeholder:text-2xs placeholder:text-muted-foreground/50",
+                      feedNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
+                      feedHighWarn && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                    )} />
+                    {feedNegWarn && (
+                      <p className="text-xs text-danger flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Reading ({feedCurr}) is below previous ({prevFeedMeter}) — meter rollback or typo.
+                      </p>
+                    )}
+                    {feedHighWarn && (
+                      <p className="text-xs text-warn flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        {feedSpike.detail || 'Delta is unusually high vs. the last reading. Verify before saving.'}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className={cn('text-xs', feedInferred ? 'text-info' : 'text-muted-foreground')}>
@@ -1734,7 +1794,23 @@ export function PretreatmentAndROLog() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Reject Meter Reading</Label>
-                    <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                    <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className={cn(
+                      "placeholder:text-2xs placeholder:text-muted-foreground/50",
+                      rejNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
+                      rejHighWarn && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                    )} />
+                    {rejNegWarn && (
+                      <p className="text-xs text-danger flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        Reading ({rejCurr}) is below previous ({prevRejMeter}) — meter rollback or typo.
+                      </p>
+                    )}
+                    {rejHighWarn && (
+                      <p className="text-xs text-warn flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        {rejSpike.detail || 'Delta is unusually high vs. the last reading. Verify before saving.'}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className={cn('text-xs', rejInferred ? 'text-info' : 'text-muted-foreground')}>

@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -128,6 +128,21 @@ export function TopBar() {
     if (!user) return;
     await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
     qc.invalidateQueries({ queryKey: ['notifications'] });
+  };
+
+  // Dismiss a single DB notification. Scoped to user_id in the query (not just
+  // relying on the RLS policy) so a stale/duplicate click can't attempt to
+  // delete someone else's row. Optimistically removes it from the cached list
+  // so the bell updates instantly instead of waiting on the next refetch.
+  const deleteNotification = async (id: string) => {
+    if (!user) return;
+    qc.setQueryData<Notification[]>(['notifications', user.id], (prev) =>
+      (prev ?? EMPTY_NOTIFICATIONS).filter((n) => n.id !== id));
+    const { error } = await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
+    if (error) {
+      // Roll back the optimistic removal by refetching from the server.
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    }
   };
 
   const plantNameById = useMemo(() => {
@@ -393,10 +408,19 @@ export function TopBar() {
             )}
 
             {notifs.map((n) => (
-              <DropdownMenuItem
+              // Plain div (not DropdownMenuItem) — same reason as the Plant
+              // Alerts rows above: Radix's Item onSelect/close-on-click
+              // behavior would swallow clicks on the nested X button before
+              // our stopPropagation could run. This keeps click-to-navigate
+              // working while letting the dismiss button opt out cleanly.
+              <div
                 key={n.id}
                 onClick={() => n.link_path && navigate(n.link_path)}
-                className="flex flex-col items-start gap-1 py-2.5 cursor-pointer"
+                className={cn(
+                  'relative flex flex-col items-start gap-1 rounded-sm px-2 py-2.5',
+                  'text-sm outline-none transition-colors hover:bg-accent',
+                  n.link_path ? 'cursor-pointer' : 'cursor-default',
+                )}
               >
                 <div className="flex items-center gap-2 w-full">
                   {!n.read && (
@@ -408,13 +432,21 @@ export function TopBar() {
                   <span className="text-2xs text-muted-foreground shrink-0">
                     {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                   </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                    className="text-muted-foreground/50 hover:text-muted-foreground transition-colors text-2xs shrink-0 ml-0.5"
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                  >
+                    ✕
+                  </button>
                 </div>
                 {n.message && (
                   <p className="text-xs text-muted-foreground leading-snug line-clamp-2 pl-3.5">
                     {n.message}
                   </p>
                 )}
-              </DropdownMenuItem>
+              </div>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
