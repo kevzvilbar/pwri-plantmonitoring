@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
@@ -25,6 +26,32 @@ export function Overview() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (selectedPlantId && !plantId) setPlantId(selectedPlantId); }, [selectedPlantId]);
+
+  // ── Deep-link from an alert: /ro-trains?tab=overview&plant=<id>&train=<id>&log=1&logTab=ro|pretreat&highlight=<readingId> ──
+  // Takes priority over both the plant seeded above and whatever was
+  // previously selected here — clicking an alert for a specific train should
+  // land on that train's log, not wherever this tab was last left.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepPlant     = searchParams.get('plant');
+  const deepTrain     = searchParams.get('train');
+  const deepLog       = searchParams.get('log') === '1';
+  const deepLogTab    = (searchParams.get('logTab') === 'pretreat' ? 'pretreat' : 'ro') as 'ro' | 'pretreat';
+  const deepHighlight = searchParams.get('highlight') ?? undefined;
+  useEffect(() => { if (deepPlant) setPlantId(deepPlant); }, [deepPlant]);
+  useEffect(() => {
+    if (!deepTrain) return;
+    setStatusFilter('All');
+    setSearch('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepTrain]);
+  // Cleared once TrainCard has actually opened the modal for deepTrain (see
+  // onAutoOpenConsumed below) — until then the ?train=/&log=1/&highlight=
+  // params stay in the URL so they survive the plant query re-fetching.
+  const clearDeepLinkParams = () => {
+    const sp = new URLSearchParams(searchParams);
+    sp.delete('plant'); sp.delete('train'); sp.delete('log'); sp.delete('logTab'); sp.delete('highlight');
+    setSearchParams(sp, { replace: true });
+  };
 
   const { data: trains } = useQuery({
     queryKey: ['ro-overview', plantId],
@@ -247,7 +274,11 @@ export function Overview() {
           <TrainCard key={t.id} train={t} last={lastReadings?.[t.id] ?? null} spark={sparkData?.[t.id] ?? []}
             hasReadingToday={!!lastReadings?.[t.id]?.reading_datetime && new Date(lastReadings[t.id].reading_datetime) >= startOfToday}
             gapReason={gapReasonsByTrain[t.id] ?? null}
-            onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['train-gap-reasons', plantId, todayDateStr] })} />
+            onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['train-gap-reasons', plantId, todayDateStr] })}
+            autoOpenLog={deepLog && deepTrain === t.id}
+            autoOpenTab={deepLogTab}
+            autoOpenHighlightId={deepHighlight}
+            onAutoOpenConsumed={clearDeepLinkParams} />
         ))}
       </div>
       {plantId && !filtered.length && <Card className="p-4 text-xs text-center text-muted-foreground">No trains match your filter</Card>}

@@ -1355,7 +1355,7 @@ export default function Dashboard() {
   const pretreatmentAlerts = useMemo(() => {
     type PretreatAlert = {
       trainId: string; plantId: string; severity: PlantAlertSeverity;
-      title: string; description: string; idSuffix: string;
+      title: string; description: string; idSuffix: string; readingId: string | null;
     };
     const out: PretreatAlert[] = [];
     const byTrain = new Map<string, any[]>();
@@ -1370,13 +1370,14 @@ export default function Dashboard() {
       const meta = _qualityTrainMeta2.get(trainId);
       const plantId = latest.plant_id ?? meta?.plant_id ?? '';
       const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
+      const readingId: string | null = latest.id ?? null;
 
       // AFM/MMF differential pressure
       (latest.afm_units ?? []).forEach((u: any) => {
         const dp = u.dp_psi ?? dpPsi(u.in_psi, u.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_afm_dp_max) {
           out.push({
-            trainId, plantId, severity: 'warning',
+            trainId, plantId, severity: 'warning', readingId,
             idSuffix: `afm-dp-${trainId}-${u.unit}`,
             title: `AFM ${u.unit} DP high: ${dp} psi`,
             description: `${trainLabel} — AFM/MMF unit ${u.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_afm_dp_max} psi) — backwash likely needed`,
@@ -1389,7 +1390,7 @@ export default function Dashboard() {
         const dp = dpPsi(h.in_psi, h.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_filter_housing_dp_max) {
           out.push({
-            trainId, plantId, severity: 'warning',
+            trainId, plantId, severity: 'warning', readingId,
             idSuffix: `housing-dp-${trainId}-${h.unit}`,
             title: `Filter Housing ${h.unit} DP high: ${dp} psi`,
             description: `${trainLabel} — filter housing ${h.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_filter_housing_dp_max} psi) — cartridge/bag replacement likely needed`,
@@ -1409,7 +1410,7 @@ export default function Dashboard() {
             amp > prevAmp * ALERTS.pretreatment_pump_amp_spike_multiplier
           ) {
             out.push({
-              trainId, plantId, severity: 'warning',
+              trainId, plantId, severity: 'warning', readingId,
               idSuffix: `booster-amp-${trainId}-${p.unit}`,
               title: `Booster Pump ${p.unit} amperage spike: ${amp}A`,
               description: `${trainLabel} — booster pump ${p.unit} reading ${amp}A vs. ${prevAmp}A last reading — check for mis-key or pump fault`,
@@ -1460,11 +1461,25 @@ export default function Dashboard() {
 
   useEffect(() => {
     const storeAlerts: PlantAlert[] = [];
-    // Deep-links straight to the flagged train's entry form — see the
-    // ?plant=&train= handling added to ROTrains/index.tsx (tab) and
-    // PretreatmentAndROLog.tsx (plant/train pre-select).
-    const roLink = (pid?: string | null, trainId?: string | null) =>
-      `/ro-trains?tab=pretreat-ro${pid ? `&plant=${pid}` : ''}${trainId ? `&train=${trainId}` : ''}`;
+    // Deep-links to the train's *history log* (Overview tab → "Open log"
+    // modal), not the live input form — an alert is about something that
+    // already happened, so it should open the read/review view where the
+    // flagged row can be found and corrected, not a blank entry form for a
+    // brand-new reading. See the ?plant=/&train=/&log=1/&logTab=/&highlight=
+    // handling added to ROTrains/index.tsx, ROTrains/Overview.tsx, and
+    // TrainCard.tsx → TrainLogModal.tsx (page-jump + row highlight).
+    const roLink = (
+      pid?: string | null,
+      trainId?: string | null,
+      opts?: { logTab?: 'ro' | 'pretreat'; highlightId?: string | null },
+    ) => {
+      const params = new URLSearchParams({ tab: 'overview' });
+      if (pid) params.set('plant', pid);
+      if (trainId) { params.set('train', trainId); params.set('log', '1'); }
+      if (opts?.logTab) params.set('logTab', opts.logTab);
+      if (opts?.highlightId) params.set('highlight', opts.highlightId);
+      return `/ro-trains?${params.toString()}`;
+    };
 
     // Train gap warnings — plant_id comes from TrainGap directly
     trainGaps.forEach((g) => {
@@ -1512,7 +1527,7 @@ export default function Dashboard() {
     latestPerTrain.forEach((r: any) => {
       const pid        = r.plant_id ?? selectedPlantId ?? '';
       const trainLabel = r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : 'Train');
-      const link        = roLink(pid, r.train_id);
+      const link        = roLink(pid, r.train_id, { highlightId: r.id });
       const dp = r.dp_psi ?? 0;
       if (dp > 40) {
         storeAlerts.push({
@@ -1628,11 +1643,15 @@ export default function Dashboard() {
         source:      'Pre-Treatment',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
-        linkPath:    roLink(a.plantId, a.trainId),
+        linkPath:    roLink(a.plantId, a.trainId, { logTab: 'pretreat', highlightId: a.readingId }),
       });
     });
 
-    // Booster/HPP pump electrical — phase imbalance / possible phase loss
+    // Booster/HPP pump electrical — phase imbalance / possible phase loss.
+    // No highlightId: these come from pump_readings, a separate table this
+    // log view doesn't render — the pretreat tab is still the closest
+    // relevant place to look (booster amperage is logged there too), just
+    // without a specific row to jump to.
     pumpElectricalAlerts.forEach((a) => {
       storeAlerts.push({
         id:          a.idSuffix,
@@ -1642,7 +1661,7 @@ export default function Dashboard() {
         source:      'Booster Pumps',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
-        linkPath:    roLink(a.plantId, a.trainId),
+        linkPath:    roLink(a.plantId, a.trainId, { logTab: 'pretreat' }),
       });
     });
 
@@ -1691,7 +1710,7 @@ export default function Dashboard() {
         source:      'RO Trains',
         plantId:     pid,
         timestamp:   Date.now(),
-        linkPath:    roLink(pid, row.train_id),
+        linkPath:    roLink(pid, row.train_id, { highlightId: row.id }),
       });
     });
 

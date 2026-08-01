@@ -5,7 +5,7 @@
  * readings with edit/correction-request actions.
  * Extracted from ROTrains.tsx (§4 item 2 decomposition).
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
@@ -34,9 +34,13 @@ interface TrainLogModalProps {
   /** Required for CSV import dialogs. Passed from TrainCard (train.plant_id). */
   plantId: string;
   onClose: () => void;
+  /** Deep-link support (Dashboard alert → "Open log" instead of the input form). */
+  initialTab?: 'ro' | 'pretreat';
+  /** A specific reading id to jump to, scroll into view, and highlight. */
+  highlightId?: string;
 }
 
-export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLogModalProps) {
+export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTab, highlightId }: TrainLogModalProps) {
   const qc = useQueryClient();
   const { isManager, isDataAnalyst, activeOperator } = useAuth();
   // Managers, Admins, and Data Analysts can edit any reading at any time;
@@ -51,7 +55,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
   // dialog. Checking Repl. opens this; unchecking still clears all three
   // granular flags (+ the shared flag, kept in sync by a DB trigger) directly.
   const [replaceReadingId, setReplaceReadingId] = useState<string | null>(null);
-  const [logTab, setLogTab]           = useState<'ro' | 'pretreat'>('ro');
+  const [logTab, setLogTab]           = useState<'ro' | 'pretreat'>(initialTab ?? 'ro');
   const [editingRoRow, setEditingRoRow]           = useState<any | null>(null);
   const [editingPretreatRow, setEditingPretreatRow] = useState<any | null>(null);
   const [correctionTarget, setCorrectionTarget]   = useState<CorrectionTarget | null>(null);
@@ -61,9 +65,10 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
 
   const todayStr  = format(new Date(), 'yyyy-MM-dd');
   const thirtyAgo = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-  const [dateFrom, setDateFrom]       = useState(thirtyAgo);
+  const ninetyAgo = format(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+  const [dateFrom, setDateFrom]       = useState(highlightId ? ninetyAgo : thirtyAgo);
   const [dateTo, setDateTo]           = useState(todayStr);
-  const [rangePreset, setRangePreset] = useState<'7' | '30' | '90' | 'custom'>('30');
+  const [rangePreset, setRangePreset] = useState<'7' | '30' | '90' | 'custom'>(highlightId ? '90' : '30');
 
   const applyPreset = (p: '7' | '30' | '90') => {
     setDateFrom(format(new Date(Date.now() - parseInt(p) * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'));
@@ -237,6 +242,24 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
   }, [logs]);
   const pageLogsWithMeterFlow = logsWithMeterFlow.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  // ── Deep-link highlight: jump to whichever page contains highlightId ──────
+  // logs/preLogs are already ordered newest-first, matching how they're
+  // paginated below, so the target row's index maps directly to a page.
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  const [highlightJumped, setHighlightJumped] = useState(false);
+  useEffect(() => {
+    if (!highlightId || highlightJumped) return;
+    const source = logTab === 'ro' ? logs : preLogs;
+    if (!source.length) return; // still loading — wait for the next run
+    const idx = source.findIndex((r: any) => r.id === highlightId);
+    if (idx === -1) { setHighlightJumped(true); return; } // not in range even at 90d — give up quietly
+    setPage(Math.floor(idx / PAGE_SIZE));
+    setHighlightJumped(true);
+  }, [highlightId, highlightJumped, logTab, logs, preLogs]);
+  useEffect(() => {
+    if (highlightRowRef.current) highlightRowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [page, highlightJumped]);
+
   const fmtVal = (v: any, unit = '') =>
     v != null
       ? <span>{Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}<span className="text-muted-foreground/60 ml-0.5 text-2xs">{unit}</span></span>
@@ -409,8 +432,16 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                     const initials   = opName !== 'Unknown'
                       ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
                     const delta = r._computed_delta ?? r.permeate_meter_delta;
+                    const isHighlighted = highlightId != null && r.id === highlightId;
                     return (
-                      <tr key={r.id ?? i} className={cn('border-t transition-colors', isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/30')}>
+                      <tr
+                        key={r.id ?? i}
+                        ref={isHighlighted ? highlightRowRef : undefined}
+                        className={cn(
+                          'border-t transition-colors',
+                          isHighlighted ? 'bg-danger-soft ring-1 ring-inset ring-danger' : isRepl ? 'bg-kpi-solar/40' : 'hover:bg-muted/30',
+                        )}
+                      >
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
                           <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                           <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>
@@ -556,8 +587,13 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose }: TrainLo
                     {pagePreLogs.map((r: any, i: number) => {
                       const opName   = r._operatorName ?? 'Unknown';
                       const initials = opName !== 'Unknown' ? opName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?';
+                      const isHighlighted = highlightId != null && r.id === highlightId;
                       return (
-                        <tr key={r.id ?? i} className="border-t hover:bg-muted/30 transition-colors">
+                        <tr
+                          key={r.id ?? i}
+                          ref={isHighlighted ? highlightRowRef : undefined}
+                          className={cn('border-t transition-colors', isHighlighted ? 'bg-danger-soft ring-1 ring-inset ring-danger' : 'hover:bg-muted/30')}
+                        >
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
                             <div className="text-foreground font-medium">{r.reading_datetime ? format(new Date(r.reading_datetime), 'MMM d, yyyy') : '—'}</div>
                             <div className="text-muted-foreground">{r.reading_datetime ? format(new Date(r.reading_datetime), 'HH:mm') : ''}</div>

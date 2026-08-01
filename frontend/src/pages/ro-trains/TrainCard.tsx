@@ -4,7 +4,7 @@
  * Mini card shown in the RO Trains Overview grid — one card per train.
  * Extracted from ROTrains.tsx (§4 item 2 decomposition).
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { MessageCircleOff } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,6 +31,12 @@ interface TrainCardProps {
   hasReadingToday?: boolean;
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
+  /** Deep-link from a Dashboard alert — auto-opens the log modal for this card. */
+  autoOpenLog?: boolean;
+  autoOpenTab?: 'ro' | 'pretreat';
+  autoOpenHighlightId?: string;
+  /** Called once the auto-open has been applied, so Overview.tsx can clear the URL params. */
+  onAutoOpenConsumed?: () => void;
 }
 
 export function TrainCard({
@@ -40,11 +46,20 @@ export function TrainCard({
   hasReadingToday,
   gapReason,
   onGapReasonSaved,
+  autoOpenLog,
+  autoOpenTab,
+  autoOpenHighlightId,
+  onAutoOpenConsumed,
 }: TrainCardProps) {
   const [logOpen, setLogOpen]         = useState(false);
   const [gapDialogOpen, setGapDialogOpen] = useState(false);
   const [gapSaving, setGapSaving]     = useState(false);
   const { user } = useAuth();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (autoOpenLog) { setLogOpen(true); onAutoOpenConsumed?.(); }
+  }, [autoOpenLog]);
 
   const trainLabel = `Train ${train.train_number}${train.name ? ` · ${train.name}` : ''}`;
   const status: string = deriveTrainStatus(train, last);
@@ -137,6 +152,8 @@ export function TrainCard({
           trainLabel={trainLabel}
           plantId={train.plant_id}
           onClose={() => setLogOpen(false)}
+          initialTab={autoOpenTab}
+          highlightId={autoOpenHighlightId}
         />
       )}
 
