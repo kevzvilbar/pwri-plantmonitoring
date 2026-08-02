@@ -8,18 +8,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { DataState } from '@/components/DataState';
+import { supabase } from '@/integrations/supabase/client';
 import { format, subDays } from 'date-fns';
-import { Timer, AlertTriangle, Filter } from 'lucide-react';
+import { Timer, AlertTriangle, Filter, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type DowntimeEvent = {
   event_date: string;
   subsystem: string;
   duration_hrs: number;
-  cause: string;
-  raw_text: string;
-  op_hrs: number | null;
-  shutdown_hrs: number | null;
+  // The FastAPI route used to parse these out of free-text remarks. The
+  // downtime_events table (supabase/migrations/20260515_...sql) only stores
+  // `description` — no separate cause/raw_text/op_hrs/shutdown_hrs — so the
+  // Supabase-direct fallback below leaves these null/absent rather than
+  // faking a parse the client can't actually do.
+  cause?: string;
+  raw_text?: string;
+  op_hrs?: number | null;
+  shutdown_hrs?: number | null;
   plant_name?: string;
 };
 
@@ -28,9 +34,23 @@ type DowntimeResponse = {
   total_duration_hrs: number;
   by_subsystem: { subsystem: string; hours: number }[];
   events: DowntimeEvent[];
+  /** Which path served this — surfaced below so a backend outage reads
+   *  differently from "nothing recorded". */
+  source: 'api' | 'supabase';
 };
 
 const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
+
+function rollup(events: DowntimeEvent[]): { subsystem: string; hours: number }[] {
+  const bySub = new Map<string, number>();
+  for (const e of events) {
+    const key = e.subsystem || 'Unspecified';
+    bySub.set(key, (bySub.get(key) ?? 0) + (e.duration_hrs || 0));
+  }
+  return [...bySub.entries()]
+    .map(([subsystem, hours]) => ({ subsystem, hours: Math.round(hours * 10) / 10 }))
+    .sort((a, b) => b.hours - a.hours);
+}
 
 export function DowntimeEventsModal({
   open, onClose, plantId, plantName,
@@ -44,22 +64,59 @@ export function DowntimeEventsModal({
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [subFilter, setSubFilter] = useState<string>('all');
 
-  const { data, isLoading } = useQuery<DowntimeResponse>({
+  const { data, isLoading, error, refetch } = useQuery<DowntimeResponse>({
     queryKey: ['downtime-events', plantId, from, to],
     enabled: open,
     queryFn: async () => {
+      const qs = new URLSearchParams({ date_from: from, date_to: to, limit: '2000' });
+      if (plantId) qs.set('plant_id', plantId);
+
+      // 1. Try the backend API first — it parses cause/raw_text/op_hrs out
+      // of free-text daily remarks, which a direct table read can't do.
       try {
-        const qs = new URLSearchParams({ date_from: from, date_to: to, limit: '2000' });
-        if (plantId) qs.set('plant_id', plantId);
         const res = await fetch(`${BASE}/api/downtime/events?${qs.toString()}`);
-        if (!res.ok) return { events: [] };
-        return res.json();
+        if (res.ok) {
+          const json = await res.json();
+          return { ...json, source: 'api' as const };
+        }
       } catch {
-        return { events: [] };
+        // network/CORS error (e.g. no backend deployed) — fall through
       }
+
+      // 2. Direct read of downtime_events — same underlying data, RLS
+      // (`auth_read_downtime`) allows any signed-in user to read it. See
+      // supabase/migrations/20260515_supabase_only_and_data_analysis.sql.
+      let q = supabase
+        .from('downtime_events' as any)
+        .select('event_date, subsystem, duration_hrs, description, plant_id')
+        .gte('event_date', from)
+        .lte('event_date', to)
+        .order('event_date', { ascending: false })
+        .limit(2000);
+      if (plantId) q = q.eq('plant_id', plantId);
+
+      const { data: rows, error: sbError } = await q;
+      if (sbError) throw new Error(sbError.message);
+
+      const events: DowntimeEvent[] = (rows ?? []).map((r: any) => ({
+        event_date: r.event_date,
+        subsystem: r.subsystem ?? 'Unspecified',
+        duration_hrs: Number(r.duration_hrs) || 0,
+        cause: r.description ?? undefined,
+        raw_text: r.description ?? '',
+      }));
+      return {
+        count: events.length,
+        total_duration_hrs: Math.round(events.reduce((s, e) => s + e.duration_hrs, 0) * 10) / 10,
+        by_subsystem: rollup(events),
+        events,
+        source: 'supabase' as const,
+      };
     },
     retry: false,
   });
+
+  const usedFallback = data?.source === 'supabase';
 
   const filtered = useMemo(() => {
     const list = data?.events ?? [];
@@ -93,6 +150,14 @@ export function DowntimeEventsModal({
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         </div>
+
+        {usedFallback && (
+          <div className="flex items-center gap-1.5 text-2xs text-muted-foreground px-0.5">
+            <Database className="h-3 w-3" />
+            Reading directly from the database — the downtime API isn't reachable
+            (cause/remarks text won't be parsed, but hours and dates are accurate).
+          </div>
+        )}
 
         {/* By-subsystem chips */}
         {subs.length > 0 && (
@@ -131,46 +196,45 @@ export function DowntimeEventsModal({
             <span>Cause</span>
           </div>
           <div className="overflow-auto flex-1">
-            {isLoading && (
-              <div className="p-6 text-center text-xs text-muted-foreground">Loading…</div>
-            )}
-            {!isLoading && filtered.length === 0 && (
-              <DataState
-                isEmpty
-                emptyTitle="No downtime events"
-                emptyDescription={plantId
-                  ? 'No shutdowns found for this plant in the selected range.'
-                  : 'Import a plant XLSX with a Downtime sheet via /import to see events here.'}
-              />
-            )}
-            {filtered.map((ev, i) => {
-              const sev = ev.duration_hrs >= 12 ? 'high' : ev.duration_hrs >= 3 ? 'med' : 'low';
-              return (
-                <div key={`${ev.event_date}-${ev.subsystem}-${i}`}
-                  className={cn(
-                    'grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-2 border-t text-xs',
-                    sev === 'high' && 'bg-danger-soft/50',
-                    sev === 'med' && 'bg-warn-soft/30',
-                  )}
-                  data-testid={`downtime-event-row-${i}`}
-                >
-                  <span className="font-mono-num">{ev.event_date}</span>
-                  <span className="truncate" title={ev.subsystem}>
-                    <Badge variant="outline" className="font-normal">{ev.subsystem}</Badge>
-                  </span>
-                  <span className={cn(
-                    'text-right font-mono-num',
-                    sev === 'high' && 'text-danger font-semibold',
-                    sev === 'med' && 'text-warn',
-                  )}>
-                    {ev.duration_hrs.toFixed(1)}h
-                  </span>
-                  <span className="text-muted-foreground line-clamp-2">
-                    {ev.cause || <span className="italic text-muted-foreground/70">{ev.raw_text}</span>}
-                  </span>
-                </div>
-              );
-            })}
+            <DataState
+              loading={isLoading}
+              error={error}
+              isEmpty={filtered.length === 0}
+              onRetry={() => refetch()}
+              emptyTitle="No downtime events"
+              emptyDescription={plantId
+                ? 'No shutdowns found for this plant in the selected range.'
+                : 'Import a plant XLSX with a Downtime sheet via /import to see events here.'}
+            >
+              {filtered.map((ev, i) => {
+                const sev = ev.duration_hrs >= 12 ? 'high' : ev.duration_hrs >= 3 ? 'med' : 'low';
+                return (
+                  <div key={`${ev.event_date}-${ev.subsystem}-${i}`}
+                    className={cn(
+                      'grid grid-cols-[88px_110px_60px_1fr] gap-2 px-3 py-2 border-t text-xs',
+                      sev === 'high' && 'bg-danger-soft/50',
+                      sev === 'med' && 'bg-warn-soft/30',
+                    )}
+                    data-testid={`downtime-event-row-${i}`}
+                  >
+                    <span className="font-mono-num">{ev.event_date}</span>
+                    <span className="truncate" title={ev.subsystem}>
+                      <Badge variant="outline" className="font-normal">{ev.subsystem}</Badge>
+                    </span>
+                    <span className={cn(
+                      'text-right font-mono-num',
+                      sev === 'high' && 'text-danger font-semibold',
+                      sev === 'med' && 'text-warn',
+                    )}>
+                      {ev.duration_hrs.toFixed(1)}h
+                    </span>
+                    <span className="text-muted-foreground line-clamp-2">
+                      {ev.cause || <span className="italic text-muted-foreground/70">{ev.raw_text}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </DataState>
           </div>
         </div>
 

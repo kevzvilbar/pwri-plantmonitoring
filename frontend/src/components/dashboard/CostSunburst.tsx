@@ -1,5 +1,6 @@
-// Cost Composition Sunburst: Cost -> {Power, Chemicals, Filters} ->
-// individual chemical / filter housing type ($). Built with d3-hierarchy
+// Cost Composition Sunburst: Cost -> {Power, Chemicals, Filters} -> Power
+// splits into {Grid, Solar}, Chemicals into individual chemicals, Filters
+// into housing type ($). Built with d3-hierarchy
 // (partition layout) + d3-shape (arc path generator) for the math only —
 // all DOM is rendered through React JSX, not d3-selection, so it behaves
 // like any other React component.
@@ -23,6 +24,7 @@
 // every arc comes from the same generator — no d3-transition/d3-interpolate
 // dependency needed. Older browsers just snap instantly; nothing breaks.
 import { useMemo, useState } from 'react';
+import { format, parseISO, subDays } from 'date-fns';
 import { hierarchy, partition, type HierarchyRectangularNode } from 'd3-hierarchy';
 import { arc as arcGenerator } from 'd3-shape';
 import { ChevronLeft } from 'lucide-react';
@@ -53,6 +55,7 @@ const SIZE = 220;
 // category rather than by sort order, so "Power" is always this color
 // regardless of which slice happens to be bigger this period.
 const POWER_COLOR = 'hsl(var(--chart-6))';
+const SOLAR_COLOR = 'hsl(var(--kpi-solar))'; // same orange token as the Solar KPI/legend dot on the Energy Mix chart
 const CHEM_COLOR = 'hsl(var(--highlight))';
 const FILTER_COLOR = 'hsl(var(--chart-4))';
 
@@ -83,8 +86,27 @@ export function CostSunburst({ plantIds }: Props) {
   const chartTo = useAppStore((s) => s.chartTo);
   const days = rangeKeyToDays(chartRange, chartFrom, chartTo);
 
-  const { data, isLoading } = useCostComposition(plantIds, days);
+  // chartFrom/chartTo only reflect the real selection when chartRange is
+  // CUSTOM (rangeKeyToDays ignores them for the preset buttons) — but every
+  // range, preset or custom, should resolve to a real, concrete date span
+  // rather than a vague day-count, matching how Data Completeness Radar
+  // already labels itself ("Jul 24–Jul 26", not "last 2d"). For presets that
+  // means computing "today back N days" here instead of leaving it for the
+  // hook to silently re-derive the same thing internally with nothing to
+  // show for it in the UI.
+  const isCustomRange = chartRange === 'CUSTOM';
+  const resolvedTo = isCustomRange ? chartTo : format(new Date(), 'yyyy-MM-dd');
+  const resolvedFrom = isCustomRange ? chartFrom : format(subDays(new Date(), days), 'yyyy-MM-dd');
+
+  const { data, isLoading } = useCostComposition(plantIds, days, resolvedFrom, resolvedTo);
   const [focusId, setFocusId] = useState('Cost');
+
+  // "last {days}d" was the tell that this was silently ignoring whatever was
+  // actually picked (it never changed no matter what range was selected).
+  // Every mode now shows the real dates it's actually querying instead.
+  const rangeLabel = resolvedFrom === resolvedTo
+    ? format(parseISO(resolvedFrom), 'MMM d')
+    : `${format(parseISO(resolvedFrom), 'MMM d')}–${format(parseISO(resolvedTo), 'MMM d')}`;
 
   const { byId, rootNode } = useMemo(() => {
     if (!data?.root) return { nodes: [] as RNode[], byId: new Map<string, RNode>(), rootNode: null as RNode | null };
@@ -123,9 +145,17 @@ export function CostSunburst({ plantIds }: Props) {
   );
 
   const colorFor = (d: RNode): string => {
+    // Grid and Solar are Power's two ring-2 children now (not ring-1
+    // siblings) — check by name first so Solar keeps its own distinct color
+    // instead of inheriting Power's, the way an ordinary chemical/filter
+    // sub-slice inherits its category's color via the depth-1 walk-up below.
+    if (d.data.name === 'Solar') return SOLAR_COLOR;
+    if (d.data.name === 'Grid') return POWER_COLOR;
     let n: RNode = d;
     while (n.depth > 1 && n.parent) n = n.parent as RNode;
-    return n.data.name === 'Power' ? POWER_COLOR : n.data.name === 'Chemicals' ? CHEM_COLOR : FILTER_COLOR;
+    return n.data.name === 'Power' ? POWER_COLOR
+      : n.data.name === 'Chemicals' ? CHEM_COLOR
+      : FILTER_COLOR;
   };
   const opacityFor = (d: RNode) => {
     const rel = d.depth - (focus?.depth ?? 0);
@@ -172,7 +202,7 @@ export function CostSunburst({ plantIds }: Props) {
           onClick={() => isZoomed && setFocusId((focus!.parent as RNode | null)?.id ?? 'Cost')}
           className={`ml-auto text-2xs flex items-center gap-0.5 ${isZoomed ? 'text-muted-foreground hover:text-foreground cursor-pointer' : 'text-muted-foreground/70 cursor-default'}`}
         >
-          {isZoomed ? <><ChevronLeft className="h-3 w-3" /> back to {(focus!.parent as RNode | null)?.data.name ?? 'Cost'}</> : `click a slice · last ${days}d`}
+          {isZoomed ? <><ChevronLeft className="h-3 w-3" /> back to {(focus!.parent as RNode | null)?.data.name ?? 'Cost'}</> : `click a slice · ${rangeLabel}`}
         </button>
       </div>
 
@@ -259,6 +289,11 @@ export function CostSunburst({ plantIds }: Props) {
       {data.hasChemBreakdown && data.unpricedChemicals.length > 0 && (
         <p className="text-2xs text-muted-foreground/70 mt-2">
           No price on file for {data.unpricedChemicals.join(', ')} — excluded from the breakdown above.
+        </p>
+      )}
+      {data.solarTotal > 0 && (
+        <p className="text-2xs text-muted-foreground/70 mt-2">
+          Solar is priced at the grid php/kWh rate for comparison — it isn't actually billed, so the center total runs higher than real cash spend.
         </p>
       )}
     </Card>

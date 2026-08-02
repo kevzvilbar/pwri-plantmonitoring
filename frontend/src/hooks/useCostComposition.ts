@@ -1,11 +1,18 @@
 // Aggregates cost data into a hierarchy suitable for the Cost Composition
-// Sunburst: Cost -> {Power, Chemicals, Filters} -> individual chemical /
-// filter housing type ($).
+// Sunburst: Cost -> {Power, Chemicals, Filters} -> Power splits into
+// {Grid, Solar}, Chemicals into individual chemicals, Filters into housing
+// type ($).
 //
-// Ring 1 (Power / Chemicals / Filters) comes straight from
-// `production_costs`, which splits every day into power_cost / chem_cost /
-// filter_cost (filter_cost added by 20260729_filter_replacements.sql, kept
-// in sync via trigger from filter_replacements — see that migration).
+// Ring 1 Power is powerTotal + solarTotal combined (Ring 2 splits it back
+// out) — chem/power/solar/filter costs all come straight from
+// `production_costs`, which splits every day into power_cost / solar_cost /
+// chem_cost / filter_cost (filter_cost added by 20260729_filter_replacements.sql,
+// solar_cost added by 20260731_add_solar_cost.sql — both kept in sync via
+// their own trigger off their source table, mirroring how power_cost/
+// chem_cost already work off power_readings/chemical_dosing_logs).
+// solar_cost is NOTIONAL — priced at the grid php/kWh rate so this ring
+// shows solar's avoided-cost value, but solar generation isn't actually
+// billed. See that migration's header before treating it as real spend.
 // Ring 2 under Chemicals prices out each of the five chemical_dosing_logs
 // quantity columns using the latest chemical_prices.unit_price as of the
 // period's end date. Ring 2 under Filters splits filter_cost by
@@ -33,6 +40,7 @@ export interface CostSunburstNode {
 export interface CostComposition {
   root: CostSunburstNode;
   powerTotal: number;
+  solarTotal: number;
   chemCostTotal: number;
   pricedChemTotal: number;
   hasChemBreakdown: boolean;
@@ -87,21 +95,35 @@ function parsePriceName(raw: string): { base: string; unit: string | null } {
   return m ? { base: m[1].trim(), unit: m[2].trim().toLowerCase() } : { base: raw.trim(), unit: null };
 }
 
-export function useCostComposition(plantIds: string[], days: number) {
+export function useCostComposition(
+  plantIds: string[],
+  days: number,
+  from?: string, // yyyy-MM-dd — explicit range start; overrides `days` when given
+  to?: string,   // yyyy-MM-dd — explicit range end; overrides `days` when given
+) {
   return useQuery<CostComposition | null>({
-    queryKey: ['cost-composition', plantIds, days],
+    queryKey: ['cost-composition', plantIds, days, from, to],
     queryFn: async () => {
       if (!plantIds.length) return null;
 
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const sinceStr = format(subDays(new Date(), days), 'yyyy-MM-dd');
+      // `days` alone re-derives the window from *right now*, which is the
+      // bug this fixes: whatever custom date range was selected elsewhere on
+      // the dashboard (chartFrom/chartTo) got thrown away, so the donut
+      // always showed "today minus N days" instead of the selected range —
+      // e.g. showing Jul 30–31 while Jul 14 was picked everywhere else, with
+      // no visual cue beyond the "last Nd" label. Callers that have a real
+      // range on hand (CostSunburst passes chartFrom/chartTo) should always
+      // pass it; `days` is kept as a fallback for callers that don't, and
+      // as part of the cache key.
+      const todayStr = to ?? format(new Date(), 'yyyy-MM-dd');
+      const sinceStr = from ?? format(subDays(new Date(), days), 'yyyy-MM-dd');
       const sinceIsoDatetime = `${sinceStr}T00:00:00`;
       const todayIsoDatetime = `${todayStr}T23:59:59`;
 
       const [costRes, dosingRes, priceRes, filterRes] = await Promise.all([
         supabase
           .from('production_costs')
-          .select('plant_id, power_cost, chem_cost, filter_cost')
+          .select('plant_id, power_cost, chem_cost, filter_cost, solar_cost')
           .in('plant_id', plantIds)
           .gte('cost_date', sinceStr)
           .lte('cost_date', todayStr),
@@ -146,6 +168,8 @@ export function useCostComposition(plantIds: string[], days: number) {
       const powerTotal = costRows.reduce((s, r) => s + (Number(r.power_cost) || 0), 0);
       const chemCostTotal = costRows.reduce((s, r) => s + (Number(r.chem_cost) || 0), 0);
       const filterCostTotal = costRows.reduce((s, r) => s + (Number((r as Record<string, unknown>).filter_cost) || 0), 0);
+      // Notional, not real spend — see solar_cost migration header.
+      const solarTotal = costRows.reduce((s, r) => s + (Number((r as Record<string, unknown>).solar_cost) || 0), 0);
 
       // Group replacement events by housing type for the Filters ring —
       // at most two children (Cartridge Filter / Bag Filter), so no need for
@@ -198,7 +222,14 @@ export function useCostComposition(plantIds: string[], days: number) {
       const root: CostSunburstNode = {
         name: 'Cost',
         children: [
-          { name: 'Power', value: Math.round(powerTotal * 100) / 100 },
+          {
+            name: 'Power',
+            value: Math.round((powerTotal + solarTotal) * 100) / 100,
+            children: [
+              { name: 'Grid', value: Math.round(powerTotal * 100) / 100 },
+              { name: 'Solar', value: Math.round(solarTotal * 100) / 100 },
+            ],
+          },
           {
             name: 'Chemicals',
             value: Math.round((hasChemBreakdown ? pricedChemTotal : chemCostTotal) * 100) / 100,
@@ -213,7 +244,7 @@ export function useCostComposition(plantIds: string[], days: number) {
       };
 
       return {
-        root, powerTotal, chemCostTotal, pricedChemTotal, hasChemBreakdown, unpricedChemicals,
+        root, powerTotal, solarTotal, chemCostTotal, pricedChemTotal, hasChemBreakdown, unpricedChemicals,
         filterCostTotal, hasFilterBreakdown,
       };
     },

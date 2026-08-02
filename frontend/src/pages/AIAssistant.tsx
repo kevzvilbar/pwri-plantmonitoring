@@ -41,95 +41,59 @@ type Anomaly = {
 };
 
 // ---------------------------------------------------------------------------
-// Anthropic API helpers
+// AI backend helpers — the system prompt itself now lives server-side in
+// backend/ai_service.py (SYSTEM_PROMPT there), so the frontend no longer
+// needs its own copy.
 // ---------------------------------------------------------------------------
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
-const SYSTEM_PROMPT = `You are an AI assistant for PWRI Monitoring, a multi-plant water operations management system.
-You help operators, supervisors, and managers analyze water plant data including:
-- Well meter readings and daily volumes
-- RO train status and performance
-- Locator meter readings
-- Chemical usage and costs
-- Downtime events and maintenance records
-- NRW (Non-Revenue Water) analysis
-- Anomaly detection in consumption patterns
+async function authHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-Be concise, data-focused, and professional. When data is provided in the conversation, analyze it directly.
-If asked about specific data you don't have, explain what data would be needed and how to find it in the system.`;
-
-async function callClaude(messages: Msg[]): Promise<string> {
-  const res = await fetch(ANTHROPIC_URL, {
+/**
+ * Was: fetch(ANTHROPIC_URL) with no x-api-key and no
+ * anthropic-dangerous-direct-browser-access header — Anthropic's API would
+ * reject every call (401), and even a working key here would ship it to
+ * every visitor's browser. The real, correctly-architected route is
+ * backend/server.py's POST /api/ai/chat, which holds EMERGENT_LLM_KEY
+ * server-side (backend/ai_service.py) and persists session history in the
+ * ai_chat_sessions table. This restores that path; it also means the
+ * feature now correctly depends on VITE_BACKEND_URL being set to a real,
+ * reachable backend rather than silently pointing at the wrong API.
+ */
+async function callClaude(latestUserMessage: string, sessionId: string | null): Promise<{ reply: string; sessionId: string }> {
+  const res = await fetch(`${BASE}/api/ai/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-    }),
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify({ message: latestUserMessage, session_id: sessionId ?? undefined }),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+    throw new Error(err?.detail ?? `HTTP ${res.status}`);
   }
 
   const data = await res.json();
-  return data.content?.map((b: any) => b.text ?? '').join('') ?? '';
+  return { reply: data.reply ?? '', sessionId: data.session_id };
 }
 
 async function callClaudeForAnomalies(readings: any[]): Promise<{ anomalies: Anomaly[]; summary: string }> {
-  const systemInstruction = `You are a water operations anomaly detection expert. Analyze well meter readings and identify anomalies.
-Return ONLY valid JSON in this exact format, no markdown, no explanation outside the JSON:
-{
-  "summary": "Brief plain-text summary of findings",
-  "anomalies": [
-    {
-      "well": "well name",
-      "date": "YYYY-MM-DD",
-      "type": "spike|drop|zero_reading|off_location|negative_delta",
-      "severity": "low|medium|high",
-      "value": 123.4,
-      "baseline": 100.0,
-      "message": "Short description of the anomaly",
-      "suggested_action": "Recommended action"
-    }
-  ]
-}`;
-
-  const res = await fetch(ANTHROPIC_URL, {
+  const res = await fetch(`${BASE}/api/ai/anomalies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1000,
-      system: systemInstruction,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze these well meter readings for anomalies. Look for: sudden spikes or drops (>50% from baseline), zero readings, negative deltas, off-location flags.\n\nReadings:\n${JSON.stringify(readings, null, 2)}`,
-        },
-      ],
-    }),
+    body: JSON.stringify({ readings }),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+    throw new Error(err?.detail ?? `HTTP ${res.status}`);
   }
 
-  const data = await res.json();
-  const text = data.content?.map((b: any) => b.text ?? '').join('') ?? '{}';
-
-  try {
-    const clean = text.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
-  } catch {
-    return { summary: text, anomalies: [] };
-  }
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -137,8 +101,6 @@ Return ONLY valid JSON in this exact format, no markdown, no explanation outside
 // ---------------------------------------------------------------------------
 
 type Session = { id: string; messages: Msg[]; preview: string; updatedAt: string };
-
-function makeId() { return crypto.randomUUID(); }
 
 const SUGGESTIONS = [
   'List the top 3 abnormal consumption days this month across all plants.',
@@ -192,7 +154,7 @@ export default function AIAssistant() {
     setSending(true);
 
     try {
-      const reply = await callClaude(nextMessages);
+      const { reply, sessionId } = await callClaude(msg, activeSessionId);
       const assistantMsg: Msg = { role: 'assistant', content: reply };
       const finalMessages = [...nextMessages, assistantMsg];
       setMessages(finalMessages);
@@ -208,10 +170,9 @@ export default function AIAssistant() {
             : s
         ));
       } else {
-        const newId = makeId();
-        const newSession: Session = { id: newId, messages: finalMessages, preview, updatedAt: now };
+        const newSession: Session = { id: sessionId, messages: finalMessages, preview, updatedAt: now };
         setSessions(prev => [newSession, ...prev]);
-        setActiveSessionId(newId);
+        setActiveSessionId(sessionId);
       }
     } catch (e) {
       const friendly = e.message.includes('fetch') || e.message.includes('network')
@@ -313,6 +274,14 @@ export default function AIAssistant() {
         }
       />
 
+      {!BASE && (
+        <DataState
+          unavailable
+          unavailableTitle="AI Assistant needs a backend that isn't configured"
+          unavailableDescription="Chat and anomaly scans call the FastAPI backend's /api/ai routes (backend/ai_service.py), which needs VITE_BACKEND_URL set to a reachable, deployed instance. This page will error on send until that's set up."
+        />
+      )}
+
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'chat' | 'anomalies')}>
         <TabsList>
           <TabsTrigger value="chat"><Bot className="h-3.5 w-3.5 mr-1" />Chat</TabsTrigger>
@@ -374,6 +343,7 @@ export default function AIAssistant() {
                       {SUGGESTIONS.map((s) => (
                         <Button key={s} size="sm" variant="outline"
                           className="text-xs h-auto py-1.5 whitespace-normal text-left"
+                          disabled={!BASE}
                           onClick={() => sendMessage(s)}>
                           {s}
                         </Button>
@@ -425,7 +395,7 @@ export default function AIAssistant() {
                   disabled={sending}
                   className="flex-1"
                 />
-                <Button onClick={() => sendMessage()} disabled={sending || !input.trim()}>
+                <Button onClick={() => sendMessage()} disabled={sending || !input.trim() || !BASE}>
                   <Send className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -471,7 +441,7 @@ export default function AIAssistant() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button disabled={scanning || !scanPlant} onClick={runAnomalyScan}>
+              <Button disabled={scanning || !scanPlant || !BASE} onClick={runAnomalyScan}>
                 {scanning ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Scanning…</>
                           : <><Activity className="h-3.5 w-3.5 mr-1" /> Run scan</>}
               </Button>

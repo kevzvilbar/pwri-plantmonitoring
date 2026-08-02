@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
+import { DataState } from '@/components/DataState';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -90,6 +91,7 @@ interface MigrationsResponse {
 // on-disk content changed since the user last hit Re-check (i.e. potentially
 // stale relative to a previously-downloaded bundle).
 const MIGRATIONS_SHA_KEY = 'pwri:migration-shas-v1';
+const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 export function MigrationsPanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -122,14 +124,13 @@ export function MigrationsPanel() {
     }
   };
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['admin-migrations-status'],
     queryFn: async () => {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
       if (!token) throw new Error('Sign in required');
-      const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
-      const res = await fetch(`${base}/api/admin/migrations/status`, {
+      const res = await fetch(`${BASE}/api/admin/migrations/status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -383,7 +384,6 @@ export function MigrationsPanel() {
         toast.error('Not signed in.');
         return;
       }
-      const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
       const res = await fetch(`${BASE}/api/admin/migrations/apply-history/import`, {
         method: 'POST',
         headers: {
@@ -463,9 +463,8 @@ export function MigrationsPanel() {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
       if (!token) throw new Error('Sign in required');
-      const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
       const res = await fetch(
-        `${base}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
+        `${BASE}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
         {
           method: 'POST',
           headers: {
@@ -491,9 +490,8 @@ export function MigrationsPanel() {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
       if (!token) throw new Error('Sign in required');
-      const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
       const res = await fetch(
-        `${base}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
+        `${BASE}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
@@ -554,6 +552,17 @@ export function MigrationsPanel() {
             </div>
           </div>
         </div>
+
+        {!BASE ? (
+          <DataState
+            unavailable
+            unavailableTitle="Migrations status needs a backend that isn't configured"
+            unavailableDescription="Schema probing (checking which tables/columns actually exist) runs server-side against backend/server.py's /api/admin/migrations/status route — needs VITE_BACKEND_URL set to a reachable, deployed instance."
+          />
+        ) : error ? (
+          <DataState error={error} onRetry={() => refetch()} />
+        ) : null}
+
         {data && (
           <div className="flex flex-wrap gap-2 items-center pt-1">
             <Badge variant="outline" className="bg-accent/10 text-accent">

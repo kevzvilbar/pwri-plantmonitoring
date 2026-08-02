@@ -12,8 +12,6 @@ import { ChevronDown, UserCheck, UserCog, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE = import.meta.env.VITE_BACKEND_URL ?? '';
-
 function initials(p: Profile | null): string {
   if (!p) return '?';
   return ((p.first_name?.[0] ?? '') + (p.last_name?.[0] ?? '')).toUpperCase() || '?';
@@ -82,31 +80,31 @@ function useSamePlantOperators(plantAssignments: string[]) {
 
 async function logSwitchEvent(payload: {
   plant_id: string;
-  from_username: string;
-  to_username: string;
-  device_id: string;
+  from_operator_id: string;
+  to_operator_id: string;
+  switched_by: string;
 }) {
-  try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session?.access_token;
-    await fetch(`${API_BASE}/operator/switch-log`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    console.warn('[OperatorSwitcher] Failed to post switch audit log');
+  // Was: POST to `${API_BASE}/operator/switch-log`, silently swallowed on
+  // failure (console.warn only) — meaning every switch went unlogged
+  // whenever the backend was unreachable, with zero visible indication.
+  // operator_switch_log now lives directly in Supabase (RLS:
+  // auth_write_switch_log allows any signed-in user to insert), so write
+  // there directly instead of depending on a backend that isn't deployed.
+  const { error } = await supabase.from('operator_switch_log' as any).insert({
+    plant_id: payload.plant_id,
+    from_operator_id: payload.from_operator_id,
+    to_operator_id: payload.to_operator_id,
+    switched_by: payload.switched_by,
+  });
+  if (error) {
+    // The switch itself already succeeded client-side (Zustand store) —
+    // don't block or roll that back over an audit-log write failing. But
+    // don't go silent either: an admin/manager reviewing operator_switch_log
+    // later should be able to trust it's complete, so a failure here is
+    // worth a visible (if unobtrusive) signal rather than console-only.
+    console.warn('[OperatorSwitcher] Failed to write switch audit log', error);
+    toast.warning('Operator switched, but the audit log entry failed to save.');
   }
-}
-
-function getDeviceId(): string {
-  const key = 'pwri-device-id';
-  let id = localStorage.getItem(key);
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
-  return id;
 }
 
 export function OperatorSwitcher() {
@@ -154,9 +152,9 @@ export function OperatorSwitcher() {
       toast.success(`Now recording as ${fullName(p)}`);
       await logSwitchEvent({
         plant_id: sharedPlant,
-        from_username: profile?.username ?? user?.id ?? 'unknown',
-        to_username: p.username ?? p.id,
-        device_id: getDeviceId(),
+        from_operator_id: activeOperatorId ?? user?.id ?? '',
+        to_operator_id: p.id,
+        switched_by: user?.id ?? '',
       });
     } else {
       setPendingId(p.id);

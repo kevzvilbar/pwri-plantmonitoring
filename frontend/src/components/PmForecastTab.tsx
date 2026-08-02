@@ -119,6 +119,13 @@ export function PmForecastTab() {
 
   return (
     <div className="space-y-3">
+      {!BASE && (
+        <DataState
+          unavailable
+          unavailableTitle="PM Forecast needs a backend that isn't configured"
+          unavailableDescription="This calls backend/server.py's /api/ai/pm-forecast route, which needs VITE_BACKEND_URL set to a reachable, deployed instance."
+        />
+      )}
       <Card className="p-4">
         <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px]">
           <div>
@@ -158,7 +165,7 @@ export function PmForecastTab() {
             value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="mt-3 flex justify-end">
-          <Button onClick={runForecast} disabled={loading || !templateId}>
+          <Button onClick={runForecast} disabled={loading || !templateId || !BASE}>
             {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
             Forecast next PM
           </Button>

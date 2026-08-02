@@ -38,7 +38,15 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
+          # NOTE: was REACT_APP_BACKEND_URL — every frontend call site reads
+          # import.meta.env.VITE_BACKEND_URL, and Vite's envPrefix (["VITE_"]
+          # in vite.config.ts) never exposes non-VITE_-prefixed vars to the
+          # client build anyway, so the old name was silently a no-op here.
+          # Add a repo secret named VITE_BACKEND_URL pointing at the deployed
+          # FastAPI backend's public URL (see Phase 1.2 of plan.md — a
+          # backend actually has to be hosted somewhere reachable for this
+          # to do anything).
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

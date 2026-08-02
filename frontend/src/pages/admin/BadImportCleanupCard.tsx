@@ -8,12 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { DataState } from '@/components/DataState';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/components/ui/sonner';
 import { Sparkles, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+
+const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // Pre-curated names of plants known to have been imported by mistake via the
 // Smart Import flow. The Admin can still edit/uncheck before running.
@@ -70,7 +73,7 @@ export function BadImportCleanupCard() {
   );
 
   const reasonValid = reason.trim().length >= 5;
-  const canRun = selected.size > 0 && reasonValid && !busy;
+  const canRun = selected.size > 0 && reasonValid && !busy && !!BASE;
 
   const runCleanup = async () => {
     if (!canRun) return;
@@ -131,6 +134,13 @@ export function BadImportCleanupCard() {
       <div className="flex items-start gap-2">
         <Sparkles className="h-4 w-4 mt-0.5 text-warn" />
         <div className="flex-1 min-w-0 space-y-2">
+          {!BASE && (
+            <DataState
+              unavailable
+              unavailableTitle="Cleanup needs a backend that isn't configured"
+              unavailableDescription="This is a transactional, multi-table hard-delete (backend/server.py's /api/admin/plants/cleanup) — unlike the read-only fallbacks elsewhere in Admin, it's not safely reimplementable as chained client-side deletes, since a partial failure partway through could leave orphaned rows across wells, locators, RO trains, and readings. Needs VITE_BACKEND_URL set to a reachable, deployed instance."
+            />
+          )}
           <div>
             <h3 className="text-sm font-semibold">
               Cleanup imported-by-mistake plants
