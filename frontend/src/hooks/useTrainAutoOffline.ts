@@ -20,19 +20,29 @@ export function useTrainAutoOffline(plantIds: string[]) {
     queryKey: ['train-gaps', plantIds],
     queryFn: async (): Promise<TrainGap[]> => {
       if (!plantIds.length) return [];
-      const { data: trains } = await supabase
+      // Was: `{ data: trains }` / `{ data: recent }` with error discarded.
+      // If the readings fetch failed, `recent` became undefined, `lastBy`
+      // stayed empty, and EVERY train computed hours_gap = Infinity below —
+      // which the effect further down uses to auto-flag trains Offline.
+      // A transient network blip could have silently flipped every running
+      // train across every plant to Offline. Throw instead: on failure,
+      // `gaps` stays undefined, and the effect's `if (!gaps?.length) return`
+      // correctly no-ops rather than acting on wrong data.
+      const { data: trains, error: trainsErr } = await supabase
         .from('ro_trains')
         .select('id,train_number,plant_id,status')
         .in('plant_id', plantIds);
+      if (trainsErr) throw trainsErr;
       if (!trains?.length) return [];
 
       const since = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
-      const { data: recent } = await supabase
+      const { data: recent, error: recentErr } = await supabase
         .from('ro_train_readings')
         .select('train_id,reading_datetime')
         .in('train_id', trains.map((t) => t.id))
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: false });
+      if (recentErr) throw recentErr;
 
       const lastBy = new Map<string, string>();
       (recent ?? []).forEach((r: any) => {
@@ -57,7 +67,14 @@ export function useTrainAutoOffline(plantIds: string[]) {
     if (!gaps?.length) return;
     (async () => {
       for (const g of gaps) {
-        await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
+        const { error } = await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', g.train_id);
+        if (error) {
+          // Fail-safe direction (train just doesn't get flagged) is fine to
+          // swallow visually, but silent-forever makes this hard to debug —
+          // at least surface it in dev tools.
+          console.warn('[useTrainAutoOffline] Failed to auto-flag train offline', g.train_id, error);
+          continue;
+        }
         await supabase.from('train_status_log').insert({
           train_id: g.train_id, plant_id: g.plant_id, status: 'Offline',
           reason: `Auto-flagged: no reading for ${g.hours_gap.toFixed(1)}h`,
