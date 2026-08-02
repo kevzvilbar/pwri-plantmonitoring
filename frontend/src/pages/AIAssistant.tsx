@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bot, Send, Plus, Trash2, Loader2, Sparkles, Activity, Droplet,
   AlertTriangle, Calendar,
@@ -40,13 +40,19 @@ type Anomaly = {
   suggested_action: string;
 };
 
-// ---------------------------------------------------------------------------
-// AI backend helpers — the system prompt itself now lives server-side in
-// backend/ai_service.py (SYSTEM_PROMPT there), so the frontend no longer
-// needs its own copy.
-// ---------------------------------------------------------------------------
+type ApiSession = { session_id: string; updated_at: string; preview: string };
 
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
+// ---------------------------------------------------------------------------
+// Backend client
+// ---------------------------------------------------------------------------
+// This used to call https://api.anthropic.com/v1/messages directly from the
+// browser with no API key — that request could never succeed (no auth header,
+// and Anthropic doesn't allow unauthenticated direct-browser calls). The
+// actual AI integration lives server-side in backend/server.py / ai_service.py
+// (it calls an LLM via EMERGENT_LLM_KEY, currently GPT through the Emergent
+// universal key — nothing here needs to know or care which provider that is).
+
+const BASE = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? '';
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -54,53 +60,65 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/**
- * Was: fetch(ANTHROPIC_URL) with no x-api-key and no
- * anthropic-dangerous-direct-browser-access header — Anthropic's API would
- * reject every call (401), and even a working key here would ship it to
- * every visitor's browser. The real, correctly-architected route is
- * backend/server.py's POST /api/ai/chat, which holds EMERGENT_LLM_KEY
- * server-side (backend/ai_service.py) and persists session history in the
- * ai_chat_sessions table. This restores that path; it also means the
- * feature now correctly depends on VITE_BACKEND_URL being set to a real,
- * reachable backend rather than silently pointing at the wrong API.
- */
-async function callClaude(latestUserMessage: string, sessionId: string | null): Promise<{ reply: string; sessionId: string }> {
+async function apiChat(
+  message: string,
+  sessionId: string | null,
+  context?: Record<string, unknown>,
+): Promise<{ session_id: string; reply: string }> {
   const res = await fetch(`${BASE}/api/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ message: latestUserMessage, session_id: sessionId ?? undefined }),
+    body: JSON.stringify({ message, session_id: sessionId ?? undefined, context }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.detail ?? `HTTP ${res.status}`);
   }
-
-  const data = await res.json();
-  return { reply: data.reply ?? '', sessionId: data.session_id };
+  return res.json();
 }
 
-async function callClaudeForAnomalies(readings: any[]): Promise<{ anomalies: Anomaly[]; summary: string }> {
+async function apiListSessions(): Promise<ApiSession[]> {
+  const res = await fetch(`${BASE}/api/ai/sessions?limit=30`, {
+    headers: await authHeader(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiGetSession(sessionId: string): Promise<{ session_id: string; messages: Msg[] }> {
+  const res = await fetch(`${BASE}/api/ai/sessions/${sessionId}`, {
+    headers: await authHeader(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiDeleteSession(sessionId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/ai/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: await authHeader(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function apiAnomalies(readings: unknown[]): Promise<{ anomalies: Anomaly[]; summary: string }> {
   const res = await fetch(`${BASE}/api/ai/anomalies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ readings }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.detail ?? `HTTP ${res.status}`);
   }
-
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
-// Local session storage (in-memory per page load)
-// ---------------------------------------------------------------------------
-
-type Session = { id: string; messages: Msg[]; preview: string; updatedAt: string };
+async function apiHealth(): Promise<{ ok: boolean; model: string; provider: string }> {
+  const res = await fetch(`${BASE}/api/ai/health`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
 const SUGGESTIONS = [
   'List the top 3 abnormal consumption days this month across all plants.',
@@ -115,15 +133,35 @@ export default function AIAssistant() {
   const { user } = useAuth();
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState<'chat' | 'anomalies'>('chat');
 
+  // --- AI availability -------------------------------------------------------
+  // Checked once up front so the whole page can show one honest banner
+  // instead of letting every button silently fail on click.
+  const { data: health, isError: healthUnreachable } = useQuery({
+    queryKey: ['ai-health'],
+    queryFn: apiHealth,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const aiUnavailable = healthUnreachable || health?.ok === false;
+  const aiUnavailableReason = healthUnreachable
+    ? "Couldn't reach the AI service. The backend may not be deployed, or VITE_BACKEND_URL isn't configured."
+    : 'The backend is reachable, but no LLM key is configured server-side (EMERGENT_LLM_KEY). Ask an admin to set it.';
+
   // --- Chat state -----------------------------------------------------------
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const { data: sessions = [], refetch: refetchSessions } = useQuery({
+    queryKey: ['ai-sessions'],
+    queryFn: apiListSessions,
+    enabled: !!user && !aiUnavailable,
+  });
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const newChat = useCallback(() => {
@@ -132,16 +170,31 @@ export default function AIAssistant() {
     setInput('');
   }, []);
 
-  const loadSession = useCallback((s: Session) => {
-    setActiveSessionId(s.id);
-    setMessages(s.messages);
+  const loadSession = useCallback(async (s: ApiSession) => {
+    setActiveSessionId(s.session_id);
+    setLoadingSession(true);
+    try {
+      const full = await apiGetSession(s.session_id);
+      setMessages(full.messages);
+    } catch (e) {
+      toast.error(friendlyError(e));
+      setActiveSessionId(null);
+    } finally {
+      setLoadingSession(false);
+    }
   }, []);
 
-  const deleteSession = useCallback((id: string) => {
-    setSessions(prev => prev.filter(s => s.id !== id));
-    if (activeSessionId === id) newChat();
-    toast.success('Conversation deleted');
-  }, [activeSessionId, newChat]);
+  const deleteSession = useCallback(async (id: string) => {
+    try {
+      await apiDeleteSession(id);
+      if (activeSessionId === id) newChat();
+      queryClient.setQueryData<ApiSession[]>(['ai-sessions'], (prev) =>
+        (prev ?? []).filter((s) => s.session_id !== id));
+      toast.success('Conversation deleted');
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  }, [activeSessionId, newChat, queryClient]);
 
   const sendMessage = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
@@ -154,36 +207,21 @@ export default function AIAssistant() {
     setSending(true);
 
     try {
-      const { reply, sessionId } = await callClaude(msg, activeSessionId);
-      const assistantMsg: Msg = { role: 'assistant', content: reply };
-      const finalMessages = [...nextMessages, assistantMsg];
-      setMessages(finalMessages);
+      const res = await apiChat(msg, activeSessionId);
+      const assistantMsg: Msg = { role: 'assistant', content: res.reply };
+      setMessages([...nextMessages, assistantMsg]);
 
-      // Persist session in memory
-      const now = new Date().toISOString();
-      const preview = msg.slice(0, 60) + (msg.length > 60 ? '…' : '');
-
-      if (activeSessionId) {
-        setSessions(prev => prev.map(s =>
-          s.id === activeSessionId
-            ? { ...s, messages: finalMessages, preview, updatedAt: now }
-            : s
-        ));
-      } else {
-        const newSession: Session = { id: sessionId, messages: finalMessages, preview, updatedAt: now };
-        setSessions(prev => [newSession, ...prev]);
-        setActiveSessionId(sessionId);
-      }
+      const isNewSession = !activeSessionId;
+      if (isNewSession) setActiveSessionId(res.session_id);
+      refetchSessions();
     } catch (e) {
-      const friendly = e.message.includes('fetch') || e.message.includes('network')
-        ? 'Could not reach the AI. Check your connection.'
-        : e.message;
-      setMessages(m => [...m, { role: 'assistant', content: `⚠ ${friendly}` }]);
+      const friendly = friendlyError(e);
+      setMessages((m) => [...m, { role: 'assistant', content: `⚠ ${friendly}` }]);
       toast.error(`AI error: ${friendly}`);
     } finally {
       setSending(false);
     }
-  }, [input, messages, activeSessionId]);
+  }, [input, messages, activeSessionId, refetchSessions]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -244,7 +282,7 @@ export default function AIAssistant() {
         flags: r.off_location_flag ? ['off_location'] : [],
       }));
 
-      const res = await callClaudeForAnomalies(readings);
+      const res = await apiAnomalies(readings);
       setScanResult(res);
       toast.success(`Found ${res.anomalies.length} anomaly(ies)`);
     } catch (e) {
@@ -274,11 +312,12 @@ export default function AIAssistant() {
         }
       />
 
-      {!BASE && (
+      {aiUnavailable && (
         <DataState
           unavailable
-          unavailableTitle="AI Assistant needs a backend that isn't configured"
-          unavailableDescription="Chat and anomaly scans call the FastAPI backend's /api/ai routes (backend/ai_service.py), which needs VITE_BACKEND_URL set to a reachable, deployed instance. This page will error on send until that's set up."
+          unavailableTitle="AI service unavailable"
+          unavailableDescription={aiUnavailableReason}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ['ai-health'] })}
         />
       )}
 
@@ -293,7 +332,7 @@ export default function AIAssistant() {
           <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
             {/* Sidebar - sessions */}
             <Card className="p-2 h-[calc(100vh-260px)] min-h-[400px] flex flex-col">
-              <Button size="sm" onClick={newChat} className="w-full mb-2">
+              <Button size="sm" onClick={newChat} className="w-full mb-2" disabled={aiUnavailable}>
                 <Plus className="h-3.5 w-3.5 mr-1" /> New chat
               </Button>
               <div className="text-xs uppercase tracking-wider text-muted-foreground px-1 mb-1">
@@ -307,11 +346,11 @@ export default function AIAssistant() {
                 >
                   {sessions.map((s) => (
                     <button
-                      key={s.id}
+                      key={s.session_id}
                       onClick={() => loadSession(s)}
                       className={cn(
                         'w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-muted group flex items-start gap-1',
-                        activeSessionId === s.id && 'bg-muted',
+                        activeSessionId === s.session_id && 'bg-muted',
                       )}
                     >
                       <div className="flex-1 min-w-0">
@@ -319,7 +358,7 @@ export default function AIAssistant() {
                       </div>
                       <Trash2
                         className="h-3 w-3 opacity-0 group-hover:opacity-70 hover:opacity-100 shrink-0 mt-0.5"
-                        onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
+                        onClick={(e) => { e.stopPropagation(); deleteSession(s.session_id); }}
                       />
                     </button>
                   ))}
@@ -330,7 +369,11 @@ export default function AIAssistant() {
             {/* Main - chat thread */}
             <Card className="p-0 h-[calc(100vh-260px)] min-h-[400px] flex flex-col">
               <div className="flex-1 overflow-auto p-4 space-y-3">
-                {messages.length === 0 ? (
+                {loadingSession ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading conversation…
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6">
                     <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-2">
                       <Bot className="h-5 w-5 text-muted-foreground" />
@@ -343,7 +386,7 @@ export default function AIAssistant() {
                       {SUGGESTIONS.map((s) => (
                         <Button key={s} size="sm" variant="outline"
                           className="text-xs h-auto py-1.5 whitespace-normal text-left"
-                          disabled={!BASE}
+                          disabled={aiUnavailable}
                           onClick={() => sendMessage(s)}>
                           {s}
                         </Button>
@@ -387,15 +430,15 @@ export default function AIAssistant() {
               <div className="border-t p-2 flex gap-2">
                 <Input
                   value={input}
-                  placeholder="Ask anything about your operations…"
+                  placeholder={aiUnavailable ? 'AI is unavailable right now…' : 'Ask anything about your operations…'}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
                   }}
-                  disabled={sending}
+                  disabled={sending || aiUnavailable}
                   className="flex-1"
                 />
-                <Button onClick={() => sendMessage()} disabled={sending || !input.trim() || !BASE}>
+                <Button onClick={() => sendMessage()} disabled={sending || aiUnavailable || !input.trim()}>
                   <Send className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -441,7 +484,7 @@ export default function AIAssistant() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button disabled={scanning || !scanPlant || !BASE} onClick={runAnomalyScan}>
+              <Button disabled={scanning || !scanPlant || aiUnavailable} onClick={runAnomalyScan}>
                 {scanning ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Scanning…</>
                           : <><Activity className="h-3.5 w-3.5 mr-1" /> Run scan</>}
               </Button>

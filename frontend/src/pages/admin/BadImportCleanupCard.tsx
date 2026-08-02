@@ -1,22 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { usePlants } from '@/hooks/usePlants';
+import { useBackendReachable } from '@/hooks/useBackendReachable';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { DataState } from '@/components/DataState';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/components/ui/sonner';
+import { DataState } from '@/components/DataState';
 import { Sparkles, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // Pre-curated names of plants known to have been imported by mistake via the
 // Smart Import flow. The Admin can still edit/uncheck before running.
@@ -33,6 +32,7 @@ const REASON_TEMPLATES: { label: string; value: string }[] = [
 export function BadImportCleanupCard() {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
+  const { reachable: backendReachable, checking: backendChecking } = useBackendReachable();
 
   // Default-tick the suggested ones if they actually exist in the DB.
   const initialSelection = useMemo<Set<string>>(() => {
@@ -53,13 +53,19 @@ export function BadImportCleanupCard() {
   // Sync the auto-selected suggestion list with the latest plants query.
   // (Without this, a freshly-loaded plants list arrives after `selected`
   // has already been initialized to an empty set on first render.)
-  if (
-    selected.size === 0 &&
-    initialSelection.size > 0 &&
-    [...initialSelection].some((n) => !selected.has(n))
-  ) {
-    setTimeout(() => setSelected(initialSelection), 0);
-  }
+  // Was: a bare `if` in the render body calling setTimeout(setSelected, 0) —
+  // works, but updating state as a side effect of render (even deferred)
+  // isn't the tool for "sync state with a changed value"; useEffect is.
+  useEffect(() => {
+    if (
+      selected.size === 0 &&
+      initialSelection.size > 0 &&
+      [...initialSelection].some((n) => !selected.has(n))
+    ) {
+      setSelected(initialSelection);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSelection]);
 
   const toggle = (name: string) => {
     const next = new Set(selected);
@@ -73,7 +79,7 @@ export function BadImportCleanupCard() {
   );
 
   const reasonValid = reason.trim().length >= 5;
-  const canRun = selected.size > 0 && reasonValid && !busy && !!BASE;
+  const canRun = selected.size > 0 && reasonValid && !busy && backendReachable;
 
   const runCleanup = async () => {
     if (!canRun) return;
@@ -134,13 +140,6 @@ export function BadImportCleanupCard() {
       <div className="flex items-start gap-2">
         <Sparkles className="h-4 w-4 mt-0.5 text-warn" />
         <div className="flex-1 min-w-0 space-y-2">
-          {!BASE && (
-            <DataState
-              unavailable
-              unavailableTitle="Cleanup needs a backend that isn't configured"
-              unavailableDescription="This is a transactional, multi-table hard-delete (backend/server.py's /api/admin/plants/cleanup) — unlike the read-only fallbacks elsewhere in Admin, it's not safely reimplementable as chained client-side deletes, since a partial failure partway through could leave orphaned rows across wells, locators, RO trains, and readings. Needs VITE_BACKEND_URL set to a reachable, deployed instance."
-            />
-          )}
           <div>
             <h3 className="text-sm font-semibold">
               Cleanup imported-by-mistake plants
@@ -152,6 +151,14 @@ export function BadImportCleanupCard() {
               <code className="text-2xs">[CLEANUP]</code> tag.
             </p>
           </div>
+
+          {!backendChecking && !backendReachable && (
+            <DataState
+              unavailable
+              unavailableTitle="Backend required for this tool"
+              unavailableDescription="This hard-deletes across many tables using elevated database access that can only run on a server. It isn't deployed, so cleanup is disabled until it is — nothing below will run."
+            />
+          )}
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">
@@ -171,6 +178,7 @@ export function BadImportCleanupCard() {
                 <Checkbox
                   checked={selected.has(p.name)}
                   onCheckedChange={() => toggle(p.name)}
+                  disabled={!backendReachable}
                   data-testid={`cleanup-checkbox-${p.name}`}
                 />
                 <span className="flex-1 truncate">{p.name}</span>
@@ -208,6 +216,7 @@ export function BadImportCleanupCard() {
                     key={t.label}
                     type="button"
                     onClick={() => setReason(t.value)}
+                    disabled={!backendReachable}
                     className={`text-2xs rounded-full px-2 py-0.5 border transition-colors ${
                       active
                         ? 'bg-warn/20 border-warn/50 text-warn'
@@ -226,6 +235,7 @@ export function BadImportCleanupCard() {
               onChange={(e) => setReason(e.target.value)}
               rows={reasonExpanded ? 4 : 1}
               maxLength={500}
+              disabled={!backendReachable}
               placeholder="Pick a template above or type your own…"
               data-testid="cleanup-reason"
               aria-invalid={reason.length > 0 && !reasonValid}

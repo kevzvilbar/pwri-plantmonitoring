@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { Card } from '@/components/ui/card';
@@ -36,12 +36,28 @@ type ForecastResponse = {
 
 export function PmForecastTab() {
   const { selectedPlantId } = useAppStore();
+  const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState<string>('');
   const [downtime, setDowntime] = useState<string>('');
   const [trend, setTrend] = useState<'rising' | 'stable' | 'falling' | ''>('');
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ForecastResponse | null>(null);
+  const [forecastError, setForecastError] = useState<unknown>(null);
+
+  // Same AI backend PM Forecast depends on (EMERGENT_LLM_KEY) — checked once
+  // up front so the form doesn't let someone fill it out just to hit a wall.
+  const { data: health, isError: healthUnreachable } = useQuery({
+    queryKey: ['ai-health'],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/ai/health`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<{ ok: boolean }>;
+    },
+    retry: false,
+    staleTime: 30_000,
+  });
+  const forecastUnavailable = healthUnreachable || health?.ok === false;
 
   const { data: templates, isLoading, error } = useQuery({
     queryKey: ['pm-templates', selectedPlantId],
@@ -62,6 +78,7 @@ export function PmForecastTab() {
     if (!chosen) { toast.error('Pick an equipment template'); return; }
     setLoading(true);
     setResult(null);
+    setForecastError(null);
 
     // Get the last execution date for this template
     let lastExec: string | null = null;
@@ -111,6 +128,9 @@ export function PmForecastTab() {
       setResult(json);
       toast.success('Forecast generated');
     } catch (e) {
+      // Toast is easy to miss — also leave a persistent state so the panel
+      // doesn't just look like it silently did nothing.
+      setForecastError(e);
       toast.error(friendlyError(e));
     } finally {
       setLoading(false);
@@ -119,13 +139,19 @@ export function PmForecastTab() {
 
   return (
     <div className="space-y-3">
-      {!BASE && (
+      {forecastUnavailable && (
         <DataState
           unavailable
-          unavailableTitle="PM Forecast needs a backend that isn't configured"
-          unavailableDescription="This calls backend/server.py's /api/ai/pm-forecast route, which needs VITE_BACKEND_URL set to a reachable, deployed instance."
+          unavailableTitle="PM forecasting unavailable"
+          unavailableDescription={
+            healthUnreachable
+              ? "Couldn't reach the AI service. The backend may not be deployed, or VITE_BACKEND_URL isn't configured."
+              : 'The backend is reachable, but no LLM key is configured server-side (EMERGENT_LLM_KEY). Ask an admin to set it.'
+          }
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ['ai-health'] })}
         />
       )}
+
       <Card className="p-4">
         <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px]">
           <div>
@@ -165,7 +191,7 @@ export function PmForecastTab() {
             value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="mt-3 flex justify-end">
-          <Button onClick={runForecast} disabled={loading || !templateId || !BASE}>
+          <Button onClick={runForecast} disabled={loading || !templateId || forecastUnavailable}>
             {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
             Forecast next PM
           </Button>
@@ -178,6 +204,10 @@ export function PmForecastTab() {
         <DataState isEmpty emptyTitle="No equipment templates yet"
           emptyDescription="Add an equipment template first in the Add Equipment tab." />
       ) : null}
+
+      {forecastError && !result && (
+        <DataState error={forecastError} onRetry={runForecast} />
+      )}
 
       {result && (
         <Card className={cn(

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
 import { DataState } from '@/components/DataState';
+import { useBackendReachable } from '@/hooks/useBackendReachable';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -94,6 +95,7 @@ const MIGRATIONS_SHA_KEY = 'pwri:migration-shas-v1';
 const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 export function MigrationsPanel() {
+  const { reachable: backendReachable, checking: backendChecking } = useBackendReachable();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showApplied, setShowApplied] = useState(false);
@@ -553,7 +555,7 @@ export function MigrationsPanel() {
           </div>
         </div>
 
-        {!BASE ? (
+        {!backendChecking && !backendReachable ? (
           <DataState
             unavailable
             unavailableTitle="Migrations status needs a backend that isn't configured"
@@ -675,9 +677,13 @@ export function MigrationsPanel() {
               )}
               <label
                 className={`inline-flex items-center h-7 px-3 text-xs rounded-md border bg-background hover:bg-muted cursor-pointer ${
-                  importing ? 'opacity-60 pointer-events-none' : ''
+                  importing || !backendReachable ? 'opacity-60 pointer-events-none' : ''
                 }`}
-                title="Import a previously-exported apply-history JSON. Non-destructive: local entries always win on conflict."
+                title={
+                  !backendReachable
+                    ? 'Needs a reachable backend to apply the import'
+                    : 'Import a previously-exported apply-history JSON. Non-destructive: local entries always win on conflict.'
+                }
                 data-testid="migrations-import-history-label"
               >
                 {importing
@@ -688,6 +694,7 @@ export function MigrationsPanel() {
                   type="file"
                   accept="application/json,.json"
                   className="hidden"
+                  disabled={!backendReachable}
                   data-testid="migrations-import-history-input"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -858,7 +865,7 @@ export function MigrationsPanel() {
                   {f.override_applied ? (
                     <Button
                       size="sm" variant="outline" className="h-7 text-xs"
-                      disabled={busy === f.filename}
+                      disabled={busy === f.filename || !backendReachable}
                       onClick={() => setUnmarkTarget(f.filename)}
                       data-testid={`migration-unmark-${f.filename}`}
                     >
@@ -871,7 +878,7 @@ export function MigrationsPanel() {
                     f.probed_status !== 'applied' && (
                       <Button
                         size="sm" variant="outline" className="h-7 text-xs"
-                        disabled={busy === f.filename}
+                        disabled={busy === f.filename || !backendReachable}
                         onClick={() => markApplied(f.filename)}
                         data-testid={`migration-mark-${f.filename}`}
                       >
