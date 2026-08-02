@@ -29,7 +29,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Activity } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, Calendar, Droplet, Activity } from 'lucide-react';
+import { DataState } from '@/components/DataState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum, calc, nrwColor, ALERTS } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -92,7 +93,7 @@ export function EntityHistoryChart({
     return map;
   }, [siblingLocators]);
 
-  const { data: rows = [], isLoading } = useQuery<HistoryRow[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<HistoryRow[]>({
     queryKey: ['entity-history', entityType, entityId, range, defaultInputMode],
     queryFn: async () => {
       const days = range === 'all' ? 9999 : parseInt(range);
@@ -101,29 +102,34 @@ export function EntityHistoryChart({
       let raw: any[] = [];
 
       if (entityType === 'locator') {
-        const { data } = await supabase
+        const { data, error: sbError } = await supabase
           .from('locator_readings')
           .select('reading_datetime, current_reading, previous_reading, daily_volume')
           .eq('locator_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
+        // Was: error discarded here — a genuine fetch failure (RLS, network,
+        // bad query) rendered identically to "no readings in this period".
+        if (sbError) throw sbError;
         raw = data ?? [];
       } else if (entityType === 'well') {
-        const { data } = await supabase
+        const { data, error: sbError } = await supabase
           .from('well_readings')
           // Fix: include daily_volume so stored delta is preferred over live current-previous calc
           .select('reading_datetime, current_reading, previous_reading, daily_volume')
           .eq('well_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
+        if (sbError) throw sbError;
         raw = data ?? [];
       } else {
-        const { data } = await supabase
+        const { data, error: sbError } = await supabase
           .from('product_meter_readings' as any)
           .select('reading_datetime, current_reading, previous_reading, daily_volume')
           .eq('meter_id', entityId)
           .gte('reading_datetime', since)
           .order('reading_datetime', { ascending: true });
+        if (sbError) throw sbError;
         raw = (data ?? []) as any[];
       }
 
@@ -350,75 +356,74 @@ export function EntityHistoryChart({
       )}
 
       {/* Chart */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading chart…
-        </div>
-      ) : aggregated.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" />
-          <p>No readings in this period</p>
-        </div>
-      ) : hasSiblings ? (
-        <div className="h-56 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / chartData.length))}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                tickFormatter={(v: string) => v.slice(5)} // show MM-DD
-                interval="preserveStartEnd"
-                angle={-30}
-                textAnchor="end"
-                height={36}
-              />
-              <YAxis
-                yAxisId="vol"
-                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                width={38}
-                tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
-              />
-              <YAxis
-                yAxisId="pct"
-                orientation="right"
-                tick={{ fontSize: 9, fill: C_NRW }}
-                width={30}
-                tickFormatter={(v: number) => `${v}%`}
-              />
-              <Tooltip content={customTooltip} />
-              <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
-              <Bar yAxisId="vol" dataKey="consumption" fill={C_PRODUCTION} name="Mother Meter" radius={[2,2,0,0]} />
-              <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
-              <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      ) : (
-        <div className="h-52 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={aggregated} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / aggregated.length))}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                tickFormatter={(v: string) => v.slice(5)} // show MM-DD
-                interval="preserveStartEnd"
-                angle={-30}
-                textAnchor="end"
-                height={36}
-              />
-              <YAxis
-                tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-                width={38}
-                tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
-              />
-              <Tooltip content={customTooltip} />
-              <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="Consumption" radius={[2,2,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <DataState
+        loading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={aggregated.length === 0}
+        emptyTitle="No readings in this period"
+      >
+        {hasSiblings ? (
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / chartData.length))}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                  interval="preserveStartEnd"
+                  angle={-30}
+                  textAnchor="end"
+                  height={36}
+                />
+                <YAxis
+                  yAxisId="vol"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  width={38}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+                />
+                <YAxis
+                  yAxisId="pct"
+                  orientation="right"
+                  tick={{ fontSize: 9, fill: C_NRW }}
+                  width={30}
+                  tickFormatter={(v: number) => `${v}%`}
+                />
+                <Tooltip content={customTooltip} />
+                <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
+                <Bar yAxisId="vol" dataKey="consumption" fill={C_PRODUCTION} name="Mother Meter" radius={[2,2,0,0]} />
+                <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
+                <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-52 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={aggregated} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / aggregated.length))}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                  interval="preserveStartEnd"
+                  angle={-30}
+                  textAnchor="end"
+                  height={36}
+                />
+                <YAxis
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  width={38}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+                />
+                <Tooltip content={customTooltip} />
+                <Bar dataKey="consumption" fill="hsl(174, 72%, 40%)" name="Consumption" radius={[2,2,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </DataState>
     </div>
   );
 }

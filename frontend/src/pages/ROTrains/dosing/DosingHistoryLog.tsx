@@ -15,6 +15,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { ExportButton } from '@/components/ExportButton';
 import { Loader2, Pencil, History, Trash2 } from 'lucide-react';
+import { DataState } from '@/components/DataState';
 import { cn } from '@/lib/utils';
 import { DOSING_KEYS, canEditEntry, diffFields, logReadingEdit } from '../../ro-trains';
 
@@ -44,7 +45,7 @@ export function DosingHistoryLog() {
   }, [days, customFrom, customTo]);
 
   // ── Data fetch ─────────────────────────────────────────────────────────────
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isLoading, error, refetch } = useQuery({
     queryKey: ['dosing-history', filterPlantId, from, to],
     queryFn: async () => {
       let q = supabase
@@ -304,21 +305,16 @@ export function DosingHistoryLog() {
       )}
 
       {/* ── Log table ───────────────────────────────────────────────────────── */}
-      {isLoading && (
-        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading records…
-        </div>
-      )}
-
-      {!isLoading && !logs?.length && (
-        <Card className="p-6 text-center text-sm text-muted-foreground">
-          No dosing records found for this period.
-        </Card>
-      )}
-
-      {!isLoading && !!logs?.length && (
+      <DataState
+        loading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={!logs?.length}
+        emptyTitle="No dosing records found"
+        emptyDescription="No records for this period — try widening the date range."
+      >
         <div className="space-y-2">
-          {logs.map((row: any) => {
+          {(logs ?? []).map((row: any) => {
             const isEditing = editId === row.id;
             const isPendingDelete = pendingDeleteId === row.id;
             const rowCost = DOSING_KEYS.reduce((s, c) => s + (+row[c.key] || 0) * (prices?.[c.name] ?? 0), 0);
@@ -475,7 +471,7 @@ export function DosingHistoryLog() {
             );
           })}
         </div>
-      )}
+      </DataState>
     </div>
   );
 }

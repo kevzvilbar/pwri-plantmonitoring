@@ -62,6 +62,11 @@ export interface HistoryEditState {
    *  omitted from the UPDATE payload to avoid the PostgREST
    *  "relation 'well_readings' does not exist" error. */
   hasMeterReplacement?: boolean;
+  /** power module only — which grid meter index `value` belongs to (0 = STP,
+   *  matching the legacy meter_reading_kwh column). Captured at edit-start
+   *  time from meterFilter so saveEdit writes to the right
+   *  grid_meter_readings[idx] slot instead of always idx 0. */
+  gridIdx?: number;
 }
 
 export function ReadingHistoryDialog({ entityName, module, entityId, plantId, assetMeterSerial, multiplier = 1,
@@ -291,7 +296,16 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     } else if (module === 'locator') {
       setEditRow({ id: r.id, datetime: dtStr, value: String(r.current_reading ?? ''), isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'power') {
-      setEditRow({ id: r.id, datetime: dtStr, value: String(r.meter_reading_kwh ?? ''), value2: r.solar_meter_reading != null ? String(r.solar_meter_reading) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', isMeterReplacement: !!r.is_meter_replacement });
+      // Which grid meter is r.meter_reading_kwh even for? Before this fix it
+      // wasn't — the edit form always read/wrote index 0 (STP) regardless of
+      // which meter's history dialog was actually open, so editing e.g. Grid
+      // Meter 3 Main silently overwrote Grid Meter 1 STP instead. Derive the
+      // real index from meterFilter, same as the row display just above does.
+      const gmrForEdit = r.grid_meter_readings as Record<string, number> | null | undefined;
+      const isSolarEdit = meterFilter?.type === 'solar';
+      const gridIdxForEdit = meterFilter && !isSolarEdit ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
+      const gridValueForEdit = gmrForEdit?.[String(gridIdxForEdit)] ?? (gridIdxForEdit === 0 ? r.meter_reading_kwh : null);
+      setEditRow({ id: r.id, datetime: dtStr, value: String(gridValueForEdit ?? ''), value2: r.solar_meter_reading != null ? String(r.solar_meter_reading) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', gridIdx: gridIdxForEdit, isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'blending') {
       const eventDt = r.event_date ?? r.noted_at ?? '';
       const blendDtStr = eventDt ? format(new Date(eventDt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
@@ -381,7 +395,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   };
 
   // Power-specific: toggle grid meter replacement
-  const toggleGridReplacement = async (r: any) => {
+  const toggleGridReplacement = async (r: any, gridIdx: number = 0) => {
     setTogglingGridId(r.id);
     // Use the same fallback as the display: is_grid_replacement ?? is_meter_replacement.
     // Without this, when is_grid_replacement is null the toggle always evaluates
@@ -402,7 +416,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     if (next && plantId) {
       try {
         const existingArr = Array.isArray(gridMultipliers) ? [...gridMultipliers] : [1];
-        existingArr[0] = 1;
+        while (existingArr.length <= gridIdx) existingArr.push(1);
+        existingArr[gridIdx] = 1;
         await (supabase.from('plant_power_config' as any) as any)
           .upsert(
             { plant_id: plantId, grid_meter_multipliers: existingArr, updated_at: new Date().toISOString() },
@@ -551,39 +566,53 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       }).eq('id', editRow.id));
       if (!error) await resyncLocatorChain(entityId);
     } else if (module === 'power') {
+      // Which grid meter this edit actually belongs to. Captured in startEdit
+      // from meterFilter — 0 = STP, the meter the legacy meter_reading_kwh /
+      // daily_consumption_kwh / daily_grid_kwh columns represent. Editing any
+      // other meter (Pumphouse, Main, ...) must NOT touch those legacy
+      // columns — they'd silently overwrite meter 0's data with this meter's
+      // value, which is exactly the bug being fixed here (editing Grid Meter
+      // 3 Main was reflecting onto Grid Meter 1 STP).
+      const gridIdx = editRow.gridIdx ?? 0;
+
       // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
       // totals would drift after any history correction.  Re-derive it the same way
       // the initial insert does: find the predecessor row, compute Δ meter reading,
-      // then apply the CT multiplier so PV ratios stay correct.
+      // then apply the CT multiplier so PV ratios stay correct. Only meaningful for
+      // meter 0, the one those legacy columns track.
       const editedDt = new Date(dtIso).toISOString();
       const editedDate = editedDt.slice(0, 10);
       let recomputedConsumption: number | null = null;
-      try {
-        const { data: pred } = await supabase
-          .from('power_readings')
-          .select('meter_reading_kwh')
-          .eq('plant_id', entityId)
-          .lt('reading_datetime', `${editedDate}T00:00:00.000Z`)
-          .order('reading_datetime', { ascending: false })
-          .limit(1);
-        if (pred && pred.length > 0) {
-          const delta = +editRow.value - (pred[0] as any).meter_reading_kwh;
-          if (delta >= 0) recomputedConsumption = delta * multiplier;
-        }
-      } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
+      if (gridIdx === 0) {
+        try {
+          const { data: pred } = await supabase
+            .from('power_readings')
+            .select('meter_reading_kwh')
+            .eq('plant_id', entityId)
+            .lt('reading_datetime', `${editedDate}T00:00:00.000Z`)
+            .order('reading_datetime', { ascending: false })
+            .limit(1);
+          if (pred && pred.length > 0) {
+            const delta = +editRow.value - (pred[0] as any).meter_reading_kwh;
+            if (delta >= 0) recomputedConsumption = delta * multiplier;
+          }
+        } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
+      }
       const powerUpdatePayload: Record<string, any> = {
-        meter_reading_kwh: +editRow.value,
         solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
         reading_datetime: dtIso,
         is_meter_replacement: !!editRow.isMeterReplacement,
       };
-      // Keep grid_meter_readings key-0 in sync with the edited meter_reading_kwh.
-      // Fetch the existing JSONB so we don't overwrite secondary meters (idx ≥ 1).
+      if (gridIdx === 0) {
+        powerUpdatePayload.meter_reading_kwh = +editRow.value;
+      }
+      // Keep grid_meter_readings in sync with the meter actually being edited.
+      // Fetch the existing JSONB so we don't overwrite the other meters' slots.
       try {
         const { data: existingPR } = await (supabase.from('power_readings') as any)
           .select('grid_meter_readings').eq('id', editRow.id).maybeSingle();
         const existingGmr = (existingPR?.grid_meter_readings as Record<string, number> | null) ?? {};
-        powerUpdatePayload.grid_meter_readings = { ...existingGmr, '0': +editRow.value };
+        powerUpdatePayload.grid_meter_readings = { ...existingGmr, [String(gridIdx)]: +editRow.value };
       } catch { /* non-critical: grid_meter_readings column may not exist yet */ }
       if (recomputedConsumption != null) {
         powerUpdatePayload.daily_consumption_kwh = recomputedConsumption;
@@ -706,7 +735,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               </div>
               <div>
                 <Label className="text-[11px]">
-                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : 'Grid Power Reading (kWh)'}
+                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })}
@@ -1039,7 +1068,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               title={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
                               aria-label={isRepl ? 'Replacement — click to unmark' : 'Mark as meter replacement (zeroes Δ)'}
                               disabled={isDeleting || isTogglingGrid || isTogglingSolar}
-                              onClick={() => isSolar ? toggleSolarReplacement(r) : toggleGridReplacement(r)}
+                              onClick={() => isSolar ? toggleSolarReplacement(r) : toggleGridReplacement(r, gridIdx)}
                               className={['inline-flex items-center justify-center w-5 h-5 rounded border transition-colors',
                                 'disabled:opacity-40 disabled:cursor-not-allowed',
                                 isRepl

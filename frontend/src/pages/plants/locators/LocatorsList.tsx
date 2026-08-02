@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert } from 'lucide-react';
+import { DataState } from '@/components/DataState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -158,10 +159,14 @@ export function LocatorsList({ plantId }: { plantId: string }) {
     setLocatorLockTarget(l);
   };
 
-  const { data: locators } = useQuery({
+  const { data: locators, error: locatorsError, refetch: refetchLocators } = useQuery({
     queryKey: ['locators', plantId],
     queryFn: async () => {
-      const { data } = await supabase.from('locators').select('*').eq('plant_id', plantId).order('name');
+      // Was: error discarded — a real fetch failure (RLS, network) rendered
+      // identically to "this plant has zero locators" via the `!locators?.length`
+      // check further down. Throw instead so the banner above can distinguish them.
+      const { data, error } = await supabase.from('locators').select('*').eq('plant_id', plantId).order('name');
+      if (error) throw error;
       return data ?? [];
     },
   });
@@ -169,6 +174,9 @@ export function LocatorsList({ plantId }: { plantId: string }) {
   // Product meters for this plant — used to show "Fed by" on each locator row
   // BUGFIX (2026-07-24): was ['product-meters', plantId] — collided with other
   // components using that key with a different select() shape. See ProductMeters.tsx.
+  // Left as soft-fail (unlike `locators` above): this only powers a "Fed by X"
+  // label per row, not the list itself — losing that label on error isn't
+  // worth a second banner, and the rows still render fine without it.
   const { data: productMeters } = useQuery({
     queryKey: ['locators-fed-by-product-meters', plantId],
     queryFn: async () => {
@@ -242,6 +250,9 @@ export function LocatorsList({ plantId }: { plantId: string }) {
 
   return (
     <div className="space-y-2">
+      {locatorsError && (
+        <DataState error={locatorsError} onRetry={() => refetchLocators()} />
+      )}
       <div className="flex justify-between items-center gap-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Locators ({locators?.length ?? 0})</h3>
         <div className="flex items-center gap-1.5">
@@ -497,17 +508,32 @@ export function LocatorsList({ plantId }: { plantId: string }) {
 function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () => void }) {
   const qc = useQueryClient();
   const [replaceOpen, setReplaceOpen] = useState(false);
-  const { data: locator } = useQuery({
+  const { data: locator, isLoading, error, refetch } = useQuery({
     queryKey: ['locator', locatorId],
-    queryFn: async () => (await supabase.from('locators').select('*').eq('id', locatorId).single()).data,
+    queryFn: async () => {
+      // Was: `.single()`'s error discarded — a real fetch failure (RLS,
+      // network) and "still loading" both fell through to the same `if
+      // (!locator)` check below, which rendered an infinite spinner with no
+      // way out. A bad/deleted locatorId did too. Distinguish all three now.
+      const { data, error } = await supabase.from('locators').select('*').eq('id', locatorId).single();
+      if (error) throw error;
+      return data;
+    },
   });
   const { data: replacements } = useQuery({
     queryKey: ['locator-replacements', locatorId],
     queryFn: async () => (await supabase.from('locator_meter_replacements').select('*').eq('locator_id', locatorId).order('replacement_date', { ascending: false })).data ?? [],
   });
-  if (!locator) return (
-    <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+  if (isLoading || error || !locator) return (
+    <div className="p-3">
+      <DataState
+        loading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={!isLoading && !error}
+        emptyTitle="Locator not found"
+        emptyDescription="This locator may have been deleted."
+      />
     </div>
   );
 
