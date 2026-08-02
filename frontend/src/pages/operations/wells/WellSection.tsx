@@ -454,6 +454,7 @@ export function WellReadingForm() {
                       isBlending={blendingSet.has(item.w.id)}
                       onSaved={onSaved}
                       isManagerOrAdmin={isAdmin || isManager || isDataAnalyst}
+                      canAutoApprove={isManager}
                       isInSharedPowerGroup={item.isInSharedPowerGroup}
                       sharedPower={item.sharedPower}
                       gapReason={gapReasonsByWell[item.w.id] ?? null}
@@ -489,7 +490,7 @@ export function WellReadingForm() {
 }
 
 function WellRow({
-  well, plantId, previousMeter, previousPower, previousDt, avgVol, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin, isInSharedPowerGroup,
+  well, plantId, previousMeter, previousPower, previousDt, avgVol, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin, canAutoApprove, isInSharedPowerGroup,
   sharedPower, gapReason, onGapReasonSaved,
 }: {
   well: any; plantId: string;
@@ -498,6 +499,8 @@ function WellRow({
   todayReadings: any[]; userId: string | undefined;
   isBlending: boolean; onSaved: () => void;
   isManagerOrAdmin: boolean;
+  /** Manager or Admin — see the matching prop on LocatorSection.tsx's LocatorRow. */
+  canAutoApprove: boolean;
   isInSharedPowerGroup: boolean;
   sharedPower?: { groupName: string; primaryWellId: string; previousPower: number | null };
   gapReason?: any | null;
@@ -585,6 +588,8 @@ function WellRow({
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
 
+    let guardReason: 'backward' | 'spike' | null = null;
+
     // Pre-flight guard: cooldown + backward/spike detection
     if (!editingId && userId) {
       setSaving(true);
@@ -602,6 +607,7 @@ function WellRow({
         return;
       }
       if (guard.status === 'pending_review') {
+        guardReason = guard.reason;
         toast.info(`${well.name}: ${guard.detail}`, { duration: 8000 });
       }
     }
@@ -634,8 +640,8 @@ function WellRow({
     if (pressureReading) payload.pressure_psi = +pressureReading;
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('well_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      ? await (supabase.from('well_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('well_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -651,11 +657,25 @@ function WellRow({
       return;
     }
 
-    const isPending = savedRow?.norm_status === 'pending_review';
+    let isPending = savedRow?.norm_status === 'pending_review';
+
+    let autoApproved = false;
+    if (isPending && canAutoApprove && savedRow?.id) {
+      const { error: autoErr } = await (supabase.rpc('fn_cascade_reading_correction', {
+        p_table:       'well_readings',
+        p_row_id:      savedRow.id,
+        p_new_current: savedRow.current_reading,
+        p_admin_id:    userId ?? null,
+        p_reason:      `Auto-approved on entry — ${guardReason ?? 'flagged'} check bypassed for Manager/Admin, logged for tracing`,
+      }) as any);
+      if (!autoErr) { isPending = false; autoApproved = true; }
+    }
     setWellLastSavePending(isPending);
 
     if (isPending) {
       toast.info(`${well.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
+    } else if (autoApproved) {
+      toast.success(`${well.name}: saved — auto-approved (Manager/Admin), logged for tracing.`, { duration: 6000 });
     } else {
       const curr = savedRow?.current_reading;
       const prev = savedRow?.previous_reading;

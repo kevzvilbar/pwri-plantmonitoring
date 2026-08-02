@@ -572,6 +572,7 @@ export function LocatorReadingForm() {
                   userId={user?.id}
                   onSaved={() => invalidateLocatorDash(qc)}
                   isManagerOrAdmin={isAdmin || isManager || isDataAnalyst}
+                  canAutoApprove={isManager}
                   maxReadingsPerDay={maxLocatorReadings}
                   gapReason={gapReasonsByLocator[l.id] ?? null}
                   onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['locator-gap-reasons', plantId, todayDateStr] })}
@@ -604,7 +605,7 @@ export function LocatorReadingForm() {
 }
 
 function LocatorRow({
-  locator, plantId, previous, previousDt, latestReading, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, maxReadingsPerDay = 3,
+  locator, plantId, previous, previousDt, latestReading, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, canAutoApprove, maxReadingsPerDay = 3,
   gapReason, onGapReasonSaved,
 }: {
   locator: any; plantId: string; previous: number | null; previousDt: string | null;
@@ -612,6 +613,13 @@ function LocatorRow({
   todayReadings: any[]; avgVol: number | null;
   userId: string | undefined; onSaved: () => void;
   isManagerOrAdmin: boolean;
+  /** Manager or Admin (useAuth's `isManager`, which already includes Admin) — a
+   *  reading that would otherwise be quarantined as pending_review is instead
+   *  saved straight through and immediately logged as auto-approved. Deliberately
+   *  narrower than isManagerOrAdmin (which also includes Data Analyst) — this
+   *  gate is specifically "manager or above", matching the sign-off authority
+   *  the correction/approval workflow already assumes elsewhere for this role. */
+  canAutoApprove: boolean;
   maxReadingsPerDay?: number;
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
@@ -719,6 +727,8 @@ function LocatorRow({
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
 
+    let guardReason: 'backward' | 'spike' | null = null;
+
     // ── Pre-flight guard: cooldown + backward/spike detection ────────────────
     // Mirrors the DB trigger logic (fn_locator_reading_integrity) so the UI can
     // give instant feedback before the round-trip. The trigger is the source of
@@ -748,6 +758,7 @@ function LocatorRow({
       }
       if (guard.status === 'pending_review') {
         // Save proceeds — DB trigger will also set pending_review independently.
+        guardReason = guard.reason;
         toast.info(`${locator.name}: ${guard.detail}`, { duration: 8000 });
       }
     }
@@ -790,8 +801,8 @@ function LocatorRow({
         };
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('locator_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -808,13 +819,34 @@ function LocatorRow({
       return;
     }
 
-    const isPending = savedRow?.norm_status === 'pending_review';
-    setLastSavePending(isPending);
+    let isPending = savedRow?.norm_status === 'pending_review';
     setCooldownMinutes(0);
     setCooldownAvailableAt(null);
 
+    let autoApproved = false;
+    if (isPending && canAutoApprove && savedRow?.id) {
+      // Manager/Admin: no supervisor review needed — but still route through
+      // fn_cascade_reading_correction (unchanged value, same current_reading)
+      // so it's flipped out of pending_review via the one audited, permission-
+      // checked path everything else in Data Corrections already uses, and a
+      // reading_normalizations row is written for tracing. If this call fails
+      // for any reason, fall back to leaving it in pending_review rather than
+      // silently losing the flag.
+      const { error: autoErr } = await (supabase.rpc('fn_cascade_reading_correction', {
+        p_table:       'locator_readings',
+        p_row_id:      savedRow.id,
+        p_new_current: savedRow.current_reading,
+        p_admin_id:    userId ?? null,
+        p_reason:      `Auto-approved on entry — ${guardReason ?? 'flagged'} check bypassed for Manager/Admin, logged for tracing`,
+      }) as any);
+      if (!autoErr) { isPending = false; autoApproved = true; }
+    }
+    setLastSavePending(isPending);
+
     if (isPending) {
       toast.info(`${locator.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
+    } else if (autoApproved) {
+      toast.success(`${locator.name}: saved — auto-approved (Manager/Admin), logged for tracing.`, { duration: 6000 });
     } else {
       const curr = savedRow?.current_reading;
       const prev = savedRow?.previous_reading;

@@ -107,6 +107,19 @@ const tableLabel: Record<SourceTable, string> = {
   ro_train_readings: 'RO Train',
 };
 
+// BUGFIX: every reading_normalizations audit write on this page hardcoded
+// performed_role: 'Admin', regardless of who actually performed the action.
+// Since this page is also open to Manager and Data Analyst (20260723
+// migration), a Manager's approve/reject/retract was being logged as if an
+// Admin did it — actively wrong for the exact "who did what" tracing this
+// audit table exists for. Priority order matches the tie-break already used
+// server-side for multi-role users (see fn_cascade_reading_correction).
+const ROLE_DISPLAY_PRIORITY: Record<string, number> = { Admin: 1, 'Data Analyst': 2, Manager: 3 };
+function pickDisplayRole(roles: string[]): string {
+  if (!roles.length) return 'Unknown';
+  return [...roles].sort((a, b) => (ROLE_DISPLAY_PRIORITY[a] ?? 99) - (ROLE_DISPLAY_PRIORITY[b] ?? 99))[0];
+}
+
 function DeltaBadge({ vol }: { vol: number | null }) {
   if (vol == null) return <span className="text-muted-foreground">—</span>;
   const isNeg = vol < 0;
@@ -235,6 +248,10 @@ function EditValueModal({
         p_reason:      reason,
       }) as any);
       if (error) throw error;
+      await supersedeOtherCorrectionRequests(
+        row.source_table, row.id, user?.id,
+        'Superseded — value corrected directly from Pending Review',
+      );
       toast.success(`Corrected: ${fmtNum(row.current_reading)} → ${fmtNum(parsed)}${data?.cascade_id ? ' · next row updated' : ''}`);
       onDone();
     } catch (e) {
@@ -304,9 +321,22 @@ function EditValueModal({
 
 // ── Pending Review tab (items 3, 4, 5) ───────────────────────────────────────
 
-async function fetchPending(): Promise<FlaggedRow[]> {
+// BUGFIX: this previously capped each of the 3 source tables at .limit(200)
+// while the header badge (usePendingCount, below) does an exact head-count
+// with no limit at all. With >200 pending rows in any one table, the badge
+// and the visible list permanently disagreed — approving everything visible
+// would empty the list while the badge still showed a large leftover number,
+// which reads exactly like "approved items are still stuck as pending."
+// They weren't stuck; they were never fetched. Raised to PostgREST's own
+// per-request row cap (1000) and the query now reports whether even THAT
+// was hit, so a future plant with >1000 pending rows in one table gets a
+// visible "showing partial results" banner instead of the same silent gap.
+const PENDING_FETCH_LIMIT_PER_TABLE = 1000;
+
+async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean }> {
   const tables: SourceTable[] = ['locator_readings', 'well_readings', 'product_meter_readings'];
   const results: FlaggedRow[] = [];
+  let truncated = false;
 
   for (const table of tables) {
     const entityCol = table === 'locator_readings' ? 'locator_id'
@@ -319,9 +349,10 @@ async function fetchPending(): Promise<FlaggedRow[]> {
       .select(`id, reading_datetime, previous_reading, current_reading, daily_volume, norm_status, recorded_by, plant_id, ${entityCol}`)
       .eq('norm_status', 'pending_review')
       .order('reading_datetime', { ascending: false })
-      .limit(200) as any);
+      .limit(PENDING_FETCH_LIMIT_PER_TABLE) as any);
 
     if (!rows?.length) continue;
+    if (rows.length === PENDING_FETCH_LIMIT_PER_TABLE) truncated = true;
 
     // Resolve entity names
     const entityIds = [...new Set(rows.map((r: any) => r[entityCol]))].filter(Boolean) as string[];
@@ -365,7 +396,10 @@ async function fetchPending(): Promise<FlaggedRow[]> {
     }
   }
 
-  return results.sort((a, b) => new Date(b.reading_datetime).getTime() - new Date(a.reading_datetime).getTime());
+  return {
+    rows: results.sort((a, b) => new Date(b.reading_datetime).getTime() - new Date(a.reading_datetime).getTime()),
+    truncated,
+  };
 }
 
 async function fetchCorrectionRequests(): Promise<CorrectionRequest[]> {
@@ -394,14 +428,60 @@ async function fetchCorrectionRequests(): Promise<CorrectionRequest[]> {
   }));
 }
 
+/**
+ * BUGFIX: a reading could end up with BOTH its own norm_status =
+ * 'pending_review' (shown in the main Pending list below) AND a separate
+ * correction_requests row (shown under "Operator correction requests")
+ * for the exact same underlying reading — e.g. an operator files a
+ * correction request for a reading that was independently auto-flagged,
+ * or two operators file overlapping requests for the same reading. These
+ * were never linked: resolving one left the other sitting there
+ * indefinitely, which looks exactly like "approved corrections still
+ * stays." Whichever path resolves a reading first now also closes out any
+ * OTHER still-pending correction_requests for that same
+ * source_table + source_id, so there's only ever one live approval prompt
+ * per reading.
+ *
+ * Reuses the 'rejected' status rather than introducing an unverified new
+ * 'superseded' value: correction_requests isn't defined in any migration in
+ * this repo (it was set up directly in the Supabase dashboard per the
+ * 20260723 migration's note), so its exact status CHECK constraint can't be
+ * confirmed from here — 'rejected' is already a value this table accepts
+ * (see rejectRequest below). The resolution_note distinguishes the two
+ * cases for anyone reading the Inbox/History later.
+ */
+async function supersedeOtherCorrectionRequests(
+  sourceTable: SourceTable,
+  sourceId: string,
+  resolvedBy: string | undefined,
+  note: string,
+  excludeRequestId?: string,
+) {
+  let q = supabase.from('correction_requests' as any)
+    .update({
+      status: 'rejected',
+      resolved_by: resolvedBy ?? null,
+      resolved_at: new Date().toISOString(),
+      resolution_note: note,
+    })
+    .eq('source_table', sourceTable)
+    .eq('source_id', sourceId)
+    .eq('status', 'pending');
+  if (excludeRequestId) q = q.neq('id', excludeRequestId);
+  await (q as any);
+}
+
 function PendingReviewTab() {
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
+  const actorRole = pickDisplayRole(roles);
   const qc = useQueryClient();
-  const { data: rows = [], isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['data-corrections-pending'],
     queryFn: fetchPending,
     refetchInterval: 60_000,
   });
+  const rows = data?.rows ?? [];
+  const truncated = data?.truncated ?? false;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -440,7 +520,7 @@ function PendingReviewTab() {
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['data-corrections-pending'] });
-    qc.invalidateQueries({ queryKey: ['pending-readings'] });
+    qc.invalidateQueries({ queryKey: ['correction-inbox'] });
     qc.invalidateQueries({ queryKey: ['pending-readings-count'] });
     qc.invalidateQueries({ queryKey: ['correction-requests-pending'] });
   }, [qc]);
@@ -465,6 +545,14 @@ function PendingReviewTab() {
     await (supabase.from('correction_requests' as any)
       .update({ status: 'approved', resolved_by: user?.id, resolved_at: new Date().toISOString() })
       .eq('id', req.id) as any);
+    // 3. Close out any OTHER pending request for this same reading (e.g. a
+    // second operator flagged it too) so it doesn't linger as a duplicate
+    // approval prompt for a reading that's already been corrected.
+    await supersedeOtherCorrectionRequests(
+      req.source_table, req.source_id, user?.id,
+      'Superseded — a duplicate correction request for this reading was already approved',
+      req.id,
+    );
     toast.success('Correction approved and applied');
     invalidate();
   };
@@ -475,6 +563,13 @@ function PendingReviewTab() {
     await (supabase.from('correction_requests' as any)
       .update({ status: 'rejected', resolved_by: user?.id, resolved_at: new Date().toISOString(), resolution_note: resolutionNote || null })
       .eq('id', req.id) as any);
+    // The reading was just confirmed as fine (norm_status back to 'normal'),
+    // so any OTHER still-pending request against the same reading is moot too.
+    await supersedeOtherCorrectionRequests(
+      req.source_table, req.source_id, user?.id,
+      'Superseded — the underlying reading was already resolved (a related request was rejected)',
+      req.id,
+    );
     toast.info('Correction request rejected — original value kept');
     invalidate();
   };
@@ -501,8 +596,16 @@ function PendingReviewTab() {
         original_value: row.current_reading,
         adjusted_value: decision === 'normal' ? row.current_reading : null,
         note: notes[row.id] || (decision === 'normal' ? 'Approved from corrections queue' : 'Rejected from corrections queue'),
-        performed_by: user?.id ?? null, performed_role: 'Admin',
+        performed_by: user?.id ?? null, performed_role: actorRole,
       }) as any);
+      // This reading is no longer pending — close out any duplicate
+      // correction_requests row for it too (see supersedeOtherCorrectionRequests).
+      await supersedeOtherCorrectionRequests(
+        row.source_table, row.id, user?.id,
+        decision === 'normal'
+          ? 'Superseded — reading approved directly from Pending Review'
+          : 'Superseded — reading rejected directly from Pending Review',
+      );
       toast.success(decision === 'normal' ? `${row.entity_name}: approved` : `${row.entity_name}: rejected`);
       invalidate();
     } else {
@@ -515,20 +618,41 @@ function PendingReviewTab() {
     if (!selected.size) return;
     setBulkBusy(true);
     const targets = rows.filter(r => selected.has(r.id));
-    let ok = 0;
+    const succeeded: FlaggedRow[] = [];
     for (const row of targets) {
       const { error } = await (supabase.from(row.source_table as any).update({ norm_status: decision }).eq('id', row.id) as any);
-      if (!error) { ok++; }
+      if (!error) succeeded.push(row);
     }
-    await (supabase.from('reading_normalizations' as any).insert(
-      targets.map(row => ({
-        source_table: row.source_table, source_id: row.id,
-        action: decision === 'normal' ? 'normalize' : 'retract',
-        original_value: row.current_reading,
-        note: `Bulk ${decision === 'normal' ? 'approval' : 'rejection'} (${targets.length} rows)`,
-        performed_by: user?.id ?? null, performed_role: 'Admin',
-      }))
-    ) as any);
+    if (succeeded.length) {
+      await (supabase.from('reading_normalizations' as any).insert(
+        succeeded.map(row => ({
+          source_table: row.source_table, source_id: row.id,
+          action: decision === 'normal' ? 'normalize' : 'retract',
+          original_value: row.current_reading,
+          note: `Bulk ${decision === 'normal' ? 'approval' : 'rejection'} (${targets.length} rows)`,
+          performed_by: user?.id ?? null, performed_role: actorRole,
+        }))
+      ) as any);
+      // Close out any duplicate correction_requests for each row actually
+      // resolved — batched per source_table rather than one call per row.
+      const bySourceTable = new Map<SourceTable, string[]>();
+      for (const row of succeeded) {
+        const ids = bySourceTable.get(row.source_table) ?? [];
+        ids.push(row.id);
+        bySourceTable.set(row.source_table, ids);
+      }
+      const note = decision === 'normal'
+        ? 'Superseded — reading approved via bulk action from Pending Review'
+        : 'Superseded — reading rejected via bulk action from Pending Review';
+      await Promise.all([...bySourceTable.entries()].map(([sourceTable, ids]) =>
+        supabase.from('correction_requests' as any)
+          .update({ status: 'rejected', resolved_by: user?.id ?? null, resolved_at: new Date().toISOString(), resolution_note: note })
+          .eq('source_table', sourceTable)
+          .eq('status', 'pending')
+          .in('source_id', ids) as any,
+      ));
+    }
+    const ok = succeeded.length;
     toast.success(`${ok} of ${targets.length} readings ${decision === 'normal' ? 'approved' : 'rejected'}`);
     setSelected(new Set());
     setBulkBusy(false);
@@ -619,6 +743,15 @@ function PendingReviewTab() {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {truncated && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-warn-soft border border-warn/30 rounded-lg text-xs text-warn">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          One or more tables have more than {PENDING_FETCH_LIMIT_PER_TABLE.toLocaleString()} pending readings —
+          showing the most recent {PENDING_FETCH_LIMIT_PER_TABLE.toLocaleString()} per table. Use the plant filter
+          to narrow this down, or work through the newest ones first.
         </div>
       )}
 
@@ -744,7 +877,8 @@ function PendingReviewTab() {
 // ── Correction Inbox tab — active backward/erroneous readings ─────────────────
 
 function CorrectionInboxTab() {
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
+  const actorRole = pickDisplayRole(roles);
   const qc = useQueryClient();
   const [editRow, setEditRow] = useState<FlaggedRow | null>(null);
   const [plantFilter, setPlantFilter] = useState('all');
@@ -817,8 +951,12 @@ function CorrectionInboxTab() {
       await (supabase.from('reading_normalizations' as any).insert({
         source_table: row.source_table, source_id: row.id, action: 'retract',
         original_value: row.current_reading, note: 'Retracted from correction inbox',
-        performed_by: user?.id ?? null, performed_role: 'Admin',
+        performed_by: user?.id ?? null, performed_role: actorRole,
       }) as any);
+      await supersedeOtherCorrectionRequests(
+        row.source_table, row.id, user?.id,
+        'Superseded — reading retracted directly from Correction Inbox',
+      );
       toast.success(`${row.entity_name}: retracted`);
       qc.invalidateQueries({ queryKey: ['correction-inbox'] });
     } else { toast.error(friendlyError(error)); }
