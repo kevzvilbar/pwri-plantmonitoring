@@ -59,6 +59,14 @@ type EvalResult = {
   thresholds: Thresholds;
 };
 
+// Projected days-of-supply remaining for a single tracked chemical
+// (current_stock ÷ recent average daily consumption). See fetchChemDaysOfSupply.
+export type ChemSupply = {
+  name: string;
+  days: number;
+  unit: string | null;
+};
+
 // NEW: daily row returned from Supabase for sparkline / trend data
 type DailyRow = Record<string, any> & { summary_date: string };
 
@@ -66,7 +74,7 @@ type DailyRow = Record<string, any> & { summary_date: string };
 // Default thresholds — used when no saved value exists
 // -----------------------------------------------------------------------
 
-const DEFAULT_THRESHOLDS: Thresholds = {
+export const DEFAULT_THRESHOLDS: Thresholds = {
   nrw_pct_max:              20,
   downtime_hrs_per_day_max:  2,
   permeate_tds_max:        500,
@@ -391,6 +399,7 @@ function MetricPreview({
 export function computeViolations(
   metrics: Record<string, number | undefined>,
   t: Thresholds,
+  chemSupply: ChemSupply[] = [],
 ): Violation[] {
   const violations: Violation[] = [];
 
@@ -426,10 +435,40 @@ export function computeViolations(
   check('RECOVERY_LOW',   'recovery_pct',  metrics.recovery_pct,  t.recovery_pct_min,          '<', 'medium');
   check('PV_RATIO_HIGH',  'pv_ratio',      metrics.pv_ratio,      t.pv_ratio_max,              '>', 'low');
 
+  // Chemical low-stock check — one violation per chemical projected to run
+  // out inside the configured window. `days` is current_stock ÷ recent avg
+  // daily consumption (see fetchChemDaysOfSupply); chemicals with no usable
+  // consumption estimate are simply omitted from `chemSupply`, not flagged.
+  for (const chem of chemSupply) {
+    if (chem.days === undefined || chem.days === null || Number.isNaN(chem.days)) continue;
+    if (chem.days >= t.chem_low_stock_days_min) continue;
+    const severity: 'medium' | 'high' = chem.days >= t.chem_low_stock_days_min / 2 ? 'medium' : 'high';
+    violations.push({
+      code: 'CHEM_LOW',
+      severity,
+      metric: chem.name,
+      value: Math.round(chem.days * 10) / 10,
+      threshold: t.chem_low_stock_days_min,
+      comparator: '<',
+      message: `${chem.name} has ${chem.days.toFixed(1)} days of supply left (< ${t.chem_low_stock_days_min}d) — initiate a procurement order.`,
+    });
+  }
+
   const rank = { high: 0, medium: 1, low: 2 } as Record<string, number>;
   violations.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
 
   return violations;
+}
+
+// Formats a plain `date` column value (e.g. "2026-08-03") using its
+// calendar components directly, rather than `new Date(str)` (which parses
+// as UTC midnight and can display as the previous day in timezones behind
+// UTC).
+function fmtSummaryDate(d: string): string {
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
 }
 
 // -----------------------------------------------------------------------
@@ -512,6 +551,70 @@ export async function fetchPlantMetrics(
       pv_ratio:      avg('pv_ratio'),
     },
   };
+}
+
+// Maps a tracked chemical's display name (chemical_inventory.chemical_name,
+// PLANT_CHEMICALS) to its daily-usage column on chemical_dosing_logs.
+// Mirrors the local map in ROTrains/inventory/ChemInventory.tsx — CIP-only
+// chemicals (HCl, SLS, Caustic Soda) aren't dosed per-train and have no
+// column here, so they're simply not projected.
+const CHEM_DOSING_COLUMN: Record<string, string> = {
+  'Chlorine':     'chlorine_kg',
+  'SMBS':         'smbs_kg',
+  'Anti Scalant': 'anti_scalant_l',
+  'Soda Ash':     'soda_ash_kg',
+};
+
+/**
+ * Projects days-of-supply remaining for each tracked chemical.
+ *
+ * IMPORTANT: `chemical_inventory.current_stock` is set once at creation
+ * (AddStockDialog) and never updated again — it is not a reliable current
+ * value. The rest of the app (ChemInventory.tsx) already treats
+ * "current stock" as deliveries-to-date minus dosing usage-to-date; this
+ * follows the same convention so the compliance check agrees with what's
+ * shown on the Chem Inventory page.
+ *
+ * The depletion rate is the average daily usage over `lookbackDays`. A
+ * chemical with no recorded usage in that window is omitted rather than
+ * flagged — there's no basis to project a run-out date.
+ */
+export async function fetchChemDaysOfSupply(
+  plantId: string,
+  lookbackDays = 30,
+): Promise<ChemSupply[]> {
+  const [{ data: deliveries }, { data: dosing }, { data: inventory }] = await Promise.all([
+    supabase.from('chemical_deliveries').select('chemical_name, quantity').eq('plant_id', plantId),
+    supabase.from('chemical_dosing_logs')
+      .select('chlorine_kg, smbs_kg, anti_scalant_l, soda_ash_kg, log_datetime')
+      .eq('plant_id', plantId),
+    supabase.from('chemical_inventory').select('chemical_name, unit').eq('plant_id', plantId),
+  ]);
+
+  const unitByName = new Map<string, string | null>();
+  (inventory ?? []).forEach((r: any) => unitByName.set(r.chemical_name, r.unit ?? null));
+
+  const received = new Map<string, number>();
+  (deliveries ?? []).forEach((d: any) => {
+    received.set(d.chemical_name, (received.get(d.chemical_name) ?? 0) + (+d.quantity || 0));
+  });
+
+  const dosingRows = (dosing ?? []) as Array<Record<string, any>>;
+  const sinceMs = Date.now() - lookbackDays * 24 * 60 * 60 * 1000;
+  const recentRows = dosingRows.filter((r) => new Date(r.log_datetime).getTime() >= sinceMs);
+
+  const result: ChemSupply[] = [];
+  for (const [name, column] of Object.entries(CHEM_DOSING_COLUMN)) {
+    const usedAllTime  = dosingRows.reduce((s, r) => s + (+r[column] || 0), 0);
+    const currentStock = (received.get(name) ?? 0) - usedAllTime;
+
+    const recentUsed = recentRows.reduce((s, r) => s + (+r[column] || 0), 0);
+    const avgDaily   = recentRows.length ? recentUsed / recentRows.length : 0;
+    if (avgDaily <= 0) continue;
+
+    result.push({ name, days: currentStock / avgDaily, unit: unitByName.get(name) ?? null });
+  }
+  return result;
 }
 
 /** Fetch metrics for the PREVIOUS period for trend comparison */
@@ -603,7 +706,7 @@ export default function Compliance() {
   const [evaluating, setEvaluating] = useState(false);
   const [result, setResult]     = useState<EvalResult | null>(null);
   const [overrideMetrics, setOverrideMetrics] = useState<Record<string, string>>({});
-  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'thresholds' | 'override'>(
+  const [complianceTab, setComplianceTab] = useTabPersist<'status' | 'thresholds' | 'whatif'>(
     'tab:compliance', 'status',
   );
 
@@ -614,6 +717,7 @@ export default function Compliance() {
   const [previewMetrics, setPreviewMetrics] = useState<Record<string, number | undefined> | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [whatIfViolations, setWhatIfViolations] = useState<Violation[] | null>(null);
+  const [chemSupply, setChemSupply]         = useState<ChemSupply[]>([]);
 
   useEffect(() => {
     if (selectedPlantId) { setPlantId(selectedPlantId); setScope('plant'); }
@@ -639,6 +743,7 @@ export default function Compliance() {
   useEffect(() => {
     if (scope !== 'plant' || !plantId || plantId === 'global') {
       setPreviewMetrics(null);
+      setChemSupply([]);
       return;
     }
     const controller = new AbortController();
@@ -646,9 +751,15 @@ export default function Compliance() {
     previewAbortRef.current = controller;
 
     setPreviewLoading(true);
-    fetchPlantMetrics(plantId, days)
-      .then(({ metrics }) => {
-        if (!controller.signal.aborted) setPreviewMetrics(metrics);
+    Promise.all([
+      fetchPlantMetrics(plantId, days),
+      fetchChemDaysOfSupply(plantId),
+    ])
+      .then(([{ metrics }, chem]) => {
+        if (!controller.signal.aborted) {
+          setPreviewMetrics(metrics);
+          setChemSupply(chem);
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -669,8 +780,8 @@ export default function Compliance() {
       const n = parseFloat(v);
       if (!Number.isNaN(n)) merged[k] = n;
     }
-    setWhatIfViolations(computeViolations(merged, local));
-  }, [overrideMetrics, previewMetrics, local]);
+    setWhatIfViolations(computeViolations(merged, local, chemSupply));
+  }, [overrideMetrics, previewMetrics, local, chemSupply]);
 
   // ---- Evaluate ----
   const runEvaluate = useCallback(async () => {
@@ -684,11 +795,16 @@ export default function Compliance() {
 
       let metrics: Record<string, number | undefined> = {};
       let rows: DailyRow[] = [];
+      let chem: ChemSupply[] = [];
 
       if (scope === 'plant' && plantId && plantId !== 'global') {
-        const fetched = await fetchPlantMetrics(plantId, days);
+        const [fetched, chemFetched] = await Promise.all([
+          fetchPlantMetrics(plantId, days),
+          fetchChemDaysOfSupply(plantId),
+        ]);
         metrics = fetched.metrics;
         rows    = fetched.rows;
+        chem    = chemFetched;
 
         // Also fetch previous period for trend indicators
         const prev = await fetchPreviousPeriodMetrics(plantId, days);
@@ -697,6 +813,7 @@ export default function Compliance() {
 
       setDailyRows(rows);
       setPreviewMetrics(metrics);
+      setChemSupply(chem);
 
       // Apply manual overrides
       for (const [k, v] of Object.entries(overrideMetrics)) {
@@ -705,7 +822,7 @@ export default function Compliance() {
       }
 
       const thresholds = await loadThresholds(thresholdScope);
-      const violations = computeViolations(metrics, thresholds);
+      const violations = computeViolations(metrics, thresholds, chem);
 
       const evalResult: EvalResult = {
         scope:        thresholdScope,
@@ -744,6 +861,18 @@ export default function Compliance() {
 
   // NEW: compliance score
   const complianceScore = result ? computeComplianceScore(result.violations) : null;
+
+  // NEW: freshness of the underlying data — distinct from "evaluated at".
+  // The nightly job populates daily_plant_summary for *yesterday*, so one
+  // day of lag is normal; more than that usually means a missed run, and a
+  // clean-looking score computed just now could be based on stale data.
+  const latestDataDate = dailyRows.length ? dailyRows[0].summary_date : null;
+  let dataDaysStale: number | null = null;
+  if (latestDataDate) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [y, m, day] = latestDataDate.split('-').map(Number);
+    dataDaysStale = Math.round((today.getTime() - new Date(y, m - 1, day).getTime()) / 86400000);
+  }
 
   // -----------------------------------------------------------------------
   return (
@@ -814,7 +943,7 @@ export default function Compliance() {
           <TabsTrigger value="thresholds">
             <Settings2 className="h-3.5 w-3.5 mr-1" />Thresholds
           </TabsTrigger>
-          <TabsTrigger value="override">
+          <TabsTrigger value="whatif">
             <Zap className="h-3.5 w-3.5 mr-1" />
             What-if
             {whatIfViolations !== null && (
@@ -855,6 +984,21 @@ export default function Compliance() {
                         {result.scope_label ?? result.scope} · evaluated{' '}
                         {new Date(result.evaluated_at).toLocaleTimeString()}
                       </div>
+                      {latestDataDate && (
+                        <div className={cn(
+                          'text-xs mt-0.5 flex items-center gap-1',
+                          dataDaysStale !== null && dataDaysStale > 1
+                            ? 'text-warn font-medium'
+                            : 'text-muted-foreground',
+                        )}>
+                          {dataDaysStale !== null && dataDaysStale > 1 && (
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                          )}
+                          Data as of {fmtSummaryDate(latestDataDate)}
+                          {dataDaysStale !== null && dataDaysStale > 1 &&
+                            ` — ${dataDaysStale} days old, check the nightly summary job`}
+                        </div>
+                      )}
                       {summary && summary.details.length > 0 && (
                         <ul className="mt-2 space-y-1">
                           {summary.details.map((d, i) => (
@@ -1052,7 +1196,7 @@ export default function Compliance() {
         </TabsContent>
 
         {/* -------- What-if / Manual metric override -------- */}
-        <TabsContent value="override" className="mt-3 space-y-3">
+        <TabsContent value="whatif" className="mt-3 space-y-3">
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Zap className="h-4 w-4 text-warn" />

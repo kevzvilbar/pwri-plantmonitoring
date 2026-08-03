@@ -115,7 +115,12 @@ export function FilterReplacementHistory({ rows, canDelete, onChanged }: Props) 
               <TableCell className="max-w-[200px] truncate">{r.remarks ?? "—"}</TableCell>
               {canDelete && (
                 <TableCell>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete filter replacement from ${r.replacement_date}`}
+                    onClick={() => handleDelete(r.id)}
+                  >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </TableCell>

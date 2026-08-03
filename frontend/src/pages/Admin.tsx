@@ -37,9 +37,9 @@ export default function Admin() {
   }
 
   // Data Analyst only — redirect to the unified Data Corrections page.
-  // NormalizationPanel (the old standalone view for this role) covered the
-  // same underlying data (norm_status != 'normal' on well/locator readings)
-  // that DataCorrections.tsx already handles in its pending / inbox / history
+  // The old standalone panel for this role covered the same underlying
+  // data (norm_status != 'normal' on well/locator readings) that
+  // DataCorrections.tsx already handles in its pending / inbox / history
   // tabs. Sending Data Analysts there instead of keeping a separate panel
   // removes the duplicate surface and closes the gap in Section 11.2 of the
   // master plan.

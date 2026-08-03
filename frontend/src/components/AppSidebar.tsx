@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
-  Users, DollarSign, Receipt, Download, Upload, ShieldCheck, ShieldAlert,
+  Users, DollarSign, Download, Upload, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
   ClipboardCheck } from 'lucide-react';
 import {
@@ -50,7 +50,6 @@ const groups: SidebarGroup[] = [
     label: 'Finance',
     items: [
       { to: '/costs', label: 'Costs & Tariffs', icon: DollarSign },
-      { to: '/costs?tab=prices', label: 'Chemical Prices', icon: Receipt },
     ],
   },
 ];

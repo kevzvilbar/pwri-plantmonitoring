@@ -921,18 +921,6 @@ export default function Dashboard() {
   // Per-plant tariff rates and dosing ₱ total — consumed by computePowerKwh and chemCost below
   const dashTariffByPlant = todayCostsRaw?.tariffByPlant ?? new Map<string, number>();
   const dashDosingPeso    = todayCostsRaw?.dashDosingPeso ?? 0;
-  // Latest daily summary fallback per plant (today first, else latest)
-  const { data: dailySummary } = useQuery({
-    queryKey: ['dash-summary-recent', plantIds],
-    queryFn: async () => plantIds.length
-      ? (await supabase.from('daily_plant_summary').select('*').in('plant_id', plantIds)
-          .order('summary_date', { ascending: false }).limit(plantIds.length * 5)).data ?? []
-      : [],
-    enabled: plantIds.length > 0,
-    staleTime: 2 * 60_000,   // daily summary updated by cron only
-    refetchInterval: 5 * 60_000,  // poll every 5 min
-  });
-
   // Today's blending volume, summed directly from blending_events — the table Operations →
   // Blending actually writes to. (daily_plant_summary.blending_m3 above is meant to be filled
   // in nightly by fn_compute_daily_plant_summary, but that function was missing from the DB
@@ -1276,20 +1264,7 @@ export default function Dashboard() {
     ? (chemCost ?? 0) + (powerCost ?? 0)
     : null;
 
-  // Pull latest daily_plant_summary per plant (for blending, downtime, raw water)
-  const latestPerPlant = useMemo(() => {
-    const m = new Map<string, any>();
-    (dailySummary ?? []).forEach((r: any) => { if (!m.has(r.plant_id)) m.set(r.plant_id, r); });
-    return Array.from(m.values());
-  }, [dailySummary]);
   const blending = (blendingTodayRows ?? []).reduce((s: number, r) => s + (+r.volume_m3 || 0), 0);
-  // NOTE: rawWater below has the same root-cause issue as blending did (daily_plant_summary.
-  // raw_water_consumption_m3 is also never written by anything) — left as-is for now since Raw
-  // Water's correct source calc is more involved (see TrendChart.tsx's replacement-aware,
-  // anti-spike per-well delta logic) and deserves its own dedicated fix.
-  const rawWater = latestPerPlant.reduce((s, r: any) => s + (+r.raw_water_consumption_m3 || 0), 0);
-
-
 
   const { data: chemInv } = useQuery({
     queryKey: ['dash-chem', plantIds],

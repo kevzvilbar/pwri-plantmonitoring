@@ -1205,7 +1205,7 @@ function ProductMeterNameInlineBase({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="italic text-warn hover:underline focus:outline-none"
+              className="italic text-warn hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               title="No name set — click to rename"
             >
               Product Meter {fallbackIndex ?? ''} (click to rename)
