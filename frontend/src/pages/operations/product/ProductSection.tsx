@@ -103,13 +103,21 @@ export function ProductForm() {
         }
       }
       if (error?.message?.includes('status')) {
-        const { data: fallback } = await supabase
+        const { data: fallback, error: fallbackErr } = await supabase
           .from('product_meters' as any)
           .select('id, name, created_at')
           .eq('plant_id', plantId)
           .order('created_at', { ascending: true });
+        // Was: fallback's own error discarded too — if this terminal tier
+        // also failed, `meters` (which nearly everything else on this page
+        // derives from) would silently resolve to [].
+        if (fallbackErr) throw fallbackErr;
         return ((fallback ?? []) as any[]).map((m: any) => ({ ...m, status: 'Active' }));
       }
+      // Any error not matching one of the known missing-column messages
+      // above is a real, unhandled failure — was falling through to `data
+      // ?? []` silently instead of surfacing.
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: !!plantId,
@@ -120,12 +128,13 @@ export function ProductForm() {
     queryKey: ['product-readings-latest', plantId],
     queryFn: async () => {
       if (!plantId) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('product_meter_readings' as any)
         .select('*')
         .eq('plant_id', plantId)
         .order('reading_datetime', { ascending: false })
         .limit(200);
+      if (error) throw error;
       // Return only latest per meter_id
       const seen = new Set<string>();
       return ((data ?? []) as any[]).filter((r) => {
@@ -149,12 +158,13 @@ export function ProductForm() {
     queryFn: async () => {
       if (!plantId) return [];
       const since = new Date(); since.setDate(since.getDate() - 10);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('product_meter_readings' as any)
         .select('meter_id, daily_volume, reading_datetime')
         .eq('plant_id', plantId)
         .gte('reading_datetime', since.toISOString())
         .order('reading_datetime', { ascending: false });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: !!plantId,
@@ -183,8 +193,9 @@ export function ProductForm() {
   const { data: mirrorSourceLocators } = useQuery({
     queryKey: ['product-meter-mirror-sources', derivedLocatorIds.join(',')],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locators').select('id, name, plant_id').in('id', derivedLocatorIds as string[]);
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: derivedLocatorIds.length > 0,
@@ -320,10 +331,11 @@ export function ProductForm() {
               }}
               insertRows={async (rows, pid) => {
                 // Resolve meter names → IDs
-                const { data: meterList } = await supabase
+                const { data: meterList, error: meterListErr } = await supabase
                   .from('product_meters' as any)
                   .select('id, name')
                   .eq('plant_id', pid);
+                if (meterListErr) throw meterListErr;
                 const nameToId: Record<string, string> = {};
                 ((meterList ?? []) as any[]).forEach((m: any) => {
                   nameToId[m.name.trim().toLowerCase()] = m.id;
@@ -337,10 +349,21 @@ export function ProductForm() {
                   const dtMin = dt.slice(0, 16);
 
                   // Duplicate check
-                  const { data: existing } = await supabase.from('product_meter_readings' as any)
+                  const { data: existing, error: dupCheckErr } = await supabase.from('product_meter_readings' as any)
                     .select('id').eq('meter_id', meterId)
                     .gte('reading_datetime', `${dtMin}:00`)
                     .lte('reading_datetime', `${dtMin}:59`).limit(1);
+                  // Was: error discarded — same duplicate-row risk as
+                  // elsewhere this session, just scoped to one row instead
+                  // of a whole batch: a failed check made `existing` falsy,
+                  // skipping the "duplicate found, resolve" path and falling
+                  // through to a plain INSERT even if a reading for this
+                  // meter+time already existed. Skip the row instead of
+                  // guessing.
+                  if (dupCheckErr) {
+                    errors.push(`Meter "${r.meter_name}" @ ${dtMin}: couldn't verify duplicates (${dupCheckErr.message}) — row skipped, retry the import.`);
+                    continue;
+                  }
 
                   if (existing && existing.length > 0) {
                     const decision = await resolveImportDuplicate(`${meterId}|${dtMin}`, `${r.meter_name} @ ${dtMin}`);
@@ -766,13 +789,14 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       if (!error) return (data ?? []) as any[];
       // is_meter_replacement may not exist yet (pending migration) — fall back
       // to the base columns so the dialog still loads.
-      const { data: fallback } = await supabase
+      const { data: fallback, error: fallbackErr } = await supabase
         .from('product_meter_readings' as any)
         .select('id, current_reading, previous_reading, daily_volume, reading_datetime')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
         .order('reading_datetime', { ascending: false });
+      if (fallbackErr) throw fallbackErr;
       return (fallback ?? []) as any[];
     },
   });
