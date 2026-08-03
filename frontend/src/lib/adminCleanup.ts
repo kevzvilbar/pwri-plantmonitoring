@@ -172,11 +172,17 @@ export async function cleanupPlants({
   const notFound: string[] = [];
 
   for (const name of cleanedNames) {
-    const { data: row } = await supabase
+    const { data: row, error: lookupErr } = await supabase
       .from('plants')
       .select('id, name')
       .eq('name', name)
       .maybeSingle();
+    // Was: error discarded — a failed lookup for a plant that genuinely
+    // exists silently landed in `notFound` alongside plants that actually
+    // don't exist, indistinguishable to the caller. In a bulk operation
+    // that matters: the admin sees an unexpected "not found" for a real
+    // plant and has no way to tell it was a fetch failure, not a typo.
+    if (lookupErr) throw new Error(`Lookup failed for '${name}': ${lookupErr.message}`);
     if (!row) {
       notFound.push(name);
       continue;

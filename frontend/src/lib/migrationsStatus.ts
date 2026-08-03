@@ -393,11 +393,16 @@ export async function unmarkMigrationApplied(
   filename: string,
 ): Promise<{ ok: true; filename: string; removed: boolean }> {
   validateFilename(filename, new Set(loadMigrationFiles().map((f) => f.filename)));
-  const { data: row } = await supabase
+  const { data: row, error: rowErr } = await supabase
     .from('migration_state' as any)
     .select('manual_override')
     .eq('filename', filename)
     .maybeSingle();
+  // Was: error discarded — this function returned { ok: true, removed: false }
+  // on a failed check, indistinguishable from "there was genuinely nothing
+  // to clear." An admin clicking "clear mark" would see a success path with
+  // no indication the override might still be sitting there.
+  if (rowErr) throw new Error(rowErr.message);
   const removed = !!(row as unknown as { manual_override: unknown } | null)?.manual_override;
   if (removed) {
     const { error } = await supabase
@@ -434,7 +439,11 @@ export async function importApplyHistory(
 
   const known = new Set(loadMigrationFiles().map((f) => f.filename));
 
-  const { data: existingRows } = await supabase.from('migration_state' as any).select('filename, apply_history');
+  const { data: existingRows, error: existingErr } = await supabase.from('migration_state' as any).select('filename, apply_history');
+  // Was: error discarded — a failure here made every filename look like it
+  // had no existing history, which would make "fill_gaps" mode treat
+  // already-recorded entries as new and potentially overwrite them.
+  if (existingErr) throw new Error(existingErr.message);
   const hasExistingHistory = new Map<string, boolean>();
   for (const row of (existingRows ?? []) as unknown as MigrationStateRow[]) {
     hasExistingHistory.set(row.filename, !!row.apply_history);

@@ -88,8 +88,17 @@ async function insertLocatorReadings(
   userId: string | null,
 ): Promise<{ count: number; errors: string[]; affectedIds: string[] }> {
   // Resolve locator names → IDs (single query for the whole batch)
-  const { data: locators } = await supabase
+  const { data: locators, error: locatorsErr } = await supabase
     .from('locators').select('id, name').eq('plant_id', plantId);
+  // Was: error discarded on both queries below. A failed name-resolution
+  // would make every row in the CSV fail to match a locator (safe-ish,
+  // just an unhelpful "not found" per row). A failed duplicate-check is
+  // worse: `existingByKey` would silently stay empty, and every row —
+  // including ones already imported — would be treated as new and bulk-
+  // inserted. Re-uploading the same file after a network blip on this
+  // check could duplicate an entire day's readings across every locator
+  // in it. Abort the whole import instead.
+  if (locatorsErr) throw locatorsErr;
   const nameToId: Record<string, string> = {};
   (locators ?? []).forEach((l: any) => { nameToId[l.name.trim().toLowerCase()] = l.id; });
 
@@ -101,10 +110,11 @@ async function insertLocatorReadings(
   const locatorIds = Object.values(nameToId);
   const existingByKey: Record<string, string> = {}; // "locatorId|dtMin" → reading id
   if (locatorIds.length > 0) {
-    const { data: existingReadings } = await supabase
+    const { data: existingReadings, error: existingErr } = await supabase
       .from('locator_readings')
       .select('id, locator_id, reading_datetime')
       .in('locator_id', locatorIds);
+    if (existingErr) throw existingErr;
     (existingReadings ?? []).forEach((e: any) => {
       const key = `${e.locator_id}|${(e.reading_datetime as string).slice(0, 16)}`;
       existingByKey[key] = e.id;
@@ -292,10 +302,15 @@ async function insertDerivedOverrideRows(
   // UTC-offset mismatch. (latestReading in LocatorRow only tracks the single
   // most-recent row, which isn't enough here since a bulk override can target
   // several different past dates in one file.)
-  const { data: existing } = await supabase
+  const { data: existing, error: existingErr } = await supabase
     .from('locator_readings')
     .select('id, reading_datetime, current_reading, is_estimated')
     .eq('locator_id', locatorId);
+  // Was: error discarded. If this lookup failed, `existingByDate` stayed
+  // empty and every date below took the INSERT branch instead of UPDATE —
+  // creating a brand-new duplicate reading for a date that was supposed to
+  // be corrected in place, not doubled.
+  if (existingErr) throw existingErr;
   const existingByDate: Record<string, any> = {};
   (existing ?? []).forEach((row: any) => {
     const dKey = new Date(row.reading_datetime).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
@@ -382,9 +397,12 @@ export function LocatorReadingForm() {
 
   const { data: locators } = useQuery({
     queryKey: ['op-locators', plantId],
-    queryFn: async () => plantId
-      ? (await supabase.from('locators').select('*').eq('plant_id', plantId).eq('status', 'Active').order('name')).data ?? []
-      : [],
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data, error } = await supabase.from('locators').select('*').eq('plant_id', plantId).eq('status', 'Active').order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
     enabled: !!plantId,
   });
 
@@ -395,8 +413,9 @@ export function LocatorReadingForm() {
     queryKey: ['op-locator-ids', plantId],
     queryFn: async () => {
       if (!plantId) return [] as string[];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locators').select('id').eq('plant_id', plantId).eq('status', 'Active');
+      if (error) throw error;
       return (data ?? []).map((l: any) => l.id as string);
     },
     enabled: !!plantId,
@@ -572,7 +591,6 @@ export function LocatorReadingForm() {
                   userId={user?.id}
                   onSaved={() => invalidateLocatorDash(qc)}
                   isManagerOrAdmin={isAdmin || isManager || isDataAnalyst}
-                  canAutoApprove={isManager}
                   maxReadingsPerDay={maxLocatorReadings}
                   gapReason={gapReasonsByLocator[l.id] ?? null}
                   onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['locator-gap-reasons', plantId, todayDateStr] })}
@@ -605,7 +623,7 @@ export function LocatorReadingForm() {
 }
 
 function LocatorRow({
-  locator, plantId, previous, previousDt, latestReading, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, canAutoApprove, maxReadingsPerDay = 3,
+  locator, plantId, previous, previousDt, latestReading, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, maxReadingsPerDay = 3,
   gapReason, onGapReasonSaved,
 }: {
   locator: any; plantId: string; previous: number | null; previousDt: string | null;
@@ -613,13 +631,6 @@ function LocatorRow({
   todayReadings: any[]; avgVol: number | null;
   userId: string | undefined; onSaved: () => void;
   isManagerOrAdmin: boolean;
-  /** Manager or Admin (useAuth's `isManager`, which already includes Admin) — a
-   *  reading that would otherwise be quarantined as pending_review is instead
-   *  saved straight through and immediately logged as auto-approved. Deliberately
-   *  narrower than isManagerOrAdmin (which also includes Data Analyst) — this
-   *  gate is specifically "manager or above", matching the sign-off authority
-   *  the correction/approval workflow already assumes elsewhere for this role. */
-  canAutoApprove: boolean;
   maxReadingsPerDay?: number;
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
@@ -727,8 +738,6 @@ function LocatorRow({
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
 
-    let guardReason: 'backward' | 'spike' | null = null;
-
     // ── Pre-flight guard: cooldown + backward/spike detection ────────────────
     // Mirrors the DB trigger logic (fn_locator_reading_integrity) so the UI can
     // give instant feedback before the round-trip. The trigger is the source of
@@ -758,7 +767,6 @@ function LocatorRow({
       }
       if (guard.status === 'pending_review') {
         // Save proceeds — DB trigger will also set pending_review independently.
-        guardReason = guard.reason;
         toast.info(`${locator.name}: ${guard.detail}`, { duration: 8000 });
       }
     }
@@ -801,8 +809,8 @@ function LocatorRow({
         };
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('locator_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -819,34 +827,13 @@ function LocatorRow({
       return;
     }
 
-    let isPending = savedRow?.norm_status === 'pending_review';
+    const isPending = savedRow?.norm_status === 'pending_review';
+    setLastSavePending(isPending);
     setCooldownMinutes(0);
     setCooldownAvailableAt(null);
 
-    let autoApproved = false;
-    if (isPending && canAutoApprove && savedRow?.id) {
-      // Manager/Admin: no supervisor review needed — but still route through
-      // fn_cascade_reading_correction (unchanged value, same current_reading)
-      // so it's flipped out of pending_review via the one audited, permission-
-      // checked path everything else in Data Corrections already uses, and a
-      // reading_normalizations row is written for tracing. If this call fails
-      // for any reason, fall back to leaving it in pending_review rather than
-      // silently losing the flag.
-      const { error: autoErr } = await (supabase.rpc('fn_cascade_reading_correction', {
-        p_table:       'locator_readings',
-        p_row_id:      savedRow.id,
-        p_new_current: savedRow.current_reading,
-        p_admin_id:    userId ?? null,
-        p_reason:      `Auto-approved on entry — ${guardReason ?? 'flagged'} check bypassed for Manager/Admin, logged for tracing`,
-      }) as any);
-      if (!autoErr) { isPending = false; autoApproved = true; }
-    }
-    setLastSavePending(isPending);
-
     if (isPending) {
       toast.info(`${locator.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
-    } else if (autoApproved) {
-      toast.success(`${locator.name}: saved — auto-approved (Manager/Admin), logged for tracing.`, { duration: 6000 });
     } else {
       const curr = savedRow?.current_reading;
       const prev = savedRow?.previous_reading;
@@ -882,13 +869,14 @@ function LocatorRow({
   const { data: reviewFlag } = useQuery({
     queryKey: ['derived-review-flag', locator.id],
     queryFn: async () => {
-      const { data } = await (supabase.from('locator_derived_review_flags' as any) as any)
+      const { data, error } = await (supabase.from('locator_derived_review_flags' as any) as any)
         .select('id, date_key, flagged_at')
         .eq('locator_id', locator.id)
         .is('resolved_at', null)
         .order('flagged_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (error) throw error;
       return data as { id: string; date_key: string; flagged_at: string } | null;
     },
     enabled: !!locator.is_derived,
@@ -1406,13 +1394,21 @@ function SharedPowerMeterRow({
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
 
     // Check if primary well already has a reading today — update it if so
-    const { data: todayRecs } = await supabase
+    const { data: todayRecs, error: checkErr } = await supabase
       .from('well_readings')
       .select('id')
       .eq('well_id', primaryWellId)
       .gte('reading_datetime', startOfDay.toISOString())
       .order('reading_datetime', { ascending: false })
       .limit(1);
+    // Was: error discarded — same duplicate-row risk as elsewhere this
+    // session: a failed check fell through to the INSERT branch below even
+    // when today's well reading already existed, creating a second row.
+    if (checkErr) {
+      setSaving(false);
+      toast.error("Couldn't verify today's existing reading — retry before saving.");
+      return;
+    }
 
     if (todayRecs?.length) {
       const { error } = await supabase.from('well_readings')

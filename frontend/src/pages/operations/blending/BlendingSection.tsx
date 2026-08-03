@@ -273,7 +273,8 @@ export function BlendingForm() {
 
       let q = supabase.from('blending_events' as any).select('*').gte('event_date', since);
       if (plantId) q = q.eq('plant_id', plantId);
-      const { data: events } = await q;
+      const { data: events, error } = await q;
+      if (error) throw error;
 
       const byWell = new Map<string, {
         well_id: string; volume_m3: number; today_volume_m3: number;

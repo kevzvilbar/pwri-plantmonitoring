@@ -178,8 +178,9 @@ export default function Dashboard() {
     queryKey: ['dash-locator-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as string[];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locators').select('id').in('plant_id', plantIds).eq('status', 'Active');
+      if (error) throw error;
       return (data ?? []).map((l: any) => l.id as string);
     },
     enabled: plantIds.length > 0,
@@ -198,9 +199,10 @@ export default function Dashboard() {
     queryKey: ['dash-locator-direct-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return new Set<string>();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locators').select('id,default_input_mode,is_derived')
         .in('plant_id', plantIds).eq('status', 'Active');
+      if (error) throw error;
       return new Set(
         (data ?? [])
           .filter((l: any) => l.default_input_mode === 'direct' || l.is_derived === true)
@@ -214,7 +216,8 @@ export default function Dashboard() {
     queryKey: ['dash-well-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as string[];
-      const { data } = await supabase.from('wells').select('id').in('plant_id', plantIds);
+      const { data, error } = await supabase.from('wells').select('id').in('plant_id', plantIds);
+      if (error) throw error;
       return (data ?? []).map((w: any) => w.id as string);
     },
     enabled: plantIds.length > 0,
@@ -231,13 +234,14 @@ export default function Dashboard() {
       // value as a single-day delta — producing the "-898,003" spike seen
       // in the Prod. vs Consum. tab.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locator_readings_clean' as any)
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
@@ -263,13 +267,17 @@ export default function Dashboard() {
         .order('reading_datetime', { ascending: true });
       if (!error) return (data ?? []) as any[];
       // Fallback: base columns without quality fields
-      const { data: fallback } = await supabase
+      const { data: fallback, error: fallbackErr } = await supabase
         .from('well_readings_clean' as any)
         .select('well_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
+      // Was: fallback's own error discarded too — meaning a genuine failure
+      // of BOTH attempts (not just missing quality columns) silently
+      // resolved to []. Throw the fallback's error if it also failed.
+      if (fallbackErr) throw fallbackErr;
       return (fallback ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
@@ -281,18 +289,20 @@ export default function Dashboard() {
     queryKey: ['dash-product-meters-today', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
-      const { data: meters } = await (supabase.from('product_meters' as any) as any)
+      const { data: meters, error: metersErr } = await (supabase.from('product_meters' as any) as any)
         .select('id').in('plant_id', plantIds);
+      if (metersErr) throw metersErr;
       const meterIds = (meters ?? []).map((m: any) => m.id);
       if (!meterIds.length) return [];
       // FIX: Bounded to current calendar day — mirrors the todayLocators fix.
       const todayEnd = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+      const { data, error } = await (supabase.from('product_meter_readings' as any) as any)
         .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', today)
         .lte('reading_datetime', todayEnd)
         .order('reading_datetime', { ascending: true });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
@@ -313,9 +323,10 @@ export default function Dashboard() {
     queryKey: ['dash-plant-meter-configs', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [] as any[];
-      const { data } = await (supabase.from('plant_meter_config' as any) as any)
+      const { data, error } = await (supabase.from('plant_meter_config' as any) as any)
         .select('plant_id, permeate_is_production, config')
         .in('plant_id', plantIds);
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
@@ -370,10 +381,11 @@ export default function Dashboard() {
     queryKey: ['dash-permeate-train-ids', permeateProductionPlantIds],
     queryFn: async () => {
       if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('ro_trains')
         .select('id, plant_id')
         .in('plant_id', permeateProductionPlantIds);
+      if (error) throw error;
       const rows = data ?? [];
       const trainPlantMap = new Map<string, string>();
       rows.forEach((t: any) => trainPlantMap.set(t.id as string, t.plant_id as string));
@@ -392,13 +404,14 @@ export default function Dashboard() {
       if (!_permeateTrainIds.length) return [] as any[];
       const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
         .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
+      if (error) throw error;
       // Attach plant_id via the trainPlantMap so downstream code can group by plant if needed
       return (data ?? []).map((r: any) => ({
         ...r,
@@ -421,13 +434,14 @@ export default function Dashboard() {
       if (!_permeateTrainIds.length) return [] as any[];
       const windowStart = new Date(_yesterdayKey + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_yesterdayKey + 'T23:59:59').toISOString();
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _permeateTrainIds)
         .gte('reading_datetime', windowStart)
         .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
+      if (error) throw error;
       return (data ?? []).map((r: any) => ({
         ...r,
         plant_id: _permeateTrainPlantMap.get(r.train_id) ?? null,
@@ -446,29 +460,37 @@ export default function Dashboard() {
     queryKey: ['dash-power-today', plantIds, today],
     queryFn: async () => {
       if (!plantIds.length) return { rows: [] as any[], prevRows: [] as any[], isStale: false };
-      const { data: todayData } = await supabase
+      const { data: todayData, error: todayErr } = await supabase
         .from('power_readings')
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds)
         .gte('reading_datetime', today);
+      if (todayErr) throw todayErr;
       // Fetch the most-recent row BEFORE today for each plant (delta baseline)
       const prevRows: any[] = [];
       await Promise.all(plantIds.map(async (pid) => {
-        const { data } = await supabase
+        // Deliberately soft-fail per plant here (unlike the two queries
+        // above) — one plant's lookup failing shouldn't abort Promise.all
+        // and kill the power card for every other plant. Was fully silent
+        // though; at least log it so a persistent per-plant issue is
+        // debuggable instead of just "that plant's delta looks a bit off."
+        const { data, error } = await supabase
           .from('power_readings')
           .select('meter_reading_kwh,grid_meter_readings,plant_id,reading_datetime')
           .eq('plant_id', pid).lt('reading_datetime', today)
           .order('reading_datetime', { ascending: false }).limit(1);
+        if (error) { console.warn('[Dashboard] prevRow lookup failed for plant', pid, error); return; }
         if (data?.[0]) prevRows.push(data[0]);
       }));
       if ((todayData ?? []).length) return { rows: todayData!, prevRows, isStale: false };
       // Fallback: latest reading per plant
-      const { data: recent } = await supabase
+      const { data: recent, error: recentErr } = await supabase
         .from('power_readings')
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds)
         .order('reading_datetime', { ascending: false })
         .limit(plantIds.length * 5);
+      if (recentErr) throw recentErr;
       const latestByPlant = new Map<string, any>();
       (recent ?? []).forEach((r: any) => {
         if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
@@ -505,13 +527,14 @@ export default function Dashboard() {
     queryKey: ['dash-loc-yest', _locatorIds, yesterday, today],
     queryFn: async () => {
       if (!_locatorIds?.length) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('locator_readings_clean' as any)
         .select('locator_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement,is_estimated')
         .in('locator_id', _locatorIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: (_locatorIds?.length ?? 0) > 0,
@@ -522,13 +545,14 @@ export default function Dashboard() {
     queryKey: ['dash-wells-yest', _wellIds, yesterday, today],
     queryFn: async () => {
       if (!_wellIds?.length) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('well_readings_clean' as any)
         .select('well_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('well_id', _wellIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: (_wellIds?.length ?? 0) > 0,
@@ -540,16 +564,18 @@ export default function Dashboard() {
     queryKey: ['dash-product-meters-yest', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return [];
-      const { data: meters } = await (supabase.from('product_meters' as any) as any)
+      const { data: meters, error: metersErr } = await (supabase.from('product_meters' as any) as any)
         .select('id').in('plant_id', plantIds);
+      if (metersErr) throw metersErr;
       const meterIds = (meters ?? []).map((m: any) => m.id);
       if (!meterIds.length) return [];
-      const { data } = await (supabase.from('product_meter_readings' as any) as any)
+      const { data, error } = await (supabase.from('product_meter_readings' as any) as any)
         .select('meter_id,plant_id,daily_volume,current_reading,previous_reading,reading_datetime,is_meter_replacement')
         .in('meter_id', meterIds)
         .gte('reading_datetime', yesterday)
         .lt('reading_datetime', today)
         .order('reading_datetime', { ascending: true });
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     enabled: plantIds.length > 0,
@@ -560,16 +586,19 @@ export default function Dashboard() {
     queryKey: ['dash-power-yest', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return { rows: [] as any[], prevRows: [] as any[] };
-      const { data: rows } = await supabase.from('power_readings')
+      const { data: rows, error: rowsErr } = await supabase.from('power_readings')
         .select('daily_consumption_kwh,daily_grid_kwh,meter_reading_kwh,grid_meter_readings,is_meter_replacement,plant_id,reading_datetime')
         .in('plant_id', plantIds).gte('reading_datetime', yesterday).lt('reading_datetime', today);
+      if (rowsErr) throw rowsErr;
       // Fetch pre-yesterday baseline rows for delta computation
       const prevRows: any[] = [];
       await Promise.all(plantIds.map(async (pid) => {
-        const { data } = await supabase.from('power_readings')
+        // Soft-fail per plant, same reasoning as todayPowerRaw above.
+        const { data, error } = await supabase.from('power_readings')
           .select('meter_reading_kwh,grid_meter_readings,plant_id,reading_datetime')
           .eq('plant_id', pid).lt('reading_datetime', yesterday)
           .order('reading_datetime', { ascending: false }).limit(1);
+        if (error) { console.warn('[Dashboard] yesterday prevRow lookup failed for plant', pid, error); return; }
         if (data?.[0]) prevRows.push(data[0]);
       }));
       return { rows: rows ?? [], prevRows };
@@ -590,9 +619,10 @@ export default function Dashboard() {
     queryKey: ['dash-quality-train-meta', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>() };
-      const { data } = await (supabase.from('ro_trains' as any) as any)
+      const { data, error } = await (supabase.from('ro_trains' as any) as any)
         .select('id, plant_id, train_number, name, well_id')
         .in('plant_id', plantIds);
+      if (error) throw error;
       const rows = (data ?? []) as any[];
       const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>();
       rows.forEach((t: any) => metaMap.set(t.id as string, {
@@ -616,7 +646,8 @@ export default function Dashboard() {
     queryKey: ['dash-well-names-for-trains', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return new Map<string, string>();
-      const { data } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
+      const { data, error } = await supabase.from('wells').select('id, name').in('plant_id', plantIds);
+      if (error) throw error;
       const map = new Map<string, string>();
       (data ?? []).forEach((w: any) => map.set(w.id as string, w.name as string));
       return map;
@@ -769,13 +800,14 @@ export default function Dashboard() {
       if (!_qualityTrainIds.length) return [] as any[];
       const windowStart = new Date(_localDateStr + 'T00:00:00').toISOString();
       const windowEnd   = new Date(_localDateStr + 'T23:59:59').toISOString();
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
         .select('train_id,permeate_meter_delta,reading_datetime')
         .in('train_id', _qualityTrainIds)
         .gte('reading_datetime', windowStart)
         .lte('reading_datetime', windowEnd)
         .not('permeate_meter_delta', 'is', null)
         .gt('permeate_meter_delta', 0);
+      if (error) throw error;
       return (data ?? []) as any[];
     },
     // Only fetch when there are no product meter readings — avoids a redundant
@@ -826,6 +858,10 @@ export default function Dashboard() {
           .lte('effective_date', todayStr)
           .order('effective_date', { ascending: false }),
       ]);
+      if (prodCostRes.error) throw prodCostRes.error;
+      if (tariffRes.error) throw tariffRes.error;
+      if (dosingRes.error) throw dosingRes.error;
+      if (pricesRes.error) throw pricesRes.error;
 
       // Build tariff map: plant_id → latest ₱/kWh rate (results ordered DESC, first per plant wins)
       const tariffByPlant = new Map<string, number>();
@@ -861,12 +897,13 @@ export default function Dashboard() {
         return { rows: prodCostRes.data!, costDataDate: todayStr, tariffByPlant, dashDosingPeso };
       }
       // Fallback: latest cost row per plant
-      const { data: recent } = await supabase
+      const { data: recent, error: recentErr } = await supabase
         .from('production_costs')
         .select('chem_cost,power_cost,total_cost,plant_id,cost_date')
         .in('plant_id', plantIds)
         .order('cost_date', { ascending: false })
         .limit(plantIds.length * 3);
+      if (recentErr) throw recentErr;
       const latestByPlant = new Map<string, any>();
       (recent ?? []).forEach((r: any) => {
         if (!latestByPlant.has(r.plant_id)) latestByPlant.set(r.plant_id, r);
@@ -906,10 +943,11 @@ export default function Dashboard() {
     queryFn: async () => {
       if (!plantIds.length) return [];
       const today = new Date().toISOString().slice(0, 10);
-      const { data } = await (supabase.from('blending_events' as any) as any)
+      const { data, error } = await (supabase.from('blending_events' as any) as any)
         .select('volume_m3, plant_id')
         .in('plant_id', plantIds)
         .eq('event_date', today);
+      if (error) throw error;
       return data ?? [];
     },
     enabled: plantIds.length > 0,
@@ -1302,7 +1340,8 @@ export default function Dashboard() {
       // (>=3 events and >=6h total) on the same day.
       let qDt = supabase.from('downtime_events' as any).select('*').gte('event_date', since);
       if (selectedPlantId) qDt = qDt.eq('plant_id', selectedPlantId);
-      const { data: dtRows } = await qDt;
+      const { data: dtRows, error: dtErr } = await qDt;
+      if (dtErr) throw dtErr;
       const eventsByDay = new Map<string, any[]>();
       (dtRows ?? []).forEach((d: any) => {
         const day = String(d.event_date ?? '').slice(0, 10);
@@ -1331,7 +1370,8 @@ export default function Dashboard() {
       let qBe = supabase.from('blending_events' as any).select('*')
         .gte('event_date', since).order('event_date', { ascending: false }).limit(50);
       if (selectedPlantId) qBe = qBe.eq('plant_id', selectedPlantId);
-      const { data: beRows } = await qBe;
+      const { data: beRows, error: beErr } = await qBe;
+      if (beErr) throw beErr;
       (beRows ?? []).forEach((d: any) => {
         alerts.push({
           kind: 'blending', severity: 'info',
@@ -1346,7 +1386,8 @@ export default function Dashboard() {
       let qSnap = supabase.from('compliance_snapshots' as any).select('*')
         .order('evaluated_at', { ascending: false }).limit(20);
       if (selectedPlantId) qSnap = qSnap.eq('plant_id', selectedPlantId);
-      const { data: snapRows } = await qSnap;
+      const { data: snapRows, error: snapErr } = await qSnap;
+      if (snapErr) throw snapErr;
       const seen = new Set<string>();
       (snapRows ?? []).forEach((s: any) => {
         const pid = s.plant_id ?? '';
@@ -1428,7 +1469,7 @@ export default function Dashboard() {
   const pretreatmentAlerts = useMemo(() => {
     type PretreatAlert = {
       trainId: string; plantId: string; severity: PlantAlertSeverity;
-      title: string; description: string; idSuffix: string; readingId: string | null;
+      title: string; description: string; idSuffix: string;
     };
     const out: PretreatAlert[] = [];
     const byTrain = new Map<string, any[]>();
@@ -1443,14 +1484,13 @@ export default function Dashboard() {
       const meta = _qualityTrainMeta2.get(trainId);
       const plantId = latest.plant_id ?? meta?.plant_id ?? '';
       const trainLabel = meta?.train_name ?? (meta?.train_number != null ? `Train ${meta.train_number}` : 'Train');
-      const readingId: string | null = latest.id ?? null;
 
       // AFM/MMF differential pressure
       (latest.afm_units ?? []).forEach((u: any) => {
         const dp = u.dp_psi ?? dpPsi(u.in_psi, u.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_afm_dp_max) {
           out.push({
-            trainId, plantId, severity: 'warning', readingId,
+            trainId, plantId, severity: 'warning',
             idSuffix: `afm-dp-${trainId}-${u.unit}`,
             title: `AFM ${u.unit} DP high: ${dp} psi`,
             description: `${trainLabel} — AFM/MMF unit ${u.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_afm_dp_max} psi) — backwash likely needed`,
@@ -1463,7 +1503,7 @@ export default function Dashboard() {
         const dp = dpPsi(h.in_psi, h.out_psi);
         if (dp != null && dp >= ALERTS.pretreatment_filter_housing_dp_max) {
           out.push({
-            trainId, plantId, severity: 'warning', readingId,
+            trainId, plantId, severity: 'warning',
             idSuffix: `housing-dp-${trainId}-${h.unit}`,
             title: `Filter Housing ${h.unit} DP high: ${dp} psi`,
             description: `${trainLabel} — filter housing ${h.unit} differential pressure at ${dp} psi (limit: ${ALERTS.pretreatment_filter_housing_dp_max} psi) — cartridge/bag replacement likely needed`,
@@ -1483,7 +1523,7 @@ export default function Dashboard() {
             amp > prevAmp * ALERTS.pretreatment_pump_amp_spike_multiplier
           ) {
             out.push({
-              trainId, plantId, severity: 'warning', readingId,
+              trainId, plantId, severity: 'warning',
               idSuffix: `booster-amp-${trainId}-${p.unit}`,
               title: `Booster Pump ${p.unit} amperage spike: ${amp}A`,
               description: `${trainLabel} — booster pump ${p.unit} reading ${amp}A vs. ${prevAmp}A last reading — check for mis-key or pump fault`,
@@ -1534,25 +1574,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     const storeAlerts: PlantAlert[] = [];
-    // Deep-links to the train's *history log* (Overview tab → "Open log"
-    // modal), not the live input form — an alert is about something that
-    // already happened, so it should open the read/review view where the
-    // flagged row can be found and corrected, not a blank entry form for a
-    // brand-new reading. See the ?plant=/&train=/&log=1/&logTab=/&highlight=
-    // handling added to ROTrains/index.tsx, ROTrains/Overview.tsx, and
-    // TrainCard.tsx → TrainLogModal.tsx (page-jump + row highlight).
-    const roLink = (
-      pid?: string | null,
-      trainId?: string | null,
-      opts?: { logTab?: 'ro' | 'pretreat'; highlightId?: string | null },
-    ) => {
-      const params = new URLSearchParams({ tab: 'overview' });
-      if (pid) params.set('plant', pid);
-      if (trainId) { params.set('train', trainId); params.set('log', '1'); }
-      if (opts?.logTab) params.set('logTab', opts.logTab);
-      if (opts?.highlightId) params.set('highlight', opts.highlightId);
-      return `/ro-trains?${params.toString()}`;
-    };
+    // Deep-links straight to the flagged train's entry form — see the
+    // ?plant=&train= handling added to ROTrains/index.tsx (tab) and
+    // PretreatmentAndROLog.tsx (plant/train pre-select).
+    const roLink = (pid?: string | null, trainId?: string | null) =>
+      `/ro-trains?tab=pretreat-ro${pid ? `&plant=${pid}` : ''}${trainId ? `&train=${trainId}` : ''}`;
 
     // Train gap warnings — plant_id comes from TrainGap directly
     trainGaps.forEach((g) => {
@@ -1600,7 +1626,7 @@ export default function Dashboard() {
     latestPerTrain.forEach((r: any) => {
       const pid        = r.plant_id ?? selectedPlantId ?? '';
       const trainLabel = r.train_name ?? (r.train_number != null ? `Train ${r.train_number}` : 'Train');
-      const link        = roLink(pid, r.train_id, { highlightId: r.id });
+      const link        = roLink(pid, r.train_id);
       const dp = r.dp_psi ?? 0;
       if (dp > 40) {
         storeAlerts.push({
@@ -1716,15 +1742,11 @@ export default function Dashboard() {
         source:      'Pre-Treatment',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
-        linkPath:    roLink(a.plantId, a.trainId, { logTab: 'pretreat', highlightId: a.readingId }),
+        linkPath:    roLink(a.plantId, a.trainId),
       });
     });
 
-    // Booster/HPP pump electrical — phase imbalance / possible phase loss.
-    // No highlightId: these come from pump_readings, a separate table this
-    // log view doesn't render — the pretreat tab is still the closest
-    // relevant place to look (booster amperage is logged there too), just
-    // without a specific row to jump to.
+    // Booster/HPP pump electrical — phase imbalance / possible phase loss
     pumpElectricalAlerts.forEach((a) => {
       storeAlerts.push({
         id:          a.idSuffix,
@@ -1734,7 +1756,7 @@ export default function Dashboard() {
         source:      'Booster Pumps',
         plantId:     a.plantId || selectedPlantId || '',
         timestamp:   Date.now(),
-        linkPath:    roLink(a.plantId, a.trainId, { logTab: 'pretreat' }),
+        linkPath:    roLink(a.plantId, a.trainId),
       });
     });
 
@@ -1783,7 +1805,7 @@ export default function Dashboard() {
         source:      'RO Trains',
         plantId:     pid,
         timestamp:   Date.now(),
-        linkPath:    roLink(pid, row.train_id, { highlightId: row.id }),
+        linkPath:    roLink(pid, row.train_id),
       });
     });
 
