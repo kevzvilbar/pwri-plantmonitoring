@@ -23,7 +23,6 @@ const Maintenance = lazy(() => import("./pages/Maintenance"));
 const Incidents = lazy(() => import("./pages/Incidents"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Import = lazy(() => import("./pages/Import"));
-const AIAssistant = lazy(() => import("./pages/AIAssistant"));
 const Compliance = lazy(() => import("./pages/Compliance"));
 const Exports = lazy(() => import("./pages/Exports"));
 const Admin = lazy(() => import("./pages/Admin"));
@@ -97,7 +96,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner position="top-center" />
-      <BrowserRouter basename="/pwri-plantmonitoring">
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
           <ErrorBoundary>
             <Suspense fallback={<RouteFallback />}>
@@ -128,7 +127,6 @@ const App = () => (
               <Route path="/data-corrections" element={<DataCorrections />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/exports" element={<Exports />} />
-                <Route path="/ai" element={<AIAssistant />} />
                 <Route path="/compliance" element={<Compliance />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/profile" element={<Profile />} />

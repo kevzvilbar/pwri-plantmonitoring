@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet, Cog,
-  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, Sparkles, ShieldCheck,
+  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, ShieldCheck,
   ShieldAlert,
   ClipboardCheck,
   GitBranch, FlaskConical,
@@ -50,7 +50,6 @@ const sideSheetGroups = [
   {
     title: 'Overview',
     items: [
-      { to: '/ai', label: 'AI Assistant', icon: Sparkles },
       { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
       { to: '/topology', label: 'Network Topology', icon: GitBranch },
     ],

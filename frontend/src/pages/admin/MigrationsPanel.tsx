@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
 import { DataState } from '@/components/DataState';
-import { useBackendReachable } from '@/hooks/useBackendReachable';
+import { useAuth } from '@/hooks/useAuth';
+import {
+  listMigrationStatus, markMigrationApplied, unmarkMigrationApplied, importApplyHistory,
+  type MigrationsResponse, type MigrationFile, type MigrationApplyHistory,
+} from '@/lib/migrationsStatus';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -23,79 +26,21 @@ import { format, formatDistanceToNow } from 'date-fns';
 // Migrations panel — Admin-only. Probes the live Supabase schema against the
 // SQL files in supabase/migrations/ and offers a copy-to-clipboard for any
 // pending file so the Admin can paste it into the Supabase SQL editor.
+//
+// This used to call a FastAPI backend; the parsing/probing/state logic now
+// lives in src/lib/migrationsStatus.ts, ported to run directly against
+// Supabase from here. See that file for the full explanation.
 // ---------------------------------------------------------------------------
-
-interface MigrationExpectedColumn {
-  column: string;
-  exists: boolean;
-}
-interface MigrationProbeTable {
-  name: string;
-  exists: boolean;
-  expected_columns?: MigrationExpectedColumn[];
-  missing_columns?: string[];
-  present_columns?: string[];
-  expected_count?: number;
-}
-interface MigrationProbeColumn {
-  table: string;
-  column: string;
-  exists: boolean;
-}
-interface MigrationOverride {
-  marked_at: string;
-  by_user_id: string | null;
-  by_label: string | null;
-  note: string | null;
-}
-interface MigrationApplyHistory {
-  applied_at: string | null;
-  by_label: string | null;
-  note: string | null;
-  source: string | null;
-}
-interface MigrationFile {
-  filename: string;
-  size: number;
-  sha256?: string;
-  status: 'applied' | 'pending' | 'partial' | 'indeterminate';
-  probed_status?: 'applied' | 'pending' | 'partial' | 'indeterminate';
-  manual_override?: MigrationOverride | null;
-  override_applied?: boolean;
-  // Permanent record of when this file was first marked applied locally,
-  // preserved across override-purge cleanups. Null for files never run
-  // through the override flow (we don't fabricate a timestamp we don't know).
-  apply_history?: MigrationApplyHistory | null;
-  table_probes: MigrationProbeTable[];
-  column_probes: MigrationProbeColumn[];
-  added_column_probes?: MigrationProbeColumn[];
-  sql: string;
-}
-interface MigrationsResponse {
-  migrations_dir: string;
-  summary: {
-    total: number;
-    applied: number;
-    pending: number;
-    partial: number;
-    indeterminate: number;
-  };
-  files: MigrationFile[];
-  // Filenames whose manual override was auto-removed this fetch because the
-  // probe now confirms the migration is applied for real. The frontend uses
-  // this to surface a one-time confirmation toast on explicit Re-check.
-  purged_overrides?: string[];
-}
 
 // localStorage key for the per-file SHA snapshot the user has acknowledged.
 // We compare each fresh response against this snapshot to flag files whose
 // on-disk content changed since the user last hit Re-check (i.e. potentially
 // stale relative to a previously-downloaded bundle).
 const MIGRATIONS_SHA_KEY = 'pwri:migration-shas-v1';
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 export function MigrationsPanel() {
-  const { reachable: backendReachable, checking: backendChecking } = useBackendReachable();
+  const { user, profile, isAdmin } = useAuth();
+  const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || null;
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showApplied, setShowApplied] = useState(false);
@@ -128,19 +73,7 @@ export function MigrationsPanel() {
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['admin-migrations-status'],
-    queryFn: async () => {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error('Sign in required');
-      const res = await fetch(`${BASE}/api/admin/migrations/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Migrations probe failed: ${res.status} ${body}`);
-      }
-      return (await res.json()) as MigrationsResponse;
-    },
+    queryFn: (): Promise<MigrationsResponse> => listMigrationStatus(),
   });
 
   const copySql = async (filename: string, sql: string) => {
@@ -380,30 +313,11 @@ export function MigrationsPanel() {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        toast.error('Not signed in.');
-        return;
-      }
-      const res = await fetch(`${BASE}/api/admin/migrations/apply-history/import`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ history: historyObj, mode: 'fill_gaps' }),
-      });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        toast.error(`Import failed (${res.status}): ${detail.slice(0, 200)}`);
-        return;
-      }
-      const out = await res.json();
-      const added = (out.added ?? []).length;
-      const skipExist = (out.skipped_existing ?? []).length;
-      const skipUnk = (out.skipped_unknown ?? []).length;
-      const skipBad = (out.skipped_invalid ?? []).length;
+      const out = await importApplyHistory({ history: historyObj }, 'fill_gaps', actorLabel, user?.id ?? null);
+      const added = out.added.length;
+      const skipExist = out.skipped_existing.length;
+      const skipUnk = out.skipped_unknown.length;
+      const skipBad = out.skipped_invalid.length;
       const parts = [
         `${added} added`,
         skipExist > 0 ? `${skipExist} skipped (already recorded)` : null,
@@ -462,21 +376,7 @@ export function MigrationsPanel() {
     if (note === null) return; // user cancelled
     try {
       setBusy(filename);
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error('Sign in required');
-      const res = await fetch(
-        `${BASE}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ note: note || null }),
-        },
-      );
-      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      await markMigrationApplied(filename, note || null, user?.id ?? null, actorLabel);
       toast.success(`Marked ${filename} as applied.`);
       await refetch();
     } catch (e) {
@@ -489,17 +389,7 @@ export function MigrationsPanel() {
   const unmarkApplied = async (filename: string) => {
     try {
       setBusy(filename);
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error('Sign in required');
-      const res = await fetch(
-        `${BASE}/api/admin/migrations/${encodeURIComponent(filename)}/mark-applied`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      await unmarkMigrationApplied(filename);
       toast.success(`Cleared mark for ${filename}.`);
       await refetch();
     } catch (e) {
@@ -555,11 +445,11 @@ export function MigrationsPanel() {
           </div>
         </div>
 
-        {!backendChecking && !backendReachable ? (
+        {!isAdmin ? (
           <DataState
             unavailable
-            unavailableTitle="Migrations status needs a backend that isn't configured"
-            unavailableDescription="Schema probing (checking which tables/columns actually exist) runs server-side against backend/server.py's /api/admin/migrations/status route — needs VITE_BACKEND_URL set to a reachable, deployed instance."
+            unavailableTitle="Admin required for this tool"
+            unavailableDescription="Marking migrations applied and importing history are restricted to the Admin role — sign in as an Admin to use this panel."
           />
         ) : error ? (
           <DataState error={error} onRetry={() => refetch()} />
@@ -677,10 +567,10 @@ export function MigrationsPanel() {
               )}
               <label
                 className={`inline-flex items-center h-7 px-3 text-xs rounded-md border bg-background hover:bg-muted cursor-pointer ${
-                  importing || !backendReachable ? 'opacity-60 pointer-events-none' : ''
+                  importing || !isAdmin ? 'opacity-60 pointer-events-none' : ''
                 }`}
                 title={
-                  !backendReachable
+                  !isAdmin
                     ? 'Needs a reachable backend to apply the import'
                     : 'Import a previously-exported apply-history JSON. Non-destructive: local entries always win on conflict.'
                 }
@@ -694,7 +584,7 @@ export function MigrationsPanel() {
                   type="file"
                   accept="application/json,.json"
                   className="hidden"
-                  disabled={!backendReachable}
+                  disabled={!isAdmin}
                   data-testid="migrations-import-history-input"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -865,7 +755,7 @@ export function MigrationsPanel() {
                   {f.override_applied ? (
                     <Button
                       size="sm" variant="outline" className="h-7 text-xs"
-                      disabled={busy === f.filename || !backendReachable}
+                      disabled={busy === f.filename || !isAdmin}
                       onClick={() => setUnmarkTarget(f.filename)}
                       data-testid={`migration-unmark-${f.filename}`}
                     >
@@ -878,7 +768,7 @@ export function MigrationsPanel() {
                     f.probed_status !== 'applied' && (
                       <Button
                         size="sm" variant="outline" className="h-7 text-xs"
-                        disabled={busy === f.filename || !backendReachable}
+                        disabled={busy === f.filename || !isAdmin}
                         onClick={() => markApplied(f.filename)}
                         data-testid={`migration-mark-${f.filename}`}
                       >

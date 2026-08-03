@@ -36,7 +36,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 
-import { BASE, usePlantMeterConfig, GridPylonIcon } from '../shared';
+import { usePlantMeterConfig, GridPylonIcon } from '../shared';
 
 export function MeterNameList({
   count, names, accentColor, defaultPrefix, onSave, onRemoveLast,

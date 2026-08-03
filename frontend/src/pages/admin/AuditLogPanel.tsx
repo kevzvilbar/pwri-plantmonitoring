@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DataState } from '@/components/DataState';
-import { Database } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface AuditEntry {
@@ -22,11 +21,6 @@ interface AuditEntry {
 
 type AuditLogResult = {
   entries: AuditEntry[];
-  warning?: string;
-  table_missing?: boolean;
-  /** Which path actually served this data — surfaced in the UI below so a
-   *  backend outage is distinguishable from "genuinely nothing recorded". */
-  source: 'api' | 'supabase';
 };
 
 export function AuditLogPanel() {
@@ -35,33 +29,9 @@ export function AuditLogPanel() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-audit-log', kindFilter],
     queryFn: async (): Promise<AuditLogResult> => {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error('Sign in required');
-
-      const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
-      const qs = kindFilter === 'all' ? '' : `?kind=${kindFilter}`;
-
-      // 1. Try the backend API first — it can enrich results with
-      // table_missing/warning diagnostics a direct table read can't.
-      try {
-        const res = await fetch(`${base}/api/admin/audit-log${qs}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const json = (await res.json()) as {
-            count: number; entries: AuditEntry[]; warning?: string; table_missing?: boolean;
-          };
-          return { ...json, source: 'api' };
-        }
-      } catch {
-        // network/CORS error (e.g. no backend deployed) — fall through
-      }
-
-      // 2. Direct Supabase read of deletion_audit_log — the same table the
-      // backend route reads. RLS (`is_manager_or_admin`) already restricts
-      // SELECT to admins/managers, so this is safe with the browser's anon
-      // key + the signed-in user's JWT — see
+      // Direct read of deletion_audit_log. RLS (`is_manager_or_admin`)
+      // already restricts SELECT to admins/managers, so this is safe with
+      // the browser's anon key + the signed-in user's JWT — see
       // supabase/migrations/20260424_deletion_audit_log.sql.
       let q = supabase
         .from('deletion_audit_log' as any)
@@ -76,11 +46,9 @@ export function AuditLogPanel() {
         // outage. Let this surface as a real error rather than an empty list.
         throw new Error(sbError.message);
       }
-      return { entries: (rows ?? []) as unknown as AuditEntry[], source: 'supabase' };
+      return { entries: (rows ?? []) as unknown as AuditEntry[] };
     },
   });
-
-  const usedFallback = data?.source === 'supabase';
 
   return (
     <div className="space-y-2">
@@ -100,27 +68,6 @@ export function AuditLogPanel() {
           </button>
         ))}
       </div>
-
-      {usedFallback && (
-        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground px-0.5">
-          <Database className="h-3 w-3" />
-          Reading directly from the database — the audit API isn't reachable.
-        </div>
-      )}
-
-      {data?.table_missing && (
-        <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5">
-          <strong>Audit log table not yet created.</strong> Run{' '}
-          <code>supabase/migrations/20260424_deletion_audit_log.sql</code> in your
-          Supabase project (SQL editor) to enable full audit history. Deletions
-          will still execute — they just won't be logged until the migration runs.
-        </Card>
-      )}
-      {data?.warning && !data?.table_missing && (
-        <Card className="p-3 text-xs text-warn border-warn/30 bg-warn/5">
-          Audit log warning: <code>{data.warning}</code>
-        </Card>
-      )}
 
       {(isLoading || (error && !data)) ? (
         <DataState loading={isLoading} error={!data ? error : undefined} onRetry={() => refetch()} />

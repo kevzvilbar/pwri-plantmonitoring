@@ -23,7 +23,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
@@ -35,7 +35,7 @@ import {
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, BASE, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
@@ -263,11 +263,57 @@ export function BlendingForm() {
   }>({
     queryKey: ['blending-today', plantId],
     queryFn: async () => {
-      try {
-        const res = await fetch(`${BASE}/api/blending/volume?days=14&plant_ids=${encodeURIComponent(plantId)}`);
-        if (!res.ok) return { by_well: [] };
-        return res.json();
-      } catch { return { by_well: [] }; }
+      // Ported from the old FastAPI /api/blending/volume route's `by_well`
+      // computation — same 14-day window, same per-well today/previous-day
+      // fields — just read directly from blending_events now.
+      const span = 14;
+      const base = new Date();
+      const today = format(base, 'yyyy-MM-dd');
+      const since = format(subDays(base, span - 1), 'yyyy-MM-dd');
+
+      let q = supabase.from('blending_events' as any).select('*').gte('event_date', since);
+      if (plantId) q = q.eq('plant_id', plantId);
+      const { data: events } = await q;
+
+      const byWell = new Map<string, {
+        well_id: string; volume_m3: number; today_volume_m3: number;
+        previous_volume_m3: number | null; previous_event_date: string | null;
+      }>();
+
+      for (const ev of (events ?? []) as any[]) {
+        const day = String(ev.event_date ?? '').slice(0, 10);
+        const vol = Number(ev.volume_m3) || 0;
+        const wid = ev.well_id || '';
+        if (!wid) continue;
+        if (!byWell.has(wid)) {
+          byWell.set(wid, {
+            well_id: wid, volume_m3: 0, today_volume_m3: 0,
+            previous_volume_m3: null, previous_event_date: null,
+          });
+        }
+        const cur = byWell.get(wid)!;
+        cur.volume_m3 += vol;
+        if (day === today) {
+          cur.today_volume_m3 += vol;
+        } else if (day && day < today) {
+          const prevDay = cur.previous_event_date;
+          if (prevDay === null || day > prevDay) {
+            cur.previous_event_date = day;
+            cur.previous_volume_m3 = vol;
+          }
+        }
+      }
+
+      const byWellList = Array.from(byWell.values())
+        .sort((a, b) => b.volume_m3 - a.volume_m3)
+        .map((w) => ({
+          ...w,
+          volume_m3: Math.round(w.volume_m3 * 100) / 100,
+          today_volume_m3: Math.round(w.today_volume_m3 * 100) / 100,
+          previous_volume_m3: w.previous_volume_m3 !== null ? Math.round(w.previous_volume_m3 * 100) / 100 : null,
+        }));
+
+      return { by_well: byWellList };
     },
     enabled: !!plantId,
     retry: false,

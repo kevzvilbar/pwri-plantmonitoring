@@ -1,4 +1,11 @@
-# PWRI Plant Monitoring — v2 Deployment Guide
+# PWRI Plant Monitoring — Deployment Guide
+
+> **Update (2026-08-03):** the FastAPI backend described in "Step 4 — Deploy
+> Backend" below no longer exists — it was fully retired (see
+> `docs/archive/backend-retired-2026-08-03/RETIRED.md`). This app now runs as
+> **Vercel (frontend) + Supabase (data/auth/Edge Functions) only**, with no
+> server to deploy anywhere. Skip Steps 2–4's backend portions; see
+> "Deploy Frontend" near the bottom instead.
 
 ## What Changed in This Update
 
@@ -25,6 +32,13 @@ previously lived in MongoDB now lives in Supabase:
 - Deleted `backend/nixpacks.toml`
 - No Railway environment variables required.
 
+### ✅ 2026-08-03: the backend itself is gone
+Not just Railway — the whole FastAPI app. The last routes still in live use
+(blending/downtime/alerts reads, the admin plants-cleanup tool, the audit
+log, and the migrations-status tool) were ported to direct, RLS-gated
+Supabase calls. See `docs/archive/backend-retired-2026-08-03/RETIRED.md`
+for the full route-by-route mapping.
+
 ### ✅ New: Data Analysis & Review Page
 A centralised editing and normalization hub for Admin and Data Analyst roles.
 
@@ -39,7 +53,13 @@ frontend/supabase/migrations/20260514_normalization.sql          (if not yet app
 frontend/supabase/migrations/20260515_supabase_only_and_data_analysis.sql   ← NEW
 frontend/supabase/migrations/20260718_pending_review_and_cascade_correction.sql   ← NEW
 frontend/supabase/migrations/20260719_offline_reason_tracking.sql   ← NEW
+supabase/migrations/20260802_migration_state.sql   ← NEW (replaces the backend's local override/history JSON files)
 ```
+
+Once you're signed in as Admin, the **Admin → Migrations** panel in the app
+itself will tell you exactly which of these (and every other file in
+`supabase/migrations/`) are still pending against your specific database —
+you don't have to track this by hand.
 
 The third migration fixes two bugs: it adds the missing `pending_review`
 value to the `norm_status` check constraint (readingGuards.ts saves backward/
@@ -61,69 +81,46 @@ plus `regression_results` and `raw_edit_log` for the new Data Analysis page.
 
 ---
 
-## Step 2 — Update Environment Variables
+## Step 2 — Environment Variables
 
-Remove MongoDB/Railway variables and ensure these are set:
+There's no backend `.env` anymore — only the frontend build needs vars:
 
-### Backend (`.env` or hosting provider)
-```
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...   ← required for admin ops + regression
-CORS_ORIGINS=https://your-frontend.netlify.app,http://localhost:5173
-EMERGENT_LLM_KEY=...               ← optional, enables AI chat
-CRON_SECRET=...                    ← optional, secures /api/cron/* endpoints
-```
-
-**Remove these** (no longer needed):
-```
-MONGO_URL        ← DELETE
-DB_NAME          ← DELETE
-```
-
-### Frontend (Netlify / Vite)
+### Frontend (Vercel / GitHub Pages / Vite)
 ```
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...
-VITE_BACKEND_URL=https://your-backend.fly.dev
+VITE_SUPABASE_PROJECT_ID=your-project-ref
+```
+
+**Remove these** (no longer needed — MongoDB was removed earlier, and the
+backend itself is gone as of 2026-08-03):
+```
+MONGO_URL            ← DELETE
+DB_NAME              ← DELETE
+VITE_BACKEND_URL     ← DELETE
 ```
 
 ---
 
-## Step 3 — Install Dependencies
+## Step 3 — Deploy Frontend
 
-MongoDB packages (`motor`, `pymongo`, `mongomock-motor`) are removed.
-`scipy` is added for regression.
+**Vercel**
+1. Project Settings → General → **Root Directory** → `frontend` (lets Vercel
+   auto-detect Vite and find `dist` without the old `cd frontend` build-script
+   workaround)
+2. Project Settings → Environment Variables → add the three `VITE_*` vars above
+3. `frontend/vite.config.ts`'s `base` and `frontend/src/App.tsx`'s router
+   `basename` are both environment-aware (checked via Vercel's built-in
+   `VERCEL` env var), so the same build works unmodified on GitHub Pages too
+4. `frontend/vercel.json` provides the SPA rewrite React Router needs
 
-```bash
-cd backend
-pip install -r requirements.txt
-# or with uv:
-uv sync
-```
-
----
-
-## Step 4 — Deploy Backend
-
-The backend is now a plain FastAPI app with no external database dependency
-beyond Supabase. You can deploy to any platform:
-
-**Fly.io**
-```bash
-fly launch --name pwri-backend
-fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
-fly deploy
-```
-
-**Render / Railway (still works, just no special config needed)**
-```
-Start command: cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT
-```
+**GitHub Pages** — unchanged, still driven by
+`.github/workflows/jekyll-gh-pages.yml` (the `VITE_BACKEND_URL` secret was
+removed from it in this same pass; nothing depends on it anymore).
 
 ---
 
-## Step 5 — Assign Data Analyst Role
+## Step 4 — Assign Data Analyst Role
 
 Go to **Admin Console → Users**, find the relevant user, and assign the
 `Data Analyst` role. They will then see the **Data Analysis & Review** page

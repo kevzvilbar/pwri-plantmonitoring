@@ -39,8 +39,6 @@ import { format } from 'date-fns';
 // Shared constants, helpers, and PlantMeterConfig types for the plants/ split.
 // Any plants/ sub-file that needs these utilities imports from '../shared'.
 
-export const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
-
 // ─── Chemical master list (mirrors ROTrains.tsx KNOWN_CHEMICALS) ─────────────
 // Managers configure which chemicals are applicable per plant in Plant Configuration.
 // ROTrains → Chemical Dosing hides chemicals not in the enabled list.

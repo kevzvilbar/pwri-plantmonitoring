@@ -8,8 +8,6 @@ import { Waves } from 'lucide-react';
 import { fmtNum } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
-
 type ApiResponse = {
   days: number;
   total_m3: number;
@@ -18,20 +16,9 @@ type ApiResponse = {
   by_well: { well_id: string; well_name: string; plant_name?: string; volume_m3: number }[];
 };
 
-// BUGFIX (2026-07-26): this card only ever read from the backend FastAPI route
-// (/api/blending/volume). That route is known — see the exact same failure
-// mode already fixed in useBlendingWells() (operations/shared.tsx) — to
-// silently return an all-zero/empty shape whenever VITE_BACKEND_URL is unset
-// or misrouted, or the backend's own Supabase client isn't configured
-// (server.py's supa() returns None). Both `!res.ok` and the try/catch here
-// swallowed that into the exact same `empty` object a plant with genuinely
-// zero blending injections would produce — so a backend outage and "nothing
-// logged yet" were indistinguishable, and the card just showed "No blending
-// injections recorded" either way with no way to tell which one it was.
-// Mirrors the same two-source pattern already used for useBlendingWells:
-// try the API, but only trust it if it actually returned non-zero data;
-// otherwise fall through to a direct Supabase read of blending_events
-// (the same table both paths ultimately read/write), computed client-side.
+// This app is Supabase-only (no FastAPI backend). Read blending_events
+// directly — the same table the old backend route and Operations →
+// Blending both ultimately read/write — and compute the rollup client-side.
 type BlendingEventRow = {
   event_date: string | null;
   volume_m3: number | string | null;
@@ -92,26 +79,6 @@ export function BlendingVolumeCard({ plantIds, days = 14 }: Props) {
     queryFn: async () => {
       if (!plantIds.length) return empty;
 
-      // 1. Try the backend API first.
-      try {
-        const qs = new URLSearchParams({
-          plant_ids: plantIds.join(','),
-          days: String(days),
-        });
-        const res = await fetch(`${BASE}/api/blending/volume?${qs}`);
-        if (res.ok) {
-          const json = (await res.json()) as ApiResponse;
-          // Only trust a result that's actually non-empty — total_m3 === 0
-          // is ambiguous between "backend unreachable" and "genuinely no
-          // blending events this window," so don't short-circuit on it.
-          if (json && (json.total_m3 > 0 || (json.by_well?.length ?? 0) > 0)) return json;
-        }
-      } catch {
-        // API unavailable — fall through to Supabase
-      }
-
-      // 2. Direct Supabase read of blending_events — same table the backend
-      // route reads, and the same table Operations → Blending writes to.
       try {
         const since = new Date();
         since.setUTCDate(since.getUTCDate() - (days - 1));

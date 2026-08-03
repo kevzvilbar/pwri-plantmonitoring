@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { usePlants } from '@/hooks/usePlants';
-import { useBackendReachable } from '@/hooks/useBackendReachable';
+import { useAuth } from '@/hooks/useAuth';
+import { cleanupPlants } from '@/lib/adminCleanup';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,7 +32,8 @@ const REASON_TEMPLATES: { label: string; value: string }[] = [
 export function BadImportCleanupCard() {
   const qc = useQueryClient();
   const { data: plants } = usePlants();
-  const { reachable: backendReachable, checking: backendChecking } = useBackendReachable();
+  const { user, profile, isAdmin } = useAuth();
+  const actorLabel = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || null;
 
   // Default-tick the suggested ones if they actually exist in the DB.
   const initialSelection = useMemo<Set<string>>(() => {
@@ -79,38 +80,25 @@ export function BadImportCleanupCard() {
   );
 
   const reasonValid = reason.trim().length >= 5;
-  const canRun = selected.size > 0 && reasonValid && !busy && backendReachable;
+  const canRun = selected.size > 0 && reasonValid && !busy && isAdmin;
 
   const runCleanup = async () => {
     if (!canRun) return;
     setBusy(true);
     setLastResult(null);
     try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error('Sign in as Admin first.');
-      const base = (import.meta.env.VITE_BACKEND_URL as string) || '';
-      const res = await fetch(`${base}/api/admin/plants/cleanup`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ names: Array.from(selected), reason: reason.trim() }),
+      if (!user?.id) throw new Error('Sign in as Admin first.');
+      const json = await cleanupPlants({
+        names: Array.from(selected),
+        reason: reason.trim(),
+        actorUserId: user.id,
+        actorLabel,
       });
-      const json = await res.json();
-      if (!res.ok) {
-        const msg =
-          typeof json?.detail === 'string' ? json.detail
-          : typeof json?.detail === 'object' ? JSON.stringify(json.detail)
-          : `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
-      const removed = (json.processed ?? []).length;
-      const skipped = (json.not_found ?? []).length;
+      const removed = json.processed.length;
+      const skipped = json.not_found.length;
       setLastResult({
-        processed: json.processed ?? [],
-        not_found: json.not_found ?? [],
+        processed: json.processed,
+        not_found: json.not_found,
       });
       toast.success(
         `Cleanup complete — ${removed} plant${removed === 1 ? '' : 's'} removed${
@@ -152,11 +140,11 @@ export function BadImportCleanupCard() {
             </p>
           </div>
 
-          {!backendChecking && !backendReachable && (
+          {!isAdmin && (
             <DataState
               unavailable
-              unavailableTitle="Backend required for this tool"
-              unavailableDescription="This hard-deletes across many tables using elevated database access that can only run on a server. It isn't deployed, so cleanup is disabled until it is — nothing below will run."
+              unavailableTitle="Admin required for this tool"
+              unavailableDescription="This hard-deletes across many tables. It's restricted to the Admin role — nothing below will run for other roles."
             />
           )}
 
@@ -178,7 +166,7 @@ export function BadImportCleanupCard() {
                 <Checkbox
                   checked={selected.has(p.name)}
                   onCheckedChange={() => toggle(p.name)}
-                  disabled={!backendReachable}
+                  disabled={!isAdmin}
                   data-testid={`cleanup-checkbox-${p.name}`}
                 />
                 <span className="flex-1 truncate">{p.name}</span>
@@ -216,7 +204,7 @@ export function BadImportCleanupCard() {
                     key={t.label}
                     type="button"
                     onClick={() => setReason(t.value)}
-                    disabled={!backendReachable}
+                    disabled={!isAdmin}
                     className={`text-2xs rounded-full px-2 py-0.5 border transition-colors ${
                       active
                         ? 'bg-warn/20 border-warn/50 text-warn'
@@ -235,7 +223,7 @@ export function BadImportCleanupCard() {
               onChange={(e) => setReason(e.target.value)}
               rows={reasonExpanded ? 4 : 1}
               maxLength={500}
-              disabled={!backendReachable}
+              disabled={!isAdmin}
               placeholder="Pick a template above or type your own…"
               data-testid="cleanup-reason"
               aria-invalid={reason.length > 0 && !reasonValid}

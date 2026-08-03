@@ -59,7 +59,6 @@ import {
 
 // Wells keep a fixed default limit; locators use per-plant configurable limit from Plant Configuration.
 export const WELL_MAX_READINGS_PER_DAY = 3;
-export const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 // ─── Shared Dashboard invalidator ────────────────────────────────────────────
 // Called after every successful save/import in any Operations sub-form so that
@@ -215,37 +214,8 @@ export function useBlendingWells(plantId: string) {
   return useQuery<{ wells: { well_id: string }[] }>({
     queryKey: ['blending-wells', plantId],
     queryFn: async () => {
-      // 1. Try the backend API first — note this endpoint (see server.py's
-      // blending_wells_list) queries the *same* Supabase `blending_wells`
-      // table that Plants → Wells writes to directly; it's not a separate
-      // data store. It exists as an indirect path only.
-      try {
-        const qs = plantId ? `?plant_id=${encodeURIComponent(plantId)}` : '';
-        const res = await fetch(`${BASE}/api/blending/wells${qs}`);
-        if (res.ok) {
-          const json = await res.json();
-          // BUGFIX (2026-07-25): only trust the API's result if it actually
-          // returned wells data. `Array.isArray(json?.wells)` is true even
-          // for an EMPTY array, which is ambiguous — it could mean "this
-          // plant genuinely has zero blending wells", or it could mean the
-          // backend's Supabase client isn't configured/reachable (server.py
-          // returns `{"wells": []}` whenever `supa()` is None, or VITE_BACKEND_URL
-          // is unset/misrouted so this fetch silently hits the wrong host).
-          // That ambiguity is exactly what caused Plants → Wells (direct
-          // Supabase, always correct) and Operations → Blending (this API
-          // path) to disagree: Plants showed a well tagged as blending while
-          // Operations said "No wells tagged" for the same plant. Only
-          // short-circuit on a genuinely non-empty result; fall through to
-          // the direct Supabase read (known-good, same source Plants uses)
-          // whenever the API comes back empty.
-          if (Array.isArray(json?.wells) && json.wells.length > 0) return json;
-        }
-      } catch {
-        // API unavailable — fall through to Supabase
-      }
-
-      // 2. Primary source of truth in practice: read directly from the
-      // blending_wells Supabase table (same source Plants → Wells uses)
+      // Read directly from the blending_wells Supabase table — the same
+      // table Plants → Wells writes to.
       try {
         const { data, error } = await supabase
           .from('blending_wells' as any)

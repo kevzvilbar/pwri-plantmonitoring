@@ -35,7 +35,7 @@ import {
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, BASE, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';

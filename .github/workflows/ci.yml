@@ -5,6 +5,11 @@ name: CI
 # divergence before it became a live bug: two implementations that disagreed
 # on D2 (retract not restoring original values) for weeks before being caught
 # manually.  A green CI badge is required before any branch can merge.
+#
+# NOTE (2026-08-03): the Python backend job that used to run here was
+# removed when backend/ was retired — see
+# docs/archive/backend-retired-2026-08-03/RETIRED.md. This app is now
+# Supabase-only; there's no server left to lint/type-check/test.
 
 on:
   push:
@@ -16,54 +21,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# ── Python backend ─────────────────────────────────────────────────────────────
 jobs:
-  python:
-    name: Python — lint + tests
-    runs-on: ubuntu-latest
-
-    env:
-      # CI stubs — real Supabase creds not needed for the mock-based test suite
-      SUPABASE_URL: https://placeholder.supabase.co
-      SUPABASE_ANON_KEY: placeholder-anon-key
-      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
-      EMERGENT_LLM_KEY: placeholder-llm-key
-      CRON_SECRET: placeholder-cron-secret
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-
-      - name: Lint (flake8)
-        working-directory: backend
-        # E501 (line too long) and W503 (line break before binary op) are
-        # pre-existing style choices — ignore them to avoid noise, fix others.
-        run: flake8 . --max-line-length=120 --extend-ignore=E501,W503
-
-      - name: Type-check (mypy)
-        working-directory: backend
-        # --ignore-missing-imports because several deps lack stubs
-        run: mypy .
-        # Blocking as of 2026-07-29: codebase is mypy-clean (pydantic.mypy
-        # plugin configured in pyproject.toml). Keep it that way rather than
-        # reintroducing `|| true` - the errors this caught weren't stub noise,
-        # they included a live AttributeError bug in production endpoints.
-
-      - name: Run tests
-        working-directory: backend
-        run: pytest -v --tb=short
-
-# ── TypeScript frontend ────────────────────────────────────────────────────────
   typescript:
     name: TypeScript — type-check + build
     runs-on: ubuntu-latest
@@ -104,4 +62,3 @@ jobs:
           # config resolution time.
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
-          REACT_APP_BACKEND_URL: https://placeholder.example.com

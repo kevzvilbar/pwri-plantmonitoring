@@ -1286,20 +1286,93 @@ export default function Dashboard() {
     if (c.current_stock < c.low_stock_threshold) localAlerts.push({ tone: 'warn', text: `Low stock: ${c.chemical_name}` });
   });
 
-  // Unified alerts feed (downtime / blending / recovery) served from backend
-  const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
+  // Unified alerts feed (downtime / blending / recovery). Ported 1:1 from the
+  // old FastAPI /api/alerts/feed route — same three tables, same thresholds,
+  // same severity ranking and cap — just computed client-side now, since all
+  // three tables (downtime_events, blending_events, compliance_snapshots)
+  // allow any signed-in user to SELECT under RLS.
   const { data: feed } = useQuery<{ count: number; alerts: any[] }>({
     queryKey: ['alerts-feed', selectedPlantId],
     queryFn: async () => {
-      try {
-        const qs = new URLSearchParams({ days: '30' });
-        if (selectedPlantId) qs.set('plant_id', selectedPlantId);
-        const res = await fetch(`${BASE}/api/alerts/feed?${qs.toString()}`);
-        if (!res.ok) return { count: 0, alerts: [] };
-        return res.json();
-      } catch {
-        return { count: 0, alerts: [] };
-      }
+      const days = 30;
+      const since = format(subDays(new Date(), Math.max(1, days)), 'yyyy-MM-dd');
+      const alerts: any[] = [];
+
+      // Downtime: prolonged single shutdowns (>=12h) or abnormal clusters
+      // (>=3 events and >=6h total) on the same day.
+      let qDt = supabase.from('downtime_events' as any).select('*').gte('event_date', since);
+      if (selectedPlantId) qDt = qDt.eq('plant_id', selectedPlantId);
+      const { data: dtRows } = await qDt;
+      const eventsByDay = new Map<string, any[]>();
+      (dtRows ?? []).forEach((d: any) => {
+        const day = String(d.event_date ?? '').slice(0, 10);
+        if (!eventsByDay.has(day)) eventsByDay.set(day, []);
+        eventsByDay.get(day)!.push(d);
+      });
+      eventsByDay.forEach((evs, day) => {
+        const total = evs.reduce((s, e) => s + (Number(e.duration_hrs) || 0), 0);
+        const longOnes = evs.filter((e) => (Number(e.duration_hrs) || 0) >= 12);
+        if (longOnes.length) {
+          alerts.push({
+            kind: 'downtime', severity: 'high', date: day, plant_id: longOnes[0].plant_id,
+            title: `Prolonged shutdown · ${longOnes[0].subsystem}`,
+            detail: `${longOnes[0].duration_hrs}h`, count: longOnes.length,
+          });
+        } else if (evs.length >= 3 && total >= 6) {
+          alerts.push({
+            kind: 'downtime', severity: 'medium', date: day, plant_id: evs[0].plant_id,
+            title: `Abnormal downtime · ${evs.length} events / ${total.toFixed(1)}h`,
+            detail: 'Multiple short shutdowns.', count: evs.length,
+          });
+        }
+      });
+
+      // Blending: most recent injections, informational only.
+      let qBe = supabase.from('blending_events' as any).select('*')
+        .gte('event_date', since).order('event_date', { ascending: false }).limit(50);
+      if (selectedPlantId) qBe = qBe.eq('plant_id', selectedPlantId);
+      const { data: beRows } = await qBe;
+      (beRows ?? []).forEach((d: any) => {
+        alerts.push({
+          kind: 'blending', severity: 'info',
+          date: String(d.event_date ?? '').slice(0, 10), plant_id: d.plant_id,
+          title: `Blending · ${d.well_name}`,
+          detail: `Injected ${d.volume_m3} m³ into product water.`,
+        });
+      });
+
+      // Recovery: most recent compliance snapshot per plant, flagged if it
+      // carries a recovery_pct_under violation.
+      let qSnap = supabase.from('compliance_snapshots' as any).select('*')
+        .order('evaluated_at', { ascending: false }).limit(20);
+      if (selectedPlantId) qSnap = qSnap.eq('plant_id', selectedPlantId);
+      const { data: snapRows } = await qSnap;
+      const seen = new Set<string>();
+      (snapRows ?? []).forEach((s: any) => {
+        const pid = s.plant_id ?? '';
+        if (seen.has(pid)) return;
+        seen.add(pid);
+        for (const v of s.violations ?? []) {
+          if (v.code === 'recovery_pct_under') {
+            alerts.push({
+              kind: 'recovery', severity: v.severity ?? 'medium',
+              date: String(s.evaluated_at ?? '').slice(0, 10), plant_id: pid,
+              title: 'Recovery below threshold',
+              detail: `Recovery ${v.value}% vs. min ${v.threshold}%`,
+            });
+            break;
+          }
+        }
+      });
+
+      const sevRank: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
+      alerts.sort((a, b) => {
+        const r = (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9);
+        if (r !== 0) return r;
+        return Number(String(b.date ?? '').replace(/-/g, '') || 0) - Number(String(a.date ?? '').replace(/-/g, '') || 0);
+      });
+      const capped = alerts.slice(0, 80);
+      return { count: capped.length, alerts: capped };
     },
     retry: false,
     staleTime: 0,

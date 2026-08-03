@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
 export default defineConfig(({ mode }) => ({
-  base: '/pwri-plantmonitoring/',
+  base: process.env.VERCEL ? '/' : '/pwri-plantmonitoring/',
   envPrefix: ["VITE_"],
   server: {
     host: "0.0.0.0",

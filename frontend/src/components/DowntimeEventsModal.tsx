@@ -10,18 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { DataState } from '@/components/DataState';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays } from 'date-fns';
-import { Timer, AlertTriangle, Filter, Database } from 'lucide-react';
+import { Timer, AlertTriangle, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type DowntimeEvent = {
   event_date: string;
   subsystem: string;
   duration_hrs: number;
-  // The FastAPI route used to parse these out of free-text remarks. The
-  // downtime_events table (supabase/migrations/20260515_...sql) only stores
-  // `description` — no separate cause/raw_text/op_hrs/shutdown_hrs — so the
-  // Supabase-direct fallback below leaves these null/absent rather than
-  // faking a parse the client can't actually do.
+  // The downtime_events table (supabase/migrations/20260515_...sql) only
+  // stores `description` — no separate cause/raw_text/op_hrs/shutdown_hrs —
+  // so these are left null/absent rather than faking a parse we can't do
+  // client-side.
   cause?: string;
   raw_text?: string;
   op_hrs?: number | null;
@@ -34,12 +33,7 @@ type DowntimeResponse = {
   total_duration_hrs: number;
   by_subsystem: { subsystem: string; hours: number }[];
   events: DowntimeEvent[];
-  /** Which path served this — surfaced below so a backend outage reads
-   *  differently from "nothing recorded". */
-  source: 'api' | 'supabase';
 };
-
-const BASE = (import.meta.env.VITE_BACKEND_URL as string) || '';
 
 function rollup(events: DowntimeEvent[]): { subsystem: string; hours: number }[] {
   const bySub = new Map<string, number>();
@@ -68,23 +62,8 @@ export function DowntimeEventsModal({
     queryKey: ['downtime-events', plantId, from, to],
     enabled: open,
     queryFn: async () => {
-      const qs = new URLSearchParams({ date_from: from, date_to: to, limit: '2000' });
-      if (plantId) qs.set('plant_id', plantId);
-
-      // 1. Try the backend API first — it parses cause/raw_text/op_hrs out
-      // of free-text daily remarks, which a direct table read can't do.
-      try {
-        const res = await fetch(`${BASE}/api/downtime/events?${qs.toString()}`);
-        if (res.ok) {
-          const json = await res.json();
-          return { ...json, source: 'api' as const };
-        }
-      } catch {
-        // network/CORS error (e.g. no backend deployed) — fall through
-      }
-
-      // 2. Direct read of downtime_events — same underlying data, RLS
-      // (`auth_read_downtime`) allows any signed-in user to read it. See
+      // Direct read of downtime_events — RLS (`auth_read_downtime`) allows
+      // any signed-in user to read it. See
       // supabase/migrations/20260515_supabase_only_and_data_analysis.sql.
       let q = supabase
         .from('downtime_events' as any)
@@ -110,13 +89,10 @@ export function DowntimeEventsModal({
         total_duration_hrs: Math.round(events.reduce((s, e) => s + e.duration_hrs, 0) * 10) / 10,
         by_subsystem: rollup(events),
         events,
-        source: 'supabase' as const,
       };
     },
     retry: false,
   });
-
-  const usedFallback = data?.source === 'supabase';
 
   const filtered = useMemo(() => {
     const list = data?.events ?? [];
@@ -150,14 +126,6 @@ export function DowntimeEventsModal({
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         </div>
-
-        {usedFallback && (
-          <div className="flex items-center gap-1.5 text-2xs text-muted-foreground px-0.5">
-            <Database className="h-3 w-3" />
-            Reading directly from the database — the downtime API isn't reachable
-            (cause/remarks text won't be parsed, but hours and dates are accurate).
-          </div>
-        )}
 
         {/* By-subsystem chips */}
         {subs.length > 0 && (
