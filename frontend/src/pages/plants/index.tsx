@@ -683,6 +683,10 @@ function PlantDetail({ plantId }: { plantId: string }) {
               </Button>
             )}
             {isManager && (
+              // text-[0px] here isn't a body/label text size (not part of the
+              // text-3xs/2xs type scale) — it's a mobile-collapse trick that
+              // visually hides the button label below `sm:`, replaced by
+              // sm:text-xs above that breakpoint. Icon stays visible either way.
               <div className="flex items-center justify-center [&>button]:bg-white/15 [&>button]:hover:bg-white/25 [&>button]:text-white [&>button]:border [&>button]:border-white/30 [&>button]:rounded-lg [&_svg]:text-white [&>button]:h-8 [&>button]:w-8 [&>button]:p-0 [&>button]:inline-flex [&>button]:items-center [&>button]:justify-center [&>button]:text-[0px] [&>button]:sm:w-auto [&>button]:sm:px-3 [&>button]:sm:text-xs [&>button]:sm:gap-1.5">
                 <DeleteEntityMenu
                   kind="plant" id={plant.id} label={plant.name}

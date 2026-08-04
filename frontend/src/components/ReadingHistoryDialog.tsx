@@ -960,7 +960,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       >
                         {isToggling
                           ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          : isMeterReplacement ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                          : isMeterReplacement ? <span className="text-3xs font-bold leading-none">✓</span> : null
                         }
                       </button>
                     </td>
@@ -1031,7 +1031,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             <span className="flex items-center gap-1.5">
                               {dateStr}
                               {isRepl && (
-                                <span className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30' : 'text-orange-600 bg-orange-100 dark:bg-orange-900/30'}`}>
+                                <span className={`text-3xs font-semibold uppercase tracking-wide px-1 py-0.5 rounded leading-none ${isSolar ? 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30' : 'text-orange-600 bg-orange-100 dark:bg-orange-900/30'}`}>
                                   repl.
                                 </span>
                               )}
@@ -1053,7 +1053,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             }
                           </td>
                           {/* × multiplier */}
-                          <td className="px-2 py-1.5 text-center font-mono-num text-slate-500 text-[10px]">
+                          <td className="px-2 py-1.5 text-center font-mono-num text-slate-500 text-2xs">
                             {mMult !== 1 ? `×${mMult}` : '×1'}
                           </td>
                           {/* Effective kWh */}
@@ -1077,7 +1077,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               ].join(' ')}
                             >
                               {(isTogglingGrid || isTogglingSolar) ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                : isRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null}
+                                : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
                             </button>
                           </td>
                           {canEditDelete && (
@@ -1123,12 +1123,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             <span className="flex items-center gap-1.5">
                               {dateStr}
                               {isGridRepl && (
-                                <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
+                                <span className="text-3xs font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
                                   grid repl.
                                 </span>
                               )}
                               {isSolarRepl && (
-                                <span className="text-[9px] font-semibold uppercase tracking-wide text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-1 py-0.5 rounded leading-none">
+                                <span className="text-3xs font-semibold uppercase tracking-wide text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-1 py-0.5 rounded leading-none">
                                   solar repl.
                                 </span>
                               )}
@@ -1168,7 +1168,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                 }
                               </td>
                               {/* × multiplier */}
-                              <td className="px-2 py-1 text-center font-mono-num text-slate-500 text-[10px]">
+                              <td className="px-2 py-1 text-center font-mono-num text-slate-500 text-2xs">
                                 {mMult !== 1 ? `×${mMult}` : '×1'}
                               </td>
                               {/* Effective kWh */}
@@ -1196,7 +1196,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                   >
                                     {isTogglingGrid
                                       ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                      : isGridRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                                      : isGridRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
                                     }
                                   </button>
                                 )}
@@ -1252,7 +1252,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               >
                                 {isTogglingSolar
                                   ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                  : isSolarRepl ? <span className="text-[9px] font-bold leading-none">✓</span> : null
+                                  : isSolarRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null
                                 }
                               </button>
                             </td>
@@ -1287,7 +1287,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <span className="flex items-center gap-1.5">
                           {dateStr}
                           {isMeterReplacement && (
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
+                            <span className="text-3xs font-semibold uppercase tracking-wide text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded leading-none">
                               repl.
                             </span>
                           )}
@@ -1392,7 +1392,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           )}
         </div>
 
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {days === 'custom'
             ? `Showing ${appliedFrom} → ${appliedTo}`
             : `Showing up to ${days} days of history`

@@ -117,6 +117,9 @@ export function OdometerRollerInput({
   const theme = ODO_THEME[alertState];
 
   // ── Cell sizing — taller cells give a larger swipe/tap surface ────────────
+  // fontSize below is intentionally NOT part of the text-3xs/2xs type scale
+  // (tailwind.config.ts) — it's sized to fill a specific pixel-dimensioned
+  // roller cell (cellW/cellH above), not to match a body/label text size.
   const cellW    = wholeLen === 8 ? 'w-[32px]' : 'w-[38px]';
   const cellH    = 'h-[56px]';
   const fontSize = wholeLen === 8 ? 'text-[17px]' : 'text-[19px]';

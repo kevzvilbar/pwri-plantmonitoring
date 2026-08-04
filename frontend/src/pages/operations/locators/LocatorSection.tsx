@@ -946,7 +946,7 @@ function LocatorRow({
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
-            <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+            <span className="text-3xs font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
               ~ Derived
             </span>
           </div>
@@ -1101,7 +1101,7 @@ function LocatorRow({
       )}
       {/* Item 9: locked badge — reading approved by supervisor, cannot be edited */}
       {isLocked && lastToday && !editingId && (
-        <span className="h-10 px-2 flex items-center text-[10px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg gap-1 shrink-0">
+        <span className="h-10 px-2 flex items-center text-2xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg gap-1 shrink-0">
           🔒 Locked
         </span>
       )}
@@ -1147,7 +1147,7 @@ function LocatorRow({
             <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off-site</StatusPill>
           )}
           {editingId && (
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded">Editing</span>
+            <span className="text-2xs font-semibold uppercase tracking-widest text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded">Editing</span>
           )}
           {todayCount === 0 && !editingId && (
             gapReason ? (
@@ -1155,7 +1155,7 @@ function LocatorRow({
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
                 title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
                 data-testid={`locator-gap-reason-badge-${locator.id}`}
               >
                 <MessageCircleOff className="h-2.5 w-2.5" />
@@ -1206,7 +1206,7 @@ function LocatorRow({
       {/* Row 2: input mode (read-only — set in Plant config > Locators by a Manager/Admin) + status */}
       <div className="flex items-center gap-3">
         <div
-          className="flex items-center rounded-lg border border-border overflow-hidden text-[10px] font-semibold shrink-0 px-2.5 py-1.5 bg-teal-700 text-white"
+          className="flex items-center rounded-lg border border-border overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-1.5 bg-teal-700 text-white"
           title={locInputMode === 'raw'
             ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
             : 'Daily m³ entered directly. Set in Plant config > Locators.'}
@@ -1445,7 +1445,7 @@ function SharedPowerMeterRow({
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground tracking-tight truncate">{groupName}</span>
-          <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-200/70 dark:bg-amber-800/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
+          <span className="text-3xs font-bold uppercase tracking-widest bg-amber-200/70 dark:bg-amber-800/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
             Shared Meter
           </span>
         </div>

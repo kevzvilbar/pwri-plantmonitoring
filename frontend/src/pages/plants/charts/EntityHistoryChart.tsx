@@ -287,7 +287,7 @@ export function EntityHistoryChart({
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
                   range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >{r === 'all' ? 'All' : `${r}d`}</button>
@@ -309,18 +309,18 @@ export function EntityHistoryChart({
       {aggregated.length > 0 && (
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Readings</div>
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Readings</div>
             <div className="font-mono font-semibold text-base">{aggregated.length}</div>
           </div>
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Total</div>
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Total</div>
             <div className="font-mono font-semibold text-base">{fmtNum(totalConsumption)}</div>
-            <div className="text-muted-foreground text-[9px]">m³</div>
+            <div className="text-muted-foreground text-3xs">m³</div>
           </div>
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Avg/day</div>
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide">Avg/day</div>
             <div className="font-mono font-semibold text-base">{fmtNum(avgConsumption)}</div>
-            <div className="text-muted-foreground text-[9px]">m³</div>
+            <div className="text-muted-foreground text-3xs">m³</div>
           </div>
         </div>
       )}
@@ -331,16 +331,16 @@ export function EntityHistoryChart({
       {hasSiblings && aggregated.length > 0 && (
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="bg-muted/40 rounded-lg p-2 text-center">
-            <div className="text-muted-foreground text-[10px] uppercase tracking-wide">
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide">
               Locators Total {siblingsLoading && <Loader2 className="inline h-2.5 w-2.5 animate-spin ml-0.5" />}
             </div>
             <div className="font-mono font-semibold text-base" style={{ color: C_CONSUMPTION }}>
               {fmtNum(totalSiblingConsumption)}
             </div>
-            <div className="text-muted-foreground text-[9px]">m³ · {siblingLocators!.length} locator{siblingLocators!.length !== 1 ? 's' : ''}</div>
+            <div className="text-muted-foreground text-3xs">m³ · {siblingLocators!.length} locator{siblingLocators!.length !== 1 ? 's' : ''}</div>
           </div>
           <div className={`rounded-lg p-2 text-center bg-muted/40`}>
-            <div className="text-muted-foreground text-[10px] uppercase tracking-wide flex items-center justify-center gap-1">
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide flex items-center justify-center gap-1">
               <Activity className="h-2.5 w-2.5 opacity-60" /> NRW
             </div>
             <div
@@ -350,7 +350,7 @@ export function EntityHistoryChart({
               {periodNrw == null ? '—' : periodNrw}
               <span className="text-2xs font-sans text-muted-foreground ml-0.5">%</span>
             </div>
-            <div className="text-muted-foreground text-[9px]">limit {ALERTS.nrw_green_max}%</div>
+            <div className="text-muted-foreground text-3xs">limit {ALERTS.nrw_green_max}%</div>
           </div>
         </div>
       )}
@@ -456,7 +456,7 @@ export function MeterDetailButton({
           {icon && <span className="text-muted-foreground">{icon}</span>}
           <span className="text-sm font-medium truncate">{label}</span>
           {filledCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
+            <span className="text-2xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
               {filledCount} field{filledCount !== 1 ? 's' : ''}
             </span>
           )}
@@ -476,7 +476,7 @@ export function MeterDetailButton({
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               {fields.map((f, i) => (
                 <div key={i} className={f.label === 'Installed' ? 'col-span-2' : ''}>
-                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
+                  <div className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">{f.label}</div>
                   <div className="font-mono-num font-medium">{f.value || '—'}</div>
                 </div>
               ))}

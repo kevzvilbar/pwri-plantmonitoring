@@ -566,7 +566,7 @@ function ProductMeterRow({
           <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
             <Gauge className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="text-sm font-medium truncate">{meter.name}</span>
-            <span className="text-[9px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+            <span className="text-3xs font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
               ~ Mirrored
             </span>
           </div>
