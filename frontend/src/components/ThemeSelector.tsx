@@ -11,10 +11,11 @@
  * sidebar footer, etc.).
  */
 
-import { Palette, Check } from 'lucide-react';
+import { Palette, Check, Moon } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { COLOR_THEMES } from '@/lib/themes';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import {
   Popover,
   PopoverContent,
@@ -23,7 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export function ThemeSelector() {
-  const { colorTheme, setColorTheme } = useAppStore();
+  const { colorTheme, setColorTheme, darkMode, setDarkMode } = useAppStore();
 
   return (
     <Popover>
@@ -96,6 +97,24 @@ export function ThemeSelector() {
               </button>
             );
           })}
+        </div>
+
+        <div className="mt-4 border-t pt-3">
+          <label className="flex items-center justify-between gap-2 text-sm cursor-pointer">
+            <span className="flex items-center gap-2 font-medium text-foreground">
+              <Moon className="h-3.5 w-3.5 text-muted-foreground" />
+              Dark Mode
+            </span>
+            <Switch
+              checked={darkMode}
+              onCheckedChange={setDarkMode}
+              aria-label="Toggle dark mode"
+            />
+          </label>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Newer than the color themes above — most of the app adapts
+            automatically, but a few spots may not have caught up yet.
+          </p>
         </div>
       </PopoverContent>
     </Popover>

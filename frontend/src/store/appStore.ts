@@ -77,6 +77,13 @@ interface AppState {
   // ── Color theme ───────────────────────────────────────────────────
   colorTheme: string;
   setColorTheme: (themeId: string) => void;
+
+  // ── Dark mode ─────────────────────────────────────────────────────
+  // Independent of colorTheme (data-theme picks a light palette; darkMode
+  // toggles Tailwind's .dark class, which the CSS variables in index.css
+  // already have full overrides for — see .dark block there).
+  darkMode: boolean;
+  setDarkMode: (v: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -154,6 +161,10 @@ export const useAppStore = create<AppState>()(
       // ── Color theme ──────────────────────────────────────────────
       colorTheme: DEFAULT_THEME_ID,
       setColorTheme: (themeId) => set({ colorTheme: themeId }),
+
+      // ── Dark mode ────────────────────────────────────────────────
+      darkMode: false,
+      setDarkMode: (v) => set({ darkMode: v }),
     }),
     {
       name: 'pwri-app-state',
@@ -165,6 +176,7 @@ export const useAppStore = create<AppState>()(
         chartTo: s.chartTo,
         snoozeMap: s.snoozeMap,          // persisted so reload doesn't wake alerts early
         colorTheme: s.colorTheme,        // persisted so theme survives page reload
+        darkMode: s.darkMode,            // persisted so it survives page reload
         // plantAlerts intentionally NOT persisted — re-derived on mount from live data
       }),
     },

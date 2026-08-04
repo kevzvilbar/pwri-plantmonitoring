@@ -40,9 +40,10 @@ const RouteFallback = () => (
   </div>
 );
 
-/** Applies data-theme to <html> whenever the persisted preference changes. */
+/** Applies data-theme and .dark to <html> whenever the persisted preferences change. */
 function ThemeEffect() {
   const colorTheme = useAppStore((s) => s.colorTheme);
+  const darkMode = useAppStore((s) => s.darkMode);
   useEffect(() => {
     const root = document.documentElement;
     if (colorTheme && colorTheme !== 'default') {
@@ -51,6 +52,9 @@ function ThemeEffect() {
       root.removeAttribute('data-theme');
     }
   }, [colorTheme]);
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
   return null;
 }
 
