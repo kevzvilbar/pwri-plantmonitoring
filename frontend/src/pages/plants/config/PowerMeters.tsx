@@ -209,7 +209,7 @@ export function GridMeterListRows({
           <div key={i} className="grid grid-cols-[1fr_100px_auto] items-center gap-2 px-3 py-2 border-b border-info last:border-b-0 bg-background">
             <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
-              className="text-sm bg-transparent border-b border-info focus:outline-none w-full" />
+              className="text-sm bg-transparent border-b border-info focus:outline-none focus:ring-1 focus:ring-info rounded-t w-full" />
             {/* Keep multiplier visible while editing name — styled like the readout below */}
             <div className="flex items-center gap-1 justify-self-center bg-slate-900 rounded-md px-2 py-1">
               <span className="text-xs text-slate-500 font-mono">×</span>

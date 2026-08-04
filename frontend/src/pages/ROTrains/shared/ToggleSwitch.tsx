@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 export function ToggleSwitch({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex items-center gap-1.5 focus-visible:outline-none group">
+    <button onClick={onClick} className="flex items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group">
       <div className={cn(
         'relative w-9 h-5 rounded-full transition-colors duration-200',
         active ? 'bg-primary' : 'bg-muted-foreground/30'

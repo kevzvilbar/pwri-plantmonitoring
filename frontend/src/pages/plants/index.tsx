@@ -798,7 +798,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={[
-              'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none min-w-0',
+              'py-1.5 px-1 flex flex-col sm:flex-row items-center justify-center gap-1 text-xs font-medium rounded-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-0',
               tab === t.id
                 ? 'bg-primary text-white shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
