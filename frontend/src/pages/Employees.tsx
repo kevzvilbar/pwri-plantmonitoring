@@ -17,6 +17,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
+import { DataState } from '@/components/DataState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
@@ -1150,7 +1151,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
 
   // ── Reading queries ────────────────────────────────────────────────────────
 
-  const { data: wellReadings = [], isLoading: l1 } = useQuery({
+  const { data: wellReadings = [], isLoading: l1, error: e1, refetch: r1 } = useQuery({
     queryKey: ['kpi-r-wells', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('well_readings')
@@ -1160,7 +1161,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const { data: locReadings = [], isLoading: l2 } = useQuery({
+  const { data: locReadings = [], isLoading: l2, error: e2, refetch: r2 } = useQuery({
     queryKey: ['kpi-r-loc', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('locator_readings')
@@ -1170,7 +1171,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const { data: roReadings = [], isLoading: l3 } = useQuery({
+  const { data: roReadings = [], isLoading: l3, error: e3, refetch: r3 } = useQuery({
     queryKey: ['kpi-r-ro', since, refreshKey],
     queryFn: async () => {
       const { data } = await (supabase as any).from('ro_train_readings')
@@ -1180,7 +1181,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const { data: meterReadings = [], isLoading: l4 } = useQuery({
+  const { data: meterReadings = [], isLoading: l4, error: e4, refetch: r4 } = useQuery({
     queryKey: ['kpi-r-meter', since, refreshKey],
     queryFn: async () => {
       const { data } = await (supabase as any).from('product_meter_readings')
@@ -1190,7 +1191,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const { data: powerReadings = [], isLoading: l5 } = useQuery({
+  const { data: powerReadings = [], isLoading: l5, error: e5, refetch: r5 } = useQuery({
     queryKey: ['kpi-r-power', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('power_readings')
@@ -1201,7 +1202,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     staleTime: 3 * 60_000,
   });
 
-  const { data: chemReadings = [], isLoading: l6 } = useQuery({
+  const { data: chemReadings = [], isLoading: l6, error: e6, refetch: r6 } = useQuery({
     queryKey: ['kpi-r-chem', since, refreshKey],
     queryFn: async () => {
       const { data } = await supabase.from('chemical_dosing_logs')
@@ -1212,6 +1213,8 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
   });
 
   const isLoading = l1 || l2 || l3 || l4 || l5 || l6;
+  const kpiError = e1 || e2 || e3 || e4 || e5 || e6;
+  const retryKpiQueries = () => { r1(); r2(); r3(); r4(); r5(); r6(); };
 
   // ── Matrices ────────────────────────────────────────────────────────────────
   // Built in a single pass over each reading array: `individual` keeps the
@@ -1502,15 +1505,13 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
 
       {/* Matrix table */}
       <Card className="overflow-auto p-0">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-10 gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading compliance data…
-          </div>
-        ) : plantsWithOps.length === 0 ? (
-          <div className="text-center py-10 text-xs text-muted-foreground">
-            No operators assigned to any plant.
-          </div>
-        ) : (
+        <DataState
+          loading={isLoading}
+          error={kpiError}
+          isEmpty={plantsWithOps.length === 0}
+          emptyTitle="No operators assigned to any plant."
+          onRetry={retryKpiQueries}
+        >
           <table className="w-full border-collapse text-xs">
             {/* Column headers */}
             <thead>
@@ -1645,7 +1646,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
               )}
             </tbody>
           </table>
-        )}
+        </DataState>
       </Card>
 
       {/* Summary stats */}

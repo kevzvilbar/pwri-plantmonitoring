@@ -476,7 +476,7 @@ function PendingReviewTab() {
   const { user, roles } = useAuth();
   const actorRole = pickDisplayRole(roles);
   const qc = useQueryClient();
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['data-corrections-pending'],
     queryFn: fetchPending,
     refetchInterval: 60_000,
@@ -660,7 +660,8 @@ function PendingReviewTab() {
     invalidate();
   };
 
-  if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
+  if (isLoading) return <DataState loading />;
+  if (error) return <DataState error={error} onRetry={refetch} />;
 
   return (
     <div className="space-y-3">
@@ -885,7 +886,7 @@ function CorrectionInboxTab() {
   const [plantFilter, setPlantFilter] = useState('all');
   const [tableFilter, setTableFilter] = useState<'all' | SourceTable>('all');
 
-  const { data: rows = [], isLoading, refetch } = useQuery({
+  const { data: rows = [], isLoading, error, refetch } = useQuery({
     queryKey: ['correction-inbox', plantFilter, tableFilter],
     queryFn: async () => {
       const results: FlaggedRow[] = [];
@@ -972,7 +973,8 @@ function CorrectionInboxTab() {
     setBusy(p => ({ ...p, [row.id]: false }));
   };
 
-  if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
+  if (isLoading) return <DataState loading />;
+  if (error) return <DataState error={error} onRetry={refetch} />;
 
   return (
     <div className="space-y-3">
@@ -1053,7 +1055,7 @@ function CorrectionInboxTab() {
 // ── Edit History tab ──────────────────────────────────────────────────────────
 
 function EditHistoryTab() {
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, error, refetch } = useQuery({
     queryKey: ['correction-history'],
     queryFn: async () => {
       const { data } = await (supabase
@@ -1075,14 +1077,16 @@ function EditHistoryTab() {
     return <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium', cfg[action] ?? 'bg-muted text-muted-foreground')}>{action}</span>;
   };
 
-  if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
-
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">Last 200 normalization actions across all tables.</p>
-      {rows.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">No normalization history yet.</Card>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No normalization history yet."
+        onRetry={refetch}
+      >
         <div className="border rounded-lg overflow-hidden text-xs">
           <table className="w-full">
             <thead className="bg-muted/40">
@@ -1107,7 +1111,7 @@ function EditHistoryTab() {
             </tbody>
           </table>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }

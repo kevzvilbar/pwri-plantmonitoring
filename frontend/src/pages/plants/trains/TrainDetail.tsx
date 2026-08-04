@@ -15,6 +15,7 @@ import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
+import { DataState } from '@/components/DataState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,7 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -479,7 +480,7 @@ export function EditTrainDialog({
 export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
-  const { data: rows = [], isLoading } = useQuery<{ date: string; volume: number }[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<{ date: string; volume: number }[]>({
     queryKey: ['train-history', trainId, range],
     queryFn: async () => {
       const days = range === 'all' ? 9999 : parseInt(range);
@@ -548,15 +549,14 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
           </div>
         </div>
       )}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No readings in this period"
+        onRetry={refetch}
+        className="h-36"
+      >
         <div className="h-44 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / rows.length))}>
@@ -568,7 +568,7 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
             </BarChart>
           </ResponsiveContainer>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -598,7 +598,7 @@ export function TrainMetricChart({
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
   const cols = ['reading_datetime', ...metrics.map(m => m.key)].join(',');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['train-metric', trainId, metrics.map(m => m.key).join('-'), range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -710,15 +710,14 @@ export function TrainMetricChart({
           </div>
         );
       })()}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No readings in this period"
+        onRetry={refetch}
+        className="h-36"
+      >
         <div className="h-44 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(14, 380 / rows.length))}>
@@ -734,7 +733,7 @@ export function TrainMetricChart({
             </BarChart>
           </ResponsiveContainer>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -746,7 +745,7 @@ export function TrainMetricChart({
 export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['train-ro-detail', trainId, range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -821,15 +820,14 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
           </Button>
         </div>
       </div>
-      {isLoading ? (
-        <div className="flex items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-36 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No readings in this period"
+        onRetry={refetch}
+        className="h-36"
+      >
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {miniMetrics.map(m => {
             const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
@@ -858,7 +856,7 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
             );
           })}
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -877,7 +875,7 @@ export function PretreatAFMChart({
   const [range, setRange]       = useState<'30' | '90' | '180' | 'all'>('30');
   const [view, setView]         = useState<'pressure' | 'backwash'>('pressure');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['pretreat-afm', trainId, range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -1036,15 +1034,15 @@ export function PretreatAFMChart({
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
-        </div>
-      ) : view === 'pressure' ? (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No pre-treatment readings in this period"
+        onRetry={refetch}
+        className="h-40"
+      >
+        {view === 'pressure' ? (
         <>
           <div className="flex items-center gap-3 text-2xs text-muted-foreground flex-wrap">
             {[
@@ -1104,6 +1102,7 @@ export function PretreatAFMChart({
           </ResponsiveContainer>
         </div>
       )}
+      </DataState>
     </div>
   );
 }
@@ -1114,7 +1113,7 @@ export function PretreatAFMChart({
 export function PretreatBoosterChart({ trainId }: { trainId: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['pretreat-booster', trainId, range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -1210,15 +1209,14 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No pre-treatment readings in this period"
+        onRetry={refetch}
+        className="h-40"
+      >
         <div className="h-44 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
@@ -1249,7 +1247,7 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -1260,7 +1258,7 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
 export function PretreatHPPChart({ trainId }: { trainId: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['pretreat-hpp', trainId, range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -1377,15 +1375,14 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
         </>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No readings in this period"
+        onRetry={refetch}
+        className="h-40"
+      >
         <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
@@ -1407,7 +1404,7 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -1424,7 +1421,7 @@ export function PretreatCFChart({
 }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
 
-  const { data: rows = [], isLoading } = useQuery<any[]>({
+  const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['pretreat-cf', trainId, range],
     queryFn: async () => {
       const days  = range === 'all' ? 9999 : parseInt(range);
@@ -1536,15 +1533,14 @@ export function PretreatCFChart({
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2 text-xs text-muted-foreground">
-          <BarChart2 className="h-8 w-8 opacity-30" /><p>No pre-treatment readings in this period</p>
-        </div>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={rows.length === 0}
+        emptyTitle="No pre-treatment readings in this period"
+        onRetry={refetch}
+        className="h-40"
+      >
         <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 22, left: 0 }}>
@@ -1567,7 +1563,7 @@ export function PretreatCFChart({
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
@@ -1726,7 +1722,7 @@ export function TrainOperatorLogModal({
 
   const queryKey = ['train-operator-log', trainId, dateFrom, untilNextDay];
 
-  const { data: logs = [], isLoading } = useQuery({
+  const { data: logs = [], isLoading, error, refetch } = useQuery({
     queryKey,
     queryFn: async () => {
       try {
@@ -2012,17 +2008,14 @@ export function TrainOperatorLogModal({
 
         {/* ── Log table ── */}
         <div className="flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <Calendar className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm font-medium">No logs found</p>
-              <p className="text-xs mt-0.5">Try expanding the date range.</p>
-            </div>
-          ) : (
+          <DataState
+            loading={isLoading}
+            error={error}
+            isEmpty={logs.length === 0}
+            emptyTitle="No logs found"
+            emptyDescription="Try expanding the date range."
+            onRetry={refetch}
+          >
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 bg-background border-b z-10">
                 <tr className="text-muted-foreground uppercase tracking-wide text-2xs">
@@ -2145,7 +2138,7 @@ export function TrainOperatorLogModal({
                 })}
               </tbody>
             </table>
-          )}
+          </DataState>
         </div>
 
         {/* ── Pagination footer ── */}
