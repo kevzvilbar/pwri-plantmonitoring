@@ -1,0 +1,35 @@
+-- =============================================================================
+-- Migration: hamas_phase8_drop_conflicting_prev_reading_guard
+-- Applied 2026-08-01 during the HAMAS all-zero-history investigation.
+--
+-- fn_sweep_derived_meters_for_date() (see phase6/7/8-sibling-netting above —
+-- all backfilled from live, previously uncommitted) wrote a real
+-- previous_reading (running cumulative) for is_derived locators like HAMAS.
+--
+-- trg_zz_locator_direct_mode_prev_reading (BEFORE INSERT/UPDATE on
+-- locator_readings, fn_locator_direct_mode_prev_reading_guard() — never
+-- itself committed to any migration, only discovered via
+-- pg_get_functiondef) unconditionally forced previous_reading := 0 for any
+-- is_derived or direct-input-mode locator on every write. Because Postgres
+-- fires same-timing triggers in name order, this "zz"-prefixed trigger ran
+-- AFTER trg_locator_readings_set_daily_volume had already computed
+-- daily_volume from the correct previous_reading, then silently clobbered
+-- previous_reading back to 0 anyway — leaving current_reading as a real
+-- cumulative but previous_reading wrong, and daily_volume stale from
+-- whatever it was computed as before the clobber.
+--
+-- trg_locator_readings_delta (fn_sync_locator_reading_chain, AFTER trigger)
+-- would then notice previous_reading didn't match the real chronological
+-- predecessor and issue a corrective UPDATE, which re-entered the same
+-- BEFORE-trigger gauntlet and got clobbered by the guard again — and also
+-- patched the next day's row's previous_reading, cascading corruption
+-- forward every time an adjacent date got (re)swept.
+--
+-- Dropping this guard was the first step; the real fix (making the sweep
+-- itself write direct-mode-consistent values, and fixing the OTHER two
+-- triggers that were also fighting it) landed in phase9/10/11 below, after
+-- this drop alone proved insufficient.
+-- =============================================================================
+
+DROP TRIGGER IF EXISTS trg_zz_locator_direct_mode_prev_reading ON public.locator_readings;
+DROP FUNCTION IF EXISTS public.fn_locator_direct_mode_prev_reading_guard();
