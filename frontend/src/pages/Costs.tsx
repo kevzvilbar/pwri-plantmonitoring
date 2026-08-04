@@ -5,10 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { PLANT_CHEMICALS } from '@/lib/chemicals';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ComputedInput } from '@/components/ComputedInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -614,12 +616,18 @@ export default function Costs() {
 // that file's getPriceListEntry()/syncPriceToPriceList() — and so this page
 // component doesn't export non-component values (breaks fast refresh).
 
+// Prices needs to cover both the closed dosed-chemical set (PLANT_CHEMICALS,
+// canonical in @/lib/chemicals — previously re-hardcoded here independently)
+// and the CIP-only chemicals, which aren't dosed per-train and so aren't in
+// PLANT_CHEMICALS at all (see ROTrains/cip/CIPLog.tsx's built-in CIP list).
+const CIP_ONLY_CHEMICALS = ['Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
+const KNOWN_CHEMICALS = [...PLANT_CHEMICALS.map((c) => c.name), ...CIP_ONLY_CHEMICALS];
+
 function ChemicalPrices() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
   const { selectedPlantId } = useAppStore();
   const canEdit = isManager || isAdmin;
-  const KNOWN = ['Chlorine', 'SMBS', 'Anti Scalant', 'Soda Ash', 'Free Cl Reagent', 'Caustic Soda', 'HCl', 'SLS'];
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
   // ── Add form state ───────────────────────────────────────────────────────────
@@ -827,7 +835,7 @@ function ChemicalPrices() {
                   <SelectContent>
                     {itemCategory === 'chemical'
                       ? <>
-                          {KNOWN.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          {KNOWN_CHEMICALS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                           <SelectItem value="__custom__">+ Custom…</SelectItem>
                         </>
                       : FILTER_ITEMS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)
@@ -1430,7 +1438,7 @@ function Power() {
             </div>
             <div className="flex-1">
               <Label className="text-xs">Total kWh (auto)</Label>
-              <Input value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} readOnly className="bg-muted" />
+              <ComputedInput value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} />
             </div>
           </div>
           {canEdit && (

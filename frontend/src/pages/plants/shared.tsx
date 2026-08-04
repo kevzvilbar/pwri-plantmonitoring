@@ -44,12 +44,9 @@ import { format } from 'date-fns';
 // ROTrains → Chemical Dosing hides chemicals not in the enabled list.
 // CIP-only chemicals (HCl, SLS, Caustic Soda) are intentionally excluded —
 // they are consistent across all plants and managed exclusively in the CIP tab.
-export const PLANT_CHEMICALS = [
-  { name: 'Chlorine',     defaultUnit: 'kg' },
-  { name: 'SMBS',         defaultUnit: 'kg' },
-  { name: 'Anti Scalant', defaultUnit: 'L'  },
-  { name: 'Soda Ash',     defaultUnit: 'kg' },
-];
+// Canonical definition lives in @/lib/chemicals — re-exported here since
+// most callers in this feature area already import from '../shared'.
+export { PLANT_CHEMICALS } from '@/lib/chemicals';
 
 // ─── SummaryCount pill ───────────────────────────────────────────────────────
 // Renders "active/total" — active count in primary color, total in muted.

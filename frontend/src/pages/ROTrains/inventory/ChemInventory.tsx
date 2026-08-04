@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum } from '@/lib/calculations';
 import { ExportButton } from '@/components/ExportButton';
+import { PLANT_CHEMICALS, CHEM_DOSING_COLUMN } from '@/lib/chemicals';
 
 import { AddStockDialog } from './AddStockDialog';
 
@@ -39,11 +40,10 @@ export function ChemInventory() {
         cur.received += +d.quantity || 0;
         map.set(k, cur);
       });
-      const dosingMap: Array<[string, string]> = [['Chlorine', 'kg'], ['SMBS', 'kg'], ['Anti Scalant', 'L'], ['Soda Ash', 'kg']];
-      const dosingKeyMap: Record<string, string> = { 'Chlorine': 'chlorine_kg', 'SMBS': 'smbs_kg', 'Anti Scalant': 'anti_scalant_l', 'Soda Ash': 'soda_ash_kg' };
+      const dosingMap: Array<[string, string]> = PLANT_CHEMICALS.map((c) => [c.name, c.defaultUnit]);
       (dosing ?? []).forEach((row: any) => {
         for (const [name, unit] of dosingMap) {
-          const usedQty = +row[dosingKeyMap[name]] || 0;
+          const usedQty = +row[CHEM_DOSING_COLUMN[name]] || 0;
           if (!usedQty) continue;
           const k = key(row.plant_id, name);
           const cur = map.get(k) ?? { plant_id: row.plant_id, plant_name: plantName.get(row.plant_id) ?? '', chemical_name: name, unit, received: 0, used: 0 };

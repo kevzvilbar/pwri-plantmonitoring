@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { CHEM_DOSING_COLUMN } from '@/lib/chemicals';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
@@ -553,17 +554,8 @@ export async function fetchPlantMetrics(
   };
 }
 
-// Maps a tracked chemical's display name (chemical_inventory.chemical_name,
-// PLANT_CHEMICALS) to its daily-usage column on chemical_dosing_logs.
-// Mirrors the local map in ROTrains/inventory/ChemInventory.tsx — CIP-only
-// chemicals (HCl, SLS, Caustic Soda) aren't dosed per-train and have no
-// column here, so they're simply not projected.
-const CHEM_DOSING_COLUMN: Record<string, string> = {
-  'Chlorine':     'chlorine_kg',
-  'SMBS':         'smbs_kg',
-  'Anti Scalant': 'anti_scalant_l',
-  'Soda Ash':     'soda_ash_kg',
-};
+// CHEM_DOSING_COLUMN (name -> chemical_dosing_logs column) is imported from
+// @/lib/chemicals — the same canonical mapping ChemInventory.tsx uses.
 
 /**
  * Projects days-of-supply remaining for each tracked chemical.

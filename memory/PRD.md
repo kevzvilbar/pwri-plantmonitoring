@@ -1,5 +1,19 @@
 # PWRI Monitoring — Product Requirements (PRD)
 
+> **Update (2026-08-03):** Sections 8 and 10 below (dated iteration 11,
+> 2026-07-21) describe a FastAPI-backend-plus-Emergent-supervisor setup and
+> say Vercel was "abandoned." Both claims are now stale and contradicted by
+> the current code: the FastAPI backend was fully retired on 2026-08-03 (see
+> `docs/archive/backend-retired-2026-08-03/RETIRED.md`) — this app is
+> Supabase-only now — and Vercel deployment is back and documented as a
+> first-class target (`frontend/vercel.json`, `DEPLOYMENT.md`). The Vite
+> base path is **not** a flat `/` as Section 10 states; `vite.config.ts`
+> now reads `base: process.env.VERCEL ? '/' : '/pwri-plantmonitoring/'` —
+> conditional on host, not reverted. Left the iteration log below as-written
+> (it's an accurate record of what iteration 11 did at the time) rather than
+> editing history; treat `DEPLOYMENT.md` as the current source of truth for
+> deployment until this doc gets a fuller pass.
+
 _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, Supabase-only; dead-code cleanup Section 9.3)_
 
 ## 1. Problem Statement (verbatim — consolidated across 6 iterations)
@@ -241,8 +255,14 @@ exact failure mode §4 item 1 was flagging.
 - Frontend: `yarn tsc --noEmit -p tsconfig.app.json` clean.
 
 ## 8. Deployment & Operational Notes
-- Vercel work was explicitly abandoned in iter 4. App is served via
-  Emergent preview + supervisor (FastAPI on :8001, Vite on :3000).
+- **Superseded 2026-08-03** — this bullet described the state through
+  iteration 11 (2026-07-21) and is no longer accurate: ~~Vercel work was
+  explicitly abandoned in iter 4. App is served via Emergent preview +
+  supervisor (FastAPI on :8001, Vite on :3000).~~ There is no backend
+  anymore (retired 2026-08-03; see
+  `docs/archive/backend-retired-2026-08-03/RETIRED.md`) and Vercel
+  deployment is active again — see `DEPLOYMENT.md` for the current
+  Vercel + GitHub Pages story.
 - **Required manual SQL steps** (run in Supabase SQL editor IN ORDER):
   1. `/app/supabase/migrations/20260424_deletion_audit_log.sql`
      (audit log table — iter 5).
