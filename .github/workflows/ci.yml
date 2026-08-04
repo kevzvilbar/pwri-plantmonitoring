@@ -40,6 +40,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Check types.ts is in sync with migrations
+        run: node scripts/check-types-sync.mjs
+        # Static, secret-free check — see the script's own header comment for
+        # what it does and doesn't catch. Runs before tsc so a stale types.ts
+        # is reported as one clear message instead of a wall of confusing
+        # "column does not exist on <72 other tables>" downstream errors.
+
       - name: Type-check (tsc --noEmit)
         working-directory: frontend
         run: npx tsc --noEmit
@@ -48,10 +55,15 @@ jobs:
 
       - name: Lint (ESLint)
         working-directory: frontend
-        run: npm run lint -- --max-warnings=0
-        # --max-warnings=0 means any warning is a failure.  If pre-existing
-        # warnings are too noisy to fix immediately, raise this to a specific
-        # count and chip it down over time rather than using `|| true`.
+        # NOTE (2026-08-04): --max-warnings=0 was failing this step on every
+        # push/PR — 1540 pre-existing @typescript-eslint/no-explicit-any
+        # warnings across the codebase exceed it, unrelated to any specific
+        # change. Per this file's own guidance above ("raise this to a
+        # specific count and chip it down over time"), ratcheted to the
+        # measured baseline so the gate actually blocks *new* warnings
+        # without requiring an emergency mass `any`-cleanup first. Lower
+        # this number as files get cleaned up; it should only ever go down.
+        run: npm run lint -- --max-warnings=1540
 
       - name: Production build
         working-directory: frontend

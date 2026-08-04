@@ -1444,6 +1444,69 @@ export type Database = {
           },
         ]
       }
+      filter_replacements: {
+        Row: {
+          avg_dp_psi: number | null
+          created_at: string
+          filter_housing_type: string
+          id: string
+          plant_id: string
+          quantity_replaced: number
+          recorded_by: string | null
+          remarks: string | null
+          replacement_date: string
+          supplier: string | null
+          total_cost: number | null
+          train_id: string | null
+          unit_price: number
+        }
+        Insert: {
+          avg_dp_psi?: number | null
+          created_at?: string
+          filter_housing_type: string
+          id?: string
+          plant_id: string
+          quantity_replaced: number
+          recorded_by?: string | null
+          remarks?: string | null
+          replacement_date: string
+          supplier?: string | null
+          total_cost?: number | null
+          train_id?: string | null
+          unit_price: number
+        }
+        Update: {
+          avg_dp_psi?: number | null
+          created_at?: string
+          filter_housing_type?: string
+          id?: string
+          plant_id?: string
+          quantity_replaced?: number
+          recorded_by?: string | null
+          remarks?: string | null
+          replacement_date?: string
+          supplier?: string | null
+          total_cost?: number | null
+          train_id?: string | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filter_replacements_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filter_replacements_train_id_fkey"
+            columns: ["train_id"]
+            isOneToOne: false
+            referencedRelation: "ro_trains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filter_unit_prices: {
         Row: {
           created_at: string
@@ -2091,6 +2154,27 @@ export type Database = {
         }
         Relationships: []
       }
+      migration_state: {
+        Row: {
+          apply_history: Json | null
+          filename: string
+          manual_override: Json | null
+          updated_at: string
+        }
+        Insert: {
+          apply_history?: Json | null
+          filename: string
+          manual_override?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          apply_history?: Json | null
+          filename?: string
+          manual_override?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           alert_type: string
@@ -2166,6 +2250,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "operator_switch_log_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opex_budgets: {
+        Row: {
+          budget_month: string
+          chem_budget: number
+          id: string
+          notes: string | null
+          plant_id: string
+          power_budget: number
+          total_budget: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          budget_month: string
+          chem_budget?: number
+          id?: string
+          notes?: string | null
+          plant_id: string
+          power_budget?: number
+          total_budget?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          budget_month?: string
+          chem_budget?: number
+          id?: string
+          notes?: string | null
+          plant_id?: string
+          power_budget?: number
+          total_budget?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opex_budgets_plant_id_fkey"
             columns: ["plant_id"]
             isOneToOne: false
             referencedRelation: "plants"

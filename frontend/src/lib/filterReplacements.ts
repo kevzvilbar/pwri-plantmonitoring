@@ -82,7 +82,14 @@ export async function listFilterReplacements(params: {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((r) => ({
+    ...r,
+    filter_housing_type: r.filter_housing_type as FilterHousingType,
+    // Generated column (quantity_replaced * unit_price, both NOT NULL) —
+    // Supabase types generated columns as nullable regardless, but it can
+    // only actually be null if the row itself doesn't exist.
+    total_cost: r.total_cost ?? 0,
+  }));
 }
 
 /**
