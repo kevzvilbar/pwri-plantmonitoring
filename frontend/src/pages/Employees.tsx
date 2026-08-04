@@ -591,7 +591,7 @@ function Staff() {
     queryFn: async () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
       if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
+      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
       return (data ?? []).flatMap((p: any) =>
         (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
       );
@@ -1926,7 +1926,7 @@ function RegisterInfo() {
     queryFn: async () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
       if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
+      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
       return (data ?? []).flatMap((p: any) =>
         (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
       );
@@ -2023,7 +2023,7 @@ export default function Employees() {
     queryFn: async () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_all_user_roles');
       if (!rpcError && rpcData) return rpcData as { user_id: string; role: string }[];
-      const { data } = await supabase.from('user_profiles').select('id, user_roles(role)');
+      const { data } = await (supabase as any).from('user_profiles').select('id, user_roles(role)');
       return (data ?? []).flatMap((p: any) =>
         (p.user_roles ?? []).map((r: any) => ({ user_id: p.id, role: r.role }))
       );

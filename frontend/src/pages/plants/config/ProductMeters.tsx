@@ -130,10 +130,11 @@ export function AssignLocatorsDialog({
   const { data: locators, isLoading } = useQuery({
     queryKey: ['locators-assign', plantId],
     queryFn: async () => {
-      let { data, error } = await supabase
+      let data: any, error: any;
+      ({ data, error } = await supabase
         .from('locators')
         .select('id, name, status, product_meter_id, is_derived, derived_from_meter_id')
-        .eq('plant_id', plantId).order('name');
+        .eq('plant_id', plantId).order('name'));
       if (error && error.message?.includes('column')) {
         // Mother-meter migration not applied yet on this DB — retry without the new columns.
         ({ data, error } = await supabase
@@ -787,7 +788,8 @@ export function ProductMetersCard({ plant }: { plant: any }) {
   const { data: plantLocators } = useQuery({
     queryKey: ['product-meters-plant-locators', plant.id],
     queryFn: async () => {
-      let { data, error } = await supabase.from('locators').select('id, name, status, product_meter_id, is_derived, default_input_mode').eq('plant_id', plant.id).order('name');
+      let data: any, error: any;
+      ({ data, error } = await supabase.from('locators').select('id, name, status, product_meter_id, is_derived, default_input_mode').eq('plant_id', plant.id).order('name'));
       if (error && error.message?.includes('column')) {
         ({ data, error } = await supabase.from('locators').select('id, name, status, product_meter_id').eq('plant_id', plant.id).order('name'));
         if (!error && data) data = (data as any[]).map((l) => ({ ...l, is_derived: false, default_input_mode: 'raw' }));
