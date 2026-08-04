@@ -19,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
+import { DataState } from '@/components/DataState';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1114,7 +1115,7 @@ function EditHistoryTab() {
 // ── Operator Stats tab (item 7) ───────────────────────────────────────────────
 
 function OperatorStatsTab() {
-  const { data: stats = [], isLoading } = useQuery({
+  const { data: stats = [], isLoading, error, refetch } = useQuery({
     queryKey: ['operator-error-rates'],
     queryFn: async () => {
       const { data } = await (supabase
@@ -1135,14 +1136,16 @@ function OperatorStatsTab() {
     pct >= 20 ? 'bg-destructive/10' :
     pct >= 10 ? 'bg-warn-soft' : '';
 
-  if (isLoading) return <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>;
-
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">Rolling 30-day error rate across locator and well readings. Operators at ≥10% are highlighted.</p>
-      {stats.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">No operator data available yet.</Card>
-      ) : (
+      <DataState
+        loading={isLoading}
+        error={error}
+        isEmpty={stats.length === 0}
+        emptyTitle="No operator data available yet."
+        onRetry={refetch}
+      >
         <div className="border rounded-lg overflow-hidden text-xs">
           <table className="w-full">
             <thead className="bg-muted/40">
@@ -1182,7 +1185,7 @@ function OperatorStatsTab() {
             </tbody>
           </table>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }
