@@ -52,6 +52,7 @@ const C_NRW         = '#eab308';  // yellow-500 — non-revenue water
 const C_RAWWATER    = '#06b6d4';  // cyan-500   — raw (untreated) water
 const C_RECOVERY    = '#fb923c';  // orange-400 — RO recovery rate
 const C_TDS         = '#a78bfa';  // violet-400 — permeate TDS
+const C_GRID_PV     = '#f59e0b';  // amber-400  — grid power / PV ratio
 
 // ─── Modern inline chart legend ──────────────────────────────────────────────
 type LegendShape = 'area' | 'bar' | 'line';
@@ -2769,7 +2770,7 @@ export function TrendChart({
         {replacements.length > 0 && (
           <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsl(var(--border))' }}>
             {replacements.map((name) => (
-              <div key={name} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: '#92400e', marginBottom: 2 }}>
+              <div key={name} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: 'hsl(var(--warn))', marginBottom: 2 }}>
                 <span style={{ fontSize: 12, lineHeight: 1 }}>🔧</span>
                 <span style={{ fontSize: 10, lineHeight: 1.4 }}>
                   <strong>{name} was Replaced</strong>
@@ -2820,11 +2821,11 @@ export function TrendChart({
         minWidth: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.92, backdropFilter: 'blur(4px)',
       }}>
         <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
-        <p style={{ margin: '1px 0', color: '#f59e0b' }}>
+        <p style={{ margin: '1px 0', color: C_GRID_PV }}>
           Grid PV: <strong>{gridPv != null ? `${gridPv} kWh/m³` : '0 kWh/m³'}</strong>
         </p>
         {hasSolar && (
-          <p style={{ margin: '1px 0', color: '#22c55e' }}>
+          <p style={{ margin: '1px 0', color: C_PRODUCTION }}>
             (Grid+Solar) PV: <strong>{totalPv != null ? `${totalPv} kWh/m³` : '—'}</strong>
           </p>
         )}
@@ -2832,10 +2833,10 @@ export function TrendChart({
           <p style={{ margin: '1px 0', color: C_PRODUCTION }}>
             Volume: <span>{row.production > 0 ? row.production.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' m³' : '—'}</span>
           </p>
-          <p style={{ margin: '1px 0', color: '#f59e0b' }}>
+          <p style={{ margin: '1px 0', color: C_GRID_PV }}>
             Grid Power: <span>{row.kwh > 0 ? row.kwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
           </p>
-          <p style={{ margin: '1px 0', color: '#22c55e' }}>
+          <p style={{ margin: '1px 0', color: C_PRODUCTION }}>
             Solar: <span>{row.solarKwh > 0 ? row.solarKwh.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' kWh' : '—'}</span>
           </p>
         </div>
@@ -3962,7 +3963,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis
                 tick={{ fontSize: 10 }}
-                stroke="#f59e0b"
+                stroke={C_GRID_PV}
                 width={44}
                 axisLine={false}
                 tickLine={false}
@@ -3984,7 +3985,7 @@ export function TrendChart({
               <Line
                 type="monotone"
                 dataKey={(d: any) => d.production > 0 ? +(d.kwh / d.production).toFixed(2) : null}
-                stroke="#f59e0b"
+                stroke={C_GRID_PV}
                 strokeWidth={2.5}
                 dot={false}
                 name="Grid PV (kWh/m³)"
@@ -3995,7 +3996,7 @@ export function TrendChart({
                 dataKey={(d: any) => d.production > 0 && (d.kwh + d.solarKwh) > 0
                   ? +((d.kwh + d.solarKwh) / d.production).toFixed(2)
                   : null}
-                stroke="#22c55e"
+                stroke={C_PRODUCTION}
                 strokeWidth={2}
                 strokeDasharray="4 3"
                 dot={false}
@@ -4172,10 +4173,10 @@ export function TrendChart({
                   />
                   <Tooltip content={<PhTooltip />} />
                   {/* ── Green zone ≥80% ── */}
-                  <ReferenceLine y={80} stroke="#10b981" strokeDasharray="4 3" strokeWidth={1}
+                  <ReferenceLine y={80} stroke="hsl(var(--accent))" strokeDasharray="4 3" strokeWidth={1}
                     label={{ value: '80%', position: 'right', fontSize: 9, fill: 'hsl(var(--accent))' }} />
                   {/* ── Amber zone ≥50% ── */}
-                  <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1}
+                  <ReferenceLine y={50} stroke="hsl(var(--warn))" strokeDasharray="4 3" strokeWidth={1}
                     label={{ value: '50%', position: 'right', fontSize: 9, fill: 'hsl(var(--warn))' }} />
                   <Line
                     type="monotone"
@@ -4187,7 +4188,7 @@ export function TrendChart({
                       const fill = dotFill(payload);
                       return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
                     }}
-                    stroke="#10b981"
+                    stroke="hsl(var(--accent))"
                     connectNulls
                   />
                 </ComposedChart>
@@ -4370,8 +4371,8 @@ export function TrendChart({
       {/* ── PV Ratio legend ──────────────────────────────────────────────── */}
       {metric === 'pv' && (
         <ModernChartLegend items={[
-          { color: '#f59e0b', label: 'Grid PV (kWh/m³)',          shape: 'line' },
-          { color: '#22c55e', label: '(Grid+Solar) PV (kWh/m³)',  shape: 'line' },
+          { color: C_GRID_PV,    label: 'Grid PV (kWh/m³)',          shape: 'line' },
+          { color: C_PRODUCTION, label: '(Grid+Solar) PV (kWh/m³)',  shape: 'line' },
         ]} />
       )}
     </>

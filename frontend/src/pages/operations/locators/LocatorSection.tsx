@@ -553,7 +553,7 @@ export function LocatorReadingForm() {
             <Button
               size="sm"
               variant="outline"
-              className="shrink-0 gap-1.5 h-10 border-teal-600/60 text-teal-700 hover:bg-teal-50 hover:border-teal-600 dark:hover:bg-teal-950/30"
+              className="shrink-0 gap-1.5 h-10 border-kpi-locator/60 text-kpi-locator hover:bg-kpi-locator/10 hover:border-kpi-locator"
               onClick={() => setImportOpen(true)}
               data-testid="import-locator-readings-btn"
             >
@@ -569,7 +569,7 @@ export function LocatorReadingForm() {
           {/* Section header */}
           <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MapPin className="h-3.5 w-3.5 text-teal-600" />
+              <MapPin className="h-3.5 w-3.5 text-kpi-locator" />
               <span className="text-xs font-semibold text-foreground/80 tracking-tight">Active Locators</span>
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
@@ -1109,7 +1109,7 @@ function LocatorRow({
       {/* Item 8: correction request — visible for entries 2h–7d old that aren't locked */}
       {lastToday && !editingId && canRequest && (
         <Button variant="ghost" size="sm"
-          className="h-10 px-2.5 rounded-lg shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-xs font-medium gap-1.5"
+          className="h-10 px-2.5 rounded-lg shrink-0 text-warn hover:text-warn hover:bg-warn/10 text-xs font-medium gap-1.5"
           onClick={handleCorrectionRequest}
           title="Entry is older than 2 hours — submit a correction request for supervisor review">
           ✎ Fix
@@ -1207,7 +1207,7 @@ function LocatorRow({
       {/* Row 2: input mode (read-only — set in Plant config > Locators by a Manager/Admin) + status */}
       <div className="flex items-center gap-3">
         <div
-          className="flex items-center rounded-lg border border-border overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-1.5 bg-teal-700 text-white"
+          className="flex items-center rounded-lg border border-border overflow-hidden text-2xs font-semibold shrink-0 px-2.5 py-1.5 bg-kpi-locator text-white"
           title={locInputMode === 'raw'
             ? 'Cumulative meter reading — Δ auto-computed. Set in Plant config > Locators.'
             : 'Daily m³ entered directly. Set in Plant config > Locators.'}
@@ -1264,7 +1264,7 @@ function LocatorRow({
           <div className="flex items-center gap-2">
             <Button
               onClick={save} disabled={saving || !readingChanged || atLimit}
-              className="flex-1 h-11 text-sm bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+              className="flex-1 h-11 text-sm bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
             </Button>
@@ -1275,17 +1275,17 @@ function LocatorRow({
         /* ── Row 3 (desktop or direct-mode): standard Input row ── */
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-500 pointer-events-none" />
+            <Droplet className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-locator pointer-events-none" />
             <Input
               type="number" step="any" inputMode="decimal"
               value={reading} onChange={(e) => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }}
               placeholder={locInputMode === 'direct' ? 'Daily volume (m³)' : 'Meter reading'}
-              className="pl-8 h-10 bg-teal-50/30 dark:bg-teal-950/10 border-teal-200 dark:border-teal-800/50 focus-visible:ring-teal-500/30"
+              className="pl-8 h-10 bg-kpi-locator/5 border-kpi-locator/30 focus-visible:ring-kpi-locator/30"
             />
           </div>
           <Button
             onClick={save} disabled={saving || !readingChanged || atLimit}
-            className="h-10 px-4 text-sm shrink-0 bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white shadow-sm"
+            className="h-10 px-4 text-sm shrink-0 bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
           </Button>
@@ -1481,14 +1481,14 @@ function SharedPowerMeterRow({
           prev: <span className="font-mono-num font-medium text-foreground/80">{previousPower == null ? '—' : fmtNum(previousPower)}</span>
         </span>
         <div className="relative flex-1">
-          <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-500 pointer-events-none" />
+          <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-kpi-meter pointer-events-none" />
           <Input type="number" step="any" inputMode="decimal" value={reading}
             onChange={e => { setReading(e.target.value); setDraftReading({ value: e.target.value }); }} placeholder="Shared power kWh"
-            className="h-10 pl-8 w-full border-amber-200 dark:border-amber-800/50 focus-visible:ring-amber-400/40 bg-white/70 dark:bg-amber-950/30 placeholder:text-muted-foreground/50"
+            className="h-10 pl-8 w-full border-kpi-meter/30 focus-visible:ring-kpi-meter/40 bg-kpi-meter/5 placeholder:text-muted-foreground/50"
             data-testid={`shared-power-input-${primaryWellId}`} />
         </div>
         <Button onClick={save} disabled={saving || !reading}
-          className="h-10 px-4 text-sm shrink-0 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-sm border-0">
+          className="h-10 px-4 text-sm shrink-0 bg-kpi-meter hover:bg-kpi-meter/90 active:bg-kpi-meter/80 text-white shadow-sm border-0">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
         </Button>
       </div>
