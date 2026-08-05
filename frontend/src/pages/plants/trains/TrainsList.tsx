@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ROTrainIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -292,7 +293,8 @@ export function TrainsList({ plantId }: { plantId: string }) {
             {/* ── Train header ── */}
             <div className="p-3 flex justify-between items-start gap-2">
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">
+                <div className="font-medium text-sm flex items-center gap-1.5">
+                  <ROTrainIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   {trainLabel}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
