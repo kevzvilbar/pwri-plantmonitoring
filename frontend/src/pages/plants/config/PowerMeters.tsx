@@ -29,7 +29,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, Minus, Check, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Minus, Check, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -847,7 +848,7 @@ export function PowerMeterChangeDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Wrench className="h-4 w-4 text-primary" /> Change Power Meter
+            <ChangeMeterIcon className="h-4 w-4 text-primary" /> Change Power Meter
           </DialogTitle>
         </DialogHeader>
 
@@ -1207,7 +1208,7 @@ export function PowerMetersCard({ plant }: { plant: any }) {
                   onClick={() => setChangeMeterOpen(true)}
                   className="w-full gap-1.5 h-8 text-xs rounded-lg border-info/70 text-info hover:bg-info-soft hover:border-info/90"
                 >
-                  <Wrench className="h-3.5 w-3.5" />
+                  <ChangeMeterIcon className="h-3.5 w-3.5" />
                   Change Meter
                 </Button>
               </div>

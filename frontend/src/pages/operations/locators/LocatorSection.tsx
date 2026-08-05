@@ -24,7 +24,8 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
+import { DerivedMeterIcon } from '@/components/icons/water-icons';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -946,8 +947,8 @@ function LocatorRow({
         <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
             <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
-            <span className="text-3xs font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
-              ~ Derived
+            <span className="inline-flex items-center gap-1 text-3xs font-bold uppercase tracking-widest bg-warn-soft text-warn px-1.5 py-0.5 rounded-full shrink-0">
+              <DerivedMeterIcon className="h-2.5 w-2.5" /> Derived
             </span>
           </div>
           {isManagerOrAdmin && (
@@ -969,7 +970,7 @@ function LocatorRow({
         )}
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-          <Gauge className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <DerivedMeterIcon className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span>
             No physical meter — volume is auto-computed as mother meter minus other locators.
             {/* FIX (2026-07-26): the residual sweep can only compute a day's

@@ -29,7 +29,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -1042,7 +1043,7 @@ export function ProductMetersCard({ plant }: { plant: any }) {
               >
                 {canEdit && (
                   <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceMeterTarget(m)}>
-                    <Wrench className="h-3.5 w-3.5" /> Replace Meter
+                    <ChangeMeterIcon className="h-3.5 w-3.5" /> Replace Meter
                   </Button>
                 )}
               </MeterDetailButton>
