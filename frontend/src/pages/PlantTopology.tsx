@@ -194,22 +194,36 @@ const NODE_LABELS: Record<NodeType, string> = {
   customNode:  'CUSTOM',
 };
 
+// Values are `hsl(var(--topo-<kind>-<prop>))` refs into index.css, not literal
+// hex, so this object automatically tracks light/dark mode (and any future
+// data-theme) with zero changes here — see index.css's "Plant Topology node
+// colors" sections (:root and .dark) for the actual values.
 const COLORS: Record<NodeType, { bg: string; border: string; text: string; accent: string; lane: string }> = {
-  well:        { bg: '#e0f2fe', border: '#0284c7', text: '#0c4a6e', accent: '#0284c7', lane: '#f0f9ff' },
-  rawMeter:    { bg: '#e0e7ff', border: '#4338ca', text: '#1e1b4b', accent: '#4338ca', lane: '#eef2ff' },
-  pretreat:    { bg: '#dcfce7', border: '#16a34a', text: '#14532d', accent: '#16a34a', lane: '#f0fdf4' },
-  feedMeter:   { bg: '#ccfbf1', border: '#0d9488', text: '#134e4a', accent: '#0d9488', lane: '#f0fdfa' },
-  roTrain:     { bg: '#f3e8ff', border: '#7c3aed', text: '#4c1d95', accent: '#7c3aed', lane: '#faf5ff' },
-  permeate:    { bg: '#cffafe', border: '#0891b2', text: '#164e63', accent: '#0891b2', lane: '#ecfeff' },
-  reject:      { bg: '#fee2e2', border: '#dc2626', text: '#7f1d1d', accent: '#dc2626', lane: '#fef2f2' },
-  bulk:        { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12', accent: '#ea580c', lane: '#fff7ed' },
-  locator:     { bg: '#f1f5f9', border: '#475569', text: '#1e293b', accent: '#475569', lane: '#f8fafc' },
-  solarSource: { bg: '#fefce8', border: '#ca8a04', text: '#713f12', accent: '#ca8a04', lane: '#fefce8' },
-  gridSource:  { bg: '#eef2ff', border: '#4338ca', text: '#1e1b4b', accent: '#4338ca', lane: '#eef2ff' },
-  solarMeter:  { bg: '#fef9c3', border: '#a16207', text: '#713f12', accent: '#a16207', lane: '#fef9c3' },
-  gridMeter:   { bg: '#e0e7ff', border: '#4f46e5', text: '#1e1b4b', accent: '#4f46e5', lane: '#e0e7ff' },
-  customNode:  { bg: '#f1f5f9', border: '#64748b', text: '#334155', accent: '#475569', lane: '#f8fafc' },
+  well:        { bg: 'hsl(var(--topo-well-bg))',        border: 'hsl(var(--topo-well-border))',        text: 'hsl(var(--topo-well-text))',        accent: 'hsl(var(--topo-well-border))',        lane: 'hsl(var(--topo-well-lane))' },
+  rawMeter:    { bg: 'hsl(var(--topo-rawMeter-bg))',    border: 'hsl(var(--topo-rawMeter-border))',    text: 'hsl(var(--topo-rawMeter-text))',    accent: 'hsl(var(--topo-rawMeter-border))',    lane: 'hsl(var(--topo-rawMeter-lane))' },
+  pretreat:    { bg: 'hsl(var(--topo-pretreat-bg))',    border: 'hsl(var(--topo-pretreat-border))',    text: 'hsl(var(--topo-pretreat-text))',    accent: 'hsl(var(--topo-pretreat-border))',    lane: 'hsl(var(--topo-pretreat-lane))' },
+  feedMeter:   { bg: 'hsl(var(--topo-feedMeter-bg))',   border: 'hsl(var(--topo-feedMeter-border))',   text: 'hsl(var(--topo-feedMeter-text))',   accent: 'hsl(var(--topo-feedMeter-border))',   lane: 'hsl(var(--topo-feedMeter-lane))' },
+  roTrain:     { bg: 'hsl(var(--topo-roTrain-bg))',     border: 'hsl(var(--topo-roTrain-border))',     text: 'hsl(var(--topo-roTrain-text))',     accent: 'hsl(var(--topo-roTrain-border))',     lane: 'hsl(var(--topo-roTrain-lane))' },
+  permeate:    { bg: 'hsl(var(--topo-permeate-bg))',    border: 'hsl(var(--topo-permeate-border))',    text: 'hsl(var(--topo-permeate-text))',    accent: 'hsl(var(--topo-permeate-border))',    lane: 'hsl(var(--topo-permeate-lane))' },
+  reject:      { bg: 'hsl(var(--topo-reject-bg))',      border: 'hsl(var(--topo-reject-border))',      text: 'hsl(var(--topo-reject-text))',      accent: 'hsl(var(--topo-reject-border))',      lane: 'hsl(var(--topo-reject-lane))' },
+  bulk:        { bg: 'hsl(var(--topo-bulk-bg))',        border: 'hsl(var(--topo-bulk-border))',        text: 'hsl(var(--topo-bulk-text))',        accent: 'hsl(var(--topo-bulk-border))',        lane: 'hsl(var(--topo-bulk-lane))' },
+  locator:     { bg: 'hsl(var(--topo-locator-bg))',     border: 'hsl(var(--topo-locator-border))',     text: 'hsl(var(--topo-locator-text))',     accent: 'hsl(var(--topo-locator-border))',     lane: 'hsl(var(--topo-locator-lane))' },
+  solarSource: { bg: 'hsl(var(--topo-solarSource-bg))', border: 'hsl(var(--topo-solarSource-border))', text: 'hsl(var(--topo-solarSource-text))', accent: 'hsl(var(--topo-solarSource-border))', lane: 'hsl(var(--topo-solarSource-lane))' },
+  gridSource:  { bg: 'hsl(var(--topo-gridSource-bg))',  border: 'hsl(var(--topo-gridSource-border))',  text: 'hsl(var(--topo-gridSource-text))',  accent: 'hsl(var(--topo-gridSource-border))',  lane: 'hsl(var(--topo-gridSource-lane))' },
+  solarMeter:  { bg: 'hsl(var(--topo-solarMeter-bg))',  border: 'hsl(var(--topo-solarMeter-border))',  text: 'hsl(var(--topo-solarMeter-text))',  accent: 'hsl(var(--topo-solarMeter-border))',  lane: 'hsl(var(--topo-solarMeter-lane))' },
+  gridMeter:   { bg: 'hsl(var(--topo-gridMeter-bg))',   border: 'hsl(var(--topo-gridMeter-border))',   text: 'hsl(var(--topo-gridMeter-text))',   accent: 'hsl(var(--topo-gridMeter-border))',   lane: 'hsl(var(--topo-gridMeter-lane))' },
+  customNode:  { bg: 'hsl(var(--topo-customNode-bg))',  border: 'hsl(var(--topo-customNode-border))',  text: 'hsl(var(--topo-customNode-text))',  accent: 'hsl(var(--topo-customNode-accent))', lane: 'hsl(var(--topo-customNode-lane))' },
 };
+
+// c.border/c.accent are now `hsl(var(--x))` strings, not hex, so the old
+// `c.border + '80'` hex-alpha-suffix trick no longer produces a valid CSS
+// color. This does the equivalent with the CSS Color 4 `hsl(... / alpha)`
+// syntax the rest of the design system already uses (see ThemeSelector.tsx).
+// alpha is 0-1; the three call sites below preserve their original opacity
+// (hex '80' ≈ 0.5, hex 'aa' ≈ 0.67, hex '33' ≈ 0.2).
+function withAlpha(hslColor: string, alpha: number): string {
+  return hslColor.replace(/\)$/, ` / ${alpha})`);
+}
 
 const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['permeate',   'bulk'],
@@ -620,7 +634,7 @@ function NodePalette({ onDragStart, paletteItems, onAddPaletteItem, onRenamePale
           <div
             key={type}
             className="flex items-center gap-1 px-2 py-1 rounded-md border cursor-grab active:cursor-grabbing select-none shrink-0 transition-all hover:shadow-sm hover:-translate-y-0.5"
-            style={{ background: c.bg, borderColor: c.border + '80' }}
+            style={{ background: c.bg, borderColor: withAlpha(c.border, 0.5) }}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
               onDragStart({ nodeType: type, label: NODE_LABELS[type] }, e);
@@ -704,7 +718,7 @@ function CustomNodePaletteSection({
             /* ── Draggable chip ── */
             <div
               className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-md border cursor-grab active:cursor-grabbing select-none transition-all hover:shadow-sm hover:-translate-y-0.5"
-              style={{ background: c.bg, borderColor: c.border + '80' }}
+              style={{ background: c.bg, borderColor: withAlpha(c.border, 0.5) }}
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
                 onDragStart({ nodeType: 'customNode', label: item.label, skipRename: true }, e);
@@ -850,11 +864,11 @@ function DragGhost({ item, x, y, snapping }: DragGhostProps) {
         className="px-3 py-1.5 rounded-lg border-2 text-2xs font-bold font-mono shadow-xl"
         style={{
           background: c.bg,
-          borderColor: snapping ? c.accent : c.border + 'aa',
+          borderColor: snapping ? c.accent : withAlpha(c.border, 0.67),
           color: c.text,
           transform: snapping ? 'scale(1.06)' : 'scale(1)',
           transition: 'transform 0.1s, border-color 0.1s',
-          boxShadow: snapping ? `0 0 0 3px ${c.accent}33, 0 8px 24px #0003` : '0 4px 12px #0002',
+          boxShadow: snapping ? `0 0 0 3px ${withAlpha(c.accent, 0.2)}, 0 8px 24px #0003` : '0 4px 12px #0002',
         }}
       >
         {snapping ? '📌 ' : '✦ '}{NODE_LABELS[item.nodeType]}
@@ -941,7 +955,7 @@ function SidePanel({
             <div
               key={type}
               className="flex items-center justify-between rounded-md px-2 py-1 text-2xs font-mono"
-              style={{ background: COLORS[type].bg, border: `1px solid ${COLORS[type].border}20` }}
+              style={{ background: COLORS[type].bg, border: `1px solid ${withAlpha(COLORS[type].border, 0.125)}` }}
             >
               <span style={{ color: COLORS[type].text }} className="truncate">{NODE_LABELS[type]}</span>
               <span
@@ -1554,7 +1568,7 @@ export default function PlantTopology() {
         {(isPending || (isHov && isClickable)) && (
           <rect x={-4} y={-4} width={NODE_W + 8} height={h + 8} rx={11}
             fill="none"
-            stroke={isPending ? '#f59e0b' : c.accent}
+            stroke={isPending ? 'hsl(var(--warn))' : c.accent}
             strokeWidth={2.5}
             opacity={0.8}
           />
@@ -1566,8 +1580,8 @@ export default function PlantTopology() {
 
         {/* Node body */}
         <rect width={NODE_W} height={h} rx={9}
-          fill={isInactive ? '#f8fafc' : c.bg}
-          stroke={isPending ? '#f59e0b' : c.border}
+          fill={isInactive ? 'hsl(var(--muted))' : c.bg}
+          stroke={isPending ? 'hsl(var(--warn))' : c.border}
           strokeWidth={isPending ? 2 : isHov ? 2 : 1.5}
           opacity={isInactive ? 0.55 : 1}
         />
@@ -1589,7 +1603,7 @@ export default function PlantTopology() {
         {/* Node label */}
         <text x={NODE_W / 2 + 4} y={35}
           textAnchor="middle"
-          fill={isInactive ? '#94a3b8' : c.text}
+          fill={isInactive ? 'hsl(var(--muted-foreground))' : c.text}
           fontSize={11.5} fontFamily="'Inter', system-ui, sans-serif"
           fontWeight={600}
         >
@@ -1600,7 +1614,7 @@ export default function PlantTopology() {
         {hasDetail && (
           <text x={NODE_W / 2 + 4} y={50}
             textAnchor="middle"
-            fill={isInactive ? '#94a3b8' : c.accent}
+            fill={isInactive ? 'hsl(var(--muted-foreground))' : c.accent}
             fontSize={8.5}
             fontFamily="'JetBrains Mono', monospace"
             opacity={0.85}
@@ -1612,11 +1626,11 @@ export default function PlantTopology() {
         {/* Status dot */}
         {node.status && (
           <circle cx={NODE_W - 10} cy={10} r={4}
-            fill={node.status === 'Active' ? '#10b981'
-                  : node.status === 'Running' ? '#10b981'
-                  : node.status === 'Maintenance' ? '#f59e0b'
-                  : '#f87171'}
-            stroke="white" strokeWidth={1.2}
+            fill={node.status === 'Active' ? 'hsl(var(--accent))'
+                  : node.status === 'Running' ? 'hsl(var(--accent))'
+                  : node.status === 'Maintenance' ? 'hsl(var(--warn))'
+                  : 'hsl(var(--danger))'}
+            stroke={c.bg} strokeWidth={1.2}
           />
         )}
 
@@ -1691,7 +1705,7 @@ export default function PlantTopology() {
 
     const x1 = f.x + NODE_W, y1 = f.y + fh / 2;
     const x2 = t.x,          y2 = t.y + th / 2;
-    const color = fromNode ? COLORS[fromNode.type].accent : '#94a3b8';
+    const color = fromNode ? COLORS[fromNode.type].accent : 'hsl(var(--muted-foreground))';
     const isHov = hoveredLink === idx;
     const markerId = `arrow-${idx}`;
 
@@ -1699,7 +1713,7 @@ export default function PlantTopology() {
       <g key={`link-${idx}`}>
         <defs>
           <marker id={markerId} markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-            <path d="M0,0 L0,7 L7,3.5 z" fill={isHov ? color : '#94a3b8'} />
+            <path d="M0,0 L0,7 L7,3.5 z" fill={isHov ? color : 'hsl(var(--muted-foreground))'} />
           </marker>
         </defs>
         {/* Wide invisible hit area */}
@@ -1713,7 +1727,7 @@ export default function PlantTopology() {
         <path
           d={cubicPath(x1, y1, x2, y2)}
           fill="none"
-          stroke={isHov ? color : '#94a3b8'}
+          stroke={isHov ? color : 'hsl(var(--muted-foreground))'}
           strokeWidth={isHov ? 2.5 : link.editable ? 1.5 : 2}
           strokeDasharray={link.editable ? (isHov ? '9,4' : '6,3') : undefined}
           opacity={isHov ? 0.9 : 0.45}
@@ -1911,13 +1925,13 @@ export default function PlantTopology() {
           {/* ── SVG canvas with BOTH scrollbars ────────────────────────────────── */}
           <div
             ref={canvasRef}
-            className={`flex-1 min-h-0 rounded-xl border bg-white shadow-sm transition-colors ${
+            className={`flex-1 min-h-0 rounded-xl border bg-card shadow-sm transition-colors ${
               dragItem && snapTarget ? 'border-primary/60 ring-2 ring-primary/20' : 'border-border'
             }`}
             style={{
               overflow: 'auto',
               scrollbarWidth: 'thin',
-              scrollbarColor: '#cbd5e1 #f1f5f9',
+              scrollbarColor: 'hsl(var(--border)) hsl(var(--muted))',
               cursor: dragItem ? (snapTarget ? 'copy' : 'not-allowed') : undefined,
             }}
             onWheel={(e) => {
@@ -1934,17 +1948,17 @@ export default function PlantTopology() {
             >
               <defs>
                 <marker id="arrow-main" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-                  <path d="M0,0 L0,7 L7,3.5 z" fill="#94a3b8" />
+                  <path d="M0,0 L0,7 L7,3.5 z" fill="hsl(var(--muted-foreground))" />
                 </marker>
                 <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-                  <circle cx="1" cy="1" r="1" fill="#e2e8f0" />
+                  <circle cx="1" cy="1" r="1" fill="hsl(var(--border))" />
                 </pattern>
               </defs>
 
               {/* Zoom transform wrapper */}
               <g transform={`scale(${zoom})`}>
                 {/* Canvas bg */}
-                <rect width={maxX} height={maxY + 24} fill="#ffffff" />
+                <rect width={maxX} height={maxY + 24} fill="hsl(var(--card))" />
                 <rect width={maxX} height={maxY + 24} fill="url(#dot-grid)" />
 
                 {/* Column lane backgrounds — all columns in sequence order */}
@@ -1981,7 +1995,7 @@ export default function PlantTopology() {
                       {/* Visual dotted line */}
                       <line
                         x1={handleX} y1={20} x2={handleX} y2={maxWaterY + 10}
-                        stroke={isActive ? laneColor : '#cbd5e1'}
+                        stroke={isActive ? laneColor : 'hsl(var(--border))'}
                         strokeWidth={isActive ? 2 : 1}
                         strokeDasharray={isActive ? undefined : '3,3'}
                         opacity={isActive ? 0.8 : 0.4}
@@ -2069,16 +2083,16 @@ export default function PlantTopology() {
                 {hasPowerNodes && (
                   <>
                     <line x1={0} y1={powerDividerY} x2={maxX} y2={powerDividerY}
-                      stroke="#cbd5e1" strokeWidth={1} strokeDasharray="6,5" />
-                    <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="#f1f5f9" />
+                      stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="6,5" />
+                    <rect x={10} y={powerDividerY - 22} width={104} height={18} rx={9} fill="hsl(var(--muted))" />
                     <text x={62} y={powerDividerY - 11} textAnchor="middle"
-                      fill="#64748b" fontSize={9}
+                      fill="hsl(var(--muted-foreground))" fontSize={9}
                       fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       POWER SUPPLY
                     </text>
-                    <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="#f0fdf4" />
+                    <rect x={10} y={START_Y - 26} width={88} height={18} rx={9} fill="hsl(var(--accent-soft))" />
                     <text x={54} y={START_Y - 15} textAnchor="middle"
-                      fill="#15803d" fontSize={9}
+                      fill="hsl(var(--accent))" fontSize={9}
                       fontFamily="'JetBrains Mono', monospace" fontWeight={600} letterSpacing={1.2}>
                       WATER FLOW
                     </text>
@@ -2092,7 +2106,7 @@ export default function PlantTopology() {
                   return (
                     <text key={`hdr-${slot.key}`} x={x + NODE_W / 2} y={16}
                       textAnchor="middle"
-                      fill={slot.isCustom ? '#475569' : '#64748b'}
+                      fill="hsl(var(--muted-foreground))"
                       fontSize={8.5}
                       fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
                       {slot.label.toUpperCase()}
@@ -2104,7 +2118,7 @@ export default function PlantTopology() {
                   { x: POWER_COLS.solarMeter,  label: 'SOLAR / GRID METERS' },
                 ].map(({ x, label }) => (
                   <text key={`pwr-${label}`} x={x + NODE_W / 2} y={powerDividerY + 16}
-                    textAnchor="middle" fill="#92400e" fontSize={8}
+                    textAnchor="middle" fill="hsl(var(--warn))" fontSize={8}
                     fontFamily="'JetBrains Mono', monospace" letterSpacing={1.5} fontWeight={700}>
                     {label}
                   </text>

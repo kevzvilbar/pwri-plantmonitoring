@@ -112,6 +112,82 @@
     --chart-5: 351 64% 47%;    /* Rose      — alerts */
     --chart-6: 38  92% 50%;    /* Amber     — meter / cost */
 
+    /* ── Plant Topology node colors ────────────────────────────────
+       Per-node-kind bg/border/text/lane for PlantTopology.tsx's SVG
+       flow diagram. Same hue drives all four per kind, and the .dark
+       overrides below just remap lightness/saturation on that hue —
+       PlantTopology.tsx itself never needs to know which mode is on. */
+    --topo-well-bg:            204 94% 94%;
+    --topo-well-border:        200 98% 39%;
+    --topo-well-text:          202 80% 24%;
+    --topo-well-lane:          204 100% 97%;
+
+    --topo-rawMeter-bg:        226 100% 94%;
+    --topo-rawMeter-border:    245 58% 51%;
+    --topo-rawMeter-text:      244 47% 20%;
+    --topo-rawMeter-lane:      226 100% 97%;
+
+    --topo-pretreat-bg:        141 84% 93%;
+    --topo-pretreat-border:    142 76% 36%;
+    --topo-pretreat-text:      144 61% 20%;
+    --topo-pretreat-lane:      138 76% 97%;
+
+    --topo-feedMeter-bg:       167 85% 89%;
+    --topo-feedMeter-border:   175 84% 32%;
+    --topo-feedMeter-text:     176 61% 19%;
+    --topo-feedMeter-lane:     166 76% 97%;
+
+    --topo-roTrain-bg:         269 100% 95%;
+    --topo-roTrain-border:     262 83% 58%;
+    --topo-roTrain-text:       264 67% 35%;
+    --topo-roTrain-lane:       270 100% 98%;
+
+    --topo-permeate-bg:        185 96% 90%;
+    --topo-permeate-border:    192 91% 36%;
+    --topo-permeate-text:      196 64% 24%;
+    --topo-permeate-lane:      183 100% 96%;
+
+    --topo-reject-bg:          0 93% 94%;
+    --topo-reject-border:      0 72% 51%;
+    --topo-reject-text:        0 63% 31%;
+    --topo-reject-lane:        0 86% 97%;
+
+    --topo-bulk-bg:            33 100% 96%;
+    --topo-bulk-border:        21 90% 48%;
+    --topo-bulk-text:          15 75% 28%;
+    --topo-bulk-lane:          33 100% 96%;
+
+    --topo-locator-bg:         210 40% 96%;
+    --topo-locator-border:     215 19% 35%;
+    --topo-locator-text:       217 33% 17%;
+    --topo-locator-lane:       210 40% 98%;
+
+    --topo-solarSource-bg:     55 92% 95%;
+    --topo-solarSource-border: 41 96% 40%;
+    --topo-solarSource-text:   28 73% 26%;
+    --topo-solarSource-lane:   55 92% 95%;
+
+    --topo-gridSource-bg:      226 100% 97%;
+    --topo-gridSource-border:  245 58% 51%;
+    --topo-gridSource-text:    244 47% 20%;
+    --topo-gridSource-lane:    226 100% 97%;
+
+    --topo-solarMeter-bg:      55 97% 88%;
+    --topo-solarMeter-border:  35 92% 33%;
+    --topo-solarMeter-text:    28 73% 26%;
+    --topo-solarMeter-lane:    55 97% 88%;
+
+    --topo-gridMeter-bg:       226 100% 94%;
+    --topo-gridMeter-border:   243 75% 59%;
+    --topo-gridMeter-text:     244 47% 20%;
+    --topo-gridMeter-lane:     226 100% 94%;
+
+    --topo-customNode-bg:      210 40% 96%;
+    --topo-customNode-border:  215 16% 47%;
+    --topo-customNode-text:    215 25% 27%;
+    --topo-customNode-lane:    210 40% 98%;
+    --topo-customNode-accent:  215 19% 35%;   /* only kind where accent ≠ border */
+
     /* ── Elevation shadows ──────────────────────────────────────── */
     --shadow-card:  0 1px 2px 0 hsl(215 50% 11% / 0.04),
                     0 1px 3px 0 hsl(215 50% 11% / 0.06);
@@ -170,6 +246,85 @@
     --kpi-solar:    22  88% 60%;
     --kpi-grid:     215 12% 55%;
     --kpi-chem:     158 55% 48%;
+
+    /* Plant Topology node colors (dark) — same hue per kind as the
+       light values above, remapped to a dark tinted card + brighter
+       border + light tinted text so the flow diagram isn't the one
+       screen still stuck in light mode. Border/accent lightness is
+       capped at 58% (not just "whatever reads well on the dark bg")
+       because a few of these also sit under white badge text
+       (COLORS[type].accent used as a solid fill) — much past 58%
+       and white-on-fill contrast starts failing. */
+    --topo-well-bg:            200 45% 18%;
+    --topo-well-border:        200 88% 53%;
+    --topo-well-text:          200 35% 88%;
+    --topo-well-lane:          200 40% 12%;
+
+    --topo-rawMeter-bg:        245 43% 18%;
+    --topo-rawMeter-border:    245 48% 58%;
+    --topo-rawMeter-text:      245 28% 88%;
+    --topo-rawMeter-lane:      245 38% 12%;
+
+    --topo-pretreat-bg:        142 45% 18%;
+    --topo-pretreat-border:    142 66% 50%;
+    --topo-pretreat-text:      142 35% 88%;
+    --topo-pretreat-lane:      142 40% 12%;
+
+    --topo-feedMeter-bg:       175 45% 18%;
+    --topo-feedMeter-border:   175 74% 46%;
+    --topo-feedMeter-text:     175 35% 88%;
+    --topo-feedMeter-lane:     175 40% 12%;
+
+    --topo-roTrain-bg:         262 45% 18%;
+    --topo-roTrain-border:     262 73% 58%;
+    --topo-roTrain-text:       262 35% 88%;
+    --topo-roTrain-lane:       262 40% 12%;
+
+    --topo-permeate-bg:        192 45% 18%;
+    --topo-permeate-border:    192 81% 50%;
+    --topo-permeate-text:      192 35% 88%;
+    --topo-permeate-lane:      192 40% 12%;
+
+    --topo-reject-bg:          0 45% 18%;
+    --topo-reject-border:      0 62% 58%;
+    --topo-reject-text:        0 35% 88%;
+    --topo-reject-lane:        0 40% 12%;
+
+    --topo-bulk-bg:            21 45% 18%;
+    --topo-bulk-border:        21 80% 58%;
+    --topo-bulk-text:          21 35% 88%;
+    --topo-bulk-lane:          21 40% 12%;
+
+    --topo-locator-bg:         215 30% 18%;
+    --topo-locator-border:     215 45% 49%;
+    --topo-locator-text:       215 20% 88%;
+    --topo-locator-lane:       215 25% 12%;
+
+    --topo-solarSource-bg:     41 45% 18%;
+    --topo-solarSource-border: 41 86% 54%;
+    --topo-solarSource-text:   41 35% 88%;
+    --topo-solarSource-lane:   41 40% 12%;
+
+    --topo-gridSource-bg:      245 43% 18%;
+    --topo-gridSource-border:  245 48% 58%;
+    --topo-gridSource-text:    245 28% 88%;
+    --topo-gridSource-lane:    245 38% 12%;
+
+    --topo-solarMeter-bg:      35 45% 18%;
+    --topo-solarMeter-border:  35 82% 47%;
+    --topo-solarMeter-text:    35 35% 88%;
+    --topo-solarMeter-lane:    35 40% 12%;
+
+    --topo-gridMeter-bg:       243 45% 18%;
+    --topo-gridMeter-border:   243 65% 58%;
+    --topo-gridMeter-text:     243 35% 88%;
+    --topo-gridMeter-lane:     243 40% 12%;
+
+    --topo-customNode-bg:      215 30% 18%;
+    --topo-customNode-border:  215 45% 58%;
+    --topo-customNode-text:    215 20% 88%;
+    --topo-customNode-lane:    215 25% 12%;
+    --topo-customNode-accent:  215 45% 49%;
   }
 }
 
