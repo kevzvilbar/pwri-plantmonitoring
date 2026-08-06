@@ -34,6 +34,7 @@ import {
   invalidateRODash, invalidateProductMeterDash,
 } from '@/pages/operations/shared';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { canEditEntry, logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -99,6 +100,14 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 }) {
   const isDirectMode = (module === 'locator' || module === 'well') && defaultInputMode === 'direct';
   const qc = useQueryClient();
+  // Permission model: same canEditEntry primitive already used by every other
+  // reading-entry surface (RO logs, CIP, Dosing, Locator inline edit) — was
+  // previously entirely absent here (canEditDelete was hardcoded `true`, see
+  // the comment further down where that's now removed), meaning any signed-in
+  // user could edit or delete any reading in any module through this dialog
+  // regardless of role or who recorded it.
+  const { isAdmin, isManager, isDataAnalyst, user, activeOperator, activeOperatorId } = useAuth();
+  const hasFullAccess = isAdmin || isManager || isDataAnalyst;
   const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -165,7 +174,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'locator') {
         const { data, error } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, recorded_by, created_at')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -177,7 +186,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         // branches above).
         const { data: fallback } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, recorded_by, created_at')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -187,7 +196,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement')
+          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, recorded_by, created_at')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -197,7 +206,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         // is_meter_replacement may not exist yet — avoid the PostgREST schema-cache error)
         const { data: fallback } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime')
+          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, recorded_by, created_at')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -207,7 +216,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'power') {
         const { data, error } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, grid_meter_readings, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement')
+          .select('id, meter_reading_kwh, grid_meter_readings, daily_consumption_kwh, daily_solar_kwh, daily_grid_kwh, solar_meter_reading, reading_datetime, is_meter_replacement, recorded_by, created_at')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -216,7 +225,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         // Fallback: base columns only (optional migration columns missing)
         const { data: fallback } = await supabase
           .from('power_readings')
-          .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime, is_meter_replacement')
+          .select('id, meter_reading_kwh, daily_consumption_kwh, reading_datetime, is_meter_replacement, recorded_by, created_at')
           .eq('plant_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -268,6 +277,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   });
 
   const startEdit = (r: any) => {
+    if (!canEditEntry(r, hasFullAccess, activeOperatorId)) {
+      toast.error('You can only edit your own entries, within 8 hours of submitting them.');
+      return;
+    }
     const dt = r.reading_datetime ?? r.created_at ?? '';
     const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
     if (module === 'well') {
@@ -331,8 +344,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   //
   // The Admin/Data-Analyst-only "Data Corrections" workflow already repairs
   // this via the fn_cascade_reading_correction RPC when it's used — but that
-  // RPC is role-gated and this dialog's inline edit/delete (canEditDelete is
-  // unconditionally true here) never calls it. This mirrors the same forward
+  // RPC is role-gated and this dialog's inline edit/delete (now gated by
+  // canEditEntry per row, same as everywhere else — previously unconditional)
+  // never calls it. This mirrors the same forward
   // walk as a plain client-side resync instead, so it works under whatever
   // role/RLS already permits editing a single row through this dialog.
   const resyncLocatorChain = async (locatorId: string) => {
@@ -448,6 +462,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 
   // Row selection helpers
   const toggleSelect = (id: string) => {
+    const row = rows?.find((r: any) => r.id === id);
+    if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) return;
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -456,17 +472,47 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   };
   const toggleSelectAll = () => {
     if (!rows?.length) return;
+    const editableIds = rows
+      .filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId))
+      .map((r: any) => r.id);
     setSelectedIds(prev =>
-      prev.size === rows.length ? new Set() : new Set(rows.map((r: any) => r.id))
+      prev.size === editableIds.length ? new Set() : new Set(editableIds)
     );
   };
 
   // Bulk delete
+  // Maps the dialog's module prop to the table_name reading_edit_audit_log
+  // actually accepts — see 20260806_reading_audit_log_add_power_blending_well.sql.
+  const auditTableName = (
+    m: HistoryModule,
+  ): 'locator_readings' | 'power_readings' | 'blending_events' | 'well_readings' =>
+    m === 'locator' ? 'locator_readings'
+    : m === 'power' ? 'power_readings'
+    : m === 'blending' ? 'blending_events'
+    : 'well_readings';
+
+  const actorLabel = () =>
+    `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+    || activeOperator?.username || null;
+
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
+    const idsRequested = [...selectedIds];
+    // Defense in depth: the checkboxes that populate selectedIds already only
+    // let you select rows canEditEntry allows, but re-check here too rather
+    // than trust client-side selection state alone for something destructive.
+    const deletable = new Set(
+      (rows ?? [])
+        .filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId))
+        .map((r: any) => r.id),
+    );
+    const ids = idsRequested.filter(id => deletable.has(id));
+    if (ids.length === 0) {
+      toast.error('None of the selected rows are yours to delete, or they\u2019re past the 8-hour edit window.');
+      return;
+    }
     setBulkDeletePending(false);
     setBulkDeleting(true);
-    const ids = [...selectedIds];
     let error: any = null;
     if (module === 'well')
       ({ error } = await supabase.from('well_readings').delete().in('id', ids));
@@ -483,6 +529,17 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     }
     setBulkDeleting(false);
     if (error) { toast.error(friendlyError(error)); return; }
+    const label = actorLabel();
+    for (const id of ids) {
+      await logReadingEdit({
+        table_name: auditTableName(module),
+        record_id: id,
+        plant_id: plantId ?? null,
+        action: 'delete',
+        actor_user_id: user?.id ?? null,
+        actor_label: label,
+      });
+    }
     toast.success(`${ids.length} reading(s) deleted`);
     setSelectedIds(new Set());
     qc.invalidateQueries({ queryKey });
@@ -494,6 +551,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   };
 
   const deleteRow = async (id: string) => {
+    const row = rows?.find((r: any) => r.id === id);
+    if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) {
+      toast.error('You can only delete your own entries, within 8 hours of submitting them.');
+      setPendingDeleteId(null);
+      return;
+    }
     setPendingDeleteId(null);
     setDeletingId(id);
     let error: any = null;
@@ -511,6 +574,14 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     }
     setDeletingId(null);
     if (error) { toast.error(friendlyError(error)); return; }
+    await logReadingEdit({
+      table_name: auditTableName(module),
+      record_id: id,
+      plant_id: plantId ?? null,
+      action: 'delete',
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel(),
+    });
     toast.success('Reading deleted');
     setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     qc.invalidateQueries({ queryKey });
@@ -522,6 +593,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 
   const saveEdit = async () => {
     if (!editRow) return;
+    const originalRow = rows?.find((r: any) => r.id === editRow.id);
+    if (!originalRow || !canEditEntry(originalRow, hasFullAccess, activeOperatorId)) {
+      toast.error('You can only edit your own entries, within 8 hours of submitting them.');
+      setEditRow(null);
+      return;
+    }
     setSaving(true);
     let error: any = null;
     const dtIso = new Date(editRow.datetime).toISOString();
@@ -644,6 +721,26 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     }
     setSaving(false);
     if (error) { toast.error(friendlyError(error)); return; }
+    await logReadingEdit({
+      table_name: auditTableName(module),
+      record_id: editRow.id,
+      plant_id: plantId ?? null,
+      action: 'update',
+      actor_user_id: user?.id ?? null,
+      actor_label: actorLabel(),
+      changes: diffFields(
+        {
+          current_reading: originalRow.current_reading,
+          reading_datetime: originalRow.reading_datetime,
+          is_meter_replacement: !!originalRow.is_meter_replacement,
+        },
+        {
+          current_reading: +editRow.value,
+          reading_datetime: dtIso,
+          is_meter_replacement: !!editRow.isMeterReplacement,
+        },
+      ),
+    });
     toast.success('Reading updated');
     setEditRow(null);
     qc.invalidateQueries({ queryKey });
@@ -662,7 +759,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         : `${getHistGridLabel(meterFilter.idx)} — ${entityName} — History`
       : `Power — ${entityName}`
     : `${entityName} — History`;
-  const canEditDelete = true;
+  // Column exists at all if the current user can edit/delete at least one of
+  // the currently-loaded rows — see rowEditable (computed per-row inside the
+  // rows.map below) for what actually gates each row's buttons/checkbox.
+  const anyEditable = !!rows?.some((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId));
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -812,7 +912,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         )}
 
         {/* Bulk delete toolbar — shown when rows are selected */}
-        {canEditDelete && selectedIds.size > 0 && (
+        {anyEditable && selectedIds.size > 0 && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
             <span className="text-xs font-medium text-destructive flex-1">
               {selectedIds.size} row{selectedIds.size > 1 ? 's' : ''} selected
@@ -857,11 +957,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <table className="w-full text-left">
               <thead className="bg-muted sticky top-0">
                 <tr>
-                  {canEditDelete && (
+                  {anyEditable && (
                     <th className="px-2 py-2 w-8">
                       <input type="checkbox"
                         className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                        checked={!!rows?.length && selectedIds.size === rows.length}
+                        checked={!!rows?.length && selectedIds.size > 0 &&
+                          selectedIds.size === rows.filter((r: any) => canEditEntry(r, hasFullAccess, activeOperatorId)).length}
                         onChange={toggleSelectAll}
                         title="Select all"
                       />
@@ -907,7 +1008,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right text-blue-700 dark:text-blue-400">Power (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
                   </>}
-                  {canEditDelete && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
+                  {anyEditable && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -934,6 +1035,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
                   const isMeterReplacement = !!r.is_meter_replacement;
+                  const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
                   // rows sorted descending → rows[i+1] is the immediately preceding reading in time
                   const predecessor: any = rows[i + 1] ?? null;
 
@@ -973,28 +1075,30 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     const hasSolar = r.solar_meter_reading != null || (r.daily_solar_kwh != null && +r.daily_solar_kwh > 0);
                     // colspan for the date cell: Date + all 6 data columns
                     const dateCols = 7;
-                    const actionsCell = canEditDelete ? (
+                    const actionsCell = anyEditable ? (
                       <td className="px-2 py-1 text-center align-top" rowSpan={resolvedGridCount + (hasSolar ? 1 : 0) + 1}>
-                        <div className="flex items-center justify-center gap-0.5 pt-0.5">
-                          <button
-                            title="Edit"
-                            aria-label="Edit"
-                            disabled={!!editRow || isDeleting}
-                            onClick={() => startEdit(r)}
-                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
-                            title="Delete"
-                            aria-label="Delete"
-                            disabled={!!editRow || isDeleting}
-                            onClick={() => setPendingDeleteId(r.id)}
-                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
-                          >
-                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                          </button>
-                        </div>
+                        {rowEditable && (
+                          <div className="flex items-center justify-center gap-0.5 pt-0.5">
+                            <button
+                              title="Edit"
+                              aria-label="Edit"
+                              disabled={!!editRow || isDeleting}
+                              onClick={() => startEdit(r)}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              title="Delete"
+                              aria-label="Delete"
+                              disabled={!!editRow || isDeleting}
+                              onClick={() => setPendingDeleteId(r.id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                            >
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     ) : null;
 
@@ -1021,10 +1125,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             : 'hover:bg-muted/40',
                           ].join(' ')}
                         >
-                          {canEditDelete && (
+                          {anyEditable && (
                             <td className="px-2 py-1.5 w-8">
-                              <input type="checkbox" className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                                checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                              {rowEditable && (
+                                <input type="checkbox" className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                                  checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                              )}
                             </td>
                           )}
                           <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
@@ -1080,20 +1186,22 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                                 : isRepl ? <span className="text-3xs font-bold leading-none">✓</span> : null}
                             </button>
                           </td>
-                          {canEditDelete && (
+                          {anyEditable && (
                             <td className="px-2 py-1 text-center">
-                              <div className="flex items-center justify-center gap-0.5">
-                                <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
-                                  onClick={() => startEdit(r)}
-                                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                                <button title="Delete" aria-label="Delete" disabled={!!editRow || isDeleting}
-                                  onClick={() => setPendingDeleteId(r.id)}
-                                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
-                                  {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                                </button>
+                              {rowEditable && (
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
+                                    onClick={() => startEdit(r)}
+                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                  <button title="Delete" aria-label="Delete" disabled={!!editRow || isDeleting}
+                                    onClick={() => setPendingDeleteId(r.id)}
+                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
+                                    {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                                  </button>
                               </div>
+                              )}
                             </td>
                           )}
                         </tr>
@@ -1109,14 +1217,16 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           : isGridRepl ? 'bg-orange-50/40 dark:bg-orange-950/10'
                           : 'bg-muted/20',
                         ].join(' ')}>
-                          {canEditDelete && (
+                          {anyEditable && (
                             <td className="px-2 py-1 w-8">
-                              <input
-                                type="checkbox"
-                                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                                checked={selectedIds.has(r.id)}
-                                onChange={() => toggleSelect(r.id)}
-                              />
+                              {rowEditable && (
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                                  checked={selectedIds.has(r.id)}
+                                  onChange={() => toggleSelect(r.id)}
+                                />
+                              )}
                             </td>
                           )}
                           <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground font-medium" colSpan={dateCols}>
@@ -1148,7 +1258,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           const effective   = isGridRepl ? 0 : rawDelta != null ? rawDelta * mMult : null;
                           return (
                             <tr key={`g${mi}`} className="hover:bg-muted/30">
-                              {canEditDelete && <td />}
+                              {anyEditable && <td />}
                               {/* Meter label */}
                               <td className="px-3 py-1 pl-6">
                                 <span className="flex items-center gap-1 text-[11px]">
@@ -1208,7 +1318,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {/* ── Solar sub-row (only when plant has solar data) ── */}
                         {hasSolar && (
                           <tr className="hover:bg-muted/30">
-                            {canEditDelete && <td />}
+                            {anyEditable && <td />}
                             {/* Meter label */}
                             <td className="px-3 py-1 pl-6">
                               <span className="flex items-center gap-1 text-[11px]">
@@ -1273,14 +1383,16 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         : 'hover:bg-muted/40',
                       ].join(' ')}
                     >
-                      {canEditDelete && (
+                      {anyEditable && (
                         <td className="px-2 py-1.5 w-8">
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 accent-primary cursor-pointer"
-                            checked={selectedIds.has(r.id)}
-                            onChange={() => toggleSelect(r.id)}
-                          />
+                          {rowEditable && (
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                              checked={selectedIds.has(r.id)}
+                              onChange={() => toggleSelect(r.id)}
+                            />
+                          )}
                         </td>
                       )}
                       <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
@@ -1360,28 +1472,30 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {replCell}
                       </>}
 
-                      {canEditDelete && (
+                      {anyEditable && (
                         <td className="px-2 py-1 text-center">
-                          <div className="flex items-center justify-center gap-0.5">
-                            <button
-                              title="Edit"
-                              aria-label="Edit"
-                              disabled={!!editRow || isDeleting}
-                              onClick={() => startEdit(r)}
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button
-                              title="Delete"
-                              aria-label="Delete"
-                              disabled={!!editRow || isDeleting}
-                              onClick={() => setPendingDeleteId(r.id)}
-                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
-                            >
-                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                            </button>
-                          </div>
+                          {rowEditable && (
+                            <div className="flex items-center justify-center gap-0.5">
+                              <button
+                                title="Edit"
+                                aria-label="Edit"
+                                disabled={!!editRow || isDeleting}
+                                onClick={() => startEdit(r)}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                title="Delete"
+                                aria-label="Delete"
+                                disabled={!!editRow || isDeleting}
+                                onClick={() => setPendingDeleteId(r.id)}
+                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                              >
+                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                              </button>
+                            </div>
+                          )}
                         </td>
                       )}
                     </tr>

@@ -133,7 +133,7 @@ export async function logReadingEdit(entry: {
   // 'locator_readings' added alongside the Hamas override feature — see
   // supabase/migrations/20260727_hamas_phase0_roles_and_audit.sql, which
   // extends the matching DB check constraint the same way.
-  table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs' | 'locator_readings';
+  table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs' | 'locator_readings' | 'power_readings' | 'blending_events' | 'well_readings';
   /** Nullable for 'import' action — a CSV batch covers N records, not one. */
   record_id?: string | null;
   plant_id: string | null;
