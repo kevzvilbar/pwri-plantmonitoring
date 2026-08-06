@@ -11,6 +11,7 @@ import { fmtNum } from '@/lib/calculations';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
+import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
 
 import { PlantPicker } from './shared/PlantPicker';
 
@@ -59,6 +60,20 @@ export function Overview() {
       ? (await supabase.from('ro_trains').select('*').eq('plant_id', plantId).order('train_number')).data ?? []
       : [],
     enabled: !!plantId,
+  });
+
+  // Same scope resolution Compliance.tsx itself uses (plant-specific row if
+  // one's been saved for this plant, else the 'global' scope's defaults) —
+  // this used to be a hardcoded PERM_TDS_LIMIT = 600 here, disconnected from
+  // whatever an Admin/Data Analyst actually configured on the Compliance
+  // page (whose own DEFAULT_THRESHOLDS.permeate_tds_max is 500, not 600 —
+  // this alert threshold silently didn't match the app's own default even
+  // before anyone customized anything).
+  const { data: thresholds } = useQuery({
+    queryKey: ['thresholds', plantId || 'global'],
+    queryFn: () => loadThresholds(plantId || 'global'),
+    enabled: !!plantId,
+    staleTime: 60_000,
   });
 
   const trainIds    = (trains ?? []).map((t: any) => t.id);
@@ -177,7 +192,7 @@ export function Overview() {
   const totalTrains  = (trains ?? []).length;
   const healthScore  = totalTrains ? Math.round((onlineCount / totalTrains) * 100) : null;
 
-  const PERM_TDS_LIMIT = 600;
+  const PERM_TDS_LIMIT = thresholds?.permeate_tds_max ?? DEFAULT_THRESHOLDS.permeate_tds_max;
   const highTDSTrains  = (trains ?? []).filter((t: any) => {
     const reading = lastReadings?.[t.id];
     return reading?.permeate_tds != null && reading.permeate_tds > PERM_TDS_LIMIT;
@@ -196,7 +211,7 @@ export function Overview() {
       source: 'RO Trains', plantId, timestamp: Date.now(),
     })));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highTDSTrains.length, plantId]);
+  }, [highTDSTrains.length, plantId, PERM_TDS_LIMIT]);
 
   const filtered = (trains ?? []).filter((t: any) => {
     const effectiveStatus = deriveTrainStatus(t, lastReadings?.[t.id]);
