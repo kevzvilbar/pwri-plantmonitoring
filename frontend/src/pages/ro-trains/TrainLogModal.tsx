@@ -9,19 +9,23 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
-  Loader2, BarChart2, Download, Upload, Pencil, MessageSquarePlus,
+  Loader2, BarChart2, Download, Upload, Pencil, MessageSquarePlus, Trash2,
   Calendar, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
 import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { cn } from '@/lib/utils';
-import { canEditEntry, recalculateTrainDeltas } from './helpers';
+import { canEditEntry, recalculateTrainDeltas, logReadingEdit } from './helpers';
 import { ReplaceTrainMeterDialog } from './ReplaceTrainMeterDialog';
 import { EditRoReadingDialog } from './EditRoReadingDialog';
 import { EditPretreatReadingDialog } from './EditPretreatReadingDialog';
@@ -59,6 +63,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const [editingRoRow, setEditingRoRow]           = useState<any | null>(null);
   const [editingPretreatRow, setEditingPretreatRow] = useState<any | null>(null);
   const [correctionTarget, setCorrectionTarget]   = useState<CorrectionTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ type: 'ro' | 'pretreat'; row: any } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // Piece 3+4: gap-scoped import dialogs
   const [showImportRO, setShowImportRO]           = useState(false);
   const [showImportPretreat, setShowImportPretreat] = useState(false);
@@ -226,6 +232,38 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     await recalculateTrainDeltas(trainId);
     toast.success('Replacement flag removed');
     qc.invalidateQueries({ queryKey });
+    qc.invalidateQueries({ queryKey: ['ro-overview'] });
+  };
+
+  const actorLabel = () =>
+    `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+    || activeOperator?.username || null;
+
+  const doDeleteReading = async () => {
+    if (!pendingDelete) return;
+    const { type, row } = pendingDelete;
+    if (!canEditEntry(row, hasFullAccess, activeOperator?.id)) {
+      toast.error('You can only delete your own entries, within 8 hours of submitting them.');
+      setPendingDelete(null);
+      return;
+    }
+    setDeletingId(row.id);
+    const table = type === 'ro' ? 'ro_train_readings' : 'ro_pretreatment_readings';
+    const { error } = await (supabase.from(table as any) as any).delete().eq('id', row.id);
+    setDeletingId(null);
+    setPendingDelete(null);
+    if (error) { toast.error(friendlyError(error)); return; }
+    if (type === 'ro') await recalculateTrainDeltas(trainId);
+    await logReadingEdit({
+      table_name: table,
+      record_id: row.id,
+      plant_id: row.plant_id ?? plantId ?? null,
+      action: 'delete',
+      actor_user_id: activeOperator?.id ?? null,
+      actor_label: actorLabel(),
+    });
+    toast.success('Reading deleted');
+    qc.invalidateQueries({ queryKey: type === 'ro' ? queryKey : preQueryKey });
     qc.invalidateQueries({ queryKey: ['ro-overview'] });
   };
 
@@ -511,10 +549,19 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                         <td className="px-2 py-2 text-center">
                           {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
-                            <button onClick={() => setEditingRoRow(r)} title="Edit reading" aria-label="Edit reading"
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                              <Pencil className="h-3 w-3" />
-                            </button>
+                            <div className="flex items-center justify-center gap-0.5">
+                              <button onClick={() => setEditingRoRow(r)} title="Edit reading" aria-label="Edit reading"
+                                disabled={deletingId === r.id}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40">
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button onClick={() => setPendingDelete({ type: 'ro', row: r })}
+                                title="Delete reading" aria-label="Delete reading"
+                                disabled={deletingId === r.id}
+                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40">
+                                {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                              </button>
+                            </div>
                           ) : !hasFullAccess && activeOperator?.id && r.permeate_meter != null && (
                             <button
                               onClick={() => setCorrectionTarget({
@@ -619,10 +666,19 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                           <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                           <td className="px-2 py-2 text-center">
                             {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
-                              <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
-                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                                <Pencil className="h-3 w-3" />
-                              </button>
+                              <div className="flex items-center justify-center gap-0.5">
+                                <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
+                                  disabled={deletingId === r.id}
+                                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40">
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => setPendingDelete({ type: 'pretreat', row: r })}
+                                  title="Delete reading" aria-label="Delete reading"
+                                  disabled={deletingId === r.id}
+                                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40">
+                                  {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                </button>
+                              </div>
                             ) : !hasFullAccess && activeOperator?.id && (
                               <button
                                 onClick={() => setCorrectionTarget({
@@ -728,6 +784,26 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           onClose={() => setReplaceReadingId(null)}
         />
       )}
+      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this reading?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the {pendingDelete?.type === 'ro' ? 'RO train' : 'pre-treatment'} reading.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doDeleteReading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
