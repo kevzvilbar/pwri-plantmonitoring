@@ -50,7 +50,7 @@ export default function Plants() {
   const { id } = useParams();
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
-  const { isManager, profile } = useAuth();
+  const { isManager, profile, user: currentUser } = useAuth();
 
   // Non-managers only see plants they are assigned to.
   // Managers/Admins see all plants. Sign-up uses its own direct query, unaffected.
@@ -123,6 +123,36 @@ export default function Plants() {
   // within the same component instance. All hooks must be called unconditionally.
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Inactive'>('all');
+  const [showAddPlant, setShowAddPlant] = useState(false);
+  const [addPlantBusy, setAddPlantBusy] = useState(false);
+  const qc = useQueryClient();
+
+  const doAddPlant = async (form: AddPlantFormData) => {
+    if (!form.name.trim()) { toast.error('Plant name is required.'); return; }
+    setAddPlantBusy(true);
+    const { data, error } = await supabase.from('plants').insert({
+      name: form.name.trim(),
+      address: form.address.trim() || null,
+      design_capacity_m3: form.design_capacity_m3 === '' ? null : Number(form.design_capacity_m3),
+      filter_housing_type: form.filter_housing_type,
+      filter_media_type: form.filter_media_type,
+    }).select('id').single();
+    setAddPlantBusy(false);
+    if (error) { toast.error(friendlyError(error)); return; }
+    toast.success('Plant added');
+    await logPlantEdit({
+      plant_id: data!.id,
+      user_id: currentUser?.id ?? null,
+      field_changed: 'created',
+      old_value: null,
+      new_value: form.name.trim(),
+      timestamp: new Date().toISOString(),
+    });
+    qc.invalidateQueries({ queryKey: ['plants'] });
+    qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
+    setShowAddPlant(false);
+    navigate(`/plants/${data!.id}`);
+  };
 
   if (id) return <PlantDetail plantId={id} />;
 
@@ -348,6 +378,12 @@ export default function Plants() {
             {f === 'all' ? `All (${list?.length ?? 0})` : f}
           </button>
         ))}
+        {isManager && (
+          <Button size="sm" className="h-8 ml-auto gap-1.5" onClick={() => setShowAddPlant(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add Plant
+          </Button>
+        )}
       </div>
 
       {/* ── Plant list ── */}
@@ -545,6 +581,13 @@ export default function Plants() {
           </div>
         )}
       </div>
+
+      <AddPlantDialog
+        open={showAddPlant}
+        onOpenChange={setShowAddPlant}
+        onSubmit={doAddPlant}
+        loading={addPlantBusy}
+      />
     </div>
   );
 }
@@ -823,3 +866,103 @@ function PlantDetail({ plantId }: { plantId: string }) {
   );
 }
 
+// ─── Add Plant ──────────────────────────────────────────────────────────────
+// Deliberately minimal, matching AddTrainDialog's philosophy: the fields other
+// parts of the app assume are always set (name, filter_housing_type,
+// filter_media_type — see the Plant interface in hooks/usePlants.ts, neither
+// filter field is optional there) plus the two most-referenced identifying
+// fields (address, design_capacity_m3). Solar/grid, backwash mode, GPS,
+// geofence, and RO train setup are all configured after creation via the
+// existing Plant Config / Energy Source / Add RO Train flows — same
+// "quick add, configure details later" split AddTrainDialog already uses.
+export interface AddPlantFormData {
+  name: string;
+  address: string;
+  design_capacity_m3: number | '';
+  filter_housing_type: 'Cartridge Filter' | 'Bag Filter';
+  filter_media_type: 'AFM' | 'MMF';
+}
+
+function AddPlantDialog({ open, onOpenChange, onSubmit, loading }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSubmit: (form: AddPlantFormData) => void;
+  loading: boolean;
+}) {
+  const blank = (): AddPlantFormData => ({
+    name: '', address: '', design_capacity_m3: '',
+    filter_housing_type: 'Cartridge Filter', filter_media_type: 'AFM',
+  });
+  const [form, setForm] = useState<AddPlantFormData>(blank);
+
+  useEffect(() => {
+    if (open) setForm(blank());
+  }, [open]);
+
+  const canSubmit = form.name.trim().length > 0 && !loading;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Plant</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Plant Name</Label>
+            <Input placeholder="e.g. Mambaling WTP" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) onSubmit(form); }} />
+          </div>
+          <div>
+            <Label>Address <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Input placeholder="e.g. Brgy. San Isidro, Iloilo City" value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+          </div>
+          <div>
+            <Label>Design Capacity <span className="text-muted-foreground text-xs">(optional, MLD)</span></Label>
+            <Input type="number" min={0} step="0.1" placeholder="e.g. 5.0"
+              value={form.design_capacity_m3}
+              onChange={e => setForm(f => ({
+                ...f, design_capacity_m3: e.target.value === '' ? '' : Number(e.target.value),
+              }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Filter Housing</Label>
+              <Select value={form.filter_housing_type}
+                onValueChange={(v: 'Cartridge Filter' | 'Bag Filter') =>
+                  setForm(f => ({ ...f, filter_housing_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cartridge Filter">Cartridge Filter</SelectItem>
+                  <SelectItem value="Bag Filter">Bag Filter</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Filter Media</Label>
+              <Select value={form.filter_media_type}
+                onValueChange={(v: 'AFM' | 'MMF') => setForm(f => ({ ...f, filter_media_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AFM">AFM</SelectItem>
+                  <SelectItem value="MMF">MMF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="text-2xs text-muted-foreground">
+            Wells, locators, RO trains, and energy source are all added after the plant is created.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={() => onSubmit(form)} disabled={!canSubmit}>
+            {loading ? 'Adding…' : 'Add Plant'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
