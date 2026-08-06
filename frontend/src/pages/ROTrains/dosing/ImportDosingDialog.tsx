@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Upload, Download, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 
 import { validateDosingRow } from './validateDosingRow';
 
@@ -266,7 +266,7 @@ export function ImportDosingDialog({
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
                   ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) — schema valid</>
-                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                  : <><AlertTriangle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (

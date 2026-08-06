@@ -24,7 +24,7 @@
 
 import { useState, useEffect } from 'react';
 import { z } from 'zod';
-import { Mail, AlertTriangle, Info, CheckCircle2, Loader2 } from 'lucide-react';
+import { Mail, AlertTriangle, AlertCircle, Info, CheckCircle2, Loader2 } from 'lucide-react';
 
 import {
   Dialog,
@@ -180,7 +180,7 @@ export function EmailChangeDialog({ open, onOpenChange, target, onSuccess }: Pro
           {/* Mode banner */}
           {isAdminMode ? (
             <div className="flex gap-2.5 rounded-lg border border-warning/30 bg-warning/5 p-3">
-              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+              <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
               <div className="text-xs text-warning-foreground space-y-0.5">
                 <p className="font-semibold">Immediate change — no confirmation</p>
                 <p className="text-muted-foreground">

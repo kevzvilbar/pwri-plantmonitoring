@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import {
-  Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle,
+  Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle,
   Droplet, Zap, FlaskConical, Gauge, Waves, Thermometer,
   ChevronRight, Download, RefreshCw, X, Info, CircleDot, Menu,
   MapPin, Activity, Building2,
@@ -1081,7 +1081,7 @@ export default function SmartImportPanel() {
 
               {invalidCount > 0 && skipInvalid && (
                 <div className="flex items-start gap-2 rounded-md bg-warn-soft border border-warn px-3 py-2 text-xs text-warn">
-                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   {invalidCount} row(s) will be skipped. Hover an error badge for details.
                 </div>
               )}

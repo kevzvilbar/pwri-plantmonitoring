@@ -62,7 +62,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AlertTriangle, RefreshCw, Undo2, ChevronDown, Tag } from 'lucide-react';
+import { AlertCircle, RefreshCw, Undo2, ChevronDown, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export interface NormalizeButtonProps {
 export function NormStatusBadge({ status }: { status: NormStatus }) {
   if (status === 'normal') return null;
   const cfg = {
-    erroneous:  { icon: <AlertTriangle className="h-3 w-3" />, label: 'Flagged',    cls: 'text-warn bg-warn-soft  border-warn/60' },
+    erroneous:  { icon: <AlertCircle className="h-3 w-3" />, label: 'Flagged',    cls: 'text-warn bg-warn-soft  border-warn/60' },
     normalized: { icon: <RefreshCw     className="h-3 w-3" />, label: 'Normalized', cls: 'text-primary  bg-primary-soft     border-primary/60'  },
     retracted:  { icon: <Undo2         className="h-3 w-3" />, label: 'Retracted',  cls: 'text-muted-foreground bg-muted border-border' },
   }[status];
@@ -324,7 +324,7 @@ export function NormalizeButton({
             data-testid={`normalize-btn-${sourceId}`}
           >
             {status === 'normal'     && <><Tag className="h-3 w-3" /> Normalize</>}
-            {status === 'erroneous'  && <><AlertTriangle className="h-3 w-3" /> ⚠️ Flagged</>}
+            {status === 'erroneous'  && <><AlertCircle className="h-3 w-3" /> ⚠️ Flagged</>}
             {status === 'normalized' && <><RefreshCw className="h-3 w-3" /> 🔄 Normalized</>}
             {status === 'retracted'  && <><Undo2 className="h-3 w-3" /> ⏪ Retracted</>}
             <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -338,7 +338,7 @@ export function NormalizeButton({
             className="text-warn focus:text-warn gap-2"
             data-testid="normalize-action-tag"
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
+            <AlertCircle className="h-3.5 w-3.5" />
             Tag as erroneous
           </DropdownMenuItem>
 

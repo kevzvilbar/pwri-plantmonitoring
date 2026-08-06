@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Upload, Download, FileText, AlertCircle, Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
 
 import { StatusPill } from '@/components/StatusPill';
 import { PageHeader } from '@/components/PageHeader';
@@ -272,7 +272,7 @@ function ImportReadingsDialog({
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
                   ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
-                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                  : <><AlertTriangle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (
@@ -327,7 +327,7 @@ function ImportReadingsDialog({
           {done && importErrors.length > 0 && (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1.5">
               <p className="text-xs font-medium flex items-center gap-1.5 text-destructive">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 {imported} imported · {importErrors.length} failed
               </p>
               <ul className="text-2xs text-destructive list-disc ml-4 space-y-0.5 max-h-32 overflow-y-auto">
@@ -1137,7 +1137,7 @@ function Rollup() {
           {/* ── Negative power cost diagnostic banner ───────────────────── */}
           {hasNegativePower && (
             <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 flex items-start gap-2 text-xs">
-              <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-semibold text-destructive">
                   Negative power cost detected on {negativePowerRows.length} day(s) — data is corrupt
@@ -1485,7 +1485,7 @@ function Power() {
                     {b.billing_month ? format(parseISO(b.billing_month), 'MMM yyyy') : '—'}
                     {isNegativeKwh && (
                       <span className="inline-flex items-center gap-0.5 text-2xs font-semibold text-destructive border border-destructive/40 rounded px-1 py-0.5">
-                        <AlertCircle className="h-2.5 w-2.5" /> Reversed readings
+                        <AlertTriangle className="h-2.5 w-2.5" /> Reversed readings
                       </span>
                     )}
                   </div>

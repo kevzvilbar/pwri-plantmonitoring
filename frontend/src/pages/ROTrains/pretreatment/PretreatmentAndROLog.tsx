@@ -21,7 +21,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, AlertCircle } from 'lucide-react';
+import { Upload, AlertCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImportROReadingsDialog } from '../../ro-trains';
 
@@ -1733,7 +1733,7 @@ export function PretreatmentAndROLog() {
                     )} />
                     {feedNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
                         Reading ({feedCurr}) is below previous ({prevFeedMeter}) — meter rollback or typo.
                       </p>
                     )}
@@ -1777,7 +1777,7 @@ export function PretreatmentAndROLog() {
                     )} />
                     {permNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
                         Reading ({permCurr}) is below previous ({prevPermMeter}) — meter rollback or typo.
                       </p>
                     )}
@@ -1821,7 +1821,7 @@ export function PretreatmentAndROLog() {
                     )} />
                     {rejNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
                         Reading ({rejCurr}) is below previous ({prevRejMeter}) — meter rollback or typo.
                       </p>
                     )}

@@ -24,7 +24,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
 import { DerivedMeterIcon } from '@/components/icons/water-icons';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
@@ -1306,7 +1306,7 @@ function LocatorRow({
       )}
       {cooldownMinutes > 0 && cooldownAvailableAt && (
         <div className="flex items-center gap-1.5 rounded-md bg-destructive/10 border border-destructive/30 px-2.5 py-1.5 text-xs text-destructive">
-          <AlertCircle className="h-3 w-3 shrink-0" />
+          <AlertTriangle className="h-3 w-3 shrink-0" />
           Cooldown active — next reading available at{' '}
           {cooldownAvailableAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}{' '}
           ({cooldownMinutes} min remaining).

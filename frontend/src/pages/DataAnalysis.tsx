@@ -52,7 +52,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format, parseISO } from 'date-fns';
 import {
   FlaskConical, Play, CheckCircle2, Undo2, Pencil, ShieldAlert,
-  TrendingUp, Database, AlertTriangle, RefreshCw, Clock, Eye,
+  TrendingUp, Database, AlertCircle, RefreshCw, Clock, Eye,
   ChevronDown, ChevronUp, Info, Zap, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -1466,7 +1466,7 @@ function RegressionDetail({
       </div>
       {result.truncated && (
         <div className="px-4 py-2 text-xs bg-warn-soft text-warn border-b flex items-center gap-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           This date range has more readings than the analysis row cap — only the earliest {result.row_count.toLocaleString()} rows were analyzed. Narrow the date range to cover the rest.
         </div>
       )}
@@ -1869,7 +1869,7 @@ function AuditLogTab({ sourceTable }: { sourceTable: string }) {
   if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading audit log…</div>;
   if (isError)   return (
     <div className="flex items-center gap-2 rounded border border-warn bg-warn-soft px-3 py-2 text-xs text-warn">
-      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
       Audit log unavailable — run the <code className="font-mono">20260515_supabase_only_and_data_analysis.sql</code> migration in Supabase to create the <code className="font-mono">raw_edit_log</code> table.
     </div>
   );
@@ -2490,7 +2490,7 @@ export default function DataAnalysis() {
             {resultsError && (
               <div className="flex flex-col gap-1.5 rounded border border-warn bg-warn-soft px-3 py-2.5 text-xs">
                 <div className="flex items-center gap-2 font-medium text-warn">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                   Regression results table not found
                 </div>
                 <p className="text-warn leading-relaxed">
@@ -2534,7 +2534,7 @@ export default function DataAnalysis() {
                 <Clock className="h-3 w-3 mr-1" /> Edit Audit
               </TabsTrigger>
               <TabsTrigger value="normalization" className="text-xs">
-                <AlertTriangle className="h-3 w-3 mr-1" /> Flagged Readings
+                <AlertCircle className="h-3 w-3 mr-1" /> Flagged Readings
               </TabsTrigger>
             </TabsList>
           </CardHeader>

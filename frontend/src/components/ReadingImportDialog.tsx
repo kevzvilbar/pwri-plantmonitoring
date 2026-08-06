@@ -22,7 +22,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogContent,
@@ -378,7 +378,7 @@ export function ImportReadingsDialog({
               <p className="text-xs font-medium flex items-center gap-1.5">
                 {errors.length === 0
                   ? <><span className="h-2 w-2 rounded-full bg-accent inline-block" />{rows.length} row(s) in "{file.name}" — schema valid</>
-                  : <><AlertCircle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
+                  : <><AlertTriangle className="h-3.5 w-3.5 text-destructive" />{rows.length} row(s) — {errors.length} error(s)</>
                 }
               </p>
               {errors.length > 0 && (
@@ -432,7 +432,7 @@ export function ImportReadingsDialog({
               {importErrors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 max-h-40 overflow-y-auto">
                   <p className="text-xs font-semibold text-destructive mb-1 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" /> Import errors (first {Math.min(importErrors.length, 20)} of {importErrors.length}):
+                    <AlertTriangle className="h-3 w-3" /> Import errors (first {Math.min(importErrors.length, 20)} of {importErrors.length}):
                   </p>
                   <ul className="text-2xs text-destructive list-disc ml-3 space-y-0.5">
                     {importErrors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DataState } from '@/components/DataState';
 import { PageHeader } from '@/components/PageHeader';
 import {
-  ShieldCheck, ShieldAlert, AlertTriangle, Loader2, RefreshCw,
+  ShieldCheck, ShieldAlert, AlertCircle, Loader2, RefreshCw,
   Save, Settings2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight,
   Eye, Zap,
 } from 'lucide-react';
@@ -984,7 +984,7 @@ export default function Compliance() {
                             : 'text-muted-foreground',
                         )}>
                           {dataDaysStale !== null && dataDaysStale > 1 && (
-                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            <AlertCircle className="h-3 w-3 shrink-0" />
                           )}
                           Data as of {fmtSummaryDate(latestDataDate)}
                           {dataDaysStale !== null && dataDaysStale > 1 &&
@@ -995,7 +995,7 @@ export default function Compliance() {
                         <ul className="mt-2 space-y-1">
                           {summary.details.map((d, i) => (
                             <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
+                              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warn" />
                               {d}
                             </li>
                           ))}
