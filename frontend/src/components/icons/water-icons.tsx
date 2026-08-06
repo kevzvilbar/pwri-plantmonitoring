@@ -137,3 +137,50 @@ export const MeterOdometerIcon = ({ size, ...props }: WaterIconProps) => (
     <path d="M6 8V6.5A2.5 2.5 0 0 1 8.5 4h7A2.5 2.5 0 0 1 18 6.5V8" />
   </svg>
 );
+
+/**
+ * Grid Pylon — high-voltage transmission tower, used everywhere the "Grid"
+ * power source appears (Wells, Power Meters, Plant Appearance/Energy config,
+ * Reading History audit rows).
+ *
+ * This used to be defined twice — byte-for-byte identically — in
+ * pages/plants/shared.tsx and pages/operations/shared.tsx (icon-audit
+ * finding: duplicated component, not just duplicated meaning). Both files
+ * now re-export this single definition instead of maintaining their own
+ * copy. Kept on its own strokeWidth (1.6, not the app's usual 2) and a
+ * plain `className` prop — matching its original call sites exactly — so
+ * this consolidation doesn't change how a single existing icon renders.
+ */
+export function GridPylonIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      {/* Base platform */}
+      <line x1="4" y1="22" x2="20" y2="22" />
+      {/* Left & right legs */}
+      <line x1="8" y1="22" x2="10" y2="14" />
+      <line x1="16" y1="22" x2="14" y2="14" />
+      {/* Lower cross-brace */}
+      <line x1="8" y1="22" x2="14" y2="14" />
+      <line x1="16" y1="22" x2="10" y2="14" />
+      {/* Tower body */}
+      <line x1="10" y1="14" x2="11" y2="8" />
+      <line x1="14" y1="14" x2="13" y2="8" />
+      {/* Mid cross-brace */}
+      <line x1="10" y1="14" x2="13" y2="8" />
+      <line x1="14" y1="14" x2="11" y2="8" />
+      {/* Upper narrowing */}
+      <line x1="11" y1="8" x2="11.8" y2="4" />
+      <line x1="13" y1="8" x2="12.2" y2="4" />
+      {/* Top cross-brace */}
+      <line x1="11" y1="8" x2="12.2" y2="4" />
+      <line x1="13" y1="8" x2="11.8" y2="4" />
+      {/* Top arm (crossbar) */}
+      <line x1="7" y1="6" x2="17" y2="6" />
+      <line x1="12" y1="4" x2="12" y2="6" />
+      {/* Insulator drop lines */}
+      <line x1="7" y1="6" x2="7" y2="8" />
+      <line x1="17" y1="6" x2="17" y2="8" />
+    </svg>
+  );
+}

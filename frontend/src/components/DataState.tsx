@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { AlertTriangle, CloudOff, Inbox, Loader2, RotateCw } from 'lucide-react';
+import { AlertTriangle, CloudOff, Inbox, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ReactNode } from 'react';
 
@@ -62,7 +62,7 @@ export function DataState({
           </div>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry}>
-              <RotateCw className="h-3 w-3 mr-1" /> Try again
+              <RefreshCw className="h-3 w-3 mr-1" /> Try again
             </Button>
           )}
         </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 type Props = { children: React.ReactNode };
 type State = { error: Error | null; didAutoReload: boolean };
@@ -92,7 +92,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
               className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
               onClick={this.handleRetry}
             >
-              <RefreshCcw className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
               {isChunk ? 'Reload page' : 'Retry'}
             </button>
             <button

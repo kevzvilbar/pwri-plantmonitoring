@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Database, Copy, CheckCircle2, AlertTriangle, Loader2, ChevronDown, ChevronUp,
-  RefreshCcw, FileCode, Download, ExternalLink, Search, Trash2,
+  RefreshCw, FileCode, Download, ExternalLink, Search, Trash2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -603,7 +603,7 @@ export function MigrationsPanel() {
               >
                 {isFetching
                   ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  : <RefreshCcw className="h-3 w-3 mr-1" />}
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
                 Re-check
               </Button>
             </div>

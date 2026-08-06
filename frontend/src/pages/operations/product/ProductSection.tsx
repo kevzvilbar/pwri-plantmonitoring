@@ -581,7 +581,7 @@ function ProductMeterRow({
         </div>
 
         <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500 mt-0.5" />
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warn mt-0.5" />
           <span>
             No physical meter here — this value is mirrored
             {mirrorSource

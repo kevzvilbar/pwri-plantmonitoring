@@ -54,39 +54,11 @@ export { PLANT_CHEMICALS } from '@/lib/chemicals';
 
 // ─── Grid Pylon Icon ─────────────────────────────────────────────────────────
 // High-voltage transmission tower — used everywhere "Grid" energy source appears.
-export function GridPylonIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      {/* Base platform */}
-      <line x1="4" y1="22" x2="20" y2="22" />
-      {/* Left & right legs */}
-      <line x1="8" y1="22" x2="10" y2="14" />
-      <line x1="16" y1="22" x2="14" y2="14" />
-      {/* Lower cross-brace */}
-      <line x1="8" y1="22" x2="14" y2="14" />
-      <line x1="16" y1="22" x2="10" y2="14" />
-      {/* Tower body */}
-      <line x1="10" y1="14" x2="11" y2="8" />
-      <line x1="14" y1="14" x2="13" y2="8" />
-      {/* Mid cross-brace */}
-      <line x1="10" y1="14" x2="13" y2="8" />
-      <line x1="14" y1="14" x2="11" y2="8" />
-      {/* Upper narrowing */}
-      <line x1="11" y1="8" x2="11.8" y2="4" />
-      <line x1="13" y1="8" x2="12.2" y2="4" />
-      {/* Top cross-brace */}
-      <line x1="11" y1="8" x2="12.2" y2="4" />
-      <line x1="13" y1="8" x2="11.8" y2="4" />
-      {/* Top arm (crossbar) */}
-      <line x1="7" y1="6" x2="17" y2="6" />
-      <line x1="12" y1="4" x2="12" y2="6" />
-      {/* Insulator drop lines */}
-      <line x1="7" y1="6" x2="7" y2="8" />
-      <line x1="17" y1="6" x2="17" y2="8" />
-    </svg>
-  );
-}
+// Icon-audit fix: this used to be its own copy of the SVG (byte-identical to
+// the one in pages/operations/shared.tsx). Both now re-export the single
+// canonical definition in components/icons/water-icons.tsx instead of
+// maintaining separate copies that can silently drift apart.
+export { GridPylonIcon } from '@/components/icons/water-icons';
 
 export function SummaryCount({ label }: { label: string }) {
   const [active, total] = label.split('/').map(Number);

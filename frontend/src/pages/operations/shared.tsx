@@ -24,35 +24,15 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
 
-// High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
-
 // Generated from Operations.tsx — do not add logic here
 // Provides constants, utility functions, and hooks shared across all Operations tabs
 
-export function GridPylonIcon({ className = 'h-3 w-3' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <line x1="4" y1="22" x2="20" y2="22" />
-      <line x1="8" y1="22" x2="10" y2="14" />
-      <line x1="16" y1="22" x2="14" y2="14" />
-      <line x1="8" y1="22" x2="14" y2="14" />
-      <line x1="16" y1="22" x2="10" y2="14" />
-      <line x1="10" y1="14" x2="11" y2="8" />
-      <line x1="14" y1="14" x2="13" y2="8" />
-      <line x1="10" y1="14" x2="13" y2="8" />
-      <line x1="14" y1="14" x2="11" y2="8" />
-      <line x1="11" y1="8" x2="11.8" y2="4" />
-      <line x1="13" y1="8" x2="12.2" y2="4" />
-      <line x1="11" y1="8" x2="12.2" y2="4" />
-      <line x1="13" y1="8" x2="11.8" y2="4" />
-      <line x1="7" y1="6" x2="17" y2="6" />
-      <line x1="12" y1="4" x2="12" y2="6" />
-      <line x1="7" y1="6" x2="7" y2="8" />
-      <line x1="17" y1="6" x2="17" y2="8" />
-    </svg>
-  );
-}
+// High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
+// Icon-audit fix: this used to be its own copy of the SVG (byte-identical to
+// the one in pages/plants/shared.tsx). Both now re-export the single
+// canonical definition in components/icons/water-icons.tsx instead of
+// maintaining separate copies that can silently drift apart.
+export { GridPylonIcon } from '@/components/icons/water-icons';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';

@@ -962,7 +962,7 @@ function LocatorRow({
 
         {reviewFlag && (
           <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 rounded-lg px-3 py-2">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warn" />
             <span>
               Needs review — a sibling locator or the mother meter changed for {new Date(reviewFlag.date_key).toLocaleDateString()} since this was last computed.
             </span>
@@ -1442,7 +1442,7 @@ function SharedPowerMeterRow({
       {/* Title bar */}
       <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
         <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
-          <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <Zap className="h-3.5 w-3.5 text-warn" />
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground tracking-tight truncate">{groupName}</span>

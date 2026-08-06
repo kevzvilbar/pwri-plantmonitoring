@@ -29,7 +29,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings, Search } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, Settings2, Search } from 'lucide-react';
+// Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon everywhere
+// on this page (RO util indicator, MetricChip, PlantStatRow, tab bar) instead
+// of the generic Wrench, which this file was also using for unrelated things
+// like "Edit" and "Replace Meter" elsewhere in the app.
+import { ROTrainIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -315,7 +320,7 @@ export default function Plants() {
 
           {/* RO util — colour-coded */}
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs ${roColors.bg} ${roColors.border}`}>
-            <Wrench className={`h-3.5 w-3.5 shrink-0 ${roColors.text}`} />
+            <ROTrainIcon className={`h-3.5 w-3.5 shrink-0 ${roColors.text}`} />
             <span className={roColors.text}>RO train util.</span>
             <span className={`font-semibold ${roColors.text}`}>{roUtilPct}%</span>
           </div>
@@ -462,9 +467,9 @@ export default function Plants() {
 
                   {/* Bottom row: chips + Active/dots + health ring — all vertically aligned */}
                   <div className="flex items-stretch gap-2 mt-3">
-                    <MetricChip icon={<Gauge  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
+                    <MetricChip icon={<Droplet  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
                     <MetricChip icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
-                    <MetricChip icon={<Wrench  className="h-3 w-3" />} label="RO Trains" active={trains.active}   total={trains.total}   />
+                    <MetricChip icon={<ROTrainIcon  className="h-3 w-3" />} label="RO Trains" active={trains.active}   total={trains.total}   />
 
                     {/* Active status + menu — inline with chips, no box */}
                     <div
@@ -545,9 +550,9 @@ export default function Plants() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
-                    <PlantStatRow icon={<Gauge  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
+                    <PlantStatRow icon={<Droplet  className="h-3 w-3" />} label="Wells"     active={wells.active}    total={wells.total}    />
                     <PlantStatRow icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
-                    <PlantStatRow icon={<Wrench  className="h-3 w-3" />} label="RO trains" active={trains.active}   total={trains.total}   />
+                    <PlantStatRow icon={<ROTrainIcon  className="h-3 w-3" />} label="RO trains" active={trains.active}   total={trains.total}   />
                   </div>
                   <div className="hidden sm:flex flex-col items-center gap-1 pl-2">
                     <HealthRing score={health} plantColor={plantColor} />
@@ -833,9 +838,9 @@ function PlantDetail({ plantId }: { plantId: string }) {
           { id: 'locators', label: 'Locators', short: 'LOC', icon: <MapPin className="h-3.5 w-3.5" /> },
           { id: 'wells', label: 'Wells', short: 'WELL', icon: <Droplet className="h-3.5 w-3.5" /> },
           { id: 'product', label: 'Product', short: 'PROD', icon: <Gauge className="h-3.5 w-3.5" /> },
-          { id: 'trains', label: 'Trains', short: 'RO', icon: <Wrench className="h-3.5 w-3.5" /> },
+          { id: 'trains', label: 'Trains', short: 'RO', icon: <ROTrainIcon className="h-3.5 w-3.5" /> },
           { id: 'power', label: 'Power', short: 'PWR', icon: <Zap className="h-3.5 w-3.5" /> },
-          { id: 'configuration', label: 'Configuration', short: 'CONFIG', icon: <Settings className="h-3.5 w-3.5" /> },
+          { id: 'configuration', label: 'Configuration', short: 'CONFIG', icon: <Settings2 className="h-3.5 w-3.5" /> },
         ] as const).map((t) => (
           <button
             key={t.id}

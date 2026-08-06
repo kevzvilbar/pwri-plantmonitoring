@@ -29,7 +29,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert } from 'lucide-react';
+// Icon-audit fix: "Replace Meter" and "Replacement History" now use the
+// purpose-built ChangeMeterIcon instead of Wrench, matching ProductMeters.tsx
+// / PowerMeters.tsx, which already use it for the same action.
+import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { DataState } from '@/components/DataState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
@@ -584,7 +588,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
         ]}
       >
         <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setReplaceOpen(true)}>
-          <Wrench className="h-3.5 w-3.5" /> Replace Meter
+          <ChangeMeterIcon className="h-3.5 w-3.5" /> Replace Meter
         </Button>
       </MeterDetailButton>
 
@@ -596,7 +600,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
       {/* Replacement history */}
       <Card className="p-3">
         <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-          <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> Replacement History
+          <ChangeMeterIcon className="h-3.5 w-3.5 text-muted-foreground" /> Replacement History
         </h4>
         {replacements?.length ? (
           <div className="space-y-0">

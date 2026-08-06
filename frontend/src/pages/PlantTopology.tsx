@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import {
-  Droplets, Plug, Unplug, Save, RefreshCw, HelpCircle,
+  Droplet, Plug, Unplug, Save, RefreshCw, HelpCircle,
   PanelRightOpen, PanelRightClose, Plus, Trash2, Pencil,
   CheckCircle2, XCircle, ZoomIn, ZoomOut, Maximize2,
   GripVertical, Move,
@@ -1913,7 +1913,7 @@ export default function PlantTopology() {
           <div className="flex-1 flex flex-col min-h-0 p-4 overflow-hidden">
           {/* Zone label */}
           <div className="flex items-center gap-2 mb-3 shrink-0">
-            <Droplets className="h-3.5 w-3.5 text-primary" />
+            <Droplet className="h-3.5 w-3.5 text-primary" />
             <span className="text-2xs tracking-widest text-primary font-mono uppercase font-semibold">
               {activePlant?.name} — Water Treatment Flow
             </span>

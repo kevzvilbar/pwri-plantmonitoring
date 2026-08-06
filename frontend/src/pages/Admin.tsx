@@ -83,17 +83,17 @@ export default function Admin() {
       <Tabs defaultValue={isAdmin ? 'users' : 'plants'}>
         <TabsList className={`grid grid-cols-${tabCount} w-full`}>
           <TabsTrigger value="users" disabled={!isAdmin} data-testid="admin-tab-users">
-            <Users className="h-3 w-3 mr-1" /> Users
+            <Users className="h-3.5 w-3.5 mr-1" /> Users
           </TabsTrigger>
           <TabsTrigger value="plants" data-testid="admin-tab-plants">
-            <Building2 className="h-3 w-3 mr-1" /> Plants
+            <Building2 className="h-3.5 w-3.5 mr-1" /> Plants
           </TabsTrigger>
           <TabsTrigger value="audit" data-testid="admin-tab-audit">
-            <ClipboardList className="h-3 w-3 mr-1" /> Audit log
+            <ClipboardList className="h-3.5 w-3.5 mr-1" /> Audit log
           </TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="migrations" data-testid="admin-tab-migrations">
-              <Database className="h-3 w-3 mr-1" /> Migrations
+              <Database className="h-3.5 w-3.5 mr-1" /> Migrations
             </TabsTrigger>
           )}
         </TabsList>

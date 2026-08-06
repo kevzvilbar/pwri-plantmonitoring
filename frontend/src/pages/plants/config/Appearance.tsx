@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -206,7 +206,7 @@ export function EnergySourceCard({ plant }: { plant: any }) {
         </div>
         {isManager && !editing && (
           <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="edit-energy-btn">
-            <Wrench className="h-3 w-3 mr-1" />Edit
+            <Pencil className="h-3 w-3 mr-1" />Edit
           </Button>
         )}
       </div>

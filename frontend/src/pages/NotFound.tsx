@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { Droplets, ArrowLeft, LayoutDashboard } from 'lucide-react';
+import { Droplet, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function NotFound() {
@@ -17,7 +17,7 @@ export default function NotFound() {
         {/* Brand icon */}
         <div className="flex justify-center">
           <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-primary/10">
-            <Droplets className="h-7 w-7 text-primary" />
+            <Droplet className="h-7 w-7 text-primary" />
           </div>
         </div>
 

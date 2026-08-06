@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DataState } from '@/components/DataState';
 import { PageHeader } from '@/components/PageHeader';
 import {
-  ShieldCheck, ShieldAlert, AlertTriangle, Loader2, RefreshCcw,
+  ShieldCheck, ShieldAlert, AlertTriangle, Loader2, RefreshCw,
   Save, Settings2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight,
   Eye, Zap,
 } from 'lucide-react';
@@ -917,7 +917,7 @@ export default function Compliance() {
             <Button variant="outline" disabled={evaluating} onClick={runEvaluate}>
               {evaluating
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                : <RefreshCcw className="h-3.5 w-3.5 mr-1" />}
+                : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
               Evaluate
             </Button>
           </div>

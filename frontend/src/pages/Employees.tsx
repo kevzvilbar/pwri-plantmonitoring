@@ -8,7 +8,7 @@ import {
   Users, CheckCircle2, AlertCircle, BookOpen, ChevronDown,
   GitBranch, ClipboardList, Check, CheckCheck,
   Search, BarChart2, ChevronLeft, Info,
-  Crown, Briefcase, Settings, UserCircle,
+  Crown, Briefcase, Cog, UserCircle,
   RefreshCw, ZoomIn,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -147,7 +147,7 @@ const ROLE_HIERARCHY: { role: string; level: number; icon: ReactNode; color: str
   { role: 'Admin',         level: 0, icon: <Crown className="h-3 w-3" />,        color: 'text-danger',    bg: 'bg-danger-soft border-danger' },
   { role: 'Manager',       level: 1, icon: <Briefcase className="h-3 w-3" />,    color: 'text-info',     bg: 'bg-info-soft border-info' },
   { role: 'Data Analyst',  level: 2, icon: <BarChart2 className="h-3 w-3" />,    color: 'text-kpi-ro',  bg: 'bg-kpi-ro/15 border-kpi-ro' },
-  { role: 'Technician',    level: 3, icon: <Settings className="h-3 w-3" />,     color: 'text-primary',    bg: 'bg-primary-soft border-primary' },
+  { role: 'Technician',    level: 3, icon: <Cog className="h-3 w-3" />,          color: 'text-primary',    bg: 'bg-primary-soft border-primary' },
   { role: 'Operator',      level: 4, icon: <UserCircle className="h-3 w-3" />,   color: 'text-zinc-700',    bg: 'bg-zinc-50 border-zinc-200' },
 ];
 

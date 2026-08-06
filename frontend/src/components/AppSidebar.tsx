@@ -1,9 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Activity, Cog, Wrench, AlertTriangle,
+  LayoutDashboard, Building2, Droplet, Wrench, AlertTriangle,
   Users, DollarSign, Download, Upload, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
   ClipboardCheck } from 'lucide-react';
+// Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
+// of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
+import { ROTrainIcon } from '@/components/icons/water-icons';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -17,7 +20,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 type SidebarItem = {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  // `any` rather than `typeof LayoutDashboard`: this list now mixes lucide
+  // icons with the custom water-icon components (e.g. ROTrainIcon), same as
+  // the existing `icon: any` convention in BottomNav.tsx / StatCard.tsx.
+  icon: any;
   end?: boolean;
 };
 type SidebarGroup = { label: string; items: SidebarItem[] };
@@ -34,8 +40,13 @@ const groups: SidebarGroup[] = [
     label: 'Operations',
     items: [
       { to: '/plants', label: 'Plants', icon: Building2 },
-      { to: '/operations', label: 'Wells & Locators', icon: Activity },
-      { to: '/ro-trains', label: 'RO Trains', icon: Cog },
+      // Icon-audit fix: was `Activity` here, which mismatched the mobile
+      // bottom nav's `Droplet` for the same /operations route — and Activity
+      // is otherwise reserved for the "production vs. consumption" chart
+      // concept elsewhere in the app (DataSummaryModal, NRWGaugeCard,
+      // EntityHistoryChart), so it doubly didn't belong here.
+      { to: '/operations', label: 'Wells & Locators', icon: Droplet },
+      { to: '/ro-trains', label: 'RO Trains', icon: ROTrainIcon },
       { to: '/topology', label: 'Network Topology', icon: GitBranch },
     ],
   },

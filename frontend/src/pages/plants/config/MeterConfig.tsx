@@ -29,6 +29,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, RefreshCw } from 'lucide-react';
+// Icon-audit fix: the "RO Trains — Flow meters" section header now uses the
+// purpose-built ROTrainIcon. Wrench is kept for this file's other two
+// section headers ("Component Types & Backwash", "Plant-wide Component
+// Types"), which are genuinely about physical hardware, not RO trains
+// specifically.
+import { ROTrainIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
@@ -559,7 +565,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
           {/* ══ SECTION: RO Trains ══ */}
           <div className="pt-4">
             <div className="flex items-center gap-2 mb-3">
-              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+              <ROTrainIcon className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">RO Trains — Flow meters</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
