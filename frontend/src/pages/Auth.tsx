@@ -887,7 +887,7 @@ export default function Auth() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center mb-3">
             <img
-              src="/pwri-plantmonitoring/og-image.png"
+              src={`${import.meta.env.BASE_URL}og-image.png`}
               alt="PWRI Logo"
               className="h-16 w-16 rounded-2xl object-cover shadow-elev"
               onError={(e) => {

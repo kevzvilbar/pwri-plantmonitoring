@@ -103,7 +103,7 @@ export default function Admin() {
           <span className="text-primary">
             Reading corrections, pending reviews, and operator stats have moved to <strong>Data Corrections</strong>.
           </span>
-          <a href="/pwri-plantmonitoring/data-corrections"
+          <a href={`${import.meta.env.BASE_URL}data-corrections`}
              className="shrink-0 text-primary font-medium hover:underline">
             Open →
           </a>

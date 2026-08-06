@@ -58,7 +58,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   handleDashboard = () => {
     sessionStorage.removeItem(RELOAD_FLAG);
-    window.location.href = '/pwri-plantmonitoring/';
+    window.location.href = import.meta.env.BASE_URL;
   };
 
   render() {

@@ -139,7 +139,7 @@ export function AppSidebar() {
       {!collapsed && (
         <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-sidebar-border/40 shrink-0">
           <img
-            src="/pwri-plantmonitoring/og-image.png"
+            src={`${import.meta.env.BASE_URL}og-image.png`}
             alt="PWRI Logo"
             className="h-7 w-7 rounded-lg object-cover shrink-0"
           />

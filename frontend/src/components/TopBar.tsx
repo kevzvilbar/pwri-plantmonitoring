@@ -173,7 +173,7 @@ export function TopBar() {
         {showBrand && (
           <div className="flex items-center gap-2 shrink-0">
             <img
-              src="/pwri-plantmonitoring/og-image.png"
+              src={`${import.meta.env.BASE_URL}og-image.png`}
               alt="PWRI Logo"
               className="h-7 w-7 rounded-lg object-cover shrink-0"
               onError={(e) => {
