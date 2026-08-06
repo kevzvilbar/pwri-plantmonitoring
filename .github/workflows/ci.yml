@@ -49,9 +49,19 @@ jobs:
 
       - name: Type-check (tsc --noEmit)
         working-directory: frontend
-        run: npx tsc --noEmit
-        # Runs the full type-checker without emitting files — catches the class
-        # of type error that Vite's build (which uses esbuild, not tsc) misses.
+        run: npx tsc --noEmit -p tsconfig.app.json
+        # frontend/tsconfig.json has `files: []` and only project references
+        # (it's a solution-style root config for editor tooling) — running
+        # bare `tsc --noEmit` against it does nothing: no files, nothing to
+        # check, exits 0 in ~5s regardless of how many real errors exist.
+        # Confirmed directly: bare `tsc --noEmit` here takes ~5s and passes
+        # unconditionally; `-p tsconfig.app.json` (the actual app project)
+        # takes ~60s and does the real work. This exact regression happened
+        # once before (see the CI hardening commit from the 2026-08-01
+        # session that first pointed this at tsconfig.app.json) and
+        # apparently reverted or got lost in a later merge — if it happens
+        # again, that's the second time; worth finding out why it keeps
+        # slipping rather than just re-adding the flag a third time.
 
       - name: Lint (ESLint)
         working-directory: frontend
