@@ -35,7 +35,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
   ChevronDown, ChevronUp, ClipboardCheck, Inbox, History,
-  Users, ArrowRight, Pencil, Search, ShieldAlert,
+  Users, ArrowRight, Pencil, Search, ShieldAlert, Gauge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +55,11 @@ interface FlaggedRow {
   operator_email: string | null;
   norm_status: string;
   flag_reason?: string;
+  /** True when current_reading < previous_reading — the real "backward jump"
+   *  signal, computed once in fetchPending() from the raw values rather than
+   *  the already-clamped daily_volume. See fetchPending for why the latter
+   *  can't be trusted for this. */
+  is_backward?: boolean;
 }
 
 interface CorrectionRequest {
@@ -320,6 +325,142 @@ function EditValueModal({
   );
 }
 
+// Same "guessed max, human confirms" heuristic as Step 1 of
+// supabase/migrations/*_meter_rollover_backfill.sql: a mechanical register
+// almost always wraps at a round power-of-ten boundary just above its
+// previous value (e.g. a reading in the 900,000s on a 6-digit odometer
+// wraps at 999999.99). It's a starting point for the admin to confirm or
+// overtype against the physical meter's real register size, never applied
+// automatically.
+function guessMeterMax(previousReading: number | null): number {
+  if (previousReading == null || !Number.isFinite(previousReading)) return 99999.99;
+  const digits = String(Math.floor(Math.abs(previousReading))).length;
+  return Math.pow(10, digits) - 0.01;
+}
+
+// "Mark as rollover" for a row stuck in Pending Review because it looked
+// like a backward reading. Deliberately single-row only (no bulk variant,
+// unlike Approve/Reject all) — telling a genuine meter wrap-around apart
+// from a data-entry typo needs a human actually looking at the value
+// against this meter's normal range, the same reasoning behind the backfill
+// script's explicit per-row allow-list instead of an auto-apply pass.
+function MarkRolloverModal({
+  row, onClose, onDone,
+}: { row: FlaggedRow; onClose: () => void; onDone: () => void }) {
+  const { user, roles } = useAuth();
+  const actorRole = pickDisplayRole(roles);
+  const [maxVal, setMaxVal] = useState(String(guessMeterMax(row.previous_reading)));
+  const [busy, setBusy] = useState(false);
+
+  const parsedMax = Number(maxVal);
+  const validMax = maxVal !== '' && !isNaN(parsedMax) && parsedMax > 0
+    && (row.previous_reading == null || parsedMax >= row.previous_reading);
+
+  // Same formula as calc.dailyVolume (frontend) and the DB's rollover-aware
+  // daily_volume expression: (max - previous) + current, floored at zero.
+  const computedVolume = validMax
+    ? Math.max(0, Math.round((parsedMax - (row.previous_reading ?? 0)) + row.current_reading))
+    : null;
+
+  const handleSave = async () => {
+    if (!validMax) {
+      toast.error(row.previous_reading != null
+        ? `Enter a wrap point ≥ the previous reading (${fmtNum(row.previous_reading)})`
+        : 'Enter a valid wrap point');
+      return;
+    }
+    setBusy(true);
+    try {
+      // locator_readings.daily_volume is GENERATED ALWAYS AS — Postgres
+      // recomputes it from is_meter_rollover/meter_rollover_max automatically
+      // and must never appear in this UPDATE. well_readings and
+      // product_meter_readings store it as a plain column that needs setting
+      // directly — the same table-shape distinction the backfill SQL
+      // script's Step 2 makes.
+      const payload: Record<string, unknown> = {
+        is_meter_rollover: true,
+        meter_rollover_max: parsedMax,
+        norm_status: 'normal',
+      };
+      if (row.source_table !== 'locator_readings') {
+        payload.daily_volume = computedVolume;
+      }
+      const { error } = await (supabase.from(row.source_table as any).update(payload).eq('id', row.id) as any);
+      if (error) throw error;
+
+      await (supabase.from('reading_normalizations' as any).insert({
+        source_table: row.source_table, source_id: row.id,
+        action: 'normalize',
+        original_value: row.current_reading,
+        adjusted_value: computedVolume,
+        note: `Marked as meter rollover (wrap point ${fmtNum(parsedMax)}) from Pending Review — true delta ${fmtNum(computedVolume)} m³`,
+        performed_by: user?.id ?? null, performed_role: actorRole,
+      }) as any);
+      await supersedeOtherCorrectionRequests(
+        row.source_table, row.id, user?.id,
+        'Superseded — reading marked as meter rollover directly from Pending Review',
+      );
+      toast.success(`${row.entity_name}: marked as rollover · +${fmtNum(computedVolume)} m³`);
+      onDone();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-background border rounded-xl shadow-xl p-5 w-full max-w-sm space-y-4 mx-4" onClick={e => e.stopPropagation()}>
+        <h3 className="font-semibold text-sm flex items-center gap-1.5">
+          <Gauge className="h-4 w-4 text-primary shrink-0" />
+          Mark as meter rollover — {row.entity_name}
+        </h3>
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          <div>{row.plant_name} · {fmtDt(row.reading_datetime)}</div>
+          <div>
+            Previous: <span className="font-mono">{fmtNum(row.previous_reading)}</span>
+            {' → '}Current: <span className="font-mono">{fmtNum(row.current_reading)}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Only confirm this if the meter's register actually wrapped around —
+          the current reading should look like an early value for this meter
+          (small, near its usual minimum), not a plausible mid-range value
+          with a digit dropped or transposed.
+        </p>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Meter wrap point (register max)</label>
+          <Input
+            type="number"
+            value={maxVal}
+            onChange={e => setMaxVal(e.target.value)}
+            className="font-mono h-9 text-sm"
+            autoFocus
+          />
+          <p className="text-xs text-muted-foreground">
+            Guessed from the previous reading's digit count — overtype with
+            the physical meter's actual register size if you know it.
+          </p>
+          {validMax && (
+            <p className="text-xs text-muted-foreground">
+              True delta if confirmed: <DeltaBadge vol={computedVolume} />
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={busy || !validMax}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Confirm rollover
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Pending Review tab (items 3, 4, 5) ───────────────────────────────────────
 
 // BUGFIX: this previously capped each of the 3 source tables at .limit(200)
@@ -381,6 +522,14 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
 
     for (const r of rows) {
       const vol = r.daily_volume ?? (r.previous_reading != null ? r.current_reading - r.previous_reading : null);
+      // BUGFIX: this used to classify backward vs. spike by checking
+      // `vol < 0`, but daily_volume is clamped to 0 at save time (and, for
+      // locator_readings, by its own GENERATED expression) — so a genuine
+      // backward jump waiting in Pending Review almost never actually shows
+      // a negative stored volume, and was silently misfiled as 'spike'.
+      // Compare the two raw meter values directly instead, matching how
+      // the DB trigger / SQL backfill audit both define "backward".
+      const isBackward = r.previous_reading != null && Number(r.current_reading) < Number(r.previous_reading);
       results.push({
         id: r.id,
         source_table: table,
@@ -392,7 +541,8 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         daily_volume: vol,
         operator_email: emailMap[r.recorded_by] ?? null,
         norm_status: r.norm_status,
-        flag_reason: vol != null && vol < 0 ? 'backward' : 'spike',
+        flag_reason: isBackward ? 'backward' : 'spike',
+        is_backward: isBackward,
       });
     }
   }
@@ -487,6 +637,7 @@ function PendingReviewTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<FlaggedRow | null>(null);
+  const [rolloverRow, setRolloverRow] = useState<FlaggedRow | null>(null);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState(false);
   const [searchQ, setSearchQ] = useState('');
@@ -771,7 +922,7 @@ function PendingReviewTab() {
           </div>
 
           {filtered.map(row => {
-            const isBack = (row.daily_volume ?? 0) < 0;
+            const isBack = !!row.is_backward;
             const isBusy = busy[row.id] ?? false;
             const isExp = expanded === row.id;
             // Rough entity + plant IDs for chain context — we pass plant_id from the row
@@ -836,6 +987,14 @@ function PendingReviewTab() {
                         {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                         Approve
                       </Button>
+                      {isBack && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 gap-1 text-xs border-accent/40 text-accent hover:bg-accent-soft"
+                          disabled={isBusy} onClick={() => setRolloverRow(row)}>
+                          <Gauge className="h-3 w-3" />
+                          Mark as rollover
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline"
                         className="h-7 gap-1 text-xs border-warn/40 text-warn hover:bg-warn-soft"
                         disabled={isBusy} onClick={() => setEditRow(row)}>
@@ -870,6 +1029,13 @@ function PendingReviewTab() {
           row={editRow}
           onClose={() => setEditRow(null)}
           onDone={() => { setEditRow(null); invalidate(); }}
+        />
+      )}
+      {rolloverRow && (
+        <MarkRolloverModal
+          row={rolloverRow}
+          onClose={() => setRolloverRow(null)}
+          onDone={() => { setRolloverRow(null); invalidate(); }}
         />
       )}
     </div>

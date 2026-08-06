@@ -4569,6 +4569,7 @@ export type Database = {
           is_blending_well: boolean
           meter_brand: string | null
           meter_installed_date: string | null
+          meter_rollover_max: number | null
           meter_serial: string | null
           meter_size: string | null
           name: string
@@ -4592,6 +4593,7 @@ export type Database = {
           is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
+          meter_rollover_max?: number | null
           meter_serial?: string | null
           meter_size?: string | null
           name: string
@@ -4615,6 +4617,7 @@ export type Database = {
           is_blending_well?: boolean
           meter_brand?: string | null
           meter_installed_date?: string | null
+          meter_rollover_max?: number | null
           meter_serial?: string | null
           meter_size?: string | null
           name?: string

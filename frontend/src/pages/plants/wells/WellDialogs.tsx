@@ -43,6 +43,7 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
   const [form, setForm] = useState({
     name: well.name ?? '', diameter: well.diameter ?? '', drilling_depth_m: well.drilling_depth_m?.toString() ?? '',
     meter_brand: well.meter_brand ?? '', meter_size: well.meter_size ?? '', meter_serial: well.meter_serial ?? '',
+    meter_rollover_max: well.meter_rollover_max?.toString() ?? '',
     gps_lat: well.gps_lat?.toString() ?? '', gps_lng: well.gps_lng?.toString() ?? '',
   });
   const { user } = useAuth();
@@ -57,14 +58,15 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
       name: form.name.trim(), diameter: form.diameter || null,
       drilling_depth_m: form.drilling_depth_m ? +form.drilling_depth_m : null,
       meter_brand: form.meter_brand || null, meter_size: form.meter_size || null, meter_serial: form.meter_serial || null,
+      meter_rollover_max: form.meter_rollover_max ? +form.meter_rollover_max : null,
       gps_lat: form.gps_lat ? +form.gps_lat : null, gps_lng: form.gps_lng ? +form.gps_lng : null,
     };
     let { error } = await supabase.from('wells').update(payload as never).eq('id', well.id);
-    // Graceful fallback: if gps_lat/gps_lng are missing from the schema cache,
-    // retry without them rather than failing the entire update — mirrors the
-    // same fallback AddWellDialog already uses.
-    if (error && (error.message.includes('gps_lat') || error.message.includes('gps_lng') || error.message.includes('column') || error.message.includes('schema cache'))) {
-      const { gps_lat: _lat, gps_lng: _lng, ...fallbackPayload } = payload as any;
+    // Graceful fallback: if gps_lat/gps_lng/meter_rollover_max are missing from
+    // the schema cache, retry without them rather than failing the entire
+    // update — mirrors the same fallback AddWellDialog already uses.
+    if (error && (error.message.includes('gps_lat') || error.message.includes('gps_lng') || error.message.includes('meter_rollover_max') || error.message.includes('column') || error.message.includes('schema cache'))) {
+      const { gps_lat: _lat, gps_lng: _lng, meter_rollover_max: _mrm, ...fallbackPayload } = payload as any;
       const { error: e2 } = await supabase.from('wells').update(fallbackPayload as never).eq('id', well.id);
       error = e2 ?? null;
     }
@@ -85,6 +87,15 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
             <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
             <div><Label>Meter Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
             <div><Label>Meter Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+          </div>
+          <div>
+            <Label className="flex items-center gap-1"><Gauge className="h-3 w-3" />Meter rollover wrap point</Label>
+            <Input type="number" placeholder="e.g. 999999.99 for a 6-digit register" value={form.meter_rollover_max} onChange={e => setForm({ ...form, meter_rollover_max: e.target.value })} />
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Pre-fills the "meter rollover" wrap point at reading entry and defaults
+              for this well's rows in Data Corrections. Leave blank if unknown — entry
+              falls back to a generic guess.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>

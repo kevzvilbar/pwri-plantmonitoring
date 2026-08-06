@@ -531,8 +531,16 @@ function WellRow({
   // rollover (odometer wrapped, e.g. 99999 -> 00012) instead of it either
   // being silently sent for pending_review as a suspected data-entry error,
   // or a raw negative-clamped-to-zero delta polluting daily_volume.
+  // Gap-2 fix: previously always hardcoded '99999' regardless of this well's
+  // actual register size (e.g. Well 9 is a 6-digit meter that wraps at
+  // 999999.99, not 99999.99), which the operator had to know to overtype by
+  // hand under pressure during a live reading. Now reads
+  // wells.meter_rollover_max (see 20260806143000_wells_meter_rollover_max_config.sql)
+  // when the well has been configured, falling back to the old literal only
+  // when it hasn't.
+  const defaultRolloverMax = well.meter_rollover_max != null ? String(well.meter_rollover_max) : '99999';
   const [isRollover, setIsRollover]             = useState(false);
-  const [rolloverMax, setRolloverMax]           = useState('99999');
+  const [rolloverMax, setRolloverMax]           = useState(defaultRolloverMax);
 
   // Draft recovery — restores the meter reading if the operator navigates away accidentally
   const { draft: draftWell, setDraft: setDraftWell, clearDraft: clearDraftWell } =
@@ -683,7 +691,7 @@ function WellRow({
       toast.success(fmtSaveToast(well.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
     setReading(''); clearDraftWell(); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
-    setIsRollover(false); setRolloverMax('99999');
+    setIsRollover(false); setRolloverMax(defaultRolloverMax);
     setEditingId(null); onSaved();
   };
 
@@ -1142,6 +1150,9 @@ function WellRow({
                     className="h-6 w-24 text-xs"
                     inputMode="numeric"
                   />
+                  {well.meter_rollover_max == null && (
+                    <span className="text-warn/70 text-2xs">(guess — confirm against the meter, or set it once in Edit Well)</span>
+                  )}
                 </span>
               )}
             </div>

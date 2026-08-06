@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { StatusPill } from '@/components/StatusPill';
-import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
+import { calc, fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
@@ -174,15 +174,15 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'locator') {
         const { data, error } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         if (!error) return data ?? [];
-        // Fallback: base columns only (is_meter_replacement may not exist yet in
-        // this environment — avoid the PostgREST schema-cache error taking the
-        // whole dialog down to zero rows, matching the well/power/blending
+        // Fallback: base columns only (is_meter_replacement / is_meter_rollover may not
+        // exist yet in this environment — avoid the PostgREST schema-cache error taking
+        // the whole dialog down to zero rows, matching the well/power/blending
         // branches above).
         const { data: fallback } = await supabase
           .from('locator_readings')
@@ -191,19 +191,20 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false }));
+        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_replacement: false, is_meter_rollover: false, meter_rollover_max: null }));
       }
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
         if (!error) return data ?? [];
         // Fallback: base columns only (optional migration columns tds_ppm / pressure_psi /
-        // is_meter_replacement may not exist yet — avoid the PostgREST schema-cache error)
+        // is_meter_replacement / is_meter_rollover may not exist yet — avoid the
+        // PostgREST schema-cache error)
         const { data: fallback } = await supabase
           .from('well_readings')
           .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, recorded_by, created_at')
@@ -211,7 +212,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
           .order('reading_datetime', { ascending: false });
-        return fallback ?? [];
+        return (fallback ?? []).map((r: any) => ({ ...r, is_meter_rollover: false, meter_rollover_max: null }));
       }
       if (module === 'power') {
         const { data, error } = await supabase
@@ -1038,6 +1039,20 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                   const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
                   // rows sorted descending → rows[i+1] is the immediately preceding reading in time
                   const predecessor: any = rows[i + 1] ?? null;
+                  // Rollover-aware Δ for well/locator 'raw' (cumulative-meter) mode.
+                  // Uses the row's OWN stored previous_reading — kept correct by
+                  // fn_cascade_reading_correction / the DB trigger — instead of
+                  // predecessor.current_reading, which is only whatever happens to be
+                  // adjacent in the currently-fetched/filtered rows array (wrong near
+                  // the edge of a custom date range, or after a row is deleted).
+                  // calc.dailyVolume applies (meter_rollover_max - previous) + current
+                  // when is_meter_rollover is set, and floors at 0 otherwise — the same
+                  // formula the DB and the entry form already use, so this stops
+                  // producing the large negative "naive subtraction on rollover" delta.
+                  const rawDelta = r.previous_reading != null
+                    ? calc.dailyVolume(+r.current_reading, +r.previous_reading,
+                        !!r.is_meter_rollover, r.meter_rollover_max != null ? +r.meter_rollover_max : null)
+                    : null;
 
                   const isGridRepl      = !!(r.is_grid_replacement  ?? r.is_meter_replacement);
                   const isSolarRepl     = !!(r.is_solar_replacement ?? false);
@@ -1417,7 +1432,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
+                            : rawDelta != null ? fmtNum(rawDelta) : '—'
                           }
                         </td>
                         {replCell}
@@ -1446,7 +1461,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <td className="px-3 py-1.5 text-right font-mono-num">
                           {isMeterReplacement
                             ? <span className="text-kpi-solar font-medium">0</span>
-                            : predecessor != null ? fmtNum(r.current_reading - predecessor.current_reading) : '—'
+                            : rawDelta != null ? fmtNum(rawDelta) : '—'
                           }
                         </td>
                         {replCell}
