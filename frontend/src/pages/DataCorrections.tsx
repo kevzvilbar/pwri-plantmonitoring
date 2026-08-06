@@ -14,7 +14,7 @@
  * 4. Operator Stats  — rolling 30-day error rate table (item 7).
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -46,6 +46,10 @@ type SourceTable = 'locator_readings' | 'well_readings' | 'product_meter_reading
 interface FlaggedRow {
   id: string;
   source_table: SourceTable;
+  /** well_id / locator_id / meter_id — the FK on the reading row, not the
+   *  reading's own id. Only populated by fetchPending() so far; used to look
+   *  up wells.meter_rollover_max for the rollover-default fetch below. */
+  entity_id?: string;
   entity_name: string;
   plant_name: string;
   reading_datetime: string;
@@ -350,7 +354,27 @@ function MarkRolloverModal({
   const { user, roles } = useAuth();
   const actorRole = pickDisplayRole(roles);
   const [maxVal, setMaxVal] = useState(String(guessMeterMax(row.previous_reading)));
+  const [maxTouched, setMaxTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Wells can carry a configured wrap point (wells.meter_rollover_max, see
+  // 20260806143000_wells_meter_rollover_max_config.sql) — prefer it over the
+  // guessed digit-count heuristic once it loads. Locators and product
+  // meters have no equivalent config column yet, so they keep using the
+  // guess. maxTouched guards against clobbering a value the admin already
+  // started typing before this resolves.
+  const { data: configuredMax } = useQuery({
+    queryKey: ['well-rollover-max', row.entity_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('wells').select('meter_rollover_max').eq('id', row.entity_id as string).maybeSingle();
+      return (data as any)?.meter_rollover_max ?? null;
+    },
+    enabled: row.source_table === 'well_readings' && !!row.entity_id,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    if (configuredMax != null && !maxTouched) setMaxVal(String(configuredMax));
+  }, [configuredMax]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const parsedMax = Number(maxVal);
   const validMax = maxVal !== '' && !isNaN(parsedMax) && parsedMax > 0
@@ -434,13 +458,14 @@ function MarkRolloverModal({
           <Input
             type="number"
             value={maxVal}
-            onChange={e => setMaxVal(e.target.value)}
+            onChange={e => { setMaxVal(e.target.value); setMaxTouched(true); }}
             className="font-mono h-9 text-sm"
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            Guessed from the previous reading's digit count — overtype with
-            the physical meter's actual register size if you know it.
+            {configuredMax != null && !maxTouched
+              ? "From this well's configured wrap point (Edit Well) — overtype if it's wrong."
+              : "Guessed from the previous reading's digit count — overtype with the physical meter's actual register size if you know it."}
           </p>
           {validMax && (
             <p className="text-xs text-muted-foreground">
@@ -533,6 +558,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       results.push({
         id: r.id,
         source_table: table,
+        entity_id: r[entityCol],
         entity_name: entityMap[r[entityCol]] ?? '—',
         plant_name: plantMap[r.plant_id] ?? '—',
         reading_datetime: r.reading_datetime,
