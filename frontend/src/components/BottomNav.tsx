@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { isOperatorOnly } from '@/lib/permissions';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
@@ -116,9 +117,9 @@ export function BottomNav() {
   const { isAdmin, isManager, isDataAnalyst, profile, roles } = useAuth();
   const fullPath = pathname + search;
 
-  const isOperator =
-    profile?.designation === OPERATOR_DESIGNATION ||
-    (roles.length > 0 && roles.every((r) => r === 'Operator'));
+  // Was missing the !isElevated guard ProtectedRoute has — see AppSidebar.tsx
+  // for the same fix and permissions.test.ts for the covering test.
+  const isOperator = isOperatorOnly(roles, profile?.designation, OPERATOR_DESIGNATION);
 
   // For operators: filter every sheet group's items to allowed paths only,
   // then drop empty groups. This also removes Finance/AI/Compliance/Admin entirely.

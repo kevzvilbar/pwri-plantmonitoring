@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
+import { isOperatorOnly } from '@/lib/permissions';
 
 // Routes an Operator is allowed to visit. Everything else redirects to /.
 // Keep this in sync with AppSidebar and BottomNav allowed items.
@@ -39,24 +40,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/pending-approval" replace />;
   }
 
-  // Elevated roles (Admin, Data Analyst, Manager) have no path restrictions —
-  // their feature gating is handled inside the individual page components.
-  const isElevated = roles.some((r) =>
-    ['Admin', 'Data Analyst', 'Manager'].includes(r),
-  );
-
-  // Operator restriction: only allowed paths are accessible.
-  // We check designation AND role — a user is treated as an Operator
-  // when their primary role is Operator (regardless of designation),
-  // OR when their designation is Operator (regardless of role),
-  // to cover edge cases where one or the other hasn't been set yet.
-  const isOperator =
-    !isElevated && (
-      profile?.designation === OPERATOR_DESIGNATION ||
-      (roles.length > 0 && roles.every((r) => r === 'Operator'))
-    );
-
-  if (isOperator) {
+  // Was a 3-way duplicated inline block (ProtectedRoute / AppSidebar /
+  // BottomNav each had their own copy). Now a single shared function —
+  // see permissions.ts and permissions.test.ts.
+  if (isOperatorOnly(roles, profile?.designation, OPERATOR_DESIGNATION)) {
     const allowed = OPERATOR_ALLOWED_PATHS.some(
       (p) => p === '/' ? loc.pathname === '/' : loc.pathname.startsWith(p),
     );

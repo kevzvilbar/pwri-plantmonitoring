@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
 import { OPERATOR_ALLOWED_PATHS } from '@/components/ProtectedRoute';
+import { isOperatorOnly } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -116,9 +117,11 @@ export function AppSidebar() {
   const { pathname } = useLocation();
   const { isAdmin, isManager, isDataAnalyst, profile, roles } = useAuth();
 
-  const isOperator =
-    profile?.designation === OPERATOR_DESIGNATION ||
-    (roles.length > 0 && roles.every((r) => r === 'Operator'));
+  // Was missing the !isElevated guard ProtectedRoute has — an elevated user
+  // with a stale designation='Operator' field would get the restricted nav
+  // even though every route was actually open to them. isOperatorOnly is the
+  // single corrected definition; see permissions.test.ts.
+  const isOperator = isOperatorOnly(roles, profile?.designation, OPERATOR_DESIGNATION);
 
   let visibleGroups: SidebarGroup[];
   if (isOperator) {
