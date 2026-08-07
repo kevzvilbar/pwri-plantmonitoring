@@ -989,7 +989,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             rows. Mirrors the isDirectMode banner/column pattern already used for
             direct-input locators & wells in the shared ReadingHistoryDialog. */}
         {meter.is_derived && (
-          <div className="flex items-center gap-1.5 rounded-md bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/50 px-2.5 py-1.5 text-xs text-teal-800 dark:text-teal-300">
+          <div className="flex items-center gap-1.5 rounded-md bg-primary-soft border border-primary/30 px-2.5 py-1.5 text-xs text-primary">
             <Droplet className="h-3 w-3 shrink-0" />
             This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
           </div>

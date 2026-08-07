@@ -277,7 +277,7 @@ export function EntityHistoryChart({
       {/* Header row */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-teal-600" />
+          <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Historical Consumption</span>
         </div>
         <div className="flex items-center gap-1.5">

@@ -323,7 +323,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate flex items-center gap-1.5">
                       {l.name}
-                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedLocator === l.id ? 'text-teal-600' : 'text-muted-foreground/30'}`} />
+                      <TrendingUp className={`h-3 w-3 transition-colors shrink-0 ${selectedLocator === l.id ? 'text-primary' : 'text-muted-foreground/30'}`} />
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
                       {l.meter_brand} {l.meter_size} · SN {l.meter_serial ?? '—'}
@@ -333,7 +333,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                       const supplyMeter = (productMeters ?? []).find((m: any) => m.id === l.product_meter_id);
                       if (!supplyMeter) return null;
                       return (
-                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs bg-primary-soft text-primary border border-primary/30">
                           <Droplet className="h-2.5 w-2.5" />
                           Fed by: {supplyMeter.name}
                         </div>
@@ -348,7 +348,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                       <label
                         className={`mt-1 inline-flex items-center gap-1.5 text-2xs font-medium px-1.5 py-0.5 rounded border cursor-pointer ${
                           l.is_locked
-                            ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900'
+                            ? 'text-danger bg-danger-soft border-danger/40'
                             : 'text-muted-foreground border-dashed'
                         }`}
                         onClick={(e) => e.stopPropagation()}
@@ -364,7 +364,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                       </label>
                     ) : (
                       l.is_locked && (
-                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900">
+                        <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-danger-soft text-danger border border-danger/40">
                           <ShieldAlert className="h-2.5 w-2.5" />
                           Meter locked
                         </div>

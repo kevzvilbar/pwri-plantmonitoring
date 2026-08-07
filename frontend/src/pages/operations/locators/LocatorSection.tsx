@@ -961,7 +961,7 @@ function LocatorRow({
         </div>
 
         {reviewFlag && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/40 rounded-lg px-3 py-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warn" />
             <span>
               Needs review — a sibling locator or the mother meter changed for {new Date(reviewFlag.date_key).toLocaleDateString()} since this was last computed.
@@ -1314,20 +1314,20 @@ function LocatorRow({
       )}
 
       {lastSavePending && !cooldownMinutes && (
-        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+        <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/40 px-2.5 py-1.5 text-xs text-warn">
           <AlertCircle className="h-3 w-3 shrink-0" />
           Last reading sent for supervisor review — excluded from totals until approved.
         </div>
       )}
 
       {reading && (belowPrev || highVol) && !lastSavePending && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn/30 px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             {belowPrev ? 'Below previous — will go to supervisor review after save.' : `Flow rate ${Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above avg — will go to supervisor review after save.`}
           </span>
           {belowPrev && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
+            <span className="text-warn pl-5">
               If the meter was replaced, use the meter replacement toggle.
             </span>
           )}
