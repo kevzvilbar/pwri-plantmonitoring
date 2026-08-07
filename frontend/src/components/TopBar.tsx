@@ -1,4 +1,4 @@
-import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, Clock, BellOff } from 'lucide-react';
+import { Bell, ClipboardCheck, ShieldAlert, Wrench, Zap, Info, AlertTriangle, AlertCircle, Clock, BellOff } from 'lucide-react';
 
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -60,7 +60,7 @@ const sevTier = (severity: string): SevTier => {
 
 const sevIcon = (severity: string) =>
   sevTier(severity) === 'critical' ? AlertTriangle :
-  sevTier(severity) === 'warning'  ? AlertTriangle : Info;
+  sevTier(severity) === 'warning'  ? AlertCircle : Info;
 
 const sevDotCls = (severity: string) =>
   sevTier(severity) === 'critical' ? 'bg-danger' :
