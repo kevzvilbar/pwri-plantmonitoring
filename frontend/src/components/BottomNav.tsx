@@ -5,7 +5,7 @@ import {
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, ShieldCheck,
   ShieldAlert,
   ClipboardCheck,
-  GitBranch, FlaskConical, Gauge,
+  GitBranch, FlaskConical, Award,
 } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon (linked
 // membrane blocks) instead of the generic gear/Cog glyph, matching TrainsList
@@ -98,7 +98,7 @@ const dataAnalysisGroup = {
   items: [
     { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
     { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
-    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Gauge },
+    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Award },
   ],
 };
 

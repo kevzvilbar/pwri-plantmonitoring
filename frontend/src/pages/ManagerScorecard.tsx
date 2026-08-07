@@ -29,7 +29,7 @@ import { DataState } from '@/components/DataState';
 import { StatusPill } from '@/components/StatusPill';
 import { StatCard } from '@/components/dashboard/StatCard';
 import {
-  Gauge, Building2, AlertTriangle, ShieldAlert, ShieldQuestion,
+  Award, Percent, Building2, AlertTriangle, ShieldAlert, ShieldQuestion,
   RefreshCw, Loader2, CheckCircle2, HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -155,7 +155,7 @@ export default function ManagerScorecard() {
     <div className="space-y-4 animate-fade-in">
       <PageHeader
         title="Manager Scorecard"
-        titleIcon={<Gauge className="h-5 w-5 text-accent" />}
+        titleIcon={<Award className="h-5 w-5 text-accent" />}
         subtitle="Data-quality oversight per plant — completeness, unexplained gaps, and open exceptions, rolled up to whoever's managing it."
       />
 
@@ -184,7 +184,7 @@ export default function ManagerScorecard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={Building2} label="Plants monitored" value={`${summary.monitored} / ${summary.total || 0}`}
           tone={summary.monitored < summary.total ? 'warn' : undefined} />
-        <StatCard icon={Gauge} label="Avg completeness" value={fmtPct(summary.avgCompleteness)}
+        <StatCard icon={Percent} label="Avg completeness" value={fmtPct(summary.avgCompleteness)}
           tone={summary.avgCompleteness !== null && summary.avgCompleteness < 80 ? 'danger' : undefined} />
         <StatCard icon={AlertTriangle} label="Open exceptions" value={summary.openExceptions.toLocaleString()}
           tone={summary.openExceptions > 0 ? 'warn' : undefined} />
