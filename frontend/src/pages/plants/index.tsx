@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, useId, type ReactNode } from 'react';
 // ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
 // Plants.tsx owns recomputePermeateDeltas — the authoritative DB write for
 // permeate_meter_delta.  After each successful UPDATE we also call
@@ -258,82 +258,125 @@ export default function Plants() {
     );
   }
 
-  // ── KPI ring — one metric's percentage as a layered, gradient-stroked
-  // dial: a bold outer arc plus a faint inner echo arc sweeping the same
-  // percentage, so each ring reads as a small cluster rather than a flat
-  // stroke. Color comes from a single CSS var (--kpi-wells / --kpi-locator /
-  // --kpi-ro) so it stays in sync with dark mode and any future theme swap.
-  function KpiRing({ pct, hueVar, size = 56, icon, label }: {
-    pct: number; hueVar: string; size?: number; icon?: ReactNode; label: string;
-  }) {
-    const strokeW  = size >= 50 ? 4 : 3;
-    const cx = size / 2, cy = size / 2;
-    const rOuter = cx - strokeW - 1;
-    const rInner = rOuter - strokeW - 2.5;
-    const circOuter = 2 * Math.PI * rOuter;
-    const circInner = 2 * Math.PI * rInner;
-    const dashOuter = (pct / 100) * circOuter;
-    const dashInner = (pct / 100) * circInner;
-    const gradId = `kpiRingGrad-${hueVar.replace('--', '')}-${size}`;
-    const fontSize = size >= 50 ? '13px' : '9px';
-
-    return (
-      <div className="flex flex-col items-center gap-1 shrink-0">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={`hsl(var(${hueVar}) / 0.6)`} />
-              <stop offset="100%" stopColor={`hsl(var(${hueVar}))`} />
-            </linearGradient>
-          </defs>
-
-          {/* Outer track + gradient arc */}
-          <circle cx={cx} cy={cy} r={rOuter} fill="none" strokeWidth={strokeW}
-            stroke="currentColor" className="text-muted/50" />
-          <circle cx={cx} cy={cy} r={rOuter} fill="none" strokeWidth={strokeW}
-            stroke={`url(#${gradId})`}
-            strokeDasharray={`${dashOuter} ${circOuter - dashOuter}`}
-            strokeDashoffset={circOuter / 4}
-            strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray 0.6s ease' }}
-          />
-
-          {/* Inner echo arc — faint, thinner, same sweep */}
-          <circle cx={cx} cy={cy} r={rInner} fill="none" strokeWidth={Math.max(strokeW - 1.5, 1.5)}
-            stroke={`hsl(var(${hueVar}) / 0.55)`}
-            strokeDasharray={`${dashInner} ${circInner - dashInner}`}
-            strokeDashoffset={circInner / 4}
-            strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray 0.6s ease' }}
-          />
-
-          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
-            style={{ fontSize, fontWeight: 700, fill: `hsl(var(${hueVar}))` }}>
-            {pct}%
-          </text>
-        </svg>
-        <span className="flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {icon}
-          {size >= 50 && label}
-        </span>
-      </div>
-    );
-  }
-
-  // Three KpiRings — Wells / Locators / RO Trains — replacing the single
-  // averaged Health ring so each metric's own coverage is visible at a glance.
-  function MetricRingGroup({ wells, locators, trains, size = 56 }: {
+  // ── Plant radial gauge — Wells / Locators / RO Trains as ONE concentric
+  // radial-bar chart instead of three side-by-side rings. Layers read
+  // outer → inner: RO Trains → Locators → Wells, with the plant's combined
+  // score in the centre (same average as plantHealthScore, above). Colour
+  // still comes from the --kpi-wells / --kpi-locator / --kpi-ro CSS vars,
+  // so it stays in sync with dark mode and any future theme swap.
+  //
+  // Below 64px three bands stop being legible, so it falls back to a single
+  // status-coloured ring — at that size the per-metric numbers are already
+  // shown next to it via MetricChip / PlantStatRow, so nothing is lost.
+  function MetricRingGroup({ wells, locators, trains, size = 56, showLegend = false }: {
     wells: { active: number; total: number };
     locators: { active: number; total: number };
     trains: { active: number; total: number };
     size?: number;
+    showLegend?: boolean;
   }) {
+    const uid = useId();
     const pct = (m: { active: number; total: number }) => m.total > 0 ? Math.round((m.active / m.total) * 100) : 0;
+    const overall = Math.round((pct(wells) + pct(locators) + pct(trains)) / 3);
+
+    // ── Compact fallback (<64px): one combined ring, status-coloured ──
+    if (size < 64) {
+      const color = overall >= 75 ? 'hsl(var(--primary))' : overall >= 40 ? 'hsl(var(--info))' : 'hsl(var(--danger))';
+      const strokeW = 4;
+      const cx = size / 2, cy = size / 2;
+      const r = cx - strokeW - 1;
+      const circ = 2 * Math.PI * r;
+      const dash = (overall / 100) * circ;
+      return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0"
+          role="img" aria-label={`Overall plant health ${overall} percent`}>
+          <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={strokeW} stroke="currentColor" className="text-muted/50" />
+          <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={strokeW} stroke={color}
+            strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4}
+            strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}
+            style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
+            style={{ fontSize: 9, fontWeight: 700, fill: color }}>{overall}%</text>
+        </svg>
+      );
+    }
+
+    // Layer order, outer → inner. Add a fourth entry here if another
+    // trackable metric ever joins wells/locators/trains in summaryCounts.
+    const layers = [
+      { key: 'trains',   label: 'RO Trains', icon: <ROTrainIcon className="h-3 w-3" />, value: trains,   hueVar: '--kpi-ro' },
+      { key: 'locators', label: 'Locators',  icon: <MapPin className="h-3 w-3" />,       value: locators, hueVar: '--kpi-locator' },
+      { key: 'wells',    label: 'Wells',     icon: <Droplet className="h-3 w-3" />,      value: wells,    hueVar: '--kpi-wells' },
+    ];
+
+    const strokeW = Math.max(4, Math.round(size * 0.075));
+    const gap = Math.max(2, Math.round(strokeW * 0.55));
+    const cx = size / 2, cy = size / 2;
+    const showCaption = size >= 80;
+
     return (
-      <div className="flex items-end gap-2">
-        <KpiRing pct={pct(wells)}    hueVar="--kpi-wells"   size={size} icon={<Droplet className="h-2.5 w-2.5" />}    label="Wells" />
-        <KpiRing pct={pct(locators)} hueVar="--kpi-locator" size={size} icon={<MapPin className="h-2.5 w-2.5" />}      label="Locators" />
-        <KpiRing pct={pct(trains)}   hueVar="--kpi-ro"      size={size} icon={<ROTrainIcon className="h-2.5 w-2.5" />} label="RO Trains" />
+      <div className="flex items-center gap-4 shrink-0">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
+          aria-label={`Overall ${overall} percent. RO Trains ${pct(trains)} percent, Locators ${pct(locators)} percent, Wells ${pct(wells)} percent.`}>
+          <defs>
+            {layers.map((l) => (
+              <linearGradient key={l.key} id={`ringGrad-${uid}-${l.key}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={`hsl(var(${l.hueVar}) / 0.6)`} />
+                <stop offset="100%" stopColor={`hsl(var(${l.hueVar}))`} />
+              </linearGradient>
+            ))}
+          </defs>
+          {layers.map((l, i) => {
+            const r = cx - strokeW / 2 - 2 - i * (strokeW + gap);
+            const circ = 2 * Math.PI * r;
+            const p = pct(l.value);
+            const dash = (p / 100) * circ;
+            return (
+              <g key={l.key}>
+                {/* Track */}
+                <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={strokeW}
+                  stroke="currentColor" className="text-muted/40" />
+                {/* Progress arc */}
+                <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={strokeW}
+                  stroke={`url(#ringGrad-${uid}-${l.key})`}
+                  strokeDasharray={`${dash} ${circ - dash}`}
+                  strokeDashoffset={circ / 4}
+                  strokeLinecap="round"
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                  style={{ transition: 'stroke-dasharray 0.6s ease', filter: `drop-shadow(0 0 3px hsl(var(${l.hueVar}) / 0.4))` }}
+                />
+              </g>
+            );
+          })}
+          <text x={cx} y={cy - (showCaption ? size * 0.05 : 0)} textAnchor="middle" dominantBaseline="middle"
+            style={{ fontSize: size * 0.2, fontWeight: 800, fill: 'hsl(var(--foreground))' }}>
+            {overall}%
+          </text>
+          {showCaption && (
+            <text x={cx} y={cy + size * 0.16} textAnchor="middle" dominantBaseline="middle"
+              style={{ fontSize: size * 0.062, fontWeight: 700, letterSpacing: '0.08em', fill: 'hsl(var(--muted-foreground))' }}>
+              OVERALL
+            </text>
+          )}
+        </svg>
+
+        {/* Optional legend — skip where MetricChip/PlantStatRow already show these numbers */}
+        {showLegend && size >= 96 && (
+          <div className="flex flex-col gap-2.5" style={{ minWidth: 120 }}>
+            {layers.map((l) => {
+              const p = pct(l.value);
+              return (
+                <div key={l.key} className="flex items-center gap-2 text-xs">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(var(${l.hueVar}))` }} />
+                  {l.icon}
+                  <span className="flex-1 truncate text-muted-foreground">{l.label}</span>
+                  <span className="font-mono font-semibold text-foreground">{l.value.active}/{l.value.total}</span>
+                  <span className="font-bold text-right" style={{ color: `hsl(var(${l.hueVar}))`, width: 36 }}>{p}%</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -543,7 +586,7 @@ export default function Plants() {
 
                     {/* Metric rings — Wells / Locators / RO Trains coverage */}
                     <div className="flex items-center justify-center pl-1 shrink-0">
-                      <MetricRingGroup wells={wells} locators={locators} trains={trains} size={56} />
+                      <MetricRingGroup wells={wells} locators={locators} trains={trains} size={88} />
                     </div>
                   </div>
                 </div>
