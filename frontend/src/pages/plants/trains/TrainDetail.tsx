@@ -62,6 +62,7 @@ export function EditTrainDialog({
     num_afm: String(train.num_afm ?? 0),
     num_booster_pumps: String(train.num_booster_pumps ?? 0),
     num_hp_pumps: String(train.num_hp_pumps ?? 0),
+    hpp_target_pressure_psi: train.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '',
     num_cartridge_filters: String(train.num_cartridge_filters ?? 0),
     num_controllers: String(train.num_controllers ?? 0),
     num_filter_housings: String(train.num_filter_housings ?? 0),
@@ -96,6 +97,7 @@ export function EditTrainDialog({
       num_afm: num(form.num_afm),
       num_booster_pumps: num(form.num_booster_pumps),
       num_hp_pumps: num(form.num_hp_pumps),
+      hpp_target_pressure_psi: form.hpp_target_pressure_psi === '' ? null : Number(form.hpp_target_pressure_psi),
       num_cartridge_filters: num(form.num_cartridge_filters),
       num_controllers: num(form.num_controllers),
       num_filter_housings: num(form.num_filter_housings),
@@ -307,6 +309,26 @@ export function EditTrainDialog({
                   +
                 </Button>
               </div>
+            </div>
+
+            {/* HPP target pressure — configured once here instead of retyped
+                on every pre-treatment/RO reading, see 20260807_ro_trains_hpp_
+                target_pressure_setpoint.sql for why. */}
+            <div>
+              <Label className="text-xs">HPP Target Pressure (psi)</Label>
+              <Input
+                type="number"
+                step="any"
+                min={0}
+                placeholder="e.g. 180"
+                value={form.hpp_target_pressure_psi}
+                onChange={(e) => setForm({ ...form, hpp_target_pressure_psi: e.target.value })}
+                className="mt-1 font-mono-num"
+                data-testid="hpp-target-pressure-input"
+              />
+              <p className="text-2xs text-muted-foreground mt-1">
+                Auto-fills on every reading for this train. Leave blank to keep entering it manually per reading.
+              </p>
             </div>
 
             {/* Controllers */}

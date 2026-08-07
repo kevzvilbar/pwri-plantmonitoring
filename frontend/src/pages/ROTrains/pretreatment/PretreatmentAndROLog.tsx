@@ -160,6 +160,16 @@ export function PretreatmentAndROLog() {
   });
   const train = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
 
+  // Auto-fill from the train's configured setpoint (Train Settings ->
+  // EditTrainDialog) whenever the selected train changes or that value
+  // loads. When it's set, the field below renders read-only, so there's no
+  // "don't clobber what the user typed" concern the way syncMeterStart's
+  // effect further down has to guard against — if it's configured, the user
+  // was never able to type into this field in the first place.
+  useEffect(() => {
+    setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
+  }, [train?.id, train?.hpp_target_pressure_psi]);
+
   // Pull the most recent pre-treatment reading for this train so we can default
   // the new form's "Meter Reading Start" to the previous backwash end value.
   const { data: prevPretreat } = useQuery({
@@ -1444,7 +1454,17 @@ export function PretreatmentAndROLog() {
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
                 <div>
                   <Label className="text-xs text-muted-foreground">HPP Target Pressure (psi)</Label>
-                  <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
+                  {train?.hpp_target_pressure_psi != null ? (
+                    <>
+                      <Input type="number" step="any" value={hppTarget} readOnly disabled
+                        className="font-mono-num bg-muted/40" />
+                      <p className="text-2xs text-muted-foreground mt-1">
+                        Set in Train Settings — applies to every reading until changed there.
+                      </p>
+                    </>
+                  ) : (
+                    <Input type="number" step="any" value={hppTarget} onChange={(e) => setHppTarget(e.target.value)} />
+                  )}
                 </div>
               </Card>
 

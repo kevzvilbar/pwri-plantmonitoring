@@ -3912,6 +3912,7 @@ export type Database = {
           feed_meter_size: string | null
           filter_housing_type: string | null
           filter_media_type: string | null
+          hpp_target_pressure_psi: number | null
           id: string
           name: string | null
           num_afm: number
@@ -3944,6 +3945,7 @@ export type Database = {
           feed_meter_size?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
+          hpp_target_pressure_psi?: number | null
           id?: string
           name?: string | null
           num_afm?: number
@@ -3976,6 +3978,7 @@ export type Database = {
           feed_meter_size?: string | null
           filter_housing_type?: string | null
           filter_media_type?: string | null
+          hpp_target_pressure_psi?: number | null
           id?: string
           name?: string | null
           num_afm?: number
