@@ -21,7 +21,7 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
-import { Upload, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Upload, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImportROReadingsDialog } from '../../ro-trains';
 
@@ -242,6 +242,14 @@ export function PretreatmentAndROLog() {
   const [afmSectionStarted, setAfmSectionStarted] = useState(false);
   const [boosterHppSectionStarted, setBoosterHppSectionStarted] = useState(false);
   const [cartridgeSectionStarted, setCartridgeSectionStarted] = useState(false);
+
+  // ── In-flight save guard ─────────────────────────────────────────────────
+  // Prevents a fast double-tap (or a slow network making the operator tap
+  // "Save" again) from firing submit() twice concurrently, which previously
+  // could insert duplicate/blank ro_train_readings + ro_pretreatment_readings
+  // rows. submit() sets this true immediately and the Save button is
+  // disabled while it's true — see submit() and the Save button below.
+  const [isSaving, setIsSaving] = useState(false);
 
   // ── Missing-value override notes ─────────────────────────────────────────
   // Every field in each section is now required to proceed/save (previously
@@ -530,7 +538,12 @@ export function PretreatmentAndROLog() {
     ? +(pwrDelta / permVol).toFixed(3) : null;
 
   const submit = async () => {
+    // Re-entrancy guard: ignore a second call while the first is still
+    // in-flight (double-tap, slow network + impatient re-tap, etc.).
+    if (isSaving) return;
     if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
+    setIsSaving(true);
+    try {
 
     // ── Completeness guard (online trains only) ───────────────────────────────
     // Every key measurement field must be filled before saving. Two families of
@@ -840,6 +853,14 @@ export function PretreatmentAndROLog() {
     setBoosterReasonNeeded(false); setBoosterIncompleteReason('');
     setHousingReasonNeeded(false); setHousingIncompleteReason('');
     setRoReasonNeeded(false); setRoIncompleteReason('');
+    // BUG FIX: re-lock the step gates after every successful save (previously
+    // only reset when switching trains — see the train-change useEffect above).
+    // Leaving these true kept the fully-filled-in-appearance form (incl. the
+    // Save button) visible right after a save, now with blank fields and no
+    // re-validation — a second tap could submit an empty reading, and the
+    // Cartridge/Bag Filter Housing required-fields check (below) would never
+    // fire again for subsequent readings on the same train this session.
+    setAfmSectionStarted(false); setBoosterHppSectionStarted(false); setCartridgeSectionStarted(false);
     // Offline state reset — only bring the train back online when the offline
     // period was formally resolved (an end time was entered). If offlineEnd is
     // blank the period is still open: keep trainOnline=false so the next
@@ -895,6 +916,12 @@ export function PretreatmentAndROLog() {
     qc.invalidateQueries({ queryKey: ['dsm-ro-trains'] });
     // Broad catch-all — safety net for any other mounted queries
     qc.invalidateQueries();
+    } finally {
+      // Always clears — on success, on a validation `return`, and on a
+      // thrown/network error alike — so the Save button never gets stuck
+      // disabled and a genuine retry after a failure is still possible.
+      setIsSaving(false);
+    }
   };
 
   const f = (k: keyof typeof roValues) => ({ value: roValues[k], onChange: (e: any) => setRoValues({ ...roValues, [k]: e.target.value }) });
@@ -1533,7 +1560,7 @@ export function PretreatmentAndROLog() {
           {(train.num_cartridge_filters ?? 0) > 0 && (
             <Card className="p-3 space-y-2">
               <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
-                {cartridgeHousingLabel} ({train.num_cartridge_filters})
+                {cartridgeHousingLabel} ({train.num_cartridge_filters}) <span className="text-danger">*</span>
               </h4>
               {Array.from({ length: train.num_cartridge_filters }, (_, i) => i + 1).map((u) => {
                 const inP  = +(cartridgeHousings[u]?.inP  ?? '');
@@ -2121,8 +2148,9 @@ export function PretreatmentAndROLog() {
           </Card>
         )}
         {train && (!trainOnline || cartridgeSectionStarted) && (
-          <Button onClick={submit} className="w-full h-12 text-base font-semibold">
-            {!trainOnline ? 'Save Offline Record' : 'Save Pre-Treatment & RO Reading'}
+          <Button onClick={submit} disabled={isSaving} className="w-full h-12 text-base font-semibold gap-2">
+            {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSaving ? 'Saving…' : !trainOnline ? 'Save Offline Record' : 'Save Pre-Treatment & RO Reading'}
           </Button>
         )}
       </>
