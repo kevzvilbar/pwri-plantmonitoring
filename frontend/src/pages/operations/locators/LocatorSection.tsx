@@ -1181,7 +1181,7 @@ function LocatorRow({
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
                 title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
-                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
                 data-testid={`locator-gap-reason-badge-${locator.id}`}
               >
                 <MessageCircleOff className="h-2.5 w-2.5" />
@@ -1496,15 +1496,15 @@ function SharedPowerMeterRow({
 
   return (
     /* ── Shared meter group header — owns the kWh input ── */
-    <div className="border-b border-amber-200/80 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/20">
+    <div className="border-b border-warn/40 bg-warn-soft/60">
       {/* Title bar */}
       <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
-        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-warn-soft shrink-0">
           <Zap className="h-3.5 w-3.5 text-warn" />
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground tracking-tight truncate">{groupName}</span>
-          <span className="text-3xs font-bold uppercase tracking-widest bg-amber-200/70 dark:bg-amber-800/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full shrink-0">
+          <span className="text-3xs font-bold uppercase tracking-widest bg-warn/20 text-warn px-1.5 py-0.5 rounded-full shrink-0">
             Shared Meter
           </span>
         </div>
