@@ -749,26 +749,45 @@ export function PowerConsumptionEnergyMix({
 
 // ─── PowerMeterChangeDialog ───────────────────────────────────────────────────
 // Records a physical grid meter replacement for a plant's Power tab.
-// On save it:
-//   1. Updates grid_meter_multipliers in plant_power_config (new ratio takes effect immediately)
-//   2. Inserts a best-effort audit row into power_meter_changes (table may not exist yet)
-//   3. Inserts an is_meter_replacement=true power_reading at the change date so the
-//      Δ is zeroed at the rollover point — mirrors how Locator / Well "Replace Meter" works.
+//
+// Two modes:
+//  - Live swap (no readingId) — used from Plant Settings → Power and from the
+//    inline "Meter replaced" checkbox on the daily Operations entry form.
+//    1. Updates grid_meter_multipliers in plant_power_config (new ratio takes effect immediately)
+//    2. Inserts a best-effort audit row into power_meter_changes, including the
+//       old meter's final reading and the new meter's initial reading (both required)
+//    3. Inserts an is_meter_replacement=true power_reading at the change date,
+//       seeded with the NEW meter's initial reading — not the old meter's last
+//       value — so the Δ is genuinely zeroed at the rollover point.
+//  - Post-hoc edit (readingId passed) — used from Reading History to flag an
+//    already-saved reading as the swap point. Skips the multiplier + new insert;
+//    just records old-final/new-initial/date and flags that existing reading,
+//    mirroring how ReplaceMeterDialog's readingId mode works for water meters.
 export function PowerMeterChangeDialog({
-  plant, gridMeterCount, gridMeterNames, currentMultipliers, onClose,
+  plant, gridMeterCount, gridMeterNames, currentMultipliers, readingId, initialMeterIndex, onSuccess, onClose,
 }: {
   plant: any;
   gridMeterCount: number;
   gridMeterNames: string[];
   currentMultipliers: number[];
+  /** When passed, flags this existing power_readings row instead of inserting
+   *  a new one, and skips the multiplier field entirely (a retroactive note
+   *  about a past reading shouldn't silently change the plant's live CT ratio). */
+  readingId?: string;
+  /** Preselects the grid meter picker — e.g. the meter index the operator was
+   *  entering a reading for when they checked "Meter replaced". */
+  initialMeterIndex?: number;
+  onSuccess?: () => void;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const [form, setForm] = useState({
-    meterIndex: 0,
+    meterIndex: initialMeterIndex ?? 0,
     changeDate: format(new Date(), 'yyyy-MM-dd'),
     newMultiplier: '',
+    oldFinalReading: '',
+    newInitialReading: '',
     notes: '',
   });
   const [saving, setSaving] = useState(false);
@@ -778,77 +797,115 @@ export function PowerMeterChangeDialog({
     gridMeterNames[i] ?? (gridMeterCount === 1 ? 'Grid Meter' : `Grid Meter ${i + 1}`);
 
   const submit = async () => {
-    const newMult = parseFloat(form.newMultiplier);
-    if (!(newMult > 0)) { toast.error('Enter a valid multiplier (must be > 0)'); return; }
+    if (!form.oldFinalReading) { toast.error("Old meter's final reading is required"); return; }
+    if (!form.newInitialReading) { toast.error("New meter's initial reading is required"); return; }
+    if (!form.changeDate) { toast.error('Date changed is required'); return; }
+    let newMult = oldMultiplier;
+    if (!readingId) {
+      newMult = parseFloat(form.newMultiplier);
+      if (!(newMult > 0)) { toast.error('Enter a valid multiplier (must be > 0)'); return; }
+    }
     setSaving(true);
 
-    // 1. Update plant_power_config with new multiplier for this meter index
-    try {
-      const updatedArr = Array.isArray(currentMultipliers) ? [...currentMultipliers] : [];
-      while (updatedArr.length <= form.meterIndex) updatedArr.push(1);
-      updatedArr[form.meterIndex] = newMult;
-      await (supabase.from('plant_power_config' as any) as any).upsert(
-        { plant_id: plant.id, grid_meter_multipliers: updatedArr, updated_at: new Date().toISOString() },
-        { onConflict: 'plant_id' }
-      );
-    } catch { /* table may not exist yet */ }
+    if (!readingId) {
+      // 1. Update plant_power_config with new multiplier for this meter index —
+      // skipped in edit mode: correcting a past reading's paperwork shouldn't
+      // silently change the plant's live CT ratio.
+      try {
+        const updatedArr = Array.isArray(currentMultipliers) ? [...currentMultipliers] : [];
+        while (updatedArr.length <= form.meterIndex) updatedArr.push(1);
+        updatedArr[form.meterIndex] = newMult;
+        await (supabase.from('plant_power_config' as any) as any).upsert(
+          { plant_id: plant.id, grid_meter_multipliers: updatedArr, updated_at: new Date().toISOString() },
+          { onConflict: 'plant_id' }
+        );
+      } catch { /* table may not exist yet */ }
+    }
 
-    // 2. Audit row in power_meter_changes (best-effort — table may not exist)
+    // 2. Audit row in power_meter_changes (best-effort — table/columns may not
+    // exist yet on plants that haven't run the 20260807 migration).
+    let replacementRowId: string | null = null;
     try {
-      await (supabase.from('power_meter_changes' as any) as any).insert({
+      const { data: inserted } = await (supabase.from('power_meter_changes' as any) as any).insert({
         plant_id: plant.id,
         meter_index: form.meterIndex,
         change_date: form.changeDate,
         old_multiplier: oldMultiplier,
         new_multiplier: newMult,
+        old_meter_final_reading: +form.oldFinalReading,
+        new_meter_initial_reading: +form.newInitialReading,
         notes: form.notes || null,
         changed_by: user?.id ?? null,
         created_at: new Date().toISOString(),
-      });
-    } catch { /* ignore if table missing */ }
+      }).select('id').single();
+      replacementRowId = (inserted as any)?.id ?? null;
+    } catch { /* ignore if table/columns missing */ }
 
-    // 3. Insert a power_reading at the change date with is_meter_replacement=true
-    // so the Δ is zeroed at the rollover — the same mechanism Locator / Well replacement uses.
-    try {
-      const { data: latestRow } = await (supabase
-        .from('power_readings')
-        .select('meter_reading_kwh, grid_meter_readings')
-        .eq('plant_id', plant.id)
-        .order('reading_datetime', { ascending: false })
-        .limit(1) as any).maybeSingle();
-      if (latestRow) {
+    if (readingId) {
+      // Edit mode: flag the existing reading rather than inserting a new one.
+      try {
+        const { error: flagErr } = await (supabase.from('power_readings') as any)
+          .update({ is_grid_replacement: true }).eq('id', readingId);
+        // is_grid_replacement may not exist yet — fall back to the shared flag.
+        if (flagErr) await (supabase.from('power_readings') as any).update({ is_meter_replacement: true }).eq('id', readingId);
+      } catch { /* non-critical */ }
+      if (replacementRowId) {
+        try {
+          await (supabase.from('power_meter_changes' as any) as any).update({ reading_id: readingId }).eq('id', replacementRowId);
+        } catch { /* non-critical */ }
+      }
+    } else {
+      // 3. Insert a power_reading at the change date, seeded with the NEW
+      // meter's initial reading for this meter index — mirrors how Locator /
+      // Well replacement works, but uses the real entered value instead of
+      // carrying the old meter's number forward.
+      try {
+        const { data: latestRow } = await (supabase
+          .from('power_readings')
+          .select('meter_reading_kwh, grid_meter_readings')
+          .eq('plant_id', plant.id)
+          .order('reading_datetime', { ascending: false })
+          .limit(1) as any).maybeSingle();
         const [y, m, d] = form.changeDate.split('-').map(Number);
         const changeDt  = new Date(y, m - 1, d, 0, 0, 0).toISOString();
-        const gmr = (latestRow.grid_meter_readings as Record<string, number> | null) ?? {};
-        await supabase.from('power_readings').insert({
+        const gmr: Record<string, number> = { ...((latestRow?.grid_meter_readings as Record<string, number> | null) ?? {}) };
+        gmr[String(form.meterIndex)] = +form.newInitialReading;
+        const { data: insertedReading } = await supabase.from('power_readings').insert({
           plant_id: plant.id,
           reading_datetime: changeDt,
-          meter_reading_kwh: latestRow.meter_reading_kwh ?? 0,
+          meter_reading_kwh: form.meterIndex === 0 ? +form.newInitialReading : (latestRow?.meter_reading_kwh ?? 0),
           grid_meter_readings: gmr,
           is_meter_replacement: true,
           recorded_by: user?.id ?? null,
-        } as any);
-      }
-    } catch { /* non-critical — reading row is a convenience, not required */ }
+        } as any).select('id').single();
+        if (replacementRowId && (insertedReading as any)?.id) {
+          await (supabase.from('power_meter_changes' as any) as any)
+            .update({ reading_id: (insertedReading as any).id }).eq('id', replacementRowId);
+        }
+      } catch { /* non-critical — reading row is a convenience, not required */ }
+    }
 
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['plant-power-config', plant.id] });
     qc.invalidateQueries();
     toast.success(
-      `${getMeterName(form.meterIndex)}: meter change recorded · multiplier → ×${newMult}`
+      readingId
+        ? `${getMeterName(form.meterIndex)}: meter replacement recorded`
+        : `${getMeterName(form.meterIndex)}: meter change recorded · multiplier → ×${newMult}`
     );
+    onSuccess?.();
     onClose();
   };
 
   const newMultNum = parseFloat(form.newMultiplier);
-  const newMultValid = newMultNum > 0;
+  const newMultValid = readingId ? true : newMultNum > 0;
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <ChangeMeterIcon className="h-4 w-4 text-primary" /> Change Power Meter
+            <ChangeMeterIcon className="h-4 w-4 text-primary" /> {readingId ? 'Log Meter Replacement' : 'Change Power Meter'}
           </DialogTitle>
         </DialogHeader>
 
@@ -880,11 +937,11 @@ export function PowerMeterChangeDialog({
             </div>
           )}
 
-          {/* Change date + new multiplier — side by side */}
+          {/* Change date + old final reading — side by side */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Change Date
+                Change Date *
               </Label>
               <Input
                 type="date"
@@ -895,19 +952,49 @@ export function PowerMeterChangeDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                New Multiplier <span className="normal-case font-normal">(CT ratio)</span>
+                Old Meter's Final Reading * <span className="normal-case font-normal">(kWh)</span>
               </Label>
               <Input
-                type="number" step="any" min="0.001"
-                placeholder={`was ×${oldMultiplier}`}
-                value={form.newMultiplier}
-                onChange={e => setForm(f => ({ ...f, newMultiplier: e.target.value }))}
+                type="number" step="any"
+                value={form.oldFinalReading}
+                onChange={e => setForm(f => ({ ...f, oldFinalReading: e.target.value }))}
                 className="h-9"
               />
-              <p className="text-2xs text-muted-foreground">
-                Current: <span className="font-mono font-semibold">×{oldMultiplier}</span>
-              </p>
             </div>
+          </div>
+
+          {/* New initial reading + new multiplier — side by side. Multiplier is
+              hidden in edit mode (readingId set): a retroactive note about a
+              past reading shouldn't silently change the plant's live CT ratio. */}
+          <div className={readingId ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                New Meter's Initial Reading * <span className="normal-case font-normal">(kWh)</span>
+              </Label>
+              <Input
+                type="number" step="any"
+                value={form.newInitialReading}
+                onChange={e => setForm(f => ({ ...f, newInitialReading: e.target.value }))}
+                className="h-9"
+              />
+            </div>
+            {!readingId && (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  New Multiplier * <span className="normal-case font-normal">(CT ratio)</span>
+                </Label>
+                <Input
+                  type="number" step="any" min="0.001"
+                  placeholder={`was ×${oldMultiplier}`}
+                  value={form.newMultiplier}
+                  onChange={e => setForm(f => ({ ...f, newMultiplier: e.target.value }))}
+                  className="h-9"
+                />
+                <p className="text-2xs text-muted-foreground">
+                  Current: <span className="font-mono font-semibold">×{oldMultiplier}</span>
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Notes */}
@@ -923,21 +1010,23 @@ export function PowerMeterChangeDialog({
             />
           </div>
 
-          {/* Effect summary — shown only once user types a valid multiplier */}
-          {newMultValid && (
+          {/* Effect summary — shown once the required fields are filled */}
+          {newMultValid && form.oldFinalReading && form.newInitialReading && (
             <div className="rounded-lg bg-warn-soft border border-warn p-3 text-xs text-warn space-y-1">
               <p className="font-semibold text-xs">What happens on save</p>
               <p>
-                • <strong>{getMeterName(form.meterIndex)}</strong> multiplier:
-                {' '}<span className="font-mono">×{oldMultiplier}</span>
-                {' '}→{' '}<span className="font-mono font-semibold text-primary">×{form.newMultiplier}</span>
+                • <strong>{getMeterName(form.meterIndex)}</strong> reading:
+                {' '}<span className="font-mono">{form.oldFinalReading}</span>
+                {' '}→{' '}<span className="font-mono font-semibold text-primary">{form.newInitialReading}</span>
+                {' '}on <strong>{form.changeDate}</strong> — Δ zeroed at rollover
               </p>
-              <p>
-                • A replacement reading is created on <strong>{form.changeDate}</strong> — Δ zeroed at rollover
-              </p>
-              <p>
-                • All readings from <strong>{form.changeDate}</strong> onward use the new multiplier
-              </p>
+              {!readingId && (
+                <p>
+                  • Multiplier: <span className="font-mono">×{oldMultiplier}</span>
+                  {' '}→{' '}<span className="font-mono font-semibold text-primary">×{form.newMultiplier}</span>,
+                  effective <strong>{form.changeDate}</strong> onward
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -948,11 +1037,11 @@ export function PowerMeterChangeDialog({
           </Button>
           <Button
             onClick={submit}
-            disabled={saving || !newMultValid || !form.changeDate}
+            disabled={saving || !newMultValid || !form.changeDate || !form.oldFinalReading || !form.newInitialReading}
             className="h-9 bg-primary text-white hover:bg-primary/90"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-            Record meter change
+            {readingId ? 'Log replacement' : 'Record meter change'}
           </Button>
         </DialogFooter>
       </DialogContent>

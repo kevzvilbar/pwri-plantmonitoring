@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
+import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -541,6 +542,15 @@ function WellRow({
   const defaultRolloverMax = well.meter_rollover_max != null ? String(well.meter_rollover_max) : '99999';
   const [isRollover, setIsRollover]             = useState(false);
   const [rolloverMax, setRolloverMax]           = useState(defaultRolloverMax);
+  // "Meter replaced" — two-way wiring companion to the Reading History dialog's
+  // own Repl. checkbox: that one only lets you flag a replacement AFTER a
+  // reading is already saved (edit-time / one-way). This lets the operator
+  // flag it live, at entry time, opening the same required ReplaceMeterDialog
+  // (old final reading, new initial reading, date changed). On success we
+  // prefill the reading input with the new meter's initial value and remember
+  // the replacement record's id so it can be linked to this reading once saved.
+  const [showReplaceMeter, setShowReplaceMeter] = useState(false);
+  const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
 
   // Draft recovery — restores the meter reading if the operator navigates away accidentally
   const { draft: draftWell, setDraft: setDraftWell, clearDraft: clearDraftWell } =
@@ -603,7 +613,7 @@ function WellRow({
       setSaving(true);
       const guard = await evaluateReadingGuard(
         'well', well.id, plantId, userId, cur, new Date(customDt),
-        false, false, avgVol, isRollover,
+        !!meterReplacePending, false, avgVol, isRollover,
       );
       setSaving(false);
 
@@ -639,6 +649,7 @@ function WellRow({
       daily_volume: isRollover ? rolloverDailyVol : (dailyVol != null ? Math.max(0, dailyVol) : null),
       is_meter_rollover: isRollover,
       meter_rollover_max: isRollover ? rolloverMaxNum : null,
+      is_meter_replacement: !!meterReplacePending,
       power_meter_reading: showDedicatedPower && powerReading ? +powerReading : null,
       gps_lat, gps_lng, off_location_flag: false, recorded_by: userId,
       reading_datetime: new Date(customDt).toISOString(),
@@ -663,6 +674,16 @@ function WellRow({
         toast.error(friendlyError(error));
       }
       return;
+    }
+
+    // Link the replacement record (old final / new initial / date) back to the
+    // reading it produced. Best-effort — the reading itself already saved with
+    // is_meter_replacement=true above, so a failure here just leaves the audit
+    // record's reading_id blank rather than losing any data.
+    if (meterReplacePending?.replacementId && savedRow?.id) {
+      await (supabase.from('well_meter_replacements' as any) as any)
+        .update({ reading_id: savedRow.id })
+        .eq('id', meterReplacePending.replacementId);
     }
 
     let isPending = savedRow?.norm_status === 'pending_review';
@@ -692,6 +713,7 @@ function WellRow({
     }
     setReading(''); clearDraftWell(); setPowerReading(''); setTdsReading(''); setNtuReading(''); setPressureReading('');
     setIsRollover(false); setRolloverMax(defaultRolloverMax);
+    setMeterReplacePending(null); setShowReplaceMeter(false);
     setEditingId(null); onSaved();
   };
 
@@ -1014,6 +1036,21 @@ function WellRow({
             </div>
           )}
 
+          {/* Meter replaced — two-way: live here at entry time, and also from
+              Reading History for post-hoc corrections. Opens the same required
+              ReplaceMeterDialog (old final reading, new initial reading, date). */}
+          <label className="flex items-center gap-1.5 text-2xs text-muted-foreground cursor-pointer select-none">
+            <Checkbox
+              checked={!!meterReplacePending}
+              onCheckedChange={(v) => {
+                if (v === true) setShowReplaceMeter(true);
+                else setMeterReplacePending(null);
+              }}
+            />
+            Meter replaced
+            {meterReplacePending && <span className="text-primary font-medium">— logged</span>}
+          </label>
+
           {/* Grid / Dedicated Power Meter — only for wells with a power meter not in a shared group */}
           {showDedicatedPower && (
             <div className="flex items-center gap-1.5">
@@ -1133,6 +1170,7 @@ function WellRow({
           {belowPrev && (
             <span className="text-warn pl-5">
               Meter reading is below the previous value — possible meter rollback or data entry error.
+              If the meter was replaced, check "Meter replaced" above instead.
             </span>
           )}
           {belowPrev && (
@@ -1173,6 +1211,25 @@ function WellRow({
           plantId={plantId}
           assetMeterSerial={well.meter_serial}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showReplaceMeter && (
+        <ReplaceMeterDialog
+          kind="well"
+          assetId={well.id}
+          plantId={plantId}
+          oldSerial={well.meter_serial}
+          onSuccess={(info) => {
+            setMeterReplacePending(info ?? { newInitialReading: null, replacementId: null });
+            // Prefill the reading input with the new meter's starting value so
+            // the operator isn't re-typing what they just entered — only when
+            // the field is still empty or holding the prefilled previous value.
+            if (info?.newInitialReading != null && (reading === '' || reading === previousMeter?.toFixed(2))) {
+              setReading(String(info.newInitialReading));
+            }
+          }}
+          onClose={() => setShowReplaceMeter(false)}
         />
       )}
 

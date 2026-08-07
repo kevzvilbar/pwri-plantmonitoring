@@ -34,6 +34,7 @@ import {
   invalidateRODash, invalidateProductMeterDash,
 } from '@/pages/operations/shared';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
 import { canEditEntry, logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
@@ -125,6 +126,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [togglingGridId, setTogglingGridId] = useState<string | null>(null);
+  // Power reading currently going through PowerMeterChangeDialog (readingId
+  // mode) — see toggleGridReplacement below for why checking opens this
+  // instead of a bare flag flip + blind multiplier reset.
+  const [replacePowerReadingId, setReplacePowerReadingId] = useState<{ id: string; gridIdx: number } | null>(null);
   const [togglingSolarId, setTogglingSolarId] = useState<string | null>(null);
   // Delete confirmation now goes through an AlertDialog (themed, works in iframes,
   // unlike the native window.confirm() this previously used).
@@ -409,14 +414,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     qc.invalidateQueries({ queryKey });
   };
 
-  // Power-specific: toggle grid meter replacement
+  // Power-specific: toggle grid meter replacement. Checking opens
+  // PowerMeterChangeDialog so the swap gets logged (old meter's final reading,
+  // new meter's initial reading, date changed — all required) against
+  // power_meter_changes, instead of just flipping a flag and blindly resetting
+  // the CT multiplier to 1. Mirrors how well/locator/product's Repl. checkbox
+  // opens ReplaceMeterDialog. Unchecking still clears the flag directly.
   const toggleGridReplacement = async (r: any, gridIdx: number = 0) => {
-    setTogglingGridId(r.id);
     // Use the same fallback as the display: is_grid_replacement ?? is_meter_replacement.
     // Without this, when is_grid_replacement is null the toggle always evaluates
     // !null → true and can never be unchecked.
     const currentRepl = !!(r.is_grid_replacement ?? r.is_meter_replacement);
     const next = !currentRepl;
+    if (next) {
+      setReplacePowerReadingId({ id: r.id, gridIdx });
+      return;
+    }
+    setTogglingGridId(r.id);
     const { error } = await (supabase.from('power_readings') as any)
       .update({ is_grid_replacement: next }).eq('id', r.id);
     setTogglingGridId(null);
@@ -426,26 +440,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         .update({ is_meter_replacement: next }).eq('id', r.id);
       if (e2) { toast.error(friendlyError(e2)); return; }
     }
-    // When flagging as replacement, reset the CT multiplier in plant_power_config to 1
-    // so the operator must explicitly re-enter the new meter's ratio.
-    if (next && plantId) {
-      try {
-        const existingArr = Array.isArray(gridMultipliers) ? [...gridMultipliers] : [1];
-        while (existingArr.length <= gridIdx) existingArr.push(1);
-        existingArr[gridIdx] = 1;
-        await (supabase.from('plant_power_config' as any) as any)
-          .upsert(
-            { plant_id: plantId, grid_meter_multipliers: existingArr, updated_at: new Date().toISOString() },
-            { onConflict: 'plant_id' }
-          );
-        qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] });
-        toast.success('Grid replacement marked — Δ zeroed · CT multiplier reset to 1. Update it in Plants → Power.');
-      } catch {
-        toast.success('Grid replacement marked — Δ zeroed');
-      }
-    } else {
-      toast.success(next ? 'Grid replacement marked — Δ zeroed' : 'Grid replacement flag removed');
-    }
+    toast.success('Grid replacement flag removed');
     qc.invalidateQueries({ queryKey });
   };
 
@@ -884,6 +879,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
             </div>
             {module !== 'power' && (
+              // Power excluded here deliberately, not by omission: a power reading
+              // can hold several grid meters' values in one row (grid_meter_readings
+              // JSONB), so a single scalar "this row = replacement" checkbox would be
+              // ambiguous about which meter it means. Power's equivalent is the
+              // per-meter Repl. toggle in the table above (toggleGridReplacement),
+              // which now opens the same required PowerMeterChangeDialog.
               <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
                 <input
                   type="checkbox"
@@ -1582,6 +1583,19 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               qc.invalidateQueries({ queryKey });
             }}
             onClose={() => setReplaceReadingId(null)}
+          />
+        )}
+
+        {replacePowerReadingId && module === 'power' && plantId && (
+          <PowerMeterChangeDialog
+            plant={{ id: plantId }}
+            gridMeterCount={resolvedGridCount}
+            gridMeterNames={gridMeterNames}
+            currentMultipliers={gridMultipliers}
+            readingId={replacePowerReadingId.id}
+            initialMeterIndex={replacePowerReadingId.gridIdx}
+            onSuccess={() => qc.invalidateQueries({ queryKey })}
+            onClose={() => setReplacePowerReadingId(null)}
           />
         )}
       </DialogContent>

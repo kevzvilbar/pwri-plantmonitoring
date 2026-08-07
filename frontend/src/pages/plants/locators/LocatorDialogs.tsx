@@ -580,7 +580,13 @@ export function ReplaceMeterDialog({
    *  once the replacement record + asset update succeed — lets the row that
    *  triggered "Replace meter" be marked without a separate manual toggle. */
   readingId?: string;
-  onSuccess?: () => void;
+  /** Called after a successful save. Receives the entered new-meter initial
+   *  reading (so a live entry form can prefill its input) and the id of the
+   *  replacement record just inserted (so the entry form can link it back to
+   *  the actual reading once that reading is saved). Callers that don't need
+   *  either value can keep using a plain `() => {...}` — TS allows passing a
+   *  handler with fewer params than the declared callback type. */
+  onSuccess?: (info?: { newInitialReading: number | null; replacementId: string | null }) => void;
   onClose: () => void;
 }) {
   const { user, activeOperator } = useAuth();
@@ -589,7 +595,14 @@ export function ReplaceMeterDialog({
     old_final_reading: '', new_brand: '', new_size: '', new_serial: '', new_initial_reading: '', new_installed_date: format(new Date(), 'yyyy-MM-dd'), remarks: '',
   });
   const submit = async () => {
+    // Required: new serial (who's now installed), the old meter's last reading,
+    // the new meter's starting reading, and the date it happened — without
+    // these the replacement record can't actually zero the delta correctly or
+    // tell anyone later what the swap was.
     if (!form.new_serial) { toast.error('New serial required'); return; }
+    if (!form.old_final_reading) { toast.error("Old meter's final reading is required"); return; }
+    if (!form.new_initial_reading) { toast.error("New meter's initial reading is required"); return; }
+    if (!form.replacement_date) { toast.error('Date changed is required'); return; }
     const payload: any = {
       plant_id: plantId, replacement_date: form.replacement_date,
       reading_id: readingId ?? null,
@@ -617,7 +630,7 @@ export function ReplaceMeterDialog({
       replacementTable = 'well_meter_replacements';
       assetTable = 'wells';
     }
-    const { error } = await supabase.from(replacementTable as any).insert(payload);
+    const { data: inserted, error } = await supabase.from(replacementTable as any).insert(payload).select('id').single();
     if (error) { toast.error(friendlyError(error)); return; }
     await supabase.from(assetTable as any).update({ meter_brand: form.new_brand, meter_size: form.new_size, meter_serial: form.new_serial, meter_installed_date: form.new_installed_date }).eq('id', assetId);
 
@@ -632,7 +645,10 @@ export function ReplaceMeterDialog({
     }
 
     toast.success('Meter replaced');
-    onSuccess?.();
+    onSuccess?.({
+      newInitialReading: form.new_initial_reading ? +form.new_initial_reading : null,
+      replacementId: (inserted as any)?.id ?? null,
+    });
     onClose();
   };
   return (
@@ -641,8 +657,8 @@ export function ReplaceMeterDialog({
         <DialogHeader><DialogTitle>Replace meter</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Replacement date</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} /></div>
-            <div><Label>Old final reading</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} /></div>
+            <div><Label>Date changed *</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} /></div>
+            <div><Label>Old meter's final reading *</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} /></div>
           </div>
           <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{oldSerial ?? '—'}</span></div>
           <div className="grid grid-cols-3 gap-2">
@@ -651,7 +667,7 @@ export function ReplaceMeterDialog({
             <div><Label>New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} /></div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Initial reading</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} /></div>
+            <div><Label>New meter's initial reading *</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} /></div>
             <div><Label>Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} /></div>
           </div>
           <div><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} /></div>

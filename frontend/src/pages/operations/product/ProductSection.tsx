@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast } from '@/lib/format';
@@ -497,6 +498,10 @@ function ProductMeterRow({
   const [showHistory, setShowHistory] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const dtInputRef = useRef<HTMLInputElement>(null);
+  // "Meter replaced" — same two-way wiring fix as WellRow/LocatorRow: live at
+  // entry time (previously only reachable from the meter's history dialog).
+  const [showReplaceMeter, setShowReplaceMeter] = useState(false);
+  const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
 
   const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
@@ -522,7 +527,7 @@ function ProductMeterRow({
     // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly,
     // mirroring the same fix already applied to locator_readings and well_readings.
     const dailyVol = previous != null ? Math.max(0, cur - previous) : null;
-    const { error } = await supabase.from('product_meter_readings' as any).insert({
+    const { data: savedRow, error } = await supabase.from('product_meter_readings' as any).insert({
       meter_id: meter.id,
       plant_id: plantId,
       current_reading: cur,
@@ -530,8 +535,17 @@ function ProductMeterRow({
       reading_datetime: dt,
       recorded_by: userId,
       daily_volume: dailyVol,   // Bug fix: always persist computed delta for Dashboard aggregation
-    } as any);
+      is_meter_replacement: !!meterReplacePending,
+    } as any).select('id').single();
     if (error) { toast.error(friendlyError(error)); setSaving(false); return; }
+
+    // Link the replacement record (old final / new initial / date) back to the
+    // reading it produced — best-effort, mirrors WellRow/LocatorRow's save().
+    if (meterReplacePending?.replacementId && (savedRow as any)?.id) {
+      await (supabase.from('product_meter_replacements' as any) as any)
+        .update({ reading_id: (savedRow as any).id })
+        .eq('id', meterReplacePending.replacementId);
+    }
 
     // Audit the production volume calculation
     if (productionVolume != null) {
@@ -548,6 +562,7 @@ function ProductMeterRow({
 
     toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume)} m³ produced` : ''}`);
     setReading(''); setSaving(false); onSaved();
+    setMeterReplacePending(null); setShowReplaceMeter(false);
   };
 
   // ── Mirrored product meter (no physical meter) — GAP FIX (2026-07-28) ─────
@@ -706,6 +721,20 @@ function ProductMeterRow({
         </div>
       )}
 
+      {/* Meter replaced — two-way: live here at entry time, and also from the
+          History dialog's per-row toggle for post-hoc corrections. */}
+      <label className="flex items-center gap-1.5 text-2xs text-muted-foreground cursor-pointer select-none">
+        <Checkbox
+          checked={!!meterReplacePending}
+          onCheckedChange={(v) => {
+            if (v === true) setShowReplaceMeter(true);
+            else setMeterReplacePending(null);
+          }}
+        />
+        Meter replaced
+        {meterReplacePending && <span className="text-primary font-medium">— logged</span>}
+      </label>
+
       {/* Warning banner — mirrors locator / well / blending style */}
       {productionVolume != null && (productionVolume < 0 || highVol) && (
         <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
@@ -716,6 +745,7 @@ function ProductMeterRow({
           {productionVolume < 0 && (
             <span className="text-warn pl-5">
               Reading is below the previous value — possible meter rollback or data entry error.
+              If the meter was replaced, check "Meter replaced" above instead.
             </span>
           )}
           {highVol && (
@@ -731,6 +761,22 @@ function ProductMeterRow({
           meter={meter}
           plantId={plantId}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showReplaceMeter && (
+        <ReplaceMeterDialog
+          kind="product"
+          assetId={meter.id}
+          plantId={plantId}
+          oldSerial={meter.meter_serial}
+          onSuccess={(info) => {
+            setMeterReplacePending(info ?? { newInitialReading: null, replacementId: null });
+            if (info?.newInitialReading != null && (reading === '' || reading === previous?.toFixed(2))) {
+              setReading(String(info.newInitialReading));
+            }
+          }}
+          onClose={() => setShowReplaceMeter(false)}
         />
       )}
     </div>

@@ -16,7 +16,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
+import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
+import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -341,6 +344,12 @@ export function PowerForm() {
   const [dt, setDt]                   = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [powerHistoryOpen, setPowerHistoryOpen] = useState<{ type: 'solar'; idx: number } | { type: 'grid'; idx: number } | null>(null);
+  // "Meter replaced" — two-way wiring companion to Reading History's own
+  // toggle: previously the only way to record a power meter swap (old final /
+  // new initial kWh + date) was via Plant Settings → Power → Change Power
+  // Meter, disconnected from the live entry form. Holds the grid meter index
+  // currently going through PowerMeterChangeDialog, or null when closed.
+  const [replaceMeterIdx, setReplaceMeterIdx] = useState<number | null>(null);
   const [importOpen, setImportOpen]   = useState(false);
   // Multiplier: auto-populated from latest saved electric bill; editable by admin only when no bill exists
   const [multiplierInput, setMultiplierInput] = useState('');
@@ -1061,10 +1070,21 @@ export function PowerForm() {
                         {(isAdmin || isManager || isDataAnalyst) && (
                           <button
                             type="button"
+                            title={`Meter replaced — ${meterLabel}`}
+                            aria-label={`Meter replaced — ${meterLabel}`}
+                            onClick={() => setReplaceMeterIdx(idx)}
+                            className="ml-auto p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          >
+                            <ChangeMeterIcon className="h-3 w-3" />
+                          </button>
+                        )}
+                        {(isAdmin || isManager || isDataAnalyst) && (
+                          <button
+                            type="button"
                             title={`View ${meterLabel} history`}
                             aria-label={`View ${meterLabel} history`}
                             onClick={() => setPowerHistoryOpen({ type: 'grid', idx })}
-                            className="ml-auto p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                           >
                             <History className="h-3 w-3" />
                           </button>
@@ -1166,6 +1186,13 @@ export function PowerForm() {
                             </span>
                             {isFirst && editingId && <span className="text-2xs text-warn">(editing)</span>}
                           </Label>
+                          {(isAdmin || isManager || isDataAnalyst) && (
+                            <Button variant="ghost" size="sm"
+                              className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                              onClick={() => setReplaceMeterIdx(item.idx)} title={`Meter replaced — ${meterLabel}`}>
+                              <ChangeMeterIcon className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           {(isAdmin || isManager || isDataAnalyst) && (
                             <Button variant="ghost" size="sm"
                               className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -1339,6 +1366,13 @@ export function PowerForm() {
                       {(isAdmin || isManager || isDataAnalyst) && (
                         <Button variant="ghost" size="sm"
                           className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+                          onClick={() => setReplaceMeterIdx(idx)} title={`Meter replaced — ${meterLabel}`}>
+                          <ChangeMeterIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {(isAdmin || isManager || isDataAnalyst) && (
+                        <Button variant="ghost" size="sm"
+                          className="h-8 w-8 p-0 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
                           onClick={() => setPowerHistoryOpen({ type: 'grid', idx })} title={`View ${meterLabel} history`}>
                           <History className="h-3.5 w-3.5" />
                         </Button>
@@ -1448,6 +1482,18 @@ export function PowerForm() {
           gridMultipliers={Array.isArray(configMultiplierArr) ? (configMultiplierArr as any[]).map(Number) : []}
           meterFilter={powerHistoryOpen}
           onClose={() => setPowerHistoryOpen(null)}
+        />
+      )}
+
+      {replaceMeterIdx != null && plantId && plant && (
+        <PowerMeterChangeDialog
+          plant={plant}
+          gridMeterCount={gridMeterCount}
+          gridMeterNames={gridMeterNames}
+          currentMultipliers={Array.isArray(configMultiplierArr) ? (configMultiplierArr as any[]).map(Number) : []}
+          initialMeterIndex={replaceMeterIdx}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ['plant-power-config', plantId] })}
+          onClose={() => setReplaceMeterIdx(null)}
         />
       )}
     </div>
