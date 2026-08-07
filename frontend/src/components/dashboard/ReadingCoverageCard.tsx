@@ -9,16 +9,34 @@ import { format, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface CoverageRow {
-  label:   string;
-  done:    number;
-  total:   number;
-  urgent:  boolean; // true → show red bar when below 50%
+  label:    string;
+  done:     number;
+  total:    number;
+  urgent:   boolean; // true → switch to the danger hue when below 50%
+  colorVar: string;  // CSS custom property driving this row's stripe hue
 }
 
-function CoverageBar({ done, total, urgent }: { done: number; total: number; urgent: boolean }) {
-  const pct    = total > 0 ? Math.round((done / total) * 100) : 0;
-  const isLow  = pct < 50;
-  const barCls = urgent && isLow ? 'bg-danger' : pct < 80 ? 'bg-warn' : 'bg-accent';
+// Diagonal "hazard tape" stripe pattern in a single hue — bright/dim bands of
+// the same color so the texture reads on top of any surface underneath it.
+function stripeImage(colorVar: string, baseAlpha: number) {
+  const dimAlpha = Math.max(baseAlpha * 0.35, 0.05);
+  return `repeating-linear-gradient(-45deg,
+    hsl(var(${colorVar}) / ${baseAlpha}) 0px,
+    hsl(var(${colorVar}) / ${baseAlpha}) 5px,
+    hsl(var(${colorVar}) / ${dimAlpha}) 5px,
+    hsl(var(${colorVar}) / ${dimAlpha}) 10px)`;
+}
+
+// Critically low + urgent rows escalate to the danger hue — the category
+// color is an identity, not a replacement for the underlying safety signal.
+function resolveRowColor(done: number, total: number, urgent: boolean, colorVar: string) {
+  const pct      = total > 0 ? Math.round((done / total) * 100) : 0;
+  const critical = urgent && pct < 50;
+  return { pct, critical, activeVar: critical ? '--danger' : colorVar };
+}
+
+function CoverageBar({ done, total, urgent, colorVar }: { done: number; total: number; urgent: boolean; colorVar: string }) {
+  const { pct, critical, activeVar } = resolveRowColor(done, total, urgent, colorVar);
 
   return (
     <div>
@@ -26,14 +44,21 @@ function CoverageBar({ done, total, urgent }: { done: number; total: number; urg
         <span className="text-xs text-muted-foreground">
           {done} <span className="text-muted-foreground/50">/ {total}</span>
         </span>
-        <span className={cn('text-2xs font-medium', isLow && urgent ? 'text-danger' : 'text-muted-foreground')}>
+        <span className={cn('text-2xs font-medium', critical ? 'text-danger' : 'text-muted-foreground')}>
           {pct}%
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+      <div className="relative h-2.5 w-full rounded-full overflow-hidden bg-muted/40">
+        {/* Empty capacity — same stripe texture, faded */}
+        <div className="absolute inset-0" style={{ backgroundImage: stripeImage(activeVar, 0.18) }} />
+        {/* Filled portion */}
         <div
-          className={cn('h-full rounded-full transition-all', barCls)}
-          style={{ width: `${pct}%` }}
+          className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out"
+          style={{
+            width: `${pct}%`,
+            backgroundImage: stripeImage(activeVar, 1),
+            boxShadow: `0 2px 6px -1px hsl(var(${activeVar}) / 0.55)`,
+          }}
         />
       </div>
     </div>
@@ -133,9 +158,9 @@ export function ReadingCoverageCard({ plantIds }: Props) {
   });
 
   const rows: CoverageRow[] = [
-    { label: 'Wells',      done: wellDone,    total: wellTotal,    urgent: false },
-    { label: 'Locators',   done: locDone,     total: locatorTotal, urgent: false },
-    { label: 'RO Trains',  done: trainDone,   total: trainTotal,   urgent: true  },
+    { label: 'Wells',      done: wellDone,    total: wellTotal,    urgent: false, colorVar: '--kpi-wells'   },
+    { label: 'Locators',   done: locDone,     total: locatorTotal, urgent: false, colorVar: '--kpi-locator' },
+    { label: 'RO Trains',  done: trainDone,   total: trainTotal,   urgent: true,  colorVar: '--kpi-ro'      },
   ];
 
   const anyMissing = rows.some((r) => r.done < r.total);
@@ -153,14 +178,20 @@ export function ReadingCoverageCard({ plantIds }: Props) {
       </div>
 
       <div className="space-y-2.5">
-        {rows.map((r) => (
-          <div key={r.label}>
-            <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
-              {r.label}
-            </span>
-            <CoverageBar done={r.done} total={r.total} urgent={r.urgent} />
-          </div>
-        ))}
+        {rows.map((r) => {
+          const { activeVar } = resolveRowColor(r.done, r.total, r.urgent, r.colorVar);
+          return (
+            <div key={r.label}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(var(${activeVar}))` }} />
+                <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {r.label}
+                </span>
+              </div>
+              <CoverageBar done={r.done} total={r.total} urgent={r.urgent} colorVar={r.colorVar} />
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex justify-end pt-0.5 border-t border-border/40">

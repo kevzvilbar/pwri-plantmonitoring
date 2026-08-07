@@ -258,33 +258,83 @@ export default function Plants() {
     );
   }
 
-  function HealthRing({ score, plantColor, size = 40 }: { score: number; plantColor?: string; size?: number }) {
-    const strokeW = 3.5;
-    const r = (size / 2) - strokeW - 1;          // dynamic radius from size
+  // ── KPI ring — one metric's percentage as a layered, gradient-stroked
+  // dial: a bold outer arc plus a faint inner echo arc sweeping the same
+  // percentage, so each ring reads as a small cluster rather than a flat
+  // stroke. Color comes from a single CSS var (--kpi-wells / --kpi-locator /
+  // --kpi-ro) so it stays in sync with dark mode and any future theme swap.
+  function KpiRing({ pct, hueVar, size = 56, icon, label }: {
+    pct: number; hueVar: string; size?: number; icon?: ReactNode; label: string;
+  }) {
+    const strokeW  = size >= 50 ? 4 : 3;
     const cx = size / 2, cy = size / 2;
-    const circ = 2 * Math.PI * r;
-    const dash  = (score / 100) * circ;
-    const color = plantColor ?? (
-      score >= 80 ? 'hsl(var(--primary))' :
-      score >= 40 ? 'hsl(var(--info))' :
-                    'hsl(var(--danger))'
-    );
-    const fontSize = size >= 60 ? '12px' : size >= 48 ? '10px' : '9px';
+    const rOuter = cx - strokeW - 1;
+    const rInner = rOuter - strokeW - 2.5;
+    const circOuter = 2 * Math.PI * rOuter;
+    const circInner = 2 * Math.PI * rInner;
+    const dashOuter = (pct / 100) * circOuter;
+    const dashInner = (pct / 100) * circInner;
+    const gradId = `kpiRingGrad-${hueVar.replace('--', '')}-${size}`;
+    const fontSize = size >= 50 ? '13px' : '9px';
+
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" aria-hidden>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={strokeW}
-          className="text-muted/50" />
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={strokeW}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeDashoffset={circ / 4}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 0.6s ease' }}
-        />
-        <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
-          style={{ fontSize, fontWeight: 700, fill: color }}>
-          {score}%
-        </text>
-      </svg>
+      <div className="flex flex-col items-center gap-1 shrink-0">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+          <defs>
+            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={`hsl(var(${hueVar}) / 0.6)`} />
+              <stop offset="100%" stopColor={`hsl(var(${hueVar}))`} />
+            </linearGradient>
+          </defs>
+
+          {/* Outer track + gradient arc */}
+          <circle cx={cx} cy={cy} r={rOuter} fill="none" strokeWidth={strokeW}
+            stroke="currentColor" className="text-muted/50" />
+          <circle cx={cx} cy={cy} r={rOuter} fill="none" strokeWidth={strokeW}
+            stroke={`url(#${gradId})`}
+            strokeDasharray={`${dashOuter} ${circOuter - dashOuter}`}
+            strokeDashoffset={circOuter / 4}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.6s ease' }}
+          />
+
+          {/* Inner echo arc — faint, thinner, same sweep */}
+          <circle cx={cx} cy={cy} r={rInner} fill="none" strokeWidth={Math.max(strokeW - 1.5, 1.5)}
+            stroke={`hsl(var(${hueVar}) / 0.55)`}
+            strokeDasharray={`${dashInner} ${circInner - dashInner}`}
+            strokeDashoffset={circInner / 4}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.6s ease' }}
+          />
+
+          <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
+            style={{ fontSize, fontWeight: 700, fill: `hsl(var(${hueVar}))` }}>
+            {pct}%
+          </text>
+        </svg>
+        <span className="flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {icon}
+          {size >= 50 && label}
+        </span>
+      </div>
+    );
+  }
+
+  // Three KpiRings — Wells / Locators / RO Trains — replacing the single
+  // averaged Health ring so each metric's own coverage is visible at a glance.
+  function MetricRingGroup({ wells, locators, trains, size = 56 }: {
+    wells: { active: number; total: number };
+    locators: { active: number; total: number };
+    trains: { active: number; total: number };
+    size?: number;
+  }) {
+    const pct = (m: { active: number; total: number }) => m.total > 0 ? Math.round((m.active / m.total) * 100) : 0;
+    return (
+      <div className="flex items-end gap-2">
+        <KpiRing pct={pct(wells)}    hueVar="--kpi-wells"   size={size} icon={<Droplet className="h-2.5 w-2.5" />}    label="Wells" />
+        <KpiRing pct={pct(locators)} hueVar="--kpi-locator" size={size} icon={<MapPin className="h-2.5 w-2.5" />}      label="Locators" />
+        <KpiRing pct={pct(trains)}   hueVar="--kpi-ro"      size={size} icon={<ROTrainIcon className="h-2.5 w-2.5" />} label="RO Trains" />
+      </div>
     );
   }
 
@@ -397,7 +447,6 @@ export default function Plants() {
           const wells    = summaryCounts?.wells?.[p.id]    ?? { active: 0, total: 0 };
           const locators = summaryCounts?.locators?.[p.id] ?? { active: 0, total: 0 };
           const trains   = summaryCounts?.trains?.[p.id]   ?? { active: 0, total: 0 };
-          const health   = plantHealthScore(wells, locators, trains);
           const isActive = p.status === 'Active';
           const plantColor = getPlantColor(p, idx);
 
@@ -492,10 +541,9 @@ export default function Plants() {
                       )}
                     </div>
 
-                    {/* Health ring — enlarged */}
-                    <div className="flex flex-col items-center justify-center gap-1 pl-1 shrink-0">
-                      <HealthRing score={health} plantColor={plantColor} size={80} />
-                      <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Health</span>
+                    {/* Metric rings — Wells / Locators / RO Trains coverage */}
+                    <div className="flex items-center justify-center pl-1 shrink-0">
+                      <MetricRingGroup wells={wells} locators={locators} trains={trains} size={56} />
                     </div>
                   </div>
                 </div>
@@ -554,9 +602,8 @@ export default function Plants() {
                     <PlantStatRow icon={<MapPin  className="h-3 w-3" />} label="Locators"  active={locators.active} total={locators.total} />
                     <PlantStatRow icon={<ROTrainIcon  className="h-3 w-3" />} label="RO trains" active={trains.active}   total={trains.total}   />
                   </div>
-                  <div className="hidden sm:flex flex-col items-center gap-1 pl-2">
-                    <HealthRing score={health} plantColor={plantColor} />
-                    <span className="text-3xs font-medium uppercase tracking-wide text-muted-foreground">Health</span>
+                  <div className="hidden sm:flex items-end pl-2">
+                    <MetricRingGroup wells={wells} locators={locators} trains={trains} size={34} />
                   </div>
                 </div>
               </div>
