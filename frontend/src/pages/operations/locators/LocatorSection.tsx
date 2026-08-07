@@ -16,7 +16,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
+import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
@@ -648,6 +650,12 @@ function LocatorRow({
   const dtInputRef = useRef<HTMLInputElement>(null);
   const [gapDialogOpen, setGapDialogOpen] = useState(false);
   const [gapSaving, setGapSaving] = useState(false);
+  // "Meter replaced" — same two-way wiring fix as WellRow: live at entry time
+  // (previously only reachable from Reading History, after the fact), opening
+  // the same required ReplaceMeterDialog. Raw-mode only — 'direct' locators
+  // (e.g. HAMAS) have no cumulative odometer for a physical meter swap to apply to.
+  const [showReplaceMeter, setShowReplaceMeter] = useState(false);
+  const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
 
   // Draft recovery — persists the reading input so an accidental navigation
   // or browser crash doesn't lose what the operator was entering.
@@ -753,7 +761,7 @@ function LocatorRow({
         // evaluateReadingGuard now branches on inputMode natively, so the
         // real typed volume can be passed straight through.
         cur,
-        new Date(customDt), false, false, avgVol, false, locInputMode,
+        new Date(customDt), !!meterReplacePending, false, avgVol, false, locInputMode,
       );
       setSaving(false);
 
@@ -807,11 +815,12 @@ function LocatorRow({
           gps_lat, gps_lng, off_location_flag: off, recorded_by: userId,
           reading_datetime: new Date(customDt).toISOString(),
           is_estimated: false,
+          is_meter_replacement: !!meterReplacePending,
         };
 
     const { data: savedRow, error } = editingId
-      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('norm_status,current_reading,previous_reading,daily_volume').single() as any)
-      : await (supabase.from('locator_readings').insert(payload).select('norm_status,current_reading,previous_reading,daily_volume').single() as any);
+      ? await (supabase.from('locator_readings').update(payload).eq('id', editingId).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any)
+      : await (supabase.from('locator_readings').insert(payload).select('id,norm_status,current_reading,previous_reading,daily_volume').single() as any);
 
     setSaving(false);
 
@@ -828,6 +837,14 @@ function LocatorRow({
       return;
     }
 
+    // Link the replacement record (old final / new initial / date) back to the
+    // reading it produced — best-effort, mirrors WellRow's save().
+    if (meterReplacePending?.replacementId && savedRow?.id) {
+      await (supabase.from('locator_meter_replacements' as any) as any)
+        .update({ reading_id: savedRow.id })
+        .eq('id', meterReplacePending.replacementId);
+    }
+
     const isPending = savedRow?.norm_status === 'pending_review';
     setLastSavePending(isPending);
     setCooldownMinutes(0);
@@ -842,6 +859,7 @@ function LocatorRow({
       toast.success(fmtSaveToast(locator.name, editingId ? 'updated' : 'saved', curr, prev, vol), { duration: 5000 });
     }
     setReading(''); clearDraftReading(); setEditingId(null); onSaved();
+    setMeterReplacePending(null); setShowReplaceMeter(false);
   };
 
   // ── Derived locator (no physical meter) — GAP FIX (2026-07-25) ────────────
@@ -967,7 +985,7 @@ function LocatorRow({
         </div>
 
         {reviewFlag && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/40 rounded-lg px-3 py-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warn" />
             <span>
               Needs review — a sibling locator or the mother meter changed for {new Date(reviewFlag.date_key).toLocaleDateString()} since this was last computed.
@@ -1300,6 +1318,23 @@ function LocatorRow({
         </div>
       )}
 
+      {/* Meter replaced — raw mode only; 'direct' locators (e.g. HAMAS) enter a
+          daily volume, not a cumulative reading, so there's no physical odometer
+          value for a swap to apply to. */}
+      {locInputMode === 'raw' && (
+        <label className="flex items-center gap-1.5 text-2xs text-muted-foreground cursor-pointer select-none">
+          <Checkbox
+            checked={!!meterReplacePending}
+            onCheckedChange={(v) => {
+              if (v === true) setShowReplaceMeter(true);
+              else setMeterReplacePending(null);
+            }}
+          />
+          Meter replaced
+          {meterReplacePending && <span className="text-primary font-medium">— logged</span>}
+        </label>
+      )}
+
       {showHistory && (
         <ReadingHistoryDialog
           entityName={locator.name}
@@ -1309,6 +1344,22 @@ function LocatorRow({
           assetMeterSerial={locator.meter_serial}
           defaultInputMode={locator.default_input_mode === 'direct' ? 'direct' : 'raw'}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showReplaceMeter && (
+        <ReplaceMeterDialog
+          kind="locator"
+          assetId={locator.id}
+          plantId={plantId}
+          oldSerial={locator.meter_serial}
+          onSuccess={(info) => {
+            setMeterReplacePending(info ?? { newInitialReading: null, replacementId: null });
+            if (info?.newInitialReading != null && (reading === '' || reading === previous?.toFixed(2))) {
+              setReading(String(info.newInitialReading));
+            }
+          }}
+          onClose={() => setShowReplaceMeter(false)}
         />
       )}
       {cooldownMinutes > 0 && cooldownAvailableAt && (
@@ -1321,21 +1372,21 @@ function LocatorRow({
       )}
 
       {lastSavePending && !cooldownMinutes && (
-        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+        <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/40 px-2.5 py-1.5 text-xs text-warn">
           <AlertCircle className="h-3 w-3 shrink-0" />
           Last reading sent for supervisor review — excluded from totals until approved.
         </div>
       )}
 
       {reading && (belowPrev || highVol) && !lastSavePending && (
-        <div className="flex flex-col gap-1 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg">
-          <span className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+        <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn/30 px-3 py-2 rounded-lg">
+          <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             {belowPrev ? 'Below previous — will go to supervisor review after save.' : `Flow rate ${Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above avg — will go to supervisor review after save.`}
           </span>
           {belowPrev && (
-            <span className="text-amber-700 dark:text-amber-400 pl-5">
-              If the meter was replaced, use the meter replacement toggle.
+            <span className="text-warn pl-5">
+              If the meter was replaced, check "Meter replaced" above instead.
             </span>
           )}
         </div>
