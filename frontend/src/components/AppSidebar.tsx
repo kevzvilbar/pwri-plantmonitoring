@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Droplet, Wrench, AlertTriangle,
   Users, DollarSign, Download, Upload, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
-  ClipboardCheck } from 'lucide-react';
+  ClipboardCheck, Gauge } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
 // of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
 import { ROTrainIcon } from '@/components/icons/water-icons';
@@ -73,13 +73,15 @@ const adminOnlyGroup: SidebarGroup = {
   ],
 };
 
-// Data Analysis & Review + Data Corrections — visible to Admin, Manager, and
-// Data Analyst (both pages gate access to isAdmin || isManager || isDataAnalyst).
+// Data Analysis & Review + Data Corrections + Manager Scorecard — visible to
+// Admin, Manager, and Data Analyst (all three pages gate access to
+// isAdmin || isManager || isDataAnalyst).
 const dataAnalysisGroup: SidebarGroup = {
   label: 'Analysis',
   items: [
     { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
     { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
+    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Gauge },
   ],
 };
 

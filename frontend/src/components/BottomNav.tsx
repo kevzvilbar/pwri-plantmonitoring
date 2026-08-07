@@ -5,7 +5,7 @@ import {
   Wrench, AlertTriangle, DollarSign, Users, Download, Upload, ShieldCheck,
   ShieldAlert,
   ClipboardCheck,
-  GitBranch, FlaskConical,
+  GitBranch, FlaskConical, Gauge,
 } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon (linked
 // membrane blocks) instead of the generic gear/Cog glyph, matching TrainsList
@@ -90,14 +90,15 @@ const dataGroup = {
   ],
 };
 
-// Data Analysis & Review + Data Corrections — visible to Admins, Data
-// Analysts, and Managers (both pages gate canView to isAdmin || isDataAnalyst
-// || isManager).
+// Data Analysis & Review + Data Corrections + Manager Scorecard — visible to
+// Admins, Data Analysts, and Managers (all three pages gate canView to
+// isAdmin || isDataAnalyst || isManager).
 const dataAnalysisGroup = {
   title: 'Analysis',
   items: [
     { to: '/data-analysis', label: 'Data Analysis & Review', icon: FlaskConical },
     { to: '/data-corrections', label: 'Data Corrections', icon: ClipboardCheck },
+    { to: '/manager-scorecard', label: 'Manager Scorecard', icon: Gauge },
   ],
 };
 

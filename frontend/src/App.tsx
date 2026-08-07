@@ -32,6 +32,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const PlantTopology = lazy(() => import("./pages/PlantTopology"));
 const DataAnalysis  = lazy(() => import("./pages/DataAnalysis"));
 const DataCorrections = lazy(() => import("./pages/DataCorrections"));
+const ManagerScorecard = lazy(() => import("./pages/ManagerScorecard"));
 const Chemicals = lazy(() => import("./pages/Chemicals"));
 
 const RouteFallback = () => (
@@ -129,6 +130,7 @@ const App = () => (
                 <Route path="/incidents" element={<Incidents />} />
                 <Route path="/employees" element={<Employees />} />
               <Route path="/data-corrections" element={<DataCorrections />} />
+                <Route path="/manager-scorecard" element={<ManagerScorecard />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/exports" element={<Exports />} />
                 <Route path="/compliance" element={<Compliance />} />
