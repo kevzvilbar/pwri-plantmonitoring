@@ -26,7 +26,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, subDays, startOfDay, parseISO, addDays } from 'date-fns';
 import {
-  Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Thermometer,
+  Droplet, Activity, Zap, FlaskConical, AlertTriangle, Gauge, Percent,
   Waves, Cloud, Receipt, Banknote, LayoutGrid, ListCollapse, ExternalLink,
   ArrowUpRight, ArrowDownRight, Minus, CalendarDays,
   ShieldAlert,
@@ -1956,7 +1956,7 @@ export default function Dashboard() {
           testId="raw-ntu-per-well-source"
           decimals={2}
         />
-        <StatCard icon={Thermometer} label="Recovery" value={avgRecovery ?? '—'} unit="%"
+        <StatCard icon={Percent} label="Recovery" value={avgRecovery ?? '—'} unit="%"
           onClick={handleMetricClick('recovery', 'Recovery Trendline')} />
       </div>
       <ClusterCharts metrics={QUALITY_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="quality" />
