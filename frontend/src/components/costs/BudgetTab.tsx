@@ -211,13 +211,23 @@ export function BudgetTab() {
             <div className="h-64">
               <ResponsiveContainer>
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                  <defs>
+                    <linearGradient id="budgetFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.85} />
+                      <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.45} />
+                    </linearGradient>
+                    <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="budget" fill="hsl(var(--muted-foreground))" name="Budget ₱" />
-                  <Bar dataKey="actual" fill="hsl(var(--chart-1))" name="Actual ₱" />
+                  <Bar dataKey="budget" fill="url(#budgetFill)" name="Budget ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="actual" fill="url(#actualFill)" name="Actual ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

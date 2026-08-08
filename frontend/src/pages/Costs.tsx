@@ -1175,13 +1175,24 @@ function Rollup() {
             <div className="h-64 sm:h-72">
               <ResponsiveContainer>
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                  <defs>
+                    <linearGradient id="costsChemFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.55} />
+                    </linearGradient>
+                    <linearGradient id="costsPowerFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="chem" stackId="c" fill="hsl(var(--chart-2))" name="Chem ₱" />
-                  <Bar dataKey="power" stackId="c" fill="hsl(var(--chart-1))" name="Power ₱" />
+                  {/* stacked: chem sits below power, so only the top segment (power) is rounded — same convention as the kWh Solar/Grid stack in TrendChart.tsx */}
+                  <Bar dataKey="chem" stackId="c" fill="url(#costsChemFill)" name="Chem ₱" radius={[0, 0, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="power" stackId="c" fill="url(#costsPowerFill)" name="Power ₱" radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1727,15 +1738,30 @@ function Compare() {
             <ResponsiveContainer>
               {chartType === 'bar' ? (
                 <BarChart data={dailyChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(dailyChartData.length / 10) - 1)} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                  <defs>
+                    <linearGradient id="cmpGridFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                    </linearGradient>
+                    <linearGradient id="cmpSolarFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.55} />
+                    </linearGradient>
+                    <linearGradient id="cmpEffFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-3))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.55} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(dailyChartData.length / 10) - 1)} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }}
                     formatter={(v: any, name: string) => [v != null ? `${(+v).toLocaleString()} kWh` : '—', name]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="grid"      fill="hsl(var(--chart-1))" name="Grid kWh" />
-                  <Bar dataKey="solar"     fill="#22c55e"              name="Solar kWh" />
-                  <Bar dataKey="effective" fill="hsl(var(--chart-3))" name="Eff. kWh (×mult)" />
+                  {/* grouped, not stacked — each series stands on its own, so every bar gets the full top radius */}
+                  <Bar dataKey="grid"      fill="url(#cmpGridFill)"  name="Grid kWh"          radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="solar"     fill="url(#cmpSolarFill)" name="Solar kWh"         radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="effective" fill="url(#cmpEffFill)"   name="Eff. kWh (×mult)"  radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               ) : (
                 <LineChart data={dailyChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -1763,14 +1789,28 @@ function Compare() {
             <div className="h-64">
               <ResponsiveContainer>
                 <BarChart data={billsChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                  <defs>
+                    <linearGradient id="billsBilledFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
+                    </linearGradient>
+                    <linearGradient id="billsDailyFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.55} />
+                    </linearGradient>
+                    <linearGradient id="billsEffFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-3))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.55} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="billed"    fill="hsl(var(--chart-1))" name="Billed kWh" />
-                  <Bar dataKey="daily"     fill="hsl(var(--chart-2))" name="Sum daily kWh" />
-                  <Bar dataKey="effective" fill="hsl(var(--chart-3))" name="Eff. kWh (×mult)" />
+                  <Bar dataKey="billed"    fill="url(#billsBilledFill)" name="Billed kWh"         radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="daily"     fill="url(#billsDailyFill)"  name="Sum daily kWh"      radius={[6, 6, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="effective" fill="url(#billsEffFill)"    name="Eff. kWh (×mult)"   radius={[6, 6, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
