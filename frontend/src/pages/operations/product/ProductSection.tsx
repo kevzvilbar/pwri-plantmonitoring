@@ -919,7 +919,24 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
   // Re-walking the whole chain after every mutation keeps the stored columns
   // honest for anything that reads them directly (e.g. Dashboard/TrendChart
   // fallback paths), not just this dialog's own (now self-computed) display.
+  //
+  // is_derived (mirrored) meters — e.g. Mambaling's "HAMAS", mirrored from
+  // SRP's derived "HAMAS (Mambaling)" locator — do NOT have a cumulative
+  // chain: fn_sweep_derived_meters_for_date() writes each day's own volume
+  // straight into current_reading and pins previous_reading at 0 (phase11/12
+  // in supabase/migrations), so every row stands alone by design. Walking
+  // that history here and diffing each row's current_reading against the
+  // *previous row's* current_reading — as if it were a rising cumulative
+  // meter — clamps almost every day to 0 (two independent daily volumes
+  // essentially never happen to subtract into the second day's true volume).
+  // This was the actual root cause of HAMAS's mirrored history going to ~0 at
+  // Mambaling after any edit/delete/meter-replacement toggle in this dialog,
+  // even though SRP's own derived locator kept computing correctly — the
+  // sweep's mirror write was fine, this resync silently overwrote it
+  // afterwards. See the accompanying hamas_phase13 migration for the one-time
+  // data repair. Bail out before touching anything for these meters.
   const resyncMeterChain = async (meterId: string) => {
+    if (meter.is_derived) return;
     const { data: all, error } = await supabase
       .from('product_meter_readings' as any)
       .select('id, current_reading, previous_reading, daily_volume, reading_datetime')
@@ -948,23 +965,43 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
   const saveEdit = async () => {
     if (!editRow) return;
     setSaving(true);
-    // Recalculate daily_volume for product_meter_readings — this column is a plain
-    // stored value the app owns (not GENERATED ALWAYS AS), the same as it's computed
-    // on insert above. It was previously left stale after an edit.
-    const existingRow = rows?.find((r: any) => r.id === editRow.id);
     const newCur = +editRow.value;
-    const existingPrev = existingRow?.previous_reading;
-    const newDailyVol = existingPrev != null ? Math.max(0, newCur - existingPrev) : null;
-    const { error } = await supabase.from('product_meter_readings' as any).update({
-      current_reading: newCur,
-      reading_datetime: new Date(editRow.datetime).toISOString(),
-      daily_volume: newDailyVol,
-    } as any).eq('id', editRow.id);
+    let updatePayload: Record<string, any>;
+    if (meter.is_derived) {
+      // Derived/mirrored meters store each day's own volume directly in
+      // current_reading with previous_reading pinned at 0 (see
+      // fn_sweep_derived_meters_for_date's mirror loop) — there's no prior
+      // cumulative reading to diff against. A manual edit here is a human
+      // override of that day's volume, so write it the same way the sweep
+      // does, and mark is_estimated=false so it's clearly an operator value.
+      updatePayload = {
+        current_reading: newCur,
+        previous_reading: 0,
+        daily_volume: newCur,
+        reading_datetime: new Date(editRow.datetime).toISOString(),
+        is_estimated: false,
+      };
+    } else {
+      // Recalculate daily_volume for product_meter_readings — this column is a plain
+      // stored value the app owns (not GENERATED ALWAYS AS), the same as it's computed
+      // on insert above. It was previously left stale after an edit.
+      const existingRow = rows?.find((r: any) => r.id === editRow.id);
+      const existingPrev = existingRow?.previous_reading;
+      const newDailyVol = existingPrev != null ? Math.max(0, newCur - existingPrev) : null;
+      updatePayload = {
+        current_reading: newCur,
+        reading_datetime: new Date(editRow.datetime).toISOString(),
+        daily_volume: newDailyVol,
+      };
+    }
+    const { error } = await supabase.from('product_meter_readings' as any)
+      .update(updatePayload as any).eq('id', editRow.id);
     if (error) { setSaving(false); toast.error(friendlyError(error)); return; }
     // The edit may have changed this row's value and/or its position in the
     // date order — resync the full chain so any downstream row's stale
     // previous_reading (the bug behind the huge negative "Production"
-    // figures) gets corrected too, not just this row.
+    // figures) gets corrected too, not just this row. No-ops for derived
+    // meters, which have no such chain — see resyncMeterChain.
     await resyncMeterChain(meter.id);
     setSaving(false);
     toast.success('Reading updated');
