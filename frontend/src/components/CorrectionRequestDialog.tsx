@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { CORRECTION_REASONS } from '@/lib/correctionReasons';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -40,16 +41,6 @@ interface Props {
   onClose: () => void;
   onSubmitted: () => void;
 }
-
-const REASONS = [
-  'Meter misread — wrong digits copied',
-  'Data entry typo — extra/missing digit',
-  'Wrong previous value used as anchor',
-  'Meter replaced — should be marked as replacement',
-  'Duplicate submission — this entry is the wrong one',
-  'Reading entered for wrong locator/well',
-  'Other',
-] as const;
 
 const fmtNum = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('en-PH', { maximumFractionDigits: 2 });
@@ -193,7 +184,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
               <SelectValue placeholder="Select reason…" />
             </SelectTrigger>
             <SelectContent>
-              {REASONS.map(r => (
+              {CORRECTION_REASONS.map(r => (
                 <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
               ))}
             </SelectContent>

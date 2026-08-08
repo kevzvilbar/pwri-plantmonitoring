@@ -31,6 +31,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { CORRECTION_REASONS } from '@/lib/correctionReasons';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
@@ -300,12 +301,9 @@ function EditValueModal({
           <Select value={reason} onValueChange={setReason}>
             <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select reason…" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="Meter misread">Meter misread</SelectItem>
-              <SelectItem value="Data entry typo">Data entry typo</SelectItem>
-              <SelectItem value="Wrong previous value used">Wrong previous value used</SelectItem>
-              <SelectItem value="Meter replaced — baseline reset">Meter replaced — baseline reset</SelectItem>
-              <SelectItem value="Duplicate entry removed">Duplicate entry removed</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
+              {CORRECTION_REASONS.map(r => (
+                <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {reason === 'Other' && (
@@ -669,6 +667,12 @@ function PendingReviewTab() {
   const [searchQ, setSearchQ] = useState('');
   const [plantFilter, setPlantFilter] = useState('all');
   const [notes, setNotes] = useState<Record<string, string>>({});
+  /** Required rejection reason for operator correction requests (item 8) —
+   *  keyed by correction_requests.id. Unlike `notes` above (optional, for
+   *  admin's own direct edits/approvals), this one gates the Reject button:
+   *  an operator who submitted a reasoned request is owed an explanation
+   *  when it's turned down, not just a silent "kept the original value." */
+  const [reqNotes, setReqNotes] = useState<Record<string, string>>({});
 
   const plants = useMemo(() => [...new Set(rows.map(r => r.plant_name))].sort(), [rows]);
 
@@ -736,6 +740,7 @@ function PendingReviewTab() {
   };
 
   const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
+    if (!resolutionNote.trim()) { toast.error('A reason is required to reject a correction request'); return; }
     // Revert to normal without changing value
     await (supabase.from(req.source_table as any).update({ norm_status: 'normal' }).eq('id', req.source_id) as any);
     await (supabase.from('correction_requests' as any)
@@ -909,13 +914,20 @@ function PendingReviewTab() {
                   <div><div className="text-muted-foreground">Reason</div><div className="text-xs leading-tight">{req.reason}</div></div>
                 </div>
                 {req.note && <p className="text-xs text-muted-foreground italic">"{req.note}"</p>}
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex gap-2 items-center flex-wrap">
+                  <Input
+                    placeholder="Reason for rejection (required to reject)…"
+                    value={reqNotes[req.id] ?? ''}
+                    onChange={e => setReqNotes(p => ({ ...p, [req.id]: e.target.value }))}
+                    className="h-7 text-xs flex-1 min-w-[180px]"
+                  />
                   <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-accent/40 text-accent hover:bg-accent-soft"
                     onClick={() => approveRequest(req)}>
                     <CheckCircle2 className="h-3 w-3" />Apply correction
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 gap-1 text-xs border-destructive/40 text-destructive hover:bg-destructive/5"
-                    onClick={() => rejectRequest(req, '')}>
+                    disabled={!reqNotes[req.id]?.trim()}
+                    onClick={() => rejectRequest(req, reqNotes[req.id] ?? '')}>
                     <XCircle className="h-3 w-3" />Reject
                   </Button>
                 </div>
