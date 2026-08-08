@@ -1395,12 +1395,14 @@ export default function Dashboard() {
         const longOnes = evs.filter((e) => (Number(e.duration_hrs) || 0) >= 12);
         if (longOnes.length) {
           alerts.push({
+            id: `downtime-${longOnes[0].plant_id}-${day}`,
             kind: 'downtime', severity: 'high', date: day, plant_id: longOnes[0].plant_id,
             title: `Prolonged shutdown · ${longOnes[0].subsystem}`,
             detail: `${longOnes[0].duration_hrs}h`, count: longOnes.length,
           });
         } else if (evs.length >= 3 && total >= 6) {
           alerts.push({
+            id: `downtime-${evs[0].plant_id}-${day}`,
             kind: 'downtime', severity: 'medium', date: day, plant_id: evs[0].plant_id,
             title: `Abnormal downtime · ${evs.length} events / ${total.toFixed(1)}h`,
             detail: 'Multiple short shutdowns.', count: evs.length,
@@ -1416,6 +1418,14 @@ export default function Dashboard() {
       if (beErr) throw beErr;
       (beRows ?? []).forEach((d: any) => {
         alerts.push({
+          // The real blending_events row id — was previously left unset here
+          // and the array *position* got used as a stand-in downstream. That
+          // position shifts on every 60s refetch (ties on the same
+          // event_date have no defined order, and rows age in/out of the
+          // 30-day window), so a dismissed/snoozed card could silently come
+          // back under a "new" id on the next refresh. Keying on the actual
+          // row id makes dismiss/snooze durable for the specific event.
+          id: `blending-${d.id}`,
           kind: 'blending', severity: 'info',
           date: String(d.event_date ?? '').slice(0, 10), plant_id: d.plant_id,
           title: `Blending · ${d.well_name}`,
@@ -1438,6 +1448,7 @@ export default function Dashboard() {
         for (const v of s.violations ?? []) {
           if (v.code === 'recovery_pct_under') {
             alerts.push({
+              id: `recovery-${pid}`,
               kind: 'recovery', severity: v.severity ?? 'medium',
               date: String(s.evaluated_at ?? '').slice(0, 10), plant_id: pid,
               title: 'Recovery below threshold',
@@ -1776,9 +1787,16 @@ export default function Dashboard() {
     });
 
     // Backend feed alerts (downtime / blending / recovery)
+    // Uses the stable id set on each alert above (real blending_events row
+    // id / plant+day key) rather than array position — position shifts
+    // between refetches (ties on date have no defined order, and rows age
+    // in/out of the 30-day window), which used to make a dismissed or
+    // snoozed card come back as if it were new. Falls back to the old
+    // index-based scheme only as a defensive no-op for any alert shape that
+    // somehow skips the id above.
     feedAlerts.forEach((a: any, i: number) => {
       storeAlerts.push({
-        id:          `feed-${a.kind ?? 'alert'}-${i}-${a.title}`,
+        id:          a.id ?? `feed-${a.kind ?? 'alert'}-${i}-${a.title}`,
         severity:    a.severity === 'high' ? 'critical' : a.severity === 'medium' ? 'warning' : 'info',
         title:       a.title ?? 'Alert',
         description: a.detail ?? '',

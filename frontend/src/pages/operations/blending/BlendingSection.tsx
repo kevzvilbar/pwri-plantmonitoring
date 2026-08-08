@@ -201,27 +201,23 @@ async function insertBlendingReadings(
     }
 
     try {
-      const { data: existingRec } = await (supabase.from('blending_events' as any) as any)
-        .select('id').eq('well_id', wellId).eq('event_date', eventDate).limit(1);
       // Resolve reading_datetime from CSV: prefer reading_datetime column, fall back to event_date
       const _csvDt = r.reading_datetime?.trim() ? normalizeDatetime(r.reading_datetime.trim()) : null;
       const _rdIso = _csvDt && !isNaN(Date.parse(_csvDt)) ? new Date(_csvDt).toISOString() : null;
-      let insErr: any;
-      if (existingRec?.length) {
-        ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
-          .update({ plant_id: plantId, well_name: r.well_name, plant_name: plantName,
-            raw_meter_reading: curRaw,
-            ...(_rdIso ? { reading_datetime: _rdIso } : {}),
-            ...(prevRaw != null ? { previous_reading: prevRaw } : {}) })
-          .eq('id', existingRec[0].id));
-      } else {
-        ({ error: insErr } = await (supabase.from('blending_events' as any) as any)
-          .insert({ well_id: wellId, plant_id: plantId, well_name: r.well_name, plant_name: plantName,
-            event_date: eventDate,
-            ...(_rdIso ? { reading_datetime: _rdIso } : {}),
-            raw_meter_reading: curRaw,
-            ...(prevRaw != null ? { previous_reading: prevRaw } : {}) }));
-      }
+      // Atomic upsert via fn_blending_upsert_reading (INSERT ... ON CONFLICT
+      // (well_id, event_date) DO UPDATE) — replaces the old select-then-
+      // insert/update pair, which left a race window where two concurrent
+      // imports/saves for the same well+day could each pass the "does it
+      // exist?" check before either had written, producing two rows for the
+      // same well/day. See 20260809_blending_events_dedupe_and_unique_constraint.sql.
+      const { error: insErr } = await supabase.rpc('fn_blending_upsert_reading' as any, {
+        p_well_id: wellId, p_plant_id: plantId, p_well_name: r.well_name, p_plant_name: plantName,
+        p_event_date: eventDate,
+        p_reading_datetime: _rdIso,
+        p_raw_meter_reading: curRaw,
+        p_previous_reading: prevRaw,
+        p_update_previous_reading: true, // CSV always carries prevRaw through on overwrite, same as before
+      });
       if (insErr) throw new Error(insErr.message);
       count++;
     } catch (e) {
@@ -670,31 +666,27 @@ function BlendingRow({
     if (blendBelowPrev) toast.info(`${well.name}: reading below previous — saved anyway`);
     setSaving(true);
     try {
-      const { data: existing } = await (supabase.from('blending_events' as any) as any)
-        .select('id').eq('well_id', well.id).eq('event_date', eventDate).limit(1);
-      let error: any;
-      let savedId: string | null = existing?.length ? existing[0].id : null;
-      if (existing?.length) {
-        // previous_reading intentionally omitted on UPDATE — carries forward
-        // unchanged (trg_blending_set_reading only auto-resolves it on
-        // INSERT), so correcting a typo'd reading here never re-baselines it.
-        // volume_m3 is never sent; the trigger recomputes it from
-        // raw_meter_reading / previous_reading on every write.
-        ({ error } = await (supabase.from('blending_events' as any) as any)
-          .update({ plant_id: plantId, well_name: well.name, plant_name: plantName,
-            reading_datetime: new Date(customDt).toISOString(),
-            raw_meter_reading: +volume })
-          .eq('id', existing[0].id));
-      } else {
-        const { data: inserted, error: insertErr } = await (supabase.from('blending_events' as any) as any)
-          .insert({ well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
-            event_date: eventDate, reading_datetime: new Date(customDt).toISOString(),
-            raw_meter_reading: +volume,
-            ...(prevCumulative != null ? { previous_reading: prevCumulative } : {}) })
-          .select('id').single();
-        error = insertErr;
-        savedId = (inserted as any)?.id ?? null;
-      }
+      // Atomic upsert via fn_blending_upsert_reading (INSERT ... ON CONFLICT
+      // (well_id, event_date) DO UPDATE) — replaces the old select-then-
+      // insert/update pair, which left a race window where two concurrent
+      // saves for the same well+day (double-click, retry, two people saving
+      // around the same time) could each pass the "does it exist?" check
+      // before either had written, producing two rows for the same well/day.
+      // See 20260809_blending_events_dedupe_and_unique_constraint.sql.
+      // p_update_previous_reading: false — previous_reading is intentionally
+      // left untouched when this resolves to an UPDATE (trg_blending_set_reading
+      // only auto-resolves it on INSERT), so correcting a typo'd reading here
+      // never re-baselines it from a client-tracked value — same behaviour
+      // as the old manual UPDATE branch. volume_m3 is never sent; the
+      // trigger recomputes it from raw_meter_reading / previous_reading on
+      // every write.
+      const { data: savedId, error } = await supabase.rpc('fn_blending_upsert_reading' as any, {
+        p_well_id: well.id, p_plant_id: plantId, p_well_name: well.name, p_plant_name: plantName,
+        p_event_date: eventDate, p_reading_datetime: new Date(customDt).toISOString(),
+        p_raw_meter_reading: +volume,
+        p_previous_reading: prevCumulative,
+        p_update_previous_reading: false,
+      });
       if (error) throw error;
 
       // Best-effort — the reading itself already saved successfully above,
