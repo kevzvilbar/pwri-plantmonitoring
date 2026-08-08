@@ -3964,6 +3964,7 @@ export type Database = {
       }
       ro_trains: {
         Row: {
+          booster_pump_targets: Json | null
           created_at: string
           feed_meter_brand: string | null
           feed_meter_installed_date: string | null
@@ -3997,6 +3998,7 @@ export type Database = {
           well_id: string | null
         }
         Insert: {
+          booster_pump_targets?: Json | null
           created_at?: string
           feed_meter_brand?: string | null
           feed_meter_installed_date?: string | null
@@ -4030,6 +4032,7 @@ export type Database = {
           well_id?: string | null
         }
         Update: {
+          booster_pump_targets?: Json | null
           created_at?: string
           feed_meter_brand?: string | null
           feed_meter_installed_date?: string | null
@@ -5457,6 +5460,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: number
+      }
+      fn_manager_plant_scorecard: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
       }
       fn_notify_derived_review: {
         Args: {

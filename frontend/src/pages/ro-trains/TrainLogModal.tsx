@@ -249,22 +249,42 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     }
     setDeletingId(row.id);
     const table = type === 'ro' ? 'ro_train_readings' : 'ro_pretreatment_readings';
-    const { error } = await (supabase.from(table as any) as any).delete().eq('id', row.id);
-    setDeletingId(null);
-    setPendingDelete(null);
-    if (error) { toast.error(friendlyError(error)); return; }
-    if (type === 'ro') await recalculateTrainDeltas(trainId);
-    await logReadingEdit({
-      table_name: table,
-      record_id: row.id,
-      plant_id: row.plant_id ?? plantId ?? null,
-      action: 'delete',
-      actor_user_id: activeOperator?.id ?? null,
-      actor_label: actorLabel(),
-    });
-    toast.success('Reading deleted');
-    qc.invalidateQueries({ queryKey: type === 'ro' ? queryKey : preQueryKey });
-    qc.invalidateQueries({ queryKey: ['ro-overview'] });
+    try {
+      // .select() is required here, not cosmetic: Supabase/PostgREST does NOT
+      // error when RLS silently matches 0 rows (e.g. a manager whose
+      // plant_assignments don't cover this row's plant) — .delete() alone
+      // resolves with { error: null, data: null } either way, so without
+      // .select() a blocked delete looks identical to a successful one and
+      // we'd show "Reading deleted" while the row is still there. This is
+      // the exact failure mode already hit once for blending_events (see
+      // 20260729_blending_events_meter_columns.sql) — guarding it here too.
+      const { data, error } = await (supabase.from(table as any) as any)
+        .delete().eq('id', row.id).select('id');
+      if (error) { toast.error(friendlyError(error)); return; }
+      if (!data || data.length === 0) {
+        console.error('[doDeleteReading] delete matched 0 rows', { table, id: row.id });
+        toast.error("Delete didn't go through — you may not have permission to remove this entry. No changes were made.");
+        return;
+      }
+      if (type === 'ro') await recalculateTrainDeltas(trainId);
+      await logReadingEdit({
+        table_name: table,
+        record_id: row.id,
+        plant_id: row.plant_id ?? plantId ?? null,
+        action: 'delete',
+        actor_user_id: activeOperator?.id ?? null,
+        actor_label: actorLabel(),
+      });
+      toast.success('Reading deleted');
+    } catch (err) {
+      console.error('[doDeleteReading] unexpected error', err);
+      toast.error('Something went wrong deleting this reading. Please try again.');
+    } finally {
+      setDeletingId(null);
+      setPendingDelete(null);
+      qc.invalidateQueries({ queryKey: type === 'ro' ? queryKey : preQueryKey });
+      qc.invalidateQueries({ queryKey: ['ro-overview'] });
+    }
   };
 
   const logsWithMeterFlow = useMemo(() => {

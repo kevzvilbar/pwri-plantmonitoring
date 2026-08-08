@@ -179,6 +179,41 @@ export function PretreatmentAndROLog() {
     setHppTarget(train?.hpp_target_pressure_psi != null ? String(train.hpp_target_pressure_psi) : '');
   }, [train?.id, train?.hpp_target_pressure_psi]);
 
+  // Parsed booster pump target config from Train Settings — same JSONB shape
+  // 20260807_ro_trains_booster_pump_targets.sql and TrainDetail.tsx's
+  // EditTrainDialog both use: { psi_mode: bool, targets: { "<unit>": number } }.
+  const boosterConfig = useMemo(() => {
+    const raw = train?.booster_pump_targets as any;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return { psiMode: raw.psi_mode !== false, targets: (raw.targets ?? {}) as Record<string, number> };
+    }
+    return null;
+  }, [train?.booster_pump_targets]);
+
+  // Auto-fill configured pump targets whenever the selected train changes or
+  // its config loads. Amp is deliberately left untouched here — it's a
+  // per-reading measurement, not something a config value should ever
+  // pre-fill. Same "no clobbering user input" non-concern as the HPP field
+  // above: a pump with a configured target renders read-only below, so the
+  // user was never able to type into it.
+  useEffect(() => {
+    if (!boosterConfig) return;
+    setBoosters(prev => {
+      const next = { ...prev };
+      for (const [unitStr, value] of Object.entries(boosterConfig.targets)) {
+        const u = Number(unitStr);
+        const existing = next[u] || { hz: '', target: '', amp: '', psiMode: boosterConfig.psiMode };
+        next[u] = {
+          ...existing,
+          psiMode: boosterConfig.psiMode,
+          target: boosterConfig.psiMode ? String(value) : existing.target,
+          hz: !boosterConfig.psiMode ? String(value) : existing.hz,
+        };
+      }
+      return next;
+    });
+  }, [train?.id, boosterConfig]);
+
   // Pull the most recent pre-treatment reading for this train so we can default
   // the new form's "Meter Reading Start" to the previous backwash end value.
   const { data: prevPretreat } = useQuery({
@@ -1456,6 +1491,7 @@ export function PretreatmentAndROLog() {
             const anyPsi = Object.values(boosters).some(b => b.psiMode !== false);
             const globalPsiMode = Object.keys(boosters).length === 0 ? boosterPrefPsi : anyPsi;
             const setGlobalMode = (psi: boolean) => {
+              if (boosterConfig) return; // locked to the configured mode — see toggle buttons below
               // Persist preference so the next page open starts in the same mode
               setBoosterPrefPsi(psi);
               try { localStorage.setItem(BOOSTER_MODE_KEY, String(psi)); } catch { /* best-effort persist — ignore */ }
@@ -1477,12 +1513,18 @@ export function PretreatmentAndROLog() {
                   </h4>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Target</span>
-                    <div className="flex rounded-full border border-border overflow-hidden text-xs font-semibold">
+                    <div className={cn(
+                      'flex rounded-full border border-border overflow-hidden text-xs font-semibold',
+                      boosterConfig && 'opacity-60',
+                    )}>
                       <button
                         type="button"
                         onClick={() => setGlobalMode(true)}
+                        disabled={!!boosterConfig}
+                        title={boosterConfig ? 'Mode is set in Train Settings' : undefined}
                         className={cn(
                           'px-3 py-1 transition-colors',
+                          boosterConfig && 'cursor-not-allowed',
                           globalPsiMode
                             ? 'bg-primary text-white'
                             : 'bg-background text-muted-foreground hover:bg-muted'
@@ -1491,8 +1533,11 @@ export function PretreatmentAndROLog() {
                       <button
                         type="button"
                         onClick={() => setGlobalMode(false)}
+                        disabled={!!boosterConfig}
+                        title={boosterConfig ? 'Mode is set in Train Settings' : undefined}
                         className={cn(
                           'px-3 py-1 transition-colors',
+                          boosterConfig && 'cursor-not-allowed',
                           !globalPsiMode
                             ? 'bg-primary text-white'
                             : 'bg-background text-muted-foreground hover:bg-muted'
@@ -1515,6 +1560,7 @@ export function PretreatmentAndROLog() {
                   {Array.from({ length: train.num_booster_pumps }, (_, i) => i + 1).map((u) => {
                     const b = boosters[u] || { hz: '', target: '', amp: '', psiMode: boosterPrefPsi };
                     const psiMode = b.psiMode !== false;
+                    const pumpConfigured = boosterConfig?.targets[String(u)] != null;
                     const setB = (patch: Partial<typeof b>) =>
                       setBoosters({ ...boosters, [u]: { ...b, ...patch } });
                     return (
@@ -1524,11 +1570,14 @@ export function PretreatmentAndROLog() {
                         <Input
                           type="number" step="any"
                           value={psiMode ? b.target : ''}
-                          disabled={!psiMode}
+                          disabled={!psiMode || pumpConfigured}
+                          readOnly={pumpConfigured}
                           placeholder={psiMode ? 'Enter psi' : '—'}
+                          title={pumpConfigured ? 'Set in Train Settings' : undefined}
                           className={cn(
                             'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
-                            !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                            !psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
+                            psiMode && pumpConfigured && 'bg-muted/40'
                           )}
                           onChange={(e) => setB({ target: e.target.value })}
                         />
@@ -1536,11 +1585,14 @@ export function PretreatmentAndROLog() {
                         <Input
                           type="number" step="any"
                           value={!psiMode ? b.hz : ''}
-                          disabled={psiMode}
+                          disabled={psiMode || pumpConfigured}
+                          readOnly={pumpConfigured}
                           placeholder={!psiMode ? 'Enter Hz' : '—'}
+                          title={pumpConfigured ? 'Set in Train Settings' : undefined}
                           className={cn(
                             'text-center placeholder:text-2xs placeholder:text-muted-foreground/40 rounded-lg',
-                            psiMode && 'opacity-35 cursor-not-allowed bg-muted/30'
+                            psiMode && 'opacity-35 cursor-not-allowed bg-muted/30',
+                            !psiMode && pumpConfigured && 'bg-muted/40'
                           )}
                           onChange={(e) => setB({ hz: e.target.value })}
                         />
@@ -1559,7 +1611,9 @@ export function PretreatmentAndROLog() {
 
                 {/* Mode hint */}
                 <p className="text-3xs text-muted-foreground/50 italic">
-                  {globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
+                  {boosterConfig
+                    ? `${globalPsiMode ? 'psi' : 'Hz'} mode — set in Train Settings, applies to all pumps on this train.`
+                    : globalPsiMode ? 'psi mode — Hz column locked. Tap psi/Hz to switch.' : 'Hz mode — psi column locked. Tap psi/Hz to switch.'}
                 </p>
               </Card>
               )}

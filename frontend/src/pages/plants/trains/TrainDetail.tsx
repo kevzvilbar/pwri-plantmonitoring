@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 // When is_meter_replacement is toggled we call deltaCache.invalidate(trainId)
 // to force a Tier-2 raw recompute on the next render.
 import { deltaCache } from '@/lib/deltaCache';
+import { cn } from '@/lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,6 +75,26 @@ export function EditTrainDialog({
   });
   const [saving, setSaving] = useState(false);
 
+  // Booster pump target setpoints — separate from `form` since it's a
+  // per-unit map, not a flat field. Same JSONB shape the reading form and
+  // the 20260807_ro_trains_booster_pump_targets.sql migration both use:
+  // { psi_mode: bool, targets: { "<unit>": number } }.
+  const parsedBoosterTargets = useMemo(() => {
+    const raw = train.booster_pump_targets as any;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return { psi_mode: raw.psi_mode !== false, targets: (raw.targets ?? {}) as Record<string, number> };
+    }
+    return { psi_mode: true, targets: {} as Record<string, number> };
+  }, [train.booster_pump_targets]);
+  const [boosterPsiMode, setBoosterPsiMode] = useState(parsedBoosterTargets.psi_mode);
+  const [boosterTargets, setBoosterTargets] = useState<Record<number, string>>(() => {
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(parsedBoosterTargets.targets)) {
+      if (v != null) out[Number(k)] = String(v);
+    }
+    return out;
+  });
+
   // Wells for this plant — populates the source-well dropdown
   const { data: plantWells = [] } = useQuery({
     queryKey: ['plant-wells-for-train-edit', train.plant_id],
@@ -96,6 +117,16 @@ export function EditTrainDialog({
       name: form.name.trim() || null,
       num_afm: num(form.num_afm),
       num_booster_pumps: num(form.num_booster_pumps),
+      booster_pump_targets: num(form.num_booster_pumps) > 0
+        ? {
+            psi_mode: boosterPsiMode,
+            targets: Object.fromEntries(
+              Array.from({ length: num(form.num_booster_pumps) }, (_, i) => i + 1)
+                .filter(u => (boosterTargets[u] ?? '') !== '')
+                .map(u => [String(u), Number(boosterTargets[u])]),
+            ),
+          }
+        : null,
       num_hp_pumps: num(form.num_hp_pumps),
       hpp_target_pressure_psi: form.hpp_target_pressure_psi === '' ? null : Number(form.hpp_target_pressure_psi),
       num_cartridge_filters: num(form.num_cartridge_filters),
@@ -275,6 +306,51 @@ export function EditTrainDialog({
                 </Button>
               </div>
             </div>
+
+            {/* Booster pump target setpoints — configured once here instead
+                of retyped on every pre-treatment/RO reading, see
+                20260807_ro_trains_booster_pump_targets.sql for why. Mode is
+                one toggle for the whole train (matches the reading form's
+                own global psi/Hz toggle, which already applies to every
+                pump on the train at once). Amperage is intentionally not
+                here — it's a per-reading measurement, not a setpoint. */}
+            {num(form.num_booster_pumps) > 0 && (
+              <div className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Booster Pump Targets</Label>
+                  <div className="flex rounded-full border border-border overflow-hidden text-2xs font-semibold">
+                    <button type="button" onClick={() => setBoosterPsiMode(true)}
+                      className={cn('px-2.5 py-0.5 transition-colors',
+                        boosterPsiMode ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                      psi
+                    </button>
+                    <button type="button" onClick={() => setBoosterPsiMode(false)}
+                      className={cn('px-2.5 py-0.5 transition-colors',
+                        !boosterPsiMode ? 'bg-primary text-white' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                      Hz
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  {Array.from({ length: num(form.num_booster_pumps) }, (_, i) => i + 1).map((u) => (
+                    <div key={u} className="flex items-center gap-2">
+                      <span className="text-2xs font-medium text-muted-foreground w-14 shrink-0">Pump {u}</span>
+                      <Input
+                        type="number" step="any" min={0}
+                        placeholder={boosterPsiMode ? 'psi — leave blank to enter per reading' : 'Hz — leave blank to enter per reading'}
+                        value={boosterTargets[u] ?? ''}
+                        onChange={(e) => setBoosterTargets({ ...boosterTargets, [u]: e.target.value })}
+                        className="h-8 text-xs font-mono-num"
+                        data-testid={`booster-target-${u}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-2xs text-muted-foreground">
+                  Leave a pump blank to keep entering its target manually per reading.
+                </p>
+              </div>
+            )}
 
             {/* HP pumps */}
             <div>

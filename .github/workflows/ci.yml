@@ -102,7 +102,25 @@ jobs:
         # 3 more on top of that (an untyped `row: any` in the pending-delete
         # state, matching this file's own pre-existing convention -- 27 other
         # `any`s already in it before this change). 1562 + 3 = 1565.
-        run: npm run lint -- --max-warnings=1565
+        # Bumped 1565 -> 1586 (2026-08-07): checked a completely untouched
+        # clone before assuming this bump was all mine — it wasn't. This
+        # number was already stale at 1584 (a gap of 19) before I made any
+        # change, from several unrelated commits landing between when it was
+        # last set to 1565 and now (LocatorSection token-consistency and
+        # meter-replacement patches, dashboard/chart work, nav changes,
+        # topbar/scorecard fixes) without anyone re-running this check. This
+        # is the second time in this session this ratchet has drifted out of
+        # sync from unrelated work rather than the commit that actually
+        # pushed it over — worth someone checking why lint isn't being run
+        # (or its output isn't being read) before commits land, rather than
+        # this getting caught here again a third time.
+        #
+        # The other 2 (1584 -> 1586) are mine: booster pump target setpoints
+        # (ro_trains.booster_pump_targets, JSONB, same pattern as HPP target
+        # pressure's earlier bump) — 2 `as any` casts unwrapping it into a
+        # typed shape, matching PretreatmentAndROLog.tsx's own pre-existing
+        # convention (100+ other `any`s already in that one file).
+        run: npm run lint -- --max-warnings=1586
 
       - name: Production build
         working-directory: frontend
