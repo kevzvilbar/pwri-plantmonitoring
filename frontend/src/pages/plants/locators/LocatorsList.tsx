@@ -377,11 +377,11 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                     title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
                     className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       l.status === 'Active'
-                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-100'
+                        ? 'text-accent bg-accent-soft border-accent/30 hover:bg-accent-soft/70'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
                     } ${isManager ? 'cursor-pointer' : 'cursor-default'}`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${l.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
                     {l.status}
                   </button>
                 </div>
@@ -401,7 +401,7 @@ export function LocatorsList({ plantId }: { plantId: string }) {
             <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => setDetail(l.id)}
-                className="text-[11px] text-teal-600 hover:underline inline-flex items-center gap-0.5"
+                className="text-[11px] text-primary hover:underline inline-flex items-center gap-0.5"
               >
                 Details →
               </button>
@@ -567,10 +567,10 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
           </div>
           <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
             locator.status === 'Active'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900'
+              ? 'text-accent bg-accent-soft border-accent/30'
               : 'text-muted-foreground bg-muted border-border'
           }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${locator.status === 'Active' ? 'bg-accent' : 'bg-muted-foreground'}`} />
             {locator.status ?? 'Active'}
           </span>
         </div>

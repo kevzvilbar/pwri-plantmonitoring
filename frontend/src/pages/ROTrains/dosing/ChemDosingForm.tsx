@@ -184,7 +184,7 @@ export function ChemDosingForm() {
               {isChemEnabled('Chlorine') && (
                 <ChemCard
                   name="Chlorine (kg)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Cl₂</span>}
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">Cl₂</span>}
                   value={v.chlorine_kg} onChange={val => setV({ ...v, chlorine_kg: val })}
                   unit="kg" accent="teal"
                 />
@@ -192,7 +192,7 @@ export function ChemDosingForm() {
               {isChemEnabled('SMBS') && (
                 <ChemCard
                   name="SMBS (kg)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">S₂O₅</span>}
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">S₂O₅</span>}
                   value={v.smbs_kg} onChange={val => setV({ ...v, smbs_kg: val })}
                   unit="kg" accent="default"
                 />
@@ -200,7 +200,7 @@ export function ChemDosingForm() {
               {isChemEnabled('Soda Ash') && (
                 <ChemCard
                   name="Soda Ash (kg)"
-                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-300">Na₂CO₃</span>}
+                  icon={<span className="inline-flex items-center justify-center w-6 h-6 text-3xs font-bold font-mono bg-muted rounded text-muted-foreground">Na₂CO₃</span>}
                   value={v.soda_ash_kg} onChange={val => setV({ ...v, soda_ash_kg: val })}
                   unit="kg" accent="default"
                 />

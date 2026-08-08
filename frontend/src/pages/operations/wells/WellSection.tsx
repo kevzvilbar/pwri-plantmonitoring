@@ -1066,7 +1066,7 @@ function WellRow({
                 type="number" step="any" inputMode="decimal"
                 value={reading} onChange={e => setReading(e.target.value)}
                 placeholder={previousMeter != null ? `Prev: ${fmtNum(previousMeter)}` : 'Enter reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-teal-500/30 placeholder:text-muted-foreground/50"
+                className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/30 placeholder:text-muted-foreground/50"
                 data-testid={`well-meter-input-${well.id}`}
               />
               <Button
@@ -1104,7 +1104,7 @@ function WellRow({
                 type="number" step="any" inputMode="decimal"
                 value={powerReading} onChange={e => setPowerReading(e.target.value)}
                 placeholder={previousPower != null ? `Prev: ${fmtNum(previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
+                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
                 data-testid={`well-power-input-${well.id}`}
               />
               <Button
@@ -1127,7 +1127,7 @@ function WellRow({
                 type="number" step="any" inputMode="decimal"
                 value={sharedPowerReading} onChange={e => setSharedPowerReading(e.target.value)}
                 placeholder={sharedPower.previousPower != null ? `Prev: ${fmtNum(sharedPower.previousPower)}` : 'kWh reading'}
-                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-amber-400/30 placeholder:text-muted-foreground/50"
+                className="h-7 flex-1 min-w-0 text-xs border-warn/80 bg-warn-soft/30 focus-visible:ring-warn/30 placeholder:text-muted-foreground/50"
                 data-testid={`shared-power-input-${sharedPower.primaryWellId}`}
               />
               <Button
@@ -1151,7 +1151,7 @@ function WellRow({
               type="number" step="any" inputMode="decimal"
               value={tdsReading} onChange={e => setTdsReading(e.target.value)}
               placeholder="ppm"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-teal-500/20 placeholder:text-muted-foreground/40"
+              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
               data-testid={`well-tds-input-${well.id}`}
             />
             <Button
@@ -1170,7 +1170,7 @@ function WellRow({
               type="number" step="any" inputMode="decimal"
               value={ntuReading} onChange={e => setNtuReading(e.target.value)}
               placeholder="NTU"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-teal-500/20 placeholder:text-muted-foreground/40"
+              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
               data-testid={`well-ntu-input-${well.id}`}
             />
             <Button
@@ -1189,7 +1189,7 @@ function WellRow({
               type="number" step="any" inputMode="decimal"
               value={pressureReading} onChange={e => setPressureReading(e.target.value)}
               placeholder="psi"
-              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-teal-500/20 placeholder:text-muted-foreground/40"
+              className="h-7 flex-1 min-w-0 text-xs border-border/70 bg-background focus-visible:ring-ring/20 placeholder:text-muted-foreground/40"
               data-testid={`well-pressure-input-${well.id}`}
             />
             <Button

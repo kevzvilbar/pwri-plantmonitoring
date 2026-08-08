@@ -36,14 +36,14 @@ export const ODO_THEME: Record<OdometerAlertState, {
   dot: string; glow: string;
 }> = {
   neutral: {
-    cell:        'bg-slate-100/90 dark:bg-slate-800/80 border-slate-300/70 dark:border-slate-600/60',
+    cell:        'bg-muted/90 border-border',
     cellActive:  'bg-highlight-soft/90   border-highlight   ',
-    digit:       'text-slate-700  dark:text-slate-200',
+    digit:       'text-foreground/80',
     digitActive: 'text-highlight  ',
-    decCell:     'bg-slate-50/80  dark:bg-slate-900/50  border-slate-200/50 dark:border-slate-700/40',
-    decDigit:    'text-slate-400/70 dark:text-slate-500/60',
-    dot:         'text-slate-400  dark:text-slate-500',
-    glow:        'ring-2 ring-cyan-300/50 dark:ring-cyan-600/40',
+    decCell:     'bg-muted/50  border-border/50',
+    decDigit:    'text-muted-foreground/70',
+    dot:         'text-muted-foreground',
+    glow:        'ring-2 ring-highlight/50',
   },
   ok: {
     cell:        'bg-accent-soft/90 border-accent/70',
@@ -53,7 +53,7 @@ export const ODO_THEME: Record<OdometerAlertState, {
     decCell:     'bg-accent-soft/50  border-accent/50',
     decDigit:    'text-accent/60',
     dot:         'text-accent',
-    glow:        'ring-2 ring-emerald-300/50 dark:ring-emerald-600/40',
+    glow:        'ring-2 ring-accent/50',
   },
   warn: {
     cell:        'bg-warn-soft/90  border-warn/70 ',
@@ -63,7 +63,7 @@ export const ODO_THEME: Record<OdometerAlertState, {
     decCell:     'bg-warn-soft/50  border-warn/50',
     decDigit:    'text-warn/60',
     dot:         'text-warn ',
-    glow:        'ring-2 ring-amber-300/50 dark:ring-amber-600/40',
+    glow:        'ring-2 ring-warn/50',
   },
   error: {
     cell:        'bg-danger-soft/90   border-danger/70  ',
@@ -73,7 +73,7 @@ export const ODO_THEME: Record<OdometerAlertState, {
     decCell:     'bg-danger-soft/50   border-danger/50 ',
     decDigit:    'text-danger/60',
     dot:         'text-danger  ',
-    glow:        'ring-2 ring-red-300/50 dark:ring-red-600/40',
+    glow:        'ring-2 ring-danger/50',
   },
 } as const;
 
@@ -236,10 +236,10 @@ export function OdometerRollerInput({
       ? 'bg-highlight-soft/60'
       : isActive
         ? ''
-        : 'bg-slate-50/60 dark:bg-slate-900/40';
+        : 'bg-muted/60';
     const zoneDivide = isDecimal
       ? 'border-highlight/60'
-      : 'border-slate-200/70 dark:border-slate-700/50';
+      : 'border-border/70';
 
     if (isMobile) {
       // Three-zone layout: top tap zone (▲) | digit | bottom tap zone (▼).
@@ -345,11 +345,11 @@ export function OdometerRollerInput({
             className={[
               'flex-1 h-[48px] rounded-lg border-2 text-center font-mono font-bold text-[18px]',
               'focus:outline-none focus:ring-2 px-2',
-              alertState === 'ok'   ? 'border-accent text-accent ring-emerald-200' :
-              alertState === 'warn' ? 'border-warn   text-warn   ring-amber-200    ' :
-              alertState === 'error'? 'border-danger     text-danger     ring-red-200        ' :
-                                     'border-highlight    text-slate-800   ring-cyan-200       dark:text-slate-100',
-              'bg-white dark:bg-slate-900',
+              alertState === 'ok'   ? 'border-accent text-accent ring-accent/30' :
+              alertState === 'warn' ? 'border-warn   text-warn   ring-warn/30    ' :
+              alertState === 'error'? 'border-danger     text-danger     ring-danger/30        ' :
+                                     'border-highlight    text-foreground   ring-highlight/30',
+              'bg-card',
               disabled ? 'opacity-40 cursor-not-allowed' : '',
             ].join(' ')}
           />
@@ -406,10 +406,10 @@ export function OdometerRollerInput({
                 aria-label="Switch to keyboard input"
                 className={[
                   'ml-1 h-[40px] px-2 rounded-[8px] flex items-center gap-1',
-                  'border-2 border-slate-300 dark:border-slate-600',
-                  'bg-slate-50 dark:bg-slate-800',
-                  'text-slate-500 dark:text-slate-400 text-xs font-medium',
-                  'active:bg-slate-100 dark:active:bg-slate-700',
+                  'border-2 border-border',
+                  'bg-muted',
+                  'text-muted-foreground text-xs font-medium',
+                  'active:bg-muted/70',
                   'touch-manipulation transition-colors',
                 ].join(' ')}
               >
@@ -422,12 +422,12 @@ export function OdometerRollerInput({
           {/* Swipe hint — mobile only, shown below the drum */}
           {isMobile && !disabled && (
             <div className="flex items-center justify-center gap-3 pb-1">
-              <span className="flex items-center gap-1 text-2xs text-slate-400 dark:text-slate-500">
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 text-3xs">↑</span>
+              <span className="flex items-center gap-1 text-2xs text-muted-foreground">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-border text-3xs">↑</span>
                 swipe up +
               </span>
-              <span className="flex items-center gap-1 text-2xs text-slate-400 dark:text-slate-500">
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 text-3xs">↓</span>
+              <span className="flex items-center gap-1 text-2xs text-muted-foreground">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-border text-3xs">↓</span>
                 swipe down −
               </span>
             </div>

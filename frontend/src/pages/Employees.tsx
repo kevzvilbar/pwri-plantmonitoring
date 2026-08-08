@@ -84,7 +84,7 @@ const presenceConfig: Record<PresenceState, { label: string; dot: string; badge:
   active:  { label: 'Active',  dot: 'bg-accent', badge: 'bg-accent-soft text-accent border-accent' },
   idle:    { label: 'Idle',    dot: 'bg-warn',   badge: 'bg-warn-soft text-warn border-warn' },
   away:    { label: 'Away',    dot: 'bg-kpi-solar',  badge: 'bg-kpi-solar/15 text-kpi-solar border-kpi-solar' },
-  offline: { label: 'Offline', dot: 'bg-zinc-300',    badge: 'bg-zinc-50 text-zinc-500 border-zinc-200' },
+  offline: { label: 'Offline', dot: 'bg-muted-foreground/40',    badge: 'bg-muted text-muted-foreground border-border' },
 };
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ const ROLE_HIERARCHY: { role: string; level: number; icon: ReactNode; color: str
   { role: 'Manager',       level: 1, icon: <Briefcase className="h-3 w-3" />,    color: 'text-info',     bg: 'bg-info-soft border-info' },
   { role: 'Data Analyst',  level: 2, icon: <BarChart2 className="h-3 w-3" />,    color: 'text-kpi-ro',  bg: 'bg-kpi-ro/15 border-kpi-ro' },
   { role: 'Technician',    level: 3, icon: <Cog className="h-3 w-3" />,          color: 'text-primary',    bg: 'bg-primary-soft border-primary' },
-  { role: 'Operator',      level: 4, icon: <UserCircle className="h-3 w-3" />,   color: 'text-zinc-700',    bg: 'bg-zinc-50 border-zinc-200' },
+  { role: 'Operator',      level: 4, icon: <UserCircle className="h-3 w-3" />,   color: 'text-muted-foreground',    bg: 'bg-muted border-border' },
 ];
 
 function getRoleConfig(role: string) {
@@ -1666,7 +1666,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
 
       {/* Tooltip */}
       {tooltip && (
-        <div className="fixed z-50 bg-zinc-900 text-white text-2xs rounded-lg px-2.5 py-2 shadow-lg pointer-events-none whitespace-pre leading-relaxed"
+        <div className="fixed z-50 bg-popover text-popover-foreground border text-2xs rounded-lg px-2.5 py-2 shadow-[var(--shadow-elev)] pointer-events-none whitespace-pre leading-relaxed"
           style={{ left: tooltip.x + 12, top: tooltip.y - 12 }}>
           {tooltip.text}
         </div>

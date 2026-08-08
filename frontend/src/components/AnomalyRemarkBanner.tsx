@@ -45,14 +45,14 @@ export function AnomalyRemarkBanner({
       className={
         isCritical
           ? 'flex flex-col gap-2 text-xs bg-destructive/10 border border-destructive/30 px-3 py-2 rounded-lg'
-          : 'flex flex-col gap-2 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-3 py-2 rounded-lg'
+          : 'flex flex-col gap-2 text-xs bg-warn-soft border border-warn/40 px-3 py-2 rounded-lg'
       }
     >
       <span
         className={
           isCritical
             ? 'flex items-center gap-1.5 font-semibold text-destructive'
-            : 'flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300'
+            : 'flex items-center gap-1.5 font-semibold text-warn'
         }
       >
         {isCritical ? (
@@ -72,12 +72,12 @@ export function AnomalyRemarkBanner({
           className={
             isCritical
               ? 'text-xs bg-background border-destructive/40'
-              : 'text-xs bg-background border-amber-300 dark:border-amber-700'
+              : 'text-xs bg-background border-warn/60'
           }
           data-testid="anomaly-remark-textarea"
         />
         {!remark.trim() && (
-          <p className={isCritical ? 'text-destructive/80' : 'text-amber-700 dark:text-amber-400'}>
+          <p className={isCritical ? 'text-destructive/80' : 'text-warn/90'}>
             A remark is required before this reading can be saved.
           </p>
         )}

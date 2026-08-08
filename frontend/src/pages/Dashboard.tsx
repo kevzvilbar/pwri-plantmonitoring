@@ -35,6 +35,7 @@ import {
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
 import { DowntimeEventsModal } from '@/components/DowntimeEventsModal';
 import { BlendingVolumeCard } from '@/components/BlendingVolumeCard';
+import { RawWaterIcon } from '@/components/icons/water-icons';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { calc } from '@/lib/calculations';
 import {
@@ -1958,7 +1959,7 @@ export default function Dashboard() {
           Power Cost, Chemical Cost, and PV Ratio. Production Volume is now
           surfaced here so operators can see today's output at a glance. */}
       <ClusterHeader icon={Droplet} title="Overview" accent="text-primary" />
-      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Droplet} accent="text-primary" label="Production Volume"
           value={fmtNum(production)} unit="m³" trend={dProduction}
           onClick={handleMetricClick('production', 'Production vs Consumption')} />
@@ -1973,7 +1974,7 @@ export default function Dashboard() {
             onClick={handleMetricClick('nrw', 'NRW Trend')}
           />
         </div>
-        <StatCard icon={Droplet} accent="text-primary" label="Raw Water"
+        <StatCard icon={RawWaterIcon} accent="text-info" label="Raw Water"
           value={fmtNum(rawWaterVol)} unit="m³" trend={dRawWater}
           onClick={handleMetricClick('rawwater', 'Raw Water (m³)')} />
         <StatCard icon={Waves} accent="text-kpi-ro" label="Blending"
@@ -1989,7 +1990,7 @@ export default function Dashboard() {
           are physically measured at the RO feed manifold which BLENDS
           multiple well sources, so each row represents one source line). */}
       <ClusterHeader icon={FlaskConical} title="Quality" accent="text-accent" subtitle="RO output" />
-      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         {/* Feed TDS — expandable per-train breakdown (chevron, hidden by default) */}
         <StatCard
           icon={Gauge}
@@ -2060,7 +2061,7 @@ export default function Dashboard() {
             : 'Today'
         }
       />
-      <div className="grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+      <div className="stagger-grid grid gap-2 grid-cols-2 sm:[grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard icon={Banknote} accent="text-accent" label="Total Production Cost"
           calc
           calcTooltip={

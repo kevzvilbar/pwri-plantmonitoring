@@ -435,11 +435,11 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             ))}
             <input type="date" value={dateFrom} max={dateTo || todayStr}
               onChange={e => { setDateFrom(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-teal-600" />
+              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
             <span className="text-muted-foreground text-xs">→</span>
             <input type="date" value={dateTo} min={dateFrom} max={todayStr}
               onChange={e => { setDateTo(e.target.value); setRangePreset('custom'); setPage(0); }}
-              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-teal-600" />
+              className="h-6 text-xs px-2 rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
             {!isLoading && !preLoading && (
               <span className="text-xs text-muted-foreground ml-auto">
                 <span className="font-semibold text-foreground">{activeTotal}</span> entries

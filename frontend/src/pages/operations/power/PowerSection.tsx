@@ -1076,7 +1076,7 @@ export function PowerForm() {
                         <Input type="number" step="any" value={val}
                           onChange={e => handleChange(e.target.value)}
                           placeholder={solarInputMode === 'direct' ? 'Daily kWh' : 'Solar reading'}
-                          className="border-warn focus-visible:ring-yellow-300"
+                          className="border-warn focus-visible:ring-warn"
                           data-testid={`power-solar-input-${idx}`} />
                         <Button size="sm" disabled={isSavingThis || !solarMeterChanged}
                           onClick={() => submitMeter('solar', idx)}
@@ -1195,7 +1195,7 @@ export function PowerForm() {
                         <Input type="number" step="any" value={val}
                           onChange={e => handleChange(e.target.value)}
                           placeholder="Grid reading"
-                          className="border-info focus-visible:ring-blue-300"
+                          className="border-info focus-visible:ring-info"
                           data-testid={`power-meter-input-${idx}`} />
                         <Button
                           size="sm"
@@ -1382,7 +1382,7 @@ export function PowerForm() {
                           <Input type="number" step="any" value={val}
                             onChange={e => handleChange(e.target.value)}
                             placeholder="Daily kWh"
-                            className="border-warn focus-visible:ring-yellow-300"
+                            className="border-warn focus-visible:ring-warn"
                             data-testid={`power-solar-input-${item.idx}`} />
                           {isFirst && val && <p className="text-2xs text-warn font-mono-num">→ {fmtNum(+val)} kWh daily production</p>}
                         </>
@@ -1511,7 +1511,7 @@ export function PowerForm() {
                           <Input type="number" step="any" value={val}
                             onChange={e => handleChange(e.target.value)}
                             placeholder="Grid meter reading"
-                            className="border-info focus-visible:ring-blue-300"
+                            className="border-info focus-visible:ring-info"
                             data-testid={`power-meter-input-${idx}`} />
                           <Button
                             size="sm"

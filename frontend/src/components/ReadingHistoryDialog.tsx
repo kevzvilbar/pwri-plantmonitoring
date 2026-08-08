@@ -1007,7 +1007,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     <th className="px-3 py-2 font-medium text-right">Reading</th>
                     <th className="px-3 py-2 font-medium text-right">Δ (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center text-muted-foreground">×</th>
-                    <th className="px-3 py-2 font-medium text-right text-blue-700 dark:text-blue-400">Power (kWh)</th>
+                    <th className="px-3 py-2 font-medium text-right text-kpi-grid">Power (kWh)</th>
                     <th className="px-2 py-2 font-medium text-center">Repl.</th>
                   </>}
                   {anyEditable && <th className="px-2 py-2 font-medium text-center w-16">Actions</th>}
@@ -1136,8 +1136,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         <tr key={r.id ?? i}
                           className={[
                             'border-t',
-                            isEditing  ? 'bg-teal-50/60 dark:bg-teal-950/20'
-                            : isRepl   ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                            isEditing  ? 'bg-primary-soft/60'
+                            : isRepl   ? 'bg-warn-soft/40'
                             : 'hover:bg-muted/40',
                           ].join(' ')}
                         >
@@ -1180,7 +1180,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           </td>
                           {/* Effective kWh */}
                           <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-[11px]',
-                            effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-yellow-700 dark:text-yellow-400' : 'text-blue-700 dark:text-blue-400',
+                            effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
                           ].join(' ')}>
                             {effective != null ? fmtNum(effective) : '—'}
                           </td>
@@ -1229,8 +1229,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                         {/* ── Date header row ── */}
                         <tr className={[
                           'border-t',
-                          isEditing ? 'bg-teal-50/60 dark:bg-teal-950/20'
-                          : isGridRepl ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                          isEditing ? 'bg-primary-soft/60'
+                          : isGridRepl ? 'bg-warn-soft/40'
                           : 'bg-muted/20',
                         ].join(' ')}>
                           {anyEditable && (
@@ -1300,7 +1300,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               {/* Effective kWh */}
                               <td className={[
                                 'px-3 py-1 text-right font-mono-num font-medium text-[11px]',
-                                effective != null && effective < 0 ? 'text-destructive' : 'text-blue-700 dark:text-blue-400',
+                                effective != null && effective < 0 ? 'text-destructive' : 'text-kpi-grid',
                               ].join(' ')}>
                                 {effective != null ? fmtNum(effective) : '—'}
                               </td>
@@ -1394,8 +1394,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                       key={r.id ?? i}
                       className={[
                         'border-t',
-                        isEditing      ? 'bg-teal-50/60 dark:bg-teal-950/20'
-                        : isMeterReplacement ? 'bg-orange-50/40 dark:bg-orange-950/10'
+                        isEditing      ? 'bg-primary-soft/60'
+                        : isMeterReplacement ? 'bg-warn-soft/40'
                         : 'hover:bg-muted/40',
                       ].join(' ')}
                     >

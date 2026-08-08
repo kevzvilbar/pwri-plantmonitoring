@@ -763,7 +763,7 @@ function BlendingRow({
           )}
           <label className="cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -844,7 +844,7 @@ function BlendingRow({
           <Input type="number" step="any" inputMode="decimal" value={volume}
             onChange={(e) => setVolume(e.target.value)}
             placeholder="Cumulative meter reading"
-            className="h-9 pl-7 w-full border-kpi-ro focus-visible:ring-violet-300 bg-kpi-ro/40"
+            className="h-9 pl-7 w-full border-kpi-ro focus-visible:ring-kpi-ro bg-kpi-ro/40"
             data-testid={`blending-input-${well.id}`} />
         </div>
       )}

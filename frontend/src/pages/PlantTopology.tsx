@@ -731,7 +731,7 @@ function CustomNodePaletteSection({
               </span>
               {/* Edit icon */}
               <button
-                className="ml-0.5 p-0.5 rounded hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="ml-0.5 p-0.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => { e.stopPropagation(); setEditId(item.id); setEditName(item.label); }}
                 title="Rename"
                 aria-label="Rename"
@@ -771,7 +771,7 @@ function CustomNodePaletteSection({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-slate-400 text-slate-500 hover:border-slate-600 hover:text-slate-700 hover:bg-slate-50 transition-all shrink-0"
+          className="flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground hover:bg-muted transition-all shrink-0"
           title="Add custom node"
         >
           <Plus className="h-3 w-3" />
@@ -1072,8 +1072,8 @@ function SidePanel({
                     onClick={() => setAddType(col.id)}
                     className={`px-2 py-0.5 rounded text-2xs font-semibold border transition-all ${
                       addType === col.id
-                        ? 'border-slate-500 bg-slate-100 text-slate-700'
-                        : 'border-border text-muted-foreground hover:border-slate-400'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/50'
                     }`}
                   >
                     {col.label}
@@ -2145,15 +2145,15 @@ export default function PlantTopology() {
               </div>
             ))}
             <div className="flex items-center gap-1.5 ml-auto">
-              <div className="w-8 border-t-2 border-dashed border-slate-400" />
+              <div className="w-8 border-t-2 border-dashed border-border" />
               <span className="text-2xs text-muted-foreground font-mono">Editable</span>
-              <div className="w-8 border-t-2 border-slate-400 ml-2" />
+              <div className="w-8 border-t-2 border-border ml-2" />
               <span className="text-2xs text-muted-foreground font-mono">Fixed</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-accent ml-2 border border-white" />
+              <div className="w-3.5 h-3.5 rounded-full bg-accent ml-2 border border-background" />
               <span className="text-2xs text-muted-foreground font-mono">Active</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-danger border border-white" />
+              <div className="w-3.5 h-3.5 rounded-full bg-danger border border-background" />
               <span className="text-2xs text-muted-foreground font-mono">Inactive</span>
-              <div className="w-3.5 h-3.5 rounded-full bg-warn border border-white" />
+              <div className="w-3.5 h-3.5 rounded-full bg-warn border border-background" />
               <span className="text-2xs text-muted-foreground font-mono">Maintenance</span>
             </div>
           </div>

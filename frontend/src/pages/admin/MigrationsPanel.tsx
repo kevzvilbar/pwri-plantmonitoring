@@ -426,7 +426,7 @@ export function MigrationsPanel() {
     applied:       { label: 'Applied',       className: 'bg-accent/15 text-accent border-accent/40', Icon: CheckCircle2 },
     pending:       { label: 'Pending',       className: 'bg-danger/15 text-danger border-danger/40',          Icon: AlertTriangle },
     partial:       { label: 'Partial',       className: 'bg-warn/15 text-warn border-warn/40',       Icon: AlertTriangle },
-    indeterminate: { label: 'Indeterminate', className: 'bg-zinc-500/15 text-zinc-700 border-zinc-500/40',          Icon: FileCode },
+    indeterminate: { label: 'Indeterminate', className: 'bg-muted-foreground/15 text-muted-foreground border-muted-foreground/40',          Icon: FileCode },
   };
 
   return (
@@ -471,7 +471,7 @@ export function MigrationsPanel() {
               </Badge>
             )}
             {data.summary.indeterminate > 0 && (
-              <Badge variant="outline" className="bg-zinc-500/10 text-zinc-700">
+              <Badge variant="outline" className="bg-muted-foreground/10 text-muted-foreground">
                 {data.summary.indeterminate} indeterminate
               </Badge>
             )}

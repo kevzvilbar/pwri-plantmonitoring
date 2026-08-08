@@ -22,7 +22,7 @@ import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Waves, FlaskConical, Keyboard } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -50,7 +50,7 @@ const TAB_CONFIG = [
   { key: 'locator',  label: 'Locator',  icon: MapPin },
   { key: 'well',     label: 'Well',     icon: Droplet },
   { key: 'product',  label: 'Product',  icon: FlaskConical },
-  { key: 'blending', label: 'Blending', icon: Gauge },
+  { key: 'blending', label: 'Blending', icon: Waves },
   { key: 'power',    label: 'Power',    icon: Zap },
 ] as const;
 

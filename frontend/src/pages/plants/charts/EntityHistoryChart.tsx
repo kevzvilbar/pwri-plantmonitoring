@@ -288,7 +288,7 @@ export function EntityHistoryChart({
                 key={r}
                 onClick={() => setRange(r)}
                 className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
-                  range === r ? 'bg-teal-700 text-white' : 'text-muted-foreground hover:text-foreground'
+                  range === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >{r === 'all' ? 'All' : `${r}d`}</button>
             ))}
@@ -456,7 +456,7 @@ export function MeterDetailButton({
           {icon && <span className="text-muted-foreground">{icon}</span>}
           <span className="text-sm font-medium truncate">{label}</span>
           {filledCount > 0 && (
-            <span className="text-2xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 font-medium shrink-0">
+            <span className="text-2xs px-1.5 py-0.5 rounded-full bg-primary-soft text-primary font-medium shrink-0">
               {filledCount} field{filledCount !== 1 ? 's' : ''}
             </span>
           )}

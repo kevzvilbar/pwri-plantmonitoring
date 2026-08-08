@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import { ComputedInput } from '@/components/ComputedInput';
 import { ExportButton } from '@/components/ExportButton';
 import { Upload, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { RawWaterIcon, PermeateIcon, RejectIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { ImportROReadingsDialog } from '../../ro-trains';
 
@@ -1854,20 +1855,20 @@ export function PretreatmentAndROLog() {
             <div className={`grid gap-2 ${[showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 3 ? 'grid-cols-3' : [showFeedMeter, showPermeateMeter, showRejectMeter].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {showFeedMeter && (
               <div className="flex items-center gap-1.5 rounded-md bg-info-soft border border-info px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-info shrink-0" />
+                <RawWaterIcon className="h-3.5 w-3.5 text-info shrink-0" aria-hidden />
                 <span className="text-xs font-semibold text-info">Feed / Raw</span>
               </div>
               )}
               {showPermeateMeter && (
               <div className="flex items-center gap-1.5 rounded-md bg-accent-soft border border-accent px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
+                <PermeateIcon className="h-3.5 w-3.5 text-accent shrink-0" aria-hidden />
                 <span className="text-xs font-semibold text-accent">{productionLabel}</span>
               </div>
               )}
               {showRejectMeter && (
-              <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn px-2 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-warn shrink-0" />
-                <span className="text-xs font-semibold text-warn">Reject / Concentrate</span>
+              <div className="flex items-center gap-1.5 rounded-md bg-muted border border-border px-2 py-1.5">
+                <RejectIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden />
+                <span className="text-xs font-semibold text-muted-foreground">Reject / Concentrate</span>
               </div>
               )}
             </div>
@@ -1917,9 +1918,9 @@ export function PretreatmentAndROLog() {
                     <Label className="text-xs text-muted-foreground">Feed Meter Reading</Label>
                     <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
-                      feedNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      !feedNegWarn && feedSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
-                      !feedNegWarn && feedSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      feedNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
+                      !feedNegWarn && feedSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
+                      !feedNegWarn && feedSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
                     )} />
                     {feedNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
@@ -1968,9 +1969,9 @@ export function PretreatmentAndROLog() {
                     <Label className="text-xs text-muted-foreground">Permeate Meter Reading</Label>
                     <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
-                      permNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      !permNegWarn && permSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
-                      !permNegWarn && permSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      permNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
+                      !permNegWarn && permSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
+                      !permNegWarn && permSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
                     )} />
                     {permNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
@@ -2019,9 +2020,9 @@ export function PretreatmentAndROLog() {
                     <Label className="text-xs text-muted-foreground">Reject Meter Reading</Label>
                     <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
-                      rejNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      !rejNegWarn && rejSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
-                      !rejNegWarn && rejSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      rejNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
+                      !rejNegWarn && rejSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
+                      !rejNegWarn && rejSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
                     )} />
                     {rejNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">

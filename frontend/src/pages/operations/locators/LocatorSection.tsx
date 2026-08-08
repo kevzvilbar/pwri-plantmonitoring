@@ -1162,7 +1162,7 @@ function LocatorRow({
       )}
       {/* Item 9: locked badge — reading approved by supervisor, cannot be edited */}
       {isLocked && lastToday && !editingId && (
-        <span className="h-10 px-2 flex items-center text-2xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg gap-1 shrink-0">
+        <span className="h-10 px-2 flex items-center text-2xs font-medium text-primary bg-primary-soft border border-primary/30 rounded-lg gap-1 shrink-0">
           🔒 Locked
         </span>
       )}
@@ -1208,7 +1208,7 @@ function LocatorRow({
             <StatusPill tone="warn"><MapPin className="h-3 w-3" /> off-site</StatusPill>
           )}
           {editingId && (
-            <span className="text-2xs font-semibold uppercase tracking-widest text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded">Editing</span>
+            <span className="text-2xs font-semibold uppercase tracking-widest text-primary bg-primary-soft px-1.5 py-0.5 rounded">Editing</span>
           )}
           {todayCount === 0 && !editingId && (
             gapReason ? (
@@ -1279,13 +1279,13 @@ function LocatorRow({
             <>
               prev: <span className="font-mono-num text-foreground/80">{previous == null ? '—' : fmtNum(previous)}</span>
               {/* On mobile the delta is shown below the drum, so only show it inline on desktop */}
-              {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-medium text-teal-700 dark:text-teal-400">{fmtNum(dailyVol)} m³</span></>}
+              {!isMobile && dailyVol != null && <> · Δ <span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span></>}
               <span className="mx-1.5 text-border">·</span>
               <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
             </>
           ) : (
             <>
-              {dailyVol != null ? <><span className="font-mono-num font-medium text-teal-700 dark:text-teal-400">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/60">enter daily volume</span>}
+              {dailyVol != null ? <><span className="font-mono-num font-medium text-primary">{fmtNum(dailyVol)} m³</span> to save</> : <span className="text-muted-foreground/60">enter daily volume</span>}
               <span className="mx-1.5 text-border">·</span>
               <span className={atLimit ? 'text-warn-foreground font-medium' : 'text-muted-foreground'}>{todayCount}/{maxReadingsPerDay} today</span>
             </>
@@ -1314,7 +1314,7 @@ function LocatorRow({
               </span>
             </span>
             {dailyVol != null && (
-              <span className="font-mono-num font-semibold text-teal-700 dark:text-teal-400">
+              <span className="font-mono-num font-semibold text-primary">
                 Δ {fmtNum(dailyVol)} m³
               </span>
             )}

@@ -1023,7 +1023,7 @@ function ChemicalPrices() {
                 <span className="truncate">{p.chemical_name}</span>
                 <Badge
                   variant="outline"
-                  className={`shrink-0 text-2xs px-1.5 py-0 font-normal ${isFilter ? 'border-amber-300 text-amber-700 bg-amber-50' : 'border-sky-300 text-sky-700 bg-sky-50'}`}
+                  className={`shrink-0 text-2xs px-1.5 py-0 font-normal ${isFilter ? 'border-warn/50 text-warn bg-warn-soft' : 'border-info/50 text-info bg-info-soft'}`}
                 >
                   {isFilter ? 'Filter' : 'Chemical'}
                 </Badge>

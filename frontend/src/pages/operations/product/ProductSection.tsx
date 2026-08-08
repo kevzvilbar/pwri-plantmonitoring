@@ -635,7 +635,7 @@ function ProductMeterRow({
           <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
             <Gauge className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="text-sm font-medium truncate">{meter.name}</span>
-            <span className="text-3xs font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+            <span className="text-3xs font-bold uppercase tracking-widest bg-warn-soft text-warn px-1.5 py-0.5 rounded-full shrink-0">
               ~ Mirrored
             </span>
           </div>
@@ -683,7 +683,7 @@ function ProductMeterRow({
           </div>
           <label className="shrink-0 cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -751,7 +751,7 @@ function ProductMeterRow({
               value={reading}
               onChange={(e) => setReading(e.target.value)}
               placeholder="Product Reading"
-              className="h-9 pl-7 w-full border-primary focus-visible:ring-teal-300 bg-primary-soft/40"
+              className="h-9 pl-7 w-full border-primary focus-visible:ring-primary bg-primary-soft/40"
               data-testid={`product-meter-input-${meter.id}`}
             />
           </div>
@@ -1316,7 +1316,7 @@ function MeterNameList({
   onRemoveLast: () => void;
 }) {
   const isYellow = accentColor === 'yellow';
-  const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
+  const ring   = isYellow ? 'focus-visible:ring-warn' : 'focus-visible:ring-info';
   const border = isYellow ? 'border-warn' : 'border-info';
   const chip   = isYellow
     ? 'bg-warn-soft border-warn text-warn'

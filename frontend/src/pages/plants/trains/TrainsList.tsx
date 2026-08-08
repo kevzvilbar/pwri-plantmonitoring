@@ -289,7 +289,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
         const numCtrl  = t.num_controllers    ?? 0;
 
         return (
-          <Card key={t.id} className={`overflow-hidden border-l-2 ${borderColor}`} data-testid={`train-card-${t.id}`}>
+          <Card key={t.id} className={`overflow-hidden border-l-2 transition-shadow duration-200 hover:shadow-elev ${borderColor}`} data-testid={`train-card-${t.id}`}>
             {/* ── Train header ── */}
             <div className="p-3 flex justify-between items-start gap-2">
               <div className="min-w-0 flex-1">

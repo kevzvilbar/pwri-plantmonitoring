@@ -50,7 +50,7 @@ export function MeterNameList({
   onRemoveLast: () => void;
 }) {
   const isYellow = accentColor === 'yellow';
-  const ring   = isYellow ? 'focus-visible:ring-yellow-400' : 'focus-visible:ring-blue-400';
+  const ring   = isYellow ? 'focus-visible:ring-warn' : 'focus-visible:ring-info';
   const border = isYellow ? 'border-warn' : 'border-info';
   const chip   = isYellow
     ? 'bg-warn-soft border-warn text-warn'
@@ -252,7 +252,7 @@ export function GridMeterListRows({
                   }
                 }}
                 style={{ textShadow: '0 0 8px currentColor' }}
-                className="w-[52px] text-xs text-right font-mono font-semibold text-info bg-transparent focus:outline-none focus:ring-2 focus:ring-sky-400 rounded"
+                className="w-[52px] text-xs text-right font-mono font-semibold text-info bg-transparent focus:outline-none focus:ring-2 focus:ring-info rounded"
                 title={`CT multiplier for "${name}". Consumption = (Current − Previous) × ${mult}. Press Enter or click away to save.`}
               />
             </div>
@@ -299,7 +299,7 @@ export function MeterNameListRows({
   const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number>(-1);
 
   const isYellow = accentColor === 'yellow';
-  const ring = isYellow ? 'focus:ring-yellow-400' : 'focus:ring-blue-400';
+  const ring = isYellow ? 'focus:ring-warn' : 'focus:ring-info';
 
   const startEdit  = (i: number) => { setConfirmDeleteIdx(-1); setEditingIdx(i); setEditVal(names[i] ?? `${defaultPrefix} ${i + 1}`); };
   const commitEdit = () => {

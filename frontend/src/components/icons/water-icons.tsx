@@ -138,6 +138,20 @@ export const MeterOdometerIcon = ({ size, ...props }: WaterIconProps) => (
   </svg>
 );
 
+/** Raw / source water — untreated water still in the ground, before it
+ * reaches any meter or treatment step. Distinct on purpose from Droplet
+ * (lucide), which this app uses for finished/produced water — the two
+ * were previously conflated (Dashboard's "Production Volume" and "Raw
+ * Water" cards both rendered a plain Droplet, right next to each other). */
+export const RawWaterIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <path d="M3.5 13.5h17" className="opacity-40" />
+    <path d="M6 13.5V19a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19v-5.5" className="fill-info/15" />
+    <path d="M9 13.5V9M15 13.5V9" className="opacity-40" />
+    <path d="M11 20v-4a1 1 0 0 1 2 0v4" className="fill-info/25" />
+  </svg>
+);
+
 /**
  * Grid Pylon — high-voltage transmission tower, used everywhere the "Grid"
  * power source appears (Wells, Power Meters, Plant Appearance/Energy config,
