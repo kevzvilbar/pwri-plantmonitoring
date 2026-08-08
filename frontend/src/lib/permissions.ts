@@ -1,4 +1,5 @@
 import type { Role } from '@/hooks/useAuth';
+export type { Role };
 
 // Single source of truth for "who can do what". This is Appendix A —
 // Roles & Permissions Matrix — encoded as data instead of scattered

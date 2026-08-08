@@ -3,7 +3,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 
-type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin' | 'Data Analyst';
+export type Role = 'Operator' | 'Technician' | 'Manager' | 'Admin' | 'Data Analyst';
 
 export interface Profile {
   id: string;
