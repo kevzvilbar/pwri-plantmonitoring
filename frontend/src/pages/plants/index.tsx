@@ -485,7 +485,7 @@ export default function Plants() {
       </div>
 
       {/* ── Plant list ── */}
-      <div className="space-y-2.5">
+      <div className="stagger-grid space-y-2.5">
         {filteredList?.map((p, idx) => {
           const wells    = summaryCounts?.wells?.[p.id]    ?? { active: 0, total: 0 };
           const locators = summaryCounts?.locators?.[p.id] ?? { active: 0, total: 0 };

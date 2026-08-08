@@ -643,7 +643,7 @@ function Staff() {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+      <div className="stagger-grid grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
         {filteredStaff.map((s) => (
           <StaffTile key={s.id} member={s} roles={roles as any[]}
             isSelf={s.id === (activeOperator?.id ?? user?.id)}
