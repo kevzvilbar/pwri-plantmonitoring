@@ -1081,6 +1081,79 @@ export type Database = {
           },
         ]
       }
+      custom_role_overrides: {
+        Row: {
+          action: string
+          allowed: boolean
+          custom_role_id: string
+          id: string
+          module_key: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          allowed: boolean
+          custom_role_id: string
+          id?: string
+          module_key: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          allowed?: boolean
+          custom_role_id?: string
+          id?: string
+          module_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_role_overrides_custom_role_id_fkey"
+            columns: ["custom_role_id"]
+            isOneToOne: false
+            referencedRelation: "custom_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_roles: {
+        Row: {
+          base_role: Database["public"]["Enums"]["app_role"]
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          base_role: Database["public"]["Enums"]["app_role"]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          base_role?: Database["public"]["Enums"]["app_role"]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_roles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_plant_summary: {
         Row: {
           blending_m3: number | null
@@ -4260,23 +4333,34 @@ export type Database = {
       user_roles: {
         Row: {
           created_at: string
+          custom_role_id: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
           created_at?: string
+          custom_role_id?: string | null
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
           created_at?: string
+          custom_role_id?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_custom_role_id_fkey"
+            columns: ["custom_role_id"]
+            isOneToOne: false
+            referencedRelation: "custom_roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       well_blending: {
         Row: {

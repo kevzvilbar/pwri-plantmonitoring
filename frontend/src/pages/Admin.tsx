@@ -3,12 +3,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { ShieldAlert, Users, Building2, ClipboardList, Database, ClipboardCheck, ArrowRight } from 'lucide-react';
+import { ShieldAlert, Users, Building2, ClipboardList, Database, ClipboardCheck, ArrowRight, KeyRound } from 'lucide-react';
 
 import { UsersPanel } from './admin/UsersPanel';
 import { PlantsPanel } from './admin/PlantsPanel';
 import { AuditLogPanel } from './admin/AuditLogPanel';
 import { MigrationsPanel } from './admin/MigrationsPanel';
+import { RolesPanel } from './admin/RolesPanel';
 import { PageHeader } from '@/components/PageHeader';
 
 export default function Admin() {
@@ -71,10 +72,13 @@ export default function Admin() {
 
   // Count visible tabs to size the grid correctly
   // Manager sees: Plants, Audit (2)
-  // Admin sees:   Users, Plants, Audit, Migrations (4)
+  // Admin sees:   Users, Plants, Audit, Migrations, Roles (5)
   const canViewUsers = usePermission('admin_users', 'view');
   const canViewMigrations = usePermission('admin_migrations', 'view');
-  const tabCount = canViewUsers ? 4 : 2;
+  // Roles editor is Admin-only, same gate as Users/Migrations — it can grant
+  // access to everything else, so it stays out of Manager's reach.
+  const canManageRoles = isAdmin;
+  const tabCount = canViewUsers ? 5 : 2;
 
   return (
     <div className="space-y-4 animate-fade-in" data-testid="admin-page">
@@ -97,6 +101,11 @@ export default function Admin() {
           {canViewMigrations && (
             <TabsTrigger value="migrations" data-testid="admin-tab-migrations">
               <Database className="h-3.5 w-3.5 mr-1" /> Migrations
+            </TabsTrigger>
+          )}
+          {canManageRoles && (
+            <TabsTrigger value="roles" data-testid="admin-tab-roles">
+              <KeyRound className="h-3.5 w-3.5 mr-1" /> Roles
             </TabsTrigger>
           )}
         </TabsList>
@@ -126,6 +135,11 @@ export default function Admin() {
         {canViewMigrations && (
           <TabsContent value="migrations" className="mt-3">
             <MigrationsPanel />
+          </TabsContent>
+        )}
+        {canManageRoles && (
+          <TabsContent value="roles" className="mt-3">
+            <RolesPanel />
           </TabsContent>
         )}
       </Tabs>

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { PERMISSION_MATRIX, hasPermission, isOperatorOnly, type ModuleKey, type Action } from './permissions';
+import {
+  PERMISSION_MATRIX, hasPermission, isOperatorOnly,
+  effectivePermission, baseDefault, meaningfulOverrideCount, LOCKED_MODULES, MODULE_ORDER,
+  type ModuleKey, type Action, type RoleOverride,
+} from './permissions';
 import type { Role } from '@/hooks/useAuth';
 
 const ROLES: Role[] = ['Operator', 'Technician', 'Manager', 'Data Analyst', 'Admin'];
@@ -111,5 +115,57 @@ describe('isOperatorOnly — replaces the logic duplicated in ProtectedRoute/App
     expect(isOperatorOnly(['Manager'], OPERATOR_DESIGNATION, OPERATOR_DESIGNATION)).toBe(false);
     expect(isOperatorOnly(['Admin'], OPERATOR_DESIGNATION, OPERATOR_DESIGNATION)).toBe(false);
     expect(isOperatorOnly(['Data Analyst'], OPERATOR_DESIGNATION, OPERATOR_DESIGNATION)).toBe(false);
+  });
+});
+
+describe('effectivePermission — custom role overrides', () => {
+  it('falls back to the base role default when there is no override', () => {
+    expect(effectivePermission('Manager', [], 'costs', 'budget')).toBe(baseDefault('Manager', 'costs', 'budget'));
+    expect(effectivePermission('Operator', [], 'compliance', 'view')).toBe(false);
+  });
+
+  it('an override flips the result away from the base default', () => {
+    const overrides: RoleOverride[] = [{ module_key: 'data_analysis_review', action: 'edit', allowed: true }];
+    // Manager's default for data_analysis_review.edit is false (view-only) —
+    // an explicit override should turn it on for this custom role.
+    expect(baseDefault('Manager', 'data_analysis_review', 'edit')).toBe(false);
+    expect(effectivePermission('Manager', overrides, 'data_analysis_review', 'edit')).toBe(true);
+  });
+
+  it('LOCKED_MODULES ignore overrides entirely — cannot be reassigned off Admin', () => {
+    for (const moduleKey of LOCKED_MODULES) {
+      const tryToUnlock: RoleOverride[] = [{ module_key: moduleKey, action: 'view', allowed: true }];
+      // Operator's real access is false; a stored override claiming true
+      // must still resolve to Operator's own (false) default.
+      expect(effectivePermission('Operator', tryToUnlock, moduleKey, 'view')).toBe(false);
+
+      const tryToLockOutAdmin: RoleOverride[] = [{ module_key: moduleKey, action: 'view', allowed: false }];
+      expect(effectivePermission('Admin', tryToLockOutAdmin, moduleKey, 'view')).toBe(true);
+    }
+  });
+
+  it('every module in MODULE_ORDER has a matrix entry (no orphaned/missing rows in the editor)', () => {
+    const matrixKeys = new Set(Object.keys(PERMISSION_MATRIX));
+    for (const m of MODULE_ORDER) expect(matrixKeys.has(m), `${m} missing from PERMISSION_MATRIX`).toBe(true);
+    for (const m of matrixKeys) expect(MODULE_ORDER.includes(m as ModuleKey), `${m} missing from MODULE_ORDER`).toBe(true);
+  });
+});
+
+describe('meaningfulOverrideCount — drives the "N overrides from base" badge', () => {
+  it('is zero with no overrides', () => {
+    expect(meaningfulOverrideCount('Manager', [])).toBe(0);
+  });
+
+  it('counts overrides that actually differ from the base default', () => {
+    const overrides: RoleOverride[] = [
+      { module_key: 'data_analysis_review', action: 'edit', allowed: true }, // Manager default: false -> real change
+      { module_key: 'costs', action: 'budget', allowed: false }, // Manager default: true -> real change
+    ];
+    expect(meaningfulOverrideCount('Manager', overrides)).toBe(2);
+  });
+
+  it('does not count a stored override that just restates the base default (no-op)', () => {
+    const noop: RoleOverride[] = [{ module_key: 'plants', action: 'view', allowed: baseDefault('Manager', 'plants', 'view') }];
+    expect(meaningfulOverrideCount('Manager', noop)).toBe(0);
   });
 });
