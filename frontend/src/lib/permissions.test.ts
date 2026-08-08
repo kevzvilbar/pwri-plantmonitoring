@@ -105,6 +105,16 @@ describe('isOperatorOnly — replaces the logic duplicated in ProtectedRoute/App
   });
 });
 
+describe('manager_scorecard — must match fn_manager_plant_scorecard\'s own has_role() gate', () => {
+  it('Admin, Manager, and Data Analyst can view; Technician and Operator cannot', () => {
+    expect(hasPermission(['Admin'], 'manager_scorecard', 'view')).toBe(true);
+    expect(hasPermission(['Manager'], 'manager_scorecard', 'view')).toBe(true);
+    expect(hasPermission(['Data Analyst'], 'manager_scorecard', 'view')).toBe(true);
+    expect(hasPermission(['Technician'], 'manager_scorecard', 'view')).toBe(false);
+    expect(hasPermission(['Operator'], 'manager_scorecard', 'view')).toBe(false);
+  });
+});
+
 describe('effectivePermission — custom role overrides', () => {
   it('falls back to the base role default when there is no override', () => {
     expect(effectivePermission('Manager', [], 'costs', 'budget')).toBe(baseDefault('Manager', 'costs', 'budget'));

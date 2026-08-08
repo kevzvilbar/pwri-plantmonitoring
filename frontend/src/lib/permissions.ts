@@ -23,6 +23,7 @@ export type ModuleKey =
   | 'network_topology'
   | 'pm_schedule'
   | 'incidents'
+  | 'manager_scorecard'
   | 'costs'
   | 'employees'
   | 'data_exports'
@@ -39,7 +40,7 @@ export type ModuleKey =
 // to render "every module" (mirrors Appendix A's row order).
 export const MODULE_ORDER: readonly ModuleKey[] = [
   'dashboard', 'ai_assistant', 'compliance', 'plants', 'operations', 'ro_trains',
-  'network_topology', 'pm_schedule', 'incidents', 'costs', 'employees',
+  'network_topology', 'pm_schedule', 'incidents', 'manager_scorecard', 'costs', 'employees',
   'data_exports', 'smart_import', 'data_analysis_review', 'data_corrections',
   'admin_users', 'admin_plants', 'admin_audit', 'admin_migrations', 'profile',
 ];
@@ -54,6 +55,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   network_topology: 'Network Topology',
   pm_schedule: 'PM Schedule',
   incidents: 'Incidents',
+  manager_scorecard: 'Manager Scorecard',
   costs: 'Costs & Tariffs',
   employees: 'Employees',
   data_exports: 'Data Exports',
@@ -83,6 +85,16 @@ export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   network_topology: { view: ELEVATED },
   pm_schedule: { view: ALL },
   incidents: { view: ALL },
+  // Matches fn_manager_plant_scorecard's own has_role() check exactly
+  // (supabase/migrations/20260807_manager_plant_scorecard.sql) — that RPC
+  // is SECURITY DEFINER and independently rejects anyone outside
+  // Admin/Manager/Data Analyst, regardless of what a custom role's
+  // override says. A custom role can safely *restrict* this (deny is
+  // always enforceable at the UI layer), but *granting* it to a role based
+  // on Operator/Technician would show the page and then fail the RPC call
+  // — same class of limitation as every other module here whose
+  // underlying RLS/RPC is keyed to base_role (see migration header).
+  manager_scorecard: { view: MANAGE.concat('Data Analyst') },
   // Technician's "view" here is deliberately looser than its real UI —
   // Costs.tsx itself narrows what a Technician sees inside the page.
   // This entry governs nav/route access, not in-page field visibility.
