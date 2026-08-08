@@ -55,8 +55,10 @@ const C_TDS         = '#a78bfa';  // violet-400 — permeate TDS
 const C_GRID_PV     = '#f59e0b';  // amber-400  — grid power / PV ratio
 
 // ─── Modern inline chart legend ──────────────────────────────────────────────
-type LegendShape = 'area' | 'bar' | 'line';
-function ModernChartLegend({ items }: {
+// Exported so other dashboard cards (e.g. BlendingVolumeCard's by-well
+// breakdown) can reuse the exact same legend styling instead of forking it.
+export type LegendShape = 'area' | 'bar' | 'line';
+export function ModernChartLegend({ items }: {
   items: { color: string; label: string; shape?: LegendShape }[];
 }) {
   return (
