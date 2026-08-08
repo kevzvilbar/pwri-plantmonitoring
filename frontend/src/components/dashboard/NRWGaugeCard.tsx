@@ -28,6 +28,16 @@ function nrwFill(tone: StatTone): string {
   return `hsl(var(--${tone}))`;
 }
 
+// Maps a 0–100 gauge value to its angle on the arc (matches the Pie props
+// below: startAngle=180 at the left foot, sweeping to endAngle=0 at the
+// right foot) and that angle to an (x, y) point at a given radius — used to
+// place the threshold tick mark at the exact spot on the ring that
+// corresponds to ALERTS.nrw_green_max, independent of the current value.
+function polarPoint(cx: number, cy: number, r: number, pct: number) {
+  const angleRad = ((180 - (pct / 100) * 180) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(angleRad), y: cy - r * Math.sin(angleRad) };
+}
+
 interface Props {
   nrw:     number | null;
   yNrw:    number | null;
@@ -40,10 +50,18 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
   const fillColor  = nrwFill(tone);
   const displayVal = Math.min(Math.max(nrw ?? 0, 0), 100);
 
-  const pieData = [
-    { name: 'NRW',  value: displayVal       },
-    { name: 'rest', value: 100 - displayVal },
-  ];
+  // Gauge geometry — shared by both Pie layers and the threshold tick below
+  // so they always line up exactly.
+  const cx = 44, cy = 46, innerRadius = 27, outerRadius = 40;
+  // Ring is 13px thick; ~half that gives a full pill-shaped rounded cap
+  // without the two ends colliding into a lozenge at low values.
+  const cornerRadius = 6;
+
+  // Threshold tick — marks ALERTS.nrw_green_max on the ring so the compliance
+  // limit is visible at a glance, not just in the "(limit N%)" text below.
+  const limitPct = ALERTS.nrw_green_max;
+  const tickInner = polarPoint(cx, cy, innerRadius - 3, limitPct);
+  const tickOuter = polarPoint(cx, cy, outerRadius + 3, limitPct);
 
   // Trend vs yesterday
   const delta = nrw != null && yNrw != null && yNrw !== 0
@@ -67,24 +85,68 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
     >
       {/* Half-donut gauge — slightly larger on wider (mobile full-row) layout */}
       <div className="shrink-0" aria-hidden>
-        <PieChart width={88} height={48}>
+        {/*
+          margin explicitly zeroed: PieChart defaults to a hidden 5px margin
+          on every side, which shifts the *effective* cx/cy by +5/+5 without
+          changing the numbers you write here. On this 88×48 canvas that
+          pushes the true circle center past the chart's own clip rect
+          (bottom edge lands ~8px outside it), silently slicing the bottom
+          off both arc feet — invisible with flat edges, but it flattens the
+          rounded caps right where they're most visible, and at low % values
+          clips the value-arc's rounded dot into a flat-bottomed blob.
+        */}
+        <PieChart width={88} height={48} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          {/* Track — full-width background arc, rounded caps at both feet
+              so the ring reads as one continuous pill rather than a flat-cut
+              band. Drawn first so the value arc layers cleanly on top. */}
           <Pie
-            data={pieData}
-            cx={44}
-            cy={46}
+            data={[{ name: 'track', value: 100 }]}
+            cx={cx}
+            cy={cy}
             startAngle={180}
             endAngle={0}
-            innerRadius={27}
-            outerRadius={40}
-            cornerRadius={6}
-            paddingAngle={0}
+            innerRadius={innerRadius}
+            outerRadius={outerRadius}
+            cornerRadius={cornerRadius}
             dataKey="value"
             stroke="none"
             isAnimationActive={false}
           >
-            <Cell fill={fillColor}  />
             <Cell fill={trackColor} />
           </Pie>
+
+          {/* Value — a second, independent arc layered on top instead of a
+              second slice of the same pie. Two slices sharing one pie would
+              each get their own rounded corners at the seam between them,
+              leaving a visible notch; an overlapping arc avoids that and
+              gives a clean single rounded cap at the value's leading edge. */}
+          <Pie
+            data={[{ name: 'NRW', value: displayVal }]}
+            cx={cx}
+            cy={cy}
+            startAngle={180}
+            endAngle={180 - (displayVal / 100) * 180}
+            innerRadius={innerRadius}
+            outerRadius={outerRadius}
+            cornerRadius={cornerRadius}
+            dataKey="value"
+            stroke="none"
+            isAnimationActive={false}
+          >
+            <Cell fill={fillColor} />
+          </Pie>
+
+          {/* Threshold tick — quiet reference line at the compliance limit,
+              independent of the current value/tone so it stays put as the
+              value moves past it. */}
+          <line
+            x1={tickInner.x} y1={tickInner.y}
+            x2={tickOuter.x} y2={tickOuter.y}
+            stroke="hsl(var(--foreground))"
+            strokeOpacity={0.45}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
         </PieChart>
       </div>
 
