@@ -76,11 +76,11 @@ const MANAGE: readonly Role[] = ['Manager', 'Admin'];
 export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   dashboard: { view: ALL },
   ai_assistant: { view: ELEVATED },
-  compliance: { view: ELEVATED, edit: ['Data Analyst', 'Admin'] },
+  compliance: { view: ELEVATED },
   plants: { view: ALL, edit: MANAGE },
   operations: { view: ALL },
   ro_trains: { view: ALL },
-  network_topology: { view: ELEVATED, edit: MANAGE },
+  network_topology: { view: ELEVATED },
   pm_schedule: { view: ALL },
   incidents: { view: ALL },
   // Technician's "view" here is deliberately looser than its real UI —

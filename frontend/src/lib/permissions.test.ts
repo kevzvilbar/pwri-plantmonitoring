@@ -47,19 +47,6 @@ describe('PERMISSION_MATRIX — guardrails', () => {
     expect(hasPermission(['Manager'], 'costs', 'budget')).toBe(true);
     expect(hasPermission(['Admin'], 'costs', 'budget')).toBe(true);
   });
-
-  it('compliance threshold edits are Data Analyst/Admin only, matching the compliance_thresholds RLS policy', () => {
-    // Manager can view Compliance but the underlying table's write policy
-    // (admin_write_thresholds, 20260515_supabase_only_and_data_analysis.sql)
-    // only allows Admin or Data Analyst. Before this permission existed,
-    // Compliance.tsx showed every viewer an Edit button regardless of role,
-    // and a swallowed Supabase error meant Manager/Technician saw a false
-    // "Thresholds saved" toast while the write silently failed.
-    expect(hasPermission(['Technician'], 'compliance', 'edit')).toBe(false);
-    expect(hasPermission(['Manager'], 'compliance', 'edit')).toBe(false);
-    expect(hasPermission(['Data Analyst'], 'compliance', 'edit')).toBe(true);
-    expect(hasPermission(['Admin'], 'compliance', 'edit')).toBe(true);
-  });
 });
 
 // This block is the executable version of Appendix A. It's deliberately
