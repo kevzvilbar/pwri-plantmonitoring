@@ -28,6 +28,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
@@ -1183,7 +1184,7 @@ function SidePanel({
 
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
-  const canEdit = isAdmin || isManager;
+  const canEdit = usePermission('network_topology', 'edit');
   const { selectedPlantId } = useAppStore();
   const qc = useQueryClient();
 
