@@ -19,9 +19,11 @@ import { DesignationCombobox, accessLevelFromRoles } from '@/components/Designat
 import { toast } from '@/components/ui/sonner';
 import { Loader2, Pencil, ShieldCheck, Building2, MapPin } from 'lucide-react';
 import { ProfileEmailChange } from '@/components/ProfileEmailChange';
+import { useMyCustomRole } from '@/hooks/useCustomRoles';
 
 export default function Profile() {
   const { user, profile, activeOperator, roles, refreshProfile, loading } = useAuth();
+  const { data: myCustomRole } = useMyCustomRole();
   const { data: plants } = usePlants();
   const { selectedPlantId, setSelectedPlantId } = useAppStore();
 
@@ -157,16 +159,28 @@ export default function Profile() {
           </Label>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {roles.length === 0 && (
+          {roles.length === 0 && !myCustomRole && (
             <Badge variant="secondary">No role assigned</Badge>
           )}
-          {roles.map((r) => (
-            <Badge key={r} variant="outline" data-testid={`profile-role-${r}`}>
-              {r}
+          {myCustomRole && (
+            <Badge data-testid="profile-role-custom">
+              {myCustomRole.role.name}
             </Badge>
-          ))}
+          )}
+          {roles
+            .filter((r) => !myCustomRole || r !== myCustomRole.role.base_role)
+            .map((r) => (
+              <Badge key={r} variant="outline" data-testid={`profile-role-${r}`}>
+                {r}
+              </Badge>
+            ))}
           <StatusPill tone={access.tone}>{access.label}</StatusPill>
         </div>
+        {myCustomRole && (
+          <div className="text-xs text-muted-foreground">
+            Based on {myCustomRole.role.base_role} — customized by your Admin. Some modules may differ from the standard {myCustomRole.role.base_role} role.
+          </div>
+        )}
         <div className="text-xs text-muted-foreground">
           Access level is computed from role:{' '}
           Admin → Full access · Manager → Elevated · Supervisor → Limited · others → Restricted.
