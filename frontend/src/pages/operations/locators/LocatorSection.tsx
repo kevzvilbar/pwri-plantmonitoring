@@ -275,6 +275,82 @@ export function validateDerivedOverrideRow(r: Record<string, string>, i: number)
   return e;
 }
 
+/**
+ * After any override write to locator_readings for a derived locator, sync the
+ * same value to every mirror product_meter_readings row (product_meters where
+ * derived_from_locator_id = locatorId AND is_derived = true) for the same
+ * Asia/Manila calendar day.
+ *
+ * ROOT CAUSE this guards against: saveOverride and insertDerivedOverrideRows
+ * previously only wrote to locator_readings. The sweep's phase12 override-
+ * protection guard (CONTINUE when is_estimated = false on the locator row)
+ * then permanently skips the mirror update — so any locator override silently
+ * leaves the mirror at whatever the sweep last computed (often a completely
+ * different value). The locator and mirror diverge and stay diverged forever,
+ * because the sweep will never reconcile them as long as the override stands.
+ *
+ * is_estimated is set to true on the mirror rows: they are still derived values
+ * (just synced from a human-override rather than from a sweep run). The locator
+ * row's is_estimated = false is the signal the sweep reads for its CONTINUE
+ * guard — no need to duplicate that on the mirror side.
+ *
+ * Errors are non-fatal: the locator write already succeeded, so we warn rather
+ * than throw, to avoid misleading the user into thinking the override failed.
+ */
+async function syncDerivedLocatorMirrors(
+  locatorId: string,
+  readingDatetime: string,
+  value: number,
+): Promise<void> {
+  const { data: mirrors, error: mirrorsErr } = await (supabase
+    .from('product_meters' as any) as any)
+    .select('id, plant_id')
+    .eq('derived_from_locator_id', locatorId)
+    .eq('is_derived', true);
+  if (mirrorsErr || !mirrors?.length) return;
+
+  const dateKey = new Date(readingDatetime)
+    .toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  const dayStart  = new Date(`${dateKey}T00:00:00+08:00`).toISOString();
+  const dayEndDt  = new Date(`${dateKey}T00:00:00+08:00`);
+  dayEndDt.setDate(dayEndDt.getDate() + 1);
+  const dayEnd    = dayEndDt.toISOString();
+  // 23:59 Manila matches fn_sweep_derived_meters_for_date()'s v_reading_dt
+  // convention (v_day_end − 1 second), used for brand-new mirror rows.
+  const insertDt  = new Date(`${dateKey}T23:59:00+08:00`).toISOString();
+
+  for (const mirror of mirrors as any[]) {
+    const { data: existing } = await (supabase
+      .from('product_meter_readings' as any) as any)
+      .select('id')
+      .eq('meter_id', mirror.id)
+      .gte('reading_datetime', dayStart)
+      .lt('reading_datetime', dayEnd)
+      .order('reading_datetime', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      await (supabase.from('product_meter_readings' as any) as any).update({
+        current_reading:  value,
+        previous_reading: 0,
+        daily_volume:     value,
+        is_estimated:     true,
+      }).eq('id', existing.id);
+    } else {
+      await (supabase.from('product_meter_readings' as any) as any).insert({
+        meter_id:         mirror.id,
+        plant_id:         mirror.plant_id,
+        reading_datetime: insertDt,
+        current_reading:  value,
+        previous_reading: 0,
+        daily_volume:     value,
+        is_estimated:     true,
+      });
+    }
+  }
+}
+
 async function insertDerivedOverrideRows(
   rows: Record<string, string>[],
   plantId: string,
@@ -358,6 +434,16 @@ async function insertDerivedOverrideRows(
         actor_label: actorLabel,
         changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
       });
+      // Sync the override value to mirror product_meter_readings so any
+      // mirrored product meter (e.g. Mambaling's HAMAS) stays in step with the
+      // locator. The sweep's CONTINUE guard protects is_estimated=false locator
+      // rows and skips the entire iteration — it would never update the mirror
+      // to catch up. See syncDerivedLocatorMirrors for the full explanation.
+      await syncDerivedLocatorMirrors(
+        locatorId,
+        (savedRow as any)?.reading_datetime ?? new Date(`${dateKey}T23:59:00+08:00`).toISOString(),
+        value,
+      );
       count++;
     } catch (err: any) {
       errors.push(`Row ${line} (${row.date}): ${friendlyError(err)}`);
@@ -987,11 +1073,35 @@ function LocatorRow({
         changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
       });
 
+      // Sync the override value to mirror product_meter_readings so any
+      // mirrored product meter (e.g. Mambaling's HAMAS) immediately reflects
+      // the human-entered value rather than staying at the last sweep residual.
+      // The sweep's phase12 CONTINUE guard protects is_estimated=false locator
+      // rows from re-computation — which is correct — but that same skip covers
+      // the mirror update too, so without this call the mirror is permanently
+      // orphaned at the old sweep value for the life of the override. Non-fatal:
+      // locator write already committed; a mirror failure is logged and warned.
+      try {
+        await syncDerivedLocatorMirrors(
+          locator.id,
+          (savedRow as any)?.reading_datetime ?? new Date().toISOString(),
+          value,
+        );
+      } catch (mirrorErr: any) {
+        // Don't overwrite the success toast — the locator override itself saved.
+        console.error('[saveOverride] mirror sync failed:', mirrorErr);
+        toast.warning(`${locator.name}: override saved, but mirror sync failed — the other plant's meter may be out of date until the next sweep.`);
+      }
+
       toast.success(`${locator.name}: override saved.`);
       setOverrideOpen(false);
       qc.invalidateQueries({ queryKey: ['op-loc-latest'] });
       qc.invalidateQueries({ queryKey: ['derived-review-flag', locator.id] });
       qc.invalidateQueries({ queryKey: ['reading-history', 'locator', locator.id] });
+      // Also refresh the mirror plant's product meter queries so Mambaling's
+      // Operations dashboard reflects the new value without a manual page reload.
+      qc.invalidateQueries({ queryKey: ['product-meter-readings'] });
+      qc.invalidateQueries({ queryKey: ['product-meter-dash'] });
       onSaved();
     } catch (err: any) {
       toast.error(friendlyError(err));
