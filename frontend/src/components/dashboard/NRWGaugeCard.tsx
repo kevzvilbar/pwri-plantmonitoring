@@ -76,6 +76,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
             endAngle={0}
             innerRadius={27}
             outerRadius={40}
+            cornerRadius={6}
             paddingAngle={0}
             dataKey="value"
             stroke="none"
