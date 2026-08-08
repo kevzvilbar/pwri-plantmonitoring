@@ -17,7 +17,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -110,15 +110,20 @@ function useScorecard(days: number) {
 // ── Page root ─────────────────────────────────────────────────────────────────
 
 export default function ManagerScorecard() {
-  const { isAdmin, isManager, isDataAnalyst } = useAuth();
+  // Default set is Admin/Manager/Data Analyst — same three roles
+  // fn_manager_plant_scorecard's own has_role() check enforces at the DB
+  // layer (see the matrix comment in lib/permissions.ts). A custom role
+  // can restrict this page away from a Manager-based role; it can't
+  // meaningfully grant it to a role the RPC itself doesn't recognize.
+  const canView = usePermission('manager_scorecard', 'view');
   const [days, setDays] = useState<number>(30);
   const { data: rows = [], isLoading, error, refetch, isFetching } = useScorecard(days);
 
   // These two useMemo calls must run on every render, before the
-  // isAdmin/isManager/isDataAnalyst early return below — React's Rules of
-  // Hooks forbid calling a hook conditionally (caught by eslint's
-  // react-hooks/rules-of-hooks, not by tsc, so worth calling out: this is
-  // exactly the kind of bug a type check alone won't catch).
+  // canView early return below — React's Rules of Hooks forbid calling a
+  // hook conditionally (caught by eslint's react-hooks/rules-of-hooks, not
+  // by tsc, so worth calling out: this is exactly the kind of bug a type
+  // check alone won't catch).
   const sorted = useMemo(
     () => [...rows].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.plant_name.localeCompare(b.plant_name)),
     [rows],
@@ -139,7 +144,7 @@ export default function ManagerScorecard() {
     return { monitored, total: rows.length, avgCompleteness, openExceptions, atRisk };
   }, [rows]);
 
-  if (!isAdmin && !isManager && !isDataAnalyst) {
+  if (!canView) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Card className="p-8 text-center space-y-2 max-w-sm">
