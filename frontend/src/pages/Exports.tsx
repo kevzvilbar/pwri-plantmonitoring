@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Download, Building2, Activity, Waves, FlaskConical,
-  Zap, Wrench, ShieldCheck, MapPin, BarChart2, ChevronDown,
+  Zap, Wrench, ShieldCheck, ShieldAlert, MapPin, BarChart2, ChevronDown,
   CheckCircle2, Loader2, RefreshCw,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -14,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { downloadCSV } from '@/lib/csv';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
+import { usePermission } from '@/hooks/usePermission';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format, subDays } from 'date-fns';
@@ -345,6 +347,8 @@ function CategorySection({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Exports() {
+  const navigate = useNavigate();
+  const canView = usePermission('data_exports', 'view');
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const [plantId, setPlantId] = useState(selectedPlantId ?? 'all');
@@ -352,6 +356,29 @@ export default function Exports() {
   const [to, setTo]           = useState(format(new Date(), 'yyyy-MM-dd'));
   const [activePreset, setActivePreset] = useState<number | null>(30);
   const [exportAllState, setExportAllState] = useState<'idle' | 'busy' | 'done'>('idle');
+
+  // Was previously enforced only by hiding the nav link (AppSidebar/BottomNav)
+  // — this page itself, and the tables it reads from Exports.tsx line 155,
+  // had no role check, so a direct /exports visit bypassed the intended
+  // Technician/Operator restriction from Appendix A. Underlying table RLS
+  // still applies regardless, but the page should agree with the nav.
+  if (!canView) {
+    return (
+      <Card className="p-6 text-center space-y-2" data-testid="exports-access-denied">
+        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
+        <h2 className="font-semibold">Access denied</h2>
+        <p className="text-sm text-muted-foreground">
+          Data Exports is available to Manager, Data Analyst, and Admin.
+        </p>
+        <button
+          className="text-sm text-accent hover:underline"
+          onClick={() => navigate('/')}
+        >
+          Back to dashboard
+        </button>
+      </Card>
+    );
+  }
 
   const handlePreset = (days: number) => {
     applyPreset(days, setFrom, setTo);

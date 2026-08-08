@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { usePermission } from '@/hooks/usePermission';
 import { CHEM_DOSING_COLUMN } from '@/lib/chemicals';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
@@ -673,13 +674,21 @@ export async function loadThresholds(scope: string): Promise<Thresholds> {
 }
 
 async function persistThresholds(scope: string, thresholds: Thresholds): Promise<void> {
-  lsSaveThresholds(scope, thresholds);
   const { error } = await supabase
     .from('compliance_thresholds')
     .upsert({ scope, thresholds, updated_at: new Date().toISOString() }, { onConflict: 'scope' });
   if (error) {
-    console.warn('[Compliance] Supabase upsert failed:', error.message);
+    // Was previously swallowed here (just a console.warn) — the caller's
+    // try/catch never saw it, so saveThresholds() always showed
+    // "Thresholds saved" even when RLS denied the write (Manager/Technician
+    // per compliance_thresholds' admin_write_thresholds policy). Rethrow so
+    // the actual failure reaches the user instead of only the local cache.
+    throw error;
   }
+  // Only cache locally once the write actually succeeds — previously this
+  // ran unconditionally before the upsert, so a denied write still left the
+  // browser showing the unsaved value until the next successful reload.
+  lsSaveThresholds(scope, thresholds);
 }
 
 // -----------------------------------------------------------------------
@@ -693,6 +702,7 @@ export default function Compliance() {
   const [days, setDays]         = useState<number>(7);
   const [scope, setScope]       = useState<'global' | 'plant'>(selectedPlantId ? 'plant' : 'global');
   const [editing, setEditing]   = useState(false);
+  const canEditThresholds = usePermission('compliance', 'edit');
   const [local, setLocal]       = useState<Thresholds | null>(null);
   const [saving, setSaving]     = useState(false);
   const [evaluating, setEvaluating] = useState(false);
@@ -1146,7 +1156,7 @@ export default function Compliance() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {!editing ? (
+                {!canEditThresholds ? null : !editing ? (
                   <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
                 ) : (
                   <>

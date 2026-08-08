@@ -1,14 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle,
   Droplet, Zap, FlaskConical, Gauge, Waves, Thermometer,
   ChevronRight, Download, RefreshCw, X, Info, CircleDot, Menu,
-  MapPin, Activity, Building2,
+  MapPin, Activity, Building2, ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlants } from '@/hooks/usePlants';
+import { usePermission } from '@/hooks/usePermission';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -734,6 +736,8 @@ function PreviewTable({ rows, config }: { rows: ParsedRow[]; config: ImportTypeC
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SmartImportPanel() {
+  const navigate = useNavigate();
+  const canView = usePermission('smart_import', 'view');
   const { data: plants } = usePlants();
 
   const [selected, setSelected] = useState<ImportType>('locator_readings');
@@ -746,6 +750,28 @@ export default function SmartImportPanel() {
   const [importProgress, setImportProgress] = useState(0);
   const [importLog, setImportLog] = useState<string[]>([]);
   const [skipInvalid, setSkipInvalid] = useState(true);
+
+  // Same gap as Exports.tsx: this component inserts directly into tables
+  // (see the .insert(insertBatch) call further down) with no role check of
+  // its own — only the hidden nav link stood between a Technician and a
+  // direct /import visit.
+  if (!canView) {
+    return (
+      <Card className="p-6 text-center space-y-2" data-testid="import-access-denied">
+        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
+        <h2 className="font-semibold">Access denied</h2>
+        <p className="text-sm text-muted-foreground">
+          Smart Import is available to Manager, Data Analyst, and Admin.
+        </p>
+        <button
+          className="text-sm text-accent hover:underline"
+          onClick={() => navigate('/')}
+        >
+          Back to dashboard
+        </button>
+      </Card>
+    );
+  }
 
   const config = CONFIG_MAP[selected];
 
