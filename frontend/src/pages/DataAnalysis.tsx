@@ -27,6 +27,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { useAppStore } from '@/store/appStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/PageHeader';
@@ -2039,8 +2040,8 @@ export default function DataAnalysis() {
   // Regression state
   const [running, setRunning] = useState(false);
 
-  const canEdit = isAdmin || isDataAnalyst;
-  const canView = canEdit || isManager;
+  const canEdit = usePermission('data_analysis_review', 'edit');
+  const canView = usePermission('data_analysis_review', 'view');
 
   // Plants list
   const { data: plantsData } = useQuery({

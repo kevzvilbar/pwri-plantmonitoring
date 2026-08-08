@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
 import { PLANT_CHEMICALS } from '@/lib/chemicals';
@@ -555,7 +556,7 @@ function FiltersTab() {
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
 
   const plant = plants?.find((p) => p.id === plantId);
-  const canEdit = isManager || isAdmin;
+  const canEdit = usePermission('costs', 'edit');
 
   return (
     <div className="space-y-3">
@@ -582,7 +583,7 @@ export default function Costs() {
   const { isManager, isAdmin } = useAuth();
   // Budget tab is visible AND editable to Manager/Admin only — enforced again at
   // the RLS layer (opex_budgets policies), this is just keeping it out of the UI too.
-  const canViewBudget = isManager || isAdmin;
+  const canViewBudget = usePermission('costs', 'budget');
   return (
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="Costs" subtitle="Production cost, power bills & tariffs, chemical & filter prices" />
@@ -627,7 +628,7 @@ function ChemicalPrices() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
   const { selectedPlantId } = useAppStore();
-  const canEdit = isManager || isAdmin;
+  const canEdit = usePermission('costs', 'edit');
   const UNITS = ['kg', 'g', 'L', 'mL', 'pcs', 'gal', '__custom__'];
 
   // ── Add form state ───────────────────────────────────────────────────────────
@@ -1067,7 +1068,7 @@ function Rollup() {
   const { selectedPlantId } = useAppStore();
   const { data: plants } = usePlants();
   const { isManager, isAdmin } = useAuth();
-  const canViewBudget = isManager || isAdmin;
+  const canViewBudget = usePermission('costs', 'budget');
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
   const [from, setFrom] = useState(format(subMonths(new Date(), 1), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -1242,7 +1243,7 @@ function CostInsights({ rows, totals, from, to }: { rows: any[]; totals: any; fr
 function Power() {
   const qc = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
-  const canEdit = isManager || isAdmin;
+  const canEdit = usePermission('costs', 'edit');
   const { selectedPlantId } = useAppStore();
   const [plantId, setPlantId] = useState(selectedPlantId ?? '');
 
