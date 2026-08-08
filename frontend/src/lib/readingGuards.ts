@@ -6,12 +6,20 @@
  *
  * Fix summary (from diagnostic report 2026-06-25):
  *  - Backward readings auto-tagged 'pending_review' — not saved as 'normal'
- *  - Spike readings (>2× 7-day avg flow rate) auto-tagged 'pending_review'
+ *  - Spike readings (>2× 10-day avg flow rate) auto-tagged 'pending_review'
  *  - Per-user cooldown window (45 min) prevents SRP double-entry
  *  - previous_reading is always fetched from DB, never trusted from client state
+ *
+ * 2026-08-07: spike math delegated to lib/flowRateGuards.ts (shared with
+ * every other odometer input — well/locator/product/blending/power/RO —
+ * instead of being computed inline here only). See that module's header for
+ * why raw delta comparisons were replaced with flow-rate comparisons
+ * app-wide, and for the new ±50% 'needs_remark' tier each page now also
+ * evaluates client-side alongside this function.
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { computeRate, classifyDeviation, formatDeviationMessage } from './flowRateGuards';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,7 +36,18 @@ export type GuardResult =
 /** Minutes a user must wait between readings for the same locator. */
 export const LOCATOR_COOLDOWN_MINUTES = 45;
 
-/** Factor above the 7-day average flow rate that triggers a spike flag. */
+/**
+ * Factor above the 10-day average flow rate that triggers a 'critical' spike
+ * flag (auto pending_review). Mirrors fn_locator_reading_integrity's
+ * hardcoded 2.0 in the DB trigger — if that SQL function's threshold is ever
+ * changed, change it here too, and vice versa, since well_readings has no
+ * equivalent DB trigger and relies on this value alone.
+ *
+ * LocatorSection.tsx and WellSection.tsx import this SAME constant for their
+ * reactive client-side banner (via classifyDeviation) instead of a separately
+ * tuned value, so what the operator is warned about before Save and what the
+ * DB actually does at Save can't drift apart again.
+ */
 export const SPIKE_MULTIPLIER = 2.0;
 
 // ── Core guard ───────────────────────────────────────────────────────────────
@@ -131,31 +150,39 @@ export async function evaluateReadingGuard(
   }
 
   // ── 4. Spike check ────────────────────────────────────────────────────────
+  // Routed through the shared classifier (flowRateGuards.ts) so this DB-round-
+  // trip guard and each page's own reactive cosmetic banner can never drift
+  // apart the way they used to (the banner was comparing against
+  // ALERTS.avg_multiplier_warn = 2.5 while this — and the DB trigger,
+  // fn_locator_reading_integrity — actually used SPIKE_MULTIPLIER = 2.0, so a
+  // reading between 2.0x-2.5x got silently sent to pending_review with no
+  // warning ever shown before Save). Only the 'critical' tier is surfaced
+  // here — the new ±50% 'needs_remark' tier doesn't need a network round
+  // trip and is evaluated client-side, reactively, before the operator even
+  // reaches Save (see LocatorSection.tsx / WellSection.tsx).
   if (inputMode === 'direct') {
-    // currentReading already IS the volume — compare it directly, no diff.
-    if (avgFlowRate !== null && avgFlowRate > 0 && currentReading > avgFlowRate * SPIKE_MULTIPLIER) {
-      const pctAbove = Math.round((currentReading / avgFlowRate - 1) * 100);
+    // currentReading already IS the period's volume, one self-contained
+    // reading = one period — no reading-to-reading diff/elapsed-time to
+    // compute, so it's compared to the average directly.
+    const result = classifyDeviation(currentReading, avgFlowRate, SPIKE_MULTIPLIER);
+    if (result.tier === 'critical') {
       return {
         status: 'pending_review',
         reason: 'spike',
-        detail: `Volume ${currentReading.toLocaleString()} m³ is ${pctAbove}% above the ${avgFlowRate.toLocaleString()} m³ average. Sent for supervisor review.`,
+        detail: formatDeviationMessage('Reading', result, 'm3/day', 10),
       };
     }
-  } else if (prevReading !== null && prevDt !== null && avgFlowRate !== null && avgFlowRate > 0) {
+  } else if (prevReading !== null && prevDt !== null) {
     const volume = currentReading - prevReading;
-    const hoursElapsed =
-      (readingDatetime.getTime() - prevDt.getTime()) / 3_600_000;
-
-    if (hoursElapsed > 0 && volume > 0) {
-      const currentFlowRate = volume / hoursElapsed;
-      if (currentFlowRate > avgFlowRate * SPIKE_MULTIPLIER) {
-        const pctAbove = Math.round((currentFlowRate / avgFlowRate - 1) * 100);
-        return {
-          status: 'pending_review',
-          reason: 'spike',
-          detail: `Flow rate ${currentFlowRate.toFixed(1)} m³/hr is ${pctAbove}% above the ${avgFlowRate.toFixed(1)} m³/hr average. Sent for supervisor review.`,
-        };
-      }
+    const hoursElapsed = (readingDatetime.getTime() - prevDt.getTime()) / 3_600_000;
+    const rate = computeRate(volume, hoursElapsed);
+    const result = classifyDeviation(rate, avgFlowRate, SPIKE_MULTIPLIER);
+    if (result.tier === 'critical') {
+      return {
+        status: 'pending_review',
+        reason: 'spike',
+        detail: formatDeviationMessage('Reading', result, 'm3/hr', 10),
+      };
     }
   }
 

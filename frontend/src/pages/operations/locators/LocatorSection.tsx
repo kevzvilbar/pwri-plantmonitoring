@@ -32,14 +32,17 @@ import { DerivedMeterIcon } from '@/components/icons/water-icons';
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
 import { OdometerRollerInput, MobileCarousel, type OdometerAlertState } from '@/components/OdometerRollerInput';
-import { evaluateReadingGuard } from '@/lib/readingGuards';
+import { evaluateReadingGuard, SPIKE_MULTIPLIER } from '@/lib/readingGuards';
+import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
@@ -656,6 +659,9 @@ function LocatorRow({
   // (e.g. HAMAS) have no cumulative odometer for a physical meter swap to apply to.
   const [showReplaceMeter, setShowReplaceMeter] = useState(false);
   const [meterReplacePending, setMeterReplacePending] = useState<{ newInitialReading: number | null; replacementId: string | null } | null>(null);
+  // Required whenever the flow rate falls outside ±50% of the 10-day average
+  // (see flowRateGuards.ts) — cleared after every successful save/edit-start.
+  const [anomalyRemark, setAnomalyRemark] = useState('');
 
   // Draft recovery — persists the reading input so an accidental navigation
   // or browser crash doesn't lose what the operator was entering.
@@ -706,15 +712,22 @@ function LocatorRow({
     : (readingChanged && previous != null ? cur - previous : null);
   const belowPrev = locInputMode === 'raw' && previous != null && cur > 0 && cur < previous;
   // Q = V / t: compute current flow rate (m³/hr) from delta ÷ hours since last reading.
-  // avgVol is the 10-day average flow rate (m³/hr); warn when current rate exceeds avg × multiplier.
+  // avgVol is the 10-day average flow rate (m³/hr). Routed through the shared
+  // classifier (flowRateGuards.ts) using readingGuards.ts' SPIKE_MULTIPLIER —
+  // NOT a locally-tuned value — so what's shown here can never again disagree
+  // with what evaluateReadingGuard (and the DB trigger) actually decide at
+  // save time. Direct-mode locators keep the same scope the original cosmetic
+  // check had (raw mode only) — direct-mode's own spike check still runs
+  // server-side via evaluateReadingGuard, just isn't mirrored in this banner.
   const hoursElapsedLoc = previousDt && reading
     ? (new Date(customDt).getTime() - new Date(previousDt).getTime()) / 3_600_000
     : null;
-  const currentFlowRateLoc = dailyVol != null && hoursElapsedLoc != null && hoursElapsedLoc > 0
-    ? dailyVol / hoursElapsedLoc
-    : null;
-  const highVol = locInputMode === 'raw' && avgVol != null && currentFlowRateLoc != null
-    && currentFlowRateLoc > avgVol * ALERTS.avg_multiplier_warn;
+  const currentFlowRateLoc = locInputMode === 'raw' ? computeRate(dailyVol, hoursElapsedLoc) : null;
+  const deviationLoc = locInputMode === 'raw'
+    ? classifyDeviation(currentFlowRateLoc, avgVol, SPIKE_MULTIPLIER)
+    : { tier: 'ok' as const, direction: null, rate: null, avgRate: null, deviationPct: null };
+  const highVol = deviationLoc.tier !== 'ok';
+  const anomalyRemarkRequired = deviationLoc.tier !== 'ok' && !anomalyRemark.trim();
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
   const atLimit    = !editingId && todayCount >= maxReadingsPerDay;
@@ -746,6 +759,10 @@ function LocatorRow({
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
+    if (anomalyRemarkRequired) {
+      toast.error(`${locator.name}: this reading is outside the normal range — add a remark before saving.`);
+      return;
+    }
 
     // ── Pre-flight guard: cooldown + backward/spike detection ────────────────
     // Mirrors the DB trigger logic (fn_locator_reading_integrity) so the UI can
@@ -844,6 +861,24 @@ function LocatorRow({
         .update({ reading_id: savedRow.id })
         .eq('id', meterReplacePending.replacementId);
     }
+
+    // Best-effort — the reading itself already saved successfully above,
+    // this never blocks or rolls it back. See flowRateGuards.ts.
+    if (deviationLoc.tier !== 'ok' && savedRow?.id) {
+      void submitAnomalyRemark({
+        table_name: 'locator_readings',
+        record_id: savedRow.id,
+        plant_id: plantId,
+        tier: deviationLoc.tier,
+        direction: deviationLoc.direction!,
+        deviation_pct: deviationLoc.deviationPct!,
+        flow_rate: deviationLoc.rate,
+        avg_flow_rate: deviationLoc.avgRate,
+        rate_unit: 'm3/hr',
+        remark_text: anomalyRemark,
+      });
+    }
+    setAnomalyRemark('');
 
     const isPending = savedRow?.norm_status === 'pending_review';
     setLastSavePending(isPending);
@@ -1288,7 +1323,7 @@ function LocatorRow({
           {/* Save + action buttons */}
           <div className="flex items-center gap-2">
             <Button
-              onClick={save} disabled={saving || !readingChanged || atLimit}
+              onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
               className="flex-1 h-11 text-sm bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
@@ -1309,7 +1344,7 @@ function LocatorRow({
             />
           </div>
           <Button
-            onClick={save} disabled={saving || !readingChanged || atLimit}
+            onClick={save} disabled={saving || !readingChanged || atLimit || anomalyRemarkRequired}
             className="h-10 px-4 text-sm shrink-0 bg-kpi-locator hover:bg-kpi-locator/90 active:bg-kpi-locator/80 text-white shadow-sm"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : editingId ? 'Update' : 'Save'}
@@ -1378,18 +1413,27 @@ function LocatorRow({
         </div>
       )}
 
-      {reading && (belowPrev || highVol) && !lastSavePending && (
+      {reading && belowPrev && !lastSavePending && (
         <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn/30 px-3 py-2 rounded-lg">
           <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {belowPrev ? 'Below previous — will go to supervisor review after save.' : `Flow rate ${Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above avg — will go to supervisor review after save.`}
+            Below previous — will go to supervisor review after save.
           </span>
-          {belowPrev && (
-            <span className="text-warn pl-5">
-              If the meter was replaced, check "Meter replaced" above instead.
-            </span>
-          )}
+          <span className="text-warn pl-5">
+            If the meter was replaced, check "Meter replaced" above instead.
+          </span>
         </div>
+      )}
+
+      {reading && !belowPrev && highVol && !lastSavePending && (
+        <AnomalyRemarkBanner
+          result={deviationLoc}
+          label={locator.name}
+          unit="m3/hr"
+          windowDays={10}
+          remark={anomalyRemark}
+          onRemarkChange={setAnomalyRemark}
+        />
       )}
 
       <ReasonDialog

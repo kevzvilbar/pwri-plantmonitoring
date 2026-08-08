@@ -21,6 +21,9 @@ import { StatusPill } from '@/components/StatusPill';
 import { PowerMeterChangeDialog } from '@/pages/plants/config/PowerMeters';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
+import { computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, type VolumePoint } from '@/lib/flowRateGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
@@ -38,7 +41,7 @@ import {
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
@@ -519,7 +522,48 @@ export function PowerForm() {
     staleTime: 0,
   });
 
-  // The most recent prior reading (skip the one being edited)
+  // 14-day rolling average consumption RATE (kWh/hr) for this plant — same
+  // window/shape Dashboard's power-spike scan uses, kept as its own query
+  // since `history` above is capped at 8 rows for prefill purposes and
+  // isn't reliably a full 14-day window. Power previously had NO save-time
+  // anomaly check at all (only the read-time Dashboard scan) — this is what
+  // that gap was missing. See flowRateGuards.ts.
+  const { data: powerHistory14d } = useQuery({
+    queryKey: ['op-power-history-14d', plantId],
+    queryFn: async () => {
+      if (!plantId) return [] as any[];
+      const since = new Date();
+      since.setDate(since.getDate() - 14);
+      const { data } = await supabase
+        .from('power_readings')
+        .select('reading_datetime,daily_consumption_kwh')
+        .eq('plant_id', plantId)
+        .gte('reading_datetime', since.toISOString())
+        .not('daily_consumption_kwh', 'is', null);
+      return data ?? [];
+    },
+    enabled: !!plantId,
+    staleTime: 5 * 60_000,
+  });
+  const avgPowerRate = useMemo(() => {
+    const points: VolumePoint[] = (powerHistory14d ?? [])
+      .filter((r: any) => Number(r.daily_consumption_kwh) > 0)
+      .map((r: any) => ({ volume: Number(r.daily_consumption_kwh), at: new Date(r.reading_datetime) }));
+    return computeRollingAverageRateFromDeltas(points, 14);
+  }, [powerHistory14d]);
+
+  // Two-step confirm: submitMeter computes the deviation at click-time (it
+  // needs the fully-merged daily_consumption_kwh, which only exists once the
+  // payload is assembled) and, if outside the normal band, stops short of
+  // writing to the DB and populates this instead — the banner below then
+  // asks for a remark, and clicking Save again proceeds since anomalyRemark
+  // is no longer empty. Cleared after every successful save.
+  const [powerAnomaly, setPowerAnomaly] = useState<{
+    result: ReturnType<typeof classifyDeviation>; kind: 'grid' | 'solar'; idx: number;
+  } | null>(null);
+  const [anomalyRemark, setAnomalyRemark] = useState('');
+
+
   const prevRow    = history?.find((r: any) => r.id !== editingId) ?? null;
   // Combined/grid meter: previous meter_reading_kwh
   const prevGrid   = prevRow?.meter_reading_kwh ?? null;
@@ -730,11 +774,33 @@ export function PowerForm() {
       }
     }
 
-    const runQuery = () => rowId
-      ? supabase.from('power_readings').update(payload).eq('id', rowId)
-      : supabase.from('power_readings').insert(payload);
+    // Flow-rate anomaly check — Power previously had no save-time guard at
+    // all (see flowRateGuards.ts). Only runs once daily_consumption_kwh is
+    // actually finalized in this payload (grid: all meters present; solar:
+    // delta computable) — a partial-data save has nothing meaningful to
+    // compare yet. Two-step: if this reading is outside the normal band and
+    // the operator hasn't written a remark yet, stop here (before touching
+    // the DB) and show the banner below instead of saving; clicking Save
+    // again after typing a remark proceeds.
+    if (payload.daily_consumption_kwh != null && prevRow?.reading_datetime) {
+      const hoursElapsed = (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000;
+      const rate = computeRate(payload.daily_consumption_kwh, hoursElapsed);
+      const result = classifyDeviation(rate, avgPowerRate, ALERTS.power_spike_multiplier);
+      if (result.tier !== 'ok' && !anomalyRemark.trim()) {
+        setPowerAnomaly({ result, kind, idx });
+        setSavingMeter(null);
+        toast.error(`${kind === 'grid' ? getGridLabel(idx) : getSolarLabel(idx)}: this reading is outside the normal range — add a remark before saving.`);
+        return;
+      }
+    } else if (powerAnomaly) {
+      setPowerAnomaly(null);
+    }
 
-    let { error } = await runQuery();
+    const runQuery = () => rowId
+      ? supabase.from('power_readings').update(payload).eq('id', rowId).select('id')
+      : supabase.from('power_readings').insert(payload).select('id');
+
+    let { data: savedRows, error } = await runQuery();
     if (error && (
       error.message.includes('daily_solar_kwh') ||
       error.message.includes('daily_grid_kwh') ||
@@ -748,11 +814,31 @@ export function PowerForm() {
       delete payload.solar_meter_reading;
       delete payload.multiplier;
       delete payload.grid_meter_readings;
-      ({ error } = await runQuery());
+      ({ data: savedRows, error } = await runQuery());
     }
 
     setSavingMeter(null);
     if (error) { toast.error(friendlyError(error)); return; }
+
+    // Best-effort — the reading itself already saved successfully above,
+    // this never blocks or rolls it back. See flowRateGuards.ts.
+    if (powerAnomaly && savedRows?.[0]?.id) {
+      const { result } = powerAnomaly;
+      void submitAnomalyRemark({
+        table_name: 'power_readings',
+        record_id: savedRows[0].id,
+        plant_id: plantId,
+        tier: result.tier as 'needs_remark' | 'critical',
+        direction: result.direction!,
+        deviation_pct: result.deviationPct!,
+        flow_rate: result.rate,
+        avg_flow_rate: result.avgRate,
+        rate_unit: 'kwh/hr',
+        remark_text: anomalyRemark,
+      });
+    }
+    setPowerAnomaly(null);
+    setAnomalyRemark('');
 
     const label = kind === 'solar' ? getSolarLabel(idx) : getGridLabel(idx);
     toast.success(`${label}: reading saved`);
@@ -911,6 +997,21 @@ export function PowerForm() {
           <p className="text-xs text-muted-foreground">
             Meter count &amp; names are configured in <strong className="text-foreground/70">Plants → Power</strong>.
           </p>
+        )}
+
+        {/* Flow-rate anomaly — see submitMeter's two-step confirm. Save was
+            already stopped once; filling this in and clicking Save again
+            (same button) proceeds. */}
+        {powerAnomaly && (
+          <AnomalyRemarkBanner
+            result={powerAnomaly.result}
+            label={powerAnomaly.kind === 'grid' ? getGridLabel(powerAnomaly.idx) : getSolarLabel(powerAnomaly.idx)}
+            unit="kwh/hr"
+            windowDays={14}
+            remark={anomalyRemark}
+            onRemarkChange={setAnomalyRemark}
+            escalates={false}
+          />
         )}
 
         {/* Meter Reading(s) + Grid Power Multiplier — shown inline with Date & Time */}

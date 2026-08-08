@@ -40,6 +40,15 @@ import {
 // Wells keep a fixed default limit; locators use per-plant configurable limit from Plant Configuration.
 export const WELL_MAX_READINGS_PER_DAY = 3;
 
+// NOTE: READING_COOLDOWN_MINUTES and SPIKE_MULTIPLIER used to be re-exported
+// from here too, alongside GridPylonIcon above. They were dead beyond their
+// own import statement in every one of the 5 files that imported them (see
+// the "Reading guard helpers" note just below) — the real, used constants
+// are LOCATOR_COOLDOWN_MINUTES and SPIKE_MULTIPLIER in lib/readingGuards.ts.
+// Removed 2026-08-07 while fixing the flow-rate spike check (see
+// flowRateGuards.ts) rather than leave a second, unused, same-named 2.0
+// sitting here for someone to import from the wrong place by mistake.
+
 // ─── Shared Dashboard invalidator ────────────────────────────────────────────
 // Called after every successful save/import in any Operations sub-form so that
 // the Dashboard stat cards, NRW, PV ratio, and TrendChart series all refresh
@@ -58,9 +67,6 @@ import { flushDeltaCache } from '@/lib/deltaCache';
 // ─── Reading guard helpers (inlined — no external dependency) ────────────────
 // These mirror the DB trigger logic (fn_locator_reading_integrity) so the UI
 // gives immediate feedback before the Supabase round-trip.
-
-export const READING_COOLDOWN_MINUTES = 45;
-export const SPIKE_MULTIPLIER = 2.0;
 
 // NOTE: ReadingGuardResult and evaluateReadingGuard were previously duplicated
 // here as private (non-exported) copies. They were never called from within

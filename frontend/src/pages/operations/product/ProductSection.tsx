@@ -35,6 +35,9 @@ import {
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
+import { computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, type VolumePoint } from '@/lib/flowRateGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
@@ -42,7 +45,7 @@ import {
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
   logProductionCalc,
@@ -171,15 +174,21 @@ export function ProductForm() {
     enabled: !!plantId,
   });
 
+  // 10-day average flow rate (m³/hr) per meter — used for the anomaly
+  // banner in ProductMeterRow. Was: a plain average of stored daily_volume
+  // values, silently assuming every reading was exactly one day apart — the
+  // exact bug flowRateGuards.ts exists to fix. Now built from each entry's
+  // volume ÷ the actual gap since the PREVIOUS entry for that meter.
   const avgByMeter = useMemo(() => {
-    const acc: Record<string, number[]> = {};
+    const byMeter: Record<string, VolumePoint[]> = {};
     for (const r of recentProductReadings ?? []) {
-      if (r.daily_volume != null && r.daily_volume > 0)
-        (acc[r.meter_id] ||= []).push(r.daily_volume);
+      if (r.daily_volume != null && r.daily_volume > 0 && r.reading_datetime) {
+        (byMeter[r.meter_id] ||= []).push({ volume: r.daily_volume, at: new Date(r.reading_datetime) });
+      }
     }
     const result: Record<string, number | null> = {};
-    for (const [id, vals] of Object.entries(acc))
-      result[id] = vals.reduce((s, n) => s + n, 0) / vals.length;
+    for (const [id, points] of Object.entries(byMeter))
+      result[id] = computeRollingAverageRateFromDeltas(points, 10);
     return result;
   }, [recentProductReadings]);
 
@@ -506,7 +515,20 @@ function ProductMeterRow({
   const previous = latest?.current_reading ?? null;
   const cur = +reading || 0;
   const productionVolume = previous != null && reading ? cur - previous : null;
-  const highVol = avgVol != null && productionVolume != null && productionVolume > avgVol * ALERTS.avg_multiplier_warn;
+  // Required whenever the flow rate falls outside ±50% of the 10-day average
+  // (see flowRateGuards.ts) — cleared after every successful save.
+  const [anomalyRemark, setAnomalyRemark] = useState('');
+  // Q = V / t: avgVol (from ProductSection's avgByMeter, now a true rolling-
+  // average rate, not a naive average of raw daily_volume — see
+  // computeRollingAverageRateFromDeltas in flowRateGuards.ts) is m³/hr, so
+  // productionVolume needs the same conversion before comparing.
+  const hoursElapsedProduct = latest?.reading_datetime && reading
+    ? (new Date(customDt).getTime() - new Date(latest.reading_datetime).getTime()) / 3_600_000
+    : null;
+  const productionRate = computeRate(productionVolume, hoursElapsedProduct);
+  const deviationProduct = classifyDeviation(productionRate, avgVol ?? null, ALERTS.product_spike_multiplier);
+  const highVol = deviationProduct.tier !== 'ok';
+  const anomalyRemarkRequired = highVol && !anomalyRemark.trim();
 
   // Pre-fill the drum with the latest previous reading so the operator
   // starts from the real odometer value and only rolls the changed digits.
@@ -522,6 +544,10 @@ function ProductMeterRow({
 
   const save = async () => {
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
+    if (anomalyRemarkRequired) {
+      toast.error(`${meter.name}: this reading is outside the normal range — add a remark before saving.`);
+      return;
+    }
     setSaving(true);
     const dt = new Date(customDt).toISOString();
     // Bug fix: persist daily_volume so Dashboard/TrendChart can sum it directly,
@@ -536,6 +562,12 @@ function ProductMeterRow({
       recorded_by: userId,
       daily_volume: dailyVol,   // Bug fix: always persist computed delta for Dashboard aggregation
       is_meter_replacement: !!meterReplacePending,
+      // product_meter_readings.norm_status already has full support in the
+      // supervisor-review pipeline (DataCorrections.tsx, PendingReviewCard.tsx)
+      // — it just never got set on insert before. Wiring it up here so a
+      // critical-tier spike is actually queued for review, not just shown as
+      // a cosmetic warning with no follow-up.
+      ...(deviationProduct.tier === 'critical' ? { norm_status: 'pending_review' } : {}),
     } as any).select('id').single();
     if (error) { toast.error(friendlyError(error)); setSaving(false); return; }
 
@@ -546,6 +578,24 @@ function ProductMeterRow({
         .update({ reading_id: (savedRow as any).id })
         .eq('id', meterReplacePending.replacementId);
     }
+
+    // Best-effort — the reading itself already saved successfully above,
+    // this never blocks or rolls it back. See flowRateGuards.ts.
+    if (highVol && (savedRow as any)?.id) {
+      void submitAnomalyRemark({
+        table_name: 'product_meter_readings',
+        record_id: (savedRow as any).id,
+        plant_id: plantId,
+        tier: deviationProduct.tier as 'needs_remark' | 'critical',
+        direction: deviationProduct.direction!,
+        deviation_pct: deviationProduct.deviationPct!,
+        flow_rate: deviationProduct.rate,
+        avg_flow_rate: deviationProduct.avgRate,
+        rate_unit: 'm3/hr',
+        remark_text: anomalyRemark,
+      });
+    }
+    setAnomalyRemark('');
 
     // Audit the production volume calculation
     if (productionVolume != null) {
@@ -560,7 +610,11 @@ function ProductMeterRow({
       });
     }
 
-    toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume)} m³ produced` : ''}`);
+    if (deviationProduct.tier === 'critical') {
+      toast.info(`${meter.name}: reading saved and sent to supervisor for review.`, { duration: 6000 });
+    } else {
+      toast.success(`${meter.name}: reading saved${productionVolume != null ? ` · ${fmtNum(productionVolume)} m³ produced` : ''}`);
+    }
     setReading(''); setSaving(false); onSaved();
     setMeterReplacePending(null); setShowReplaceMeter(false);
   };
@@ -674,7 +728,7 @@ function ProductMeterRow({
           />
           <div className="flex items-center gap-2">
             <Button
-              onClick={save} disabled={saving || !reading}
+              onClick={save} disabled={saving || !reading || anomalyRemarkRequired}
               className="flex-1 h-11 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
               data-testid={`product-meter-save-${meter.id}`}
             >
@@ -703,7 +757,7 @@ function ProductMeterRow({
           </div>
           <Button
             onClick={save}
-            disabled={saving || !reading}
+            disabled={saving || !reading || anomalyRemarkRequired}
             size="sm"
             className="h-9 px-3 text-xs shrink-0"
             data-testid={`product-meter-save-${meter.id}`}
@@ -736,24 +790,28 @@ function ProductMeterRow({
       </label>
 
       {/* Warning banner — mirrors locator / well / blending style */}
-      {productionVolume != null && (productionVolume < 0 || highVol) && (
+      {productionVolume != null && productionVolume < 0 && (
         <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
           <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
-          {productionVolume < 0 && (
-            <span className="text-warn pl-5">
-              Reading is below the previous value — possible meter rollback or data entry error.
-              If the meter was replaced, check "Meter replaced" above instead.
-            </span>
-          )}
-          {highVol && (
-            <span className="text-warn pl-5">
-              Production volume is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the 10-day average — unusually high.
-            </span>
-          )}
+          <span className="text-warn pl-5">
+            Reading is below the previous value — possible meter rollback or data entry error.
+            If the meter was replaced, check "Meter replaced" above instead.
+          </span>
         </div>
+      )}
+
+      {productionVolume != null && productionVolume >= 0 && highVol && (
+        <AnomalyRemarkBanner
+          result={deviationProduct}
+          label={meter.name}
+          unit="m3/hr"
+          windowDays={10}
+          remark={anomalyRemark}
+          onRemarkChange={setAnomalyRemark}
+        />
       )}
 
       {showHistory && (

@@ -15,7 +15,9 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { calc, ALERTS } from '@/lib/calculations';
-import { evaluateROMeterSpike } from '@/lib/roReadingGuards';
+import { evaluateROMeterSpike, computeROAverageFlowRate } from '@/lib/roReadingGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -75,6 +77,13 @@ export function PretreatmentAndROLog() {
   const [hppTarget, setHppTarget] = useState('');
   const [bagsChanged, setBagsChanged] = useState('0');
   const [remarks, setRemarks] = useState('');
+  // One remark per meter — required whenever that meter's flow rate falls
+  // outside ±50% of its own 10-day average (see flowRateGuards.ts). A single
+  // save can flag more than one of the three meters at once, so these are
+  // independent, not one shared field the way the other odometer pages need.
+  const [anomalyRemarkFeed, setAnomalyRemarkFeed] = useState('');
+  const [anomalyRemarkPerm, setAnomalyRemarkPerm] = useState('');
+  const [anomalyRemarkRej, setAnomalyRemarkRej] = useState('');
 
   // RO Train online/offline status
   const [trainOnline, setTrainOnline] = useState(true);
@@ -198,6 +207,38 @@ export function PretreatmentAndROLog() {
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: false }).limit(1)).data?.[0] ?? null,
   });
+
+  // 10-day rolling average flow rate (m³/hr) per meter — see
+  // roReadingGuards.ts / flowRateGuards.ts. Replaces comparing this
+  // reading's delta against only the single prior reading's delta: a rolling
+  // average absorbs one unusually low or high prior reading instead of
+  // anchoring the "is this a spike" check entirely on it.
+  const { data: roHistory } = useQuery({
+    queryKey: ['ro-history-10d', trainId],
+    enabled: !!trainId,
+    queryFn: async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - 10);
+      const { data } = await supabase.from('ro_train_readings')
+        .select('reading_datetime, feed_meter, permeate_meter, reject_meter')
+        .eq('train_id', trainId)
+        .gte('reading_datetime', since.toISOString())
+        .order('reading_datetime', { ascending: true });
+      return data ?? [];
+    },
+  });
+  const avgFeedFlowRate = useMemo(() => computeROAverageFlowRate(
+    (roHistory ?? []).filter((r: any) => r.feed_meter != null)
+      .map((r: any) => ({ value: r.feed_meter, at: new Date(r.reading_datetime) })),
+  ), [roHistory]);
+  const avgPermFlowRate = useMemo(() => computeROAverageFlowRate(
+    (roHistory ?? []).filter((r: any) => r.permeate_meter != null)
+      .map((r: any) => ({ value: r.permeate_meter, at: new Date(r.reading_datetime) })),
+  ), [roHistory]);
+  const avgRejFlowRate = useMemo(() => computeROAverageFlowRate(
+    (roHistory ?? []).filter((r: any) => r.reject_meter != null)
+      .map((r: any) => ({ value: r.reject_meter, at: new Date(r.reading_datetime) })),
+  ), [roHistory]);
 
   // Fetch sibling trains in the same shared power meter group (if any).
   // Used to warn the operator and to do volume-weighted kWh allocation on save.
@@ -419,20 +460,34 @@ export function PretreatmentAndROLog() {
   // Dashboard alert scan uses on rows already saved to the DB — using it
   // here too means a reading flagged at save-time and one flagged later by
   // the Dashboard scan (e.g. from a CSV import, which has no client guard)
-  // agree on the exact same definition of "spike".
-  const prevFeedDeltaDB: number | null = (prevRO as any)?.feed_meter_delta     ?? null;
-  const prevPermDeltaDB: number | null = (prevRO as any)?.permeate_meter_delta ?? null;
-  const prevRejDeltaDB:  number | null = (prevRO as any)?.reject_meter_delta   ?? null;
+  // agree on the exact same definition of "spike". mDurHr (elapsed hours,
+  // already computed above for the flow-rate display) and the 10-day
+  // rolling averages (avgFeedFlowRate/avgPermFlowRate/avgRejFlowRate,
+  // fetched above) replace the old "vs. the single prior reading's delta"
+  // comparison — see roReadingGuards.ts header for why.
   // Negative: current reading is below the previous odometer snapshot → rollback or typo.
   const feedNegWarn  = prevFeedMeter != null && !isNaN(feedCurr) && feedCurr < prevFeedMeter;
   const permNegWarn  = prevPermMeter != null && !isNaN(permCurr) && permCurr < prevPermMeter;
   const rejNegWarn   = prevRejMeter  != null && !isNaN(rejCurr)  && rejCurr  < prevRejMeter;
-  const feedSpike = evaluateROMeterSpike('feed',     feedDelta, prevFeedDeltaDB);
-  const permSpike = evaluateROMeterSpike('permeate', permDelta, prevPermDeltaDB);
-  const rejSpike  = evaluateROMeterSpike('reject',   rejDelta,  prevRejDeltaDB);
-  const feedHighWarn = !feedNegWarn && feedSpike.isSpike;
-  const permHighWarn = !permNegWarn && permSpike.isSpike;
-  const rejHighWarn  = !rejNegWarn  && rejSpike.isSpike;
+  const feedSpike = evaluateROMeterSpike('feed',     feedDelta, mDurHr, avgFeedFlowRate);
+  const permSpike = evaluateROMeterSpike('permeate', permDelta, mDurHr, avgPermFlowRate);
+  const rejSpike  = evaluateROMeterSpike('reject',   rejDelta,  mDurHr, avgRejFlowRate);
+  // 'critical' preserves the exact old isSpike/highWarn meaning: beyond
+  // ALERTS.ro_meter_spike_multiplier → auto pending_review on save (below).
+  const feedHighWarn = !feedNegWarn && feedSpike.tier === 'critical';
+  const permHighWarn = !permNegWarn && permSpike.tier === 'critical';
+  const rejHighWarn  = !rejNegWarn  && rejSpike.tier === 'critical';
+  // New, broader ±50% band — requires an operator remark before Save, but
+  // doesn't by itself force pending_review (that's still 'critical' above).
+  const feedNeedsRemark = !feedNegWarn && feedSpike.tier !== 'ok';
+  const permNeedsRemark = !permNegWarn && permSpike.tier !== 'ok';
+  const rejNeedsRemark  = !rejNegWarn  && rejSpike.tier !== 'ok';
+  const anyNeedsRemark = feedNeedsRemark || permNeedsRemark || rejNeedsRemark;
+  // Blocks Save until every flagged meter has its own remark filled in.
+  const anomalyRemarksMissing =
+    (feedNeedsRemark && !anomalyRemarkFeed.trim()) ||
+    (permNeedsRemark && !anomalyRemarkPerm.trim()) ||
+    (rejNeedsRemark  && !anomalyRemarkRej.trim());
   // True if ANY of the three meters look like a mis-key — gates the
   // pending_review flag + confirmation on save, below.
   const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;
@@ -542,6 +597,10 @@ export function PretreatmentAndROLog() {
     // in-flight (double-tap, slow network + impatient re-tap, etc.).
     if (isSaving) return;
     if (!plantId || !trainId) { toast.error('Select plant and train'); return; }
+    if (anomalyRemarksMissing) {
+      toast.error('One or more meters are outside the normal range — add a remark for each before saving.');
+      return;
+    }
     setIsSaving(true);
     try {
 
@@ -739,6 +798,35 @@ export function PretreatmentAndROLog() {
         plantId:     plantId!,
         timestamp:   Date.now(),
       })));
+    }
+
+    // Best-effort — the reading itself already saved successfully above,
+    // this never blocks or rolls it back. See flowRateGuards.ts. One remark
+    // per flagged meter (feed/permeate/reject are independent, unlike every
+    // other odometer page which only ever has one meter per reading).
+    if (savedRow?.id) {
+      const toSubmit: { needsRemark: boolean; kind: 'feed' | 'permeate' | 'reject'; spike: typeof feedSpike; text: string }[] = [
+        { needsRemark: feedNeedsRemark, kind: 'feed',      spike: feedSpike, text: anomalyRemarkFeed },
+        { needsRemark: permNeedsRemark, kind: 'permeate',  spike: permSpike, text: anomalyRemarkPerm },
+        { needsRemark: rejNeedsRemark,  kind: 'reject',    spike: rejSpike,  text: anomalyRemarkRej },
+      ];
+      for (const s of toSubmit) {
+        if (!s.needsRemark) continue;
+        void submitAnomalyRemark({
+          table_name: 'ro_train_readings',
+          record_id: savedRow.id,
+          meter_kind: s.kind,
+          plant_id: plantId!,
+          tier: s.spike.tier as 'needs_remark' | 'critical',
+          direction: s.spike.direction!,
+          deviation_pct: s.spike.deviationPct!,
+          flow_rate: s.spike.rate,
+          avg_flow_rate: s.spike.avgRate,
+          rate_unit: 'm3/hr',
+          remark_text: s.text,
+        });
+      }
+      setAnomalyRemarkFeed(''); setAnomalyRemarkPerm(''); setAnomalyRemarkRej('');
     }
 
     // ── Sync train status in DB only for manual overrides ────────────────────
@@ -1776,7 +1864,8 @@ export function PretreatmentAndROLog() {
                     <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       feedNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      feedHighWarn && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      !feedNegWarn && feedSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
+                      !feedNegWarn && feedSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
                     )} />
                     {feedNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
@@ -1784,11 +1873,17 @@ export function PretreatmentAndROLog() {
                         Reading ({feedCurr}) is below previous ({prevFeedMeter}) — meter rollback or typo.
                       </p>
                     )}
-                    {feedHighWarn && (
-                      <p className="text-xs text-warn flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
-                        {feedSpike.detail || 'Delta is unusually high vs. the last reading. Verify before saving.'}
-                      </p>
+                    {feedNeedsRemark && (
+                      <div className="mt-1">
+                        <AnomalyRemarkBanner
+                          result={feedSpike}
+                          label="Feed"
+                          unit="m3/hr"
+                          windowDays={10}
+                          remark={anomalyRemarkFeed}
+                          onRemarkChange={setAnomalyRemarkFeed}
+                        />
+                      </div>
                     )}
                   </div>
                   <div>
@@ -1820,7 +1915,8 @@ export function PretreatmentAndROLog() {
                     <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       permNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      permHighWarn && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      !permNegWarn && permSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
+                      !permNegWarn && permSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
                     )} />
                     {permNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
@@ -1828,11 +1924,17 @@ export function PretreatmentAndROLog() {
                         Reading ({permCurr}) is below previous ({prevPermMeter}) — meter rollback or typo.
                       </p>
                     )}
-                    {permHighWarn && (
-                      <p className="text-xs text-warn flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
-                        Delta of {permDelta?.toFixed(1)} m³ is unusually high (last period was {prevPermDeltaDB?.toFixed(1)} m³). Verify before saving.
-                      </p>
+                    {permNeedsRemark && (
+                      <div className="mt-1">
+                        <AnomalyRemarkBanner
+                          result={permSpike}
+                          label="Permeate"
+                          unit="m3/hr"
+                          windowDays={10}
+                          remark={anomalyRemarkPerm}
+                          onRemarkChange={setAnomalyRemarkPerm}
+                        />
+                      </div>
                     )}
                   </div>
                   <div>
@@ -1864,7 +1966,8 @@ export function PretreatmentAndROLog() {
                     <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       rejNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-red-400",
-                      rejHighWarn && "border-warn bg-warn-soft focus-visible:ring-amber-400"
+                      !rejNegWarn && rejSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-red-400",
+                      !rejNegWarn && rejSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-amber-400"
                     )} />
                     {rejNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
@@ -1872,11 +1975,17 @@ export function PretreatmentAndROLog() {
                         Reading ({rejCurr}) is below previous ({prevRejMeter}) — meter rollback or typo.
                       </p>
                     )}
-                    {rejHighWarn && (
-                      <p className="text-xs text-warn flex items-center gap-1 mt-1">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
-                        {rejSpike.detail || 'Delta is unusually high vs. the last reading. Verify before saving.'}
-                      </p>
+                    {rejNeedsRemark && (
+                      <div className="mt-1">
+                        <AnomalyRemarkBanner
+                          result={rejSpike}
+                          label="Reject"
+                          unit="m3/hr"
+                          windowDays={10}
+                          remark={anomalyRemarkRej}
+                          onRemarkChange={setAnomalyRemarkRej}
+                        />
+                      </div>
                     )}
                   </div>
                   <div>
@@ -2148,7 +2257,7 @@ export function PretreatmentAndROLog() {
           </Card>
         )}
         {train && (!trainOnline || cartridgeSectionStarted) && (
-          <Button onClick={submit} disabled={isSaving} className="w-full h-12 text-base font-semibold gap-2">
+          <Button onClick={submit} disabled={isSaving || anomalyRemarksMissing} className="w-full h-12 text-base font-semibold gap-2">
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving ? 'Saving…' : !trainOnline ? 'Save Offline Record' : 'Save Pre-Treatment & RO Reading'}
           </Button>

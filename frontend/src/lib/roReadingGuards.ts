@@ -22,19 +22,33 @@
  * a delta of 1,493,203 m3 and an implied flow rate of 409,096.71 m3/h.
  * Nothing in the app currently rejects, warns loudly on, or flags that for
  * review — it silently becomes the new "previous reading" baseline too.
+ *
+ * 2026-08-07: evaluateROMeterSpike rewritten to compare a FLOW RATE (delta ÷
+ * hours elapsed) against a real rolling average rate, not a raw delta
+ * against the single immediately-prior delta. The old version had two
+ * compounding problems, visible in the "RO3 — Reject meter delta 200 m³ is
+ * 525% above the prior reading's 32 m³" alert this was built to fix:
+ *   1. No time normalization — comparing two deltas directly only makes
+ *      sense if both readings covered the same elapsed time. A 200 m³
+ *      delta over 48 hours and a 32 m³ delta over 6 hours are actually
+ *      *closer* in rate (4.2 m³/hr vs 5.3 m³/hr) than the raw "525% above"
+ *      framing suggests.
+ *   2. Comparing to a single prior point, not an average — if that one
+ *      prior reading happened to be an unusually low outlier, every normal
+ *      reading afterward looks like a false spike by comparison. A rolling
+ *      average absorbs one-off low readings instead of anchoring on them.
+ * See flowRateGuards.ts, which this now delegates to (same module every
+ * other odometer input in the app uses), and the ±50% 'needs_remark' tier
+ * PretreatmentAndROLog.tsx now also applies on top of this 'critical' tier.
  */
 
 import { ALERTS } from './calculations';
+import {
+  computeRate, computeRollingAverageRate, classifyDeviation,
+  type RatePoint, type DeviationResult,
+} from './flowRateGuards';
 
 export type ROMeterKind = 'feed' | 'permeate' | 'reject';
-
-export interface ROMeterSpikeResult {
-  isSpike: boolean;
-  /** current delta ÷ reference delta. Null when not computable. */
-  multiple: number | null;
-  label: string;
-  detail: string;
-}
 
 const METER_LABEL: Record<ROMeterKind, string> = {
   feed: 'Feed',
@@ -43,42 +57,45 @@ const METER_LABEL: Record<ROMeterKind, string> = {
 };
 
 /**
- * Compares a newly computed meter delta (this reading minus the previous
- * odometer snapshot) against a reference delta — normally the immediately
- * prior confirmed delta for the same train + meter, the same "vs. last
- * time" comparison PretreatmentAndROLog.tsx already does for permeate
- * (permHighWarn), just factored out so Dashboard can reuse it for
- * already-saved rows and for feed/reject too.
+ * 10-day rolling average flow rate (m³/hr) for one train's meter, built from
+ * a chronological series of cumulative snapshots — same pairwise-rate
+ * pattern as Locator/Well (computeRollingAverageRate), just fed from
+ * ro_train_readings instead. Exported so PretreatmentAndROLog.tsx and
+ * Dashboard.tsx both build this the same way from whatever history they've
+ * each already queried.
+ */
+export function computeROAverageFlowRate(points: RatePoint[], windowDays: number = 10): number | null {
+  return computeRollingAverageRate(points, windowDays);
+}
+
+/**
+ * Classifies a newly computed meter delta against the train's own rolling
+ * average flow rate for that meter. Returns the full DeviationResult (same
+ * shape flowRateGuards.classifyDeviation returns everywhere else) plus a
+ * ready-to-render detail string and the meter's display label.
  *
- * Deliberately conservative: only fires when the reference delta itself is
- * a real, positive, non-trivial value, so a train that happened to be near
- * zero on the prior reading doesn't produce a false "spike" on every
- * reading afterward.
+ * currentDelta/hoursElapsed replace the old currentDelta/referenceDelta pair
+ * — pass the elapsed time between this reading and the previous one for the
+ * SAME meter (PretreatmentAndROLog.tsx already computes this as
+ * autoDurationMin for the cooldown display; reuse it here, ÷60 for hours).
  */
 export function evaluateROMeterSpike(
   kind: ROMeterKind,
   currentDelta: number | null,
-  referenceDelta: number | null,
+  hoursElapsed: number | null,
+  avgFlowRate: number | null,
   multiplier: number = ALERTS.ro_meter_spike_multiplier,
-): ROMeterSpikeResult {
+): DeviationResult & { label: string; detail: string } {
   const label = METER_LABEL[kind];
-  if (
-    currentDelta == null || referenceDelta == null ||
-    !Number.isFinite(currentDelta) || !Number.isFinite(referenceDelta) ||
-    referenceDelta <= 0 || currentDelta <= 0
-  ) {
-    return { isSpike: false, multiple: null, label, detail: '' };
-  }
-  const multiple = currentDelta / referenceDelta;
-  const isSpike = multiple > multiplier;
-  return {
-    isSpike,
-    multiple,
-    label,
-    detail: isSpike
-      ? `${label} meter delta ${Math.round(currentDelta).toLocaleString()} m³ is ${Math.round((multiple - 1) * 100)}% above the prior reading's ${Math.round(referenceDelta).toLocaleString()} m³ — check for a mis-keyed meter value.`
-      : '',
-  };
+  const rate = computeRate(currentDelta, hoursElapsed);
+  const result = classifyDeviation(rate, avgFlowRate, multiplier);
+  if (result.tier === 'ok') return { ...result, label, detail: '' };
+
+  const verb = result.direction === 'high' ? 'above' : 'below';
+  const detail = result.tier === 'critical'
+    ? `${label} flow rate ${result.rate!.toFixed(1)} m³/hr is ${result.deviationPct}% ${verb} the 10-day average (${result.avgRate!.toFixed(1)} m³/hr) — check for a mis-keyed meter value.`
+    : `${label} flow rate ${result.rate!.toFixed(1)} m³/hr is ${result.deviationPct}% ${verb} the 10-day average (${result.avgRate!.toFixed(1)} m³/hr) — remark required before saving.`;
+  return { ...result, label, detail };
 }
 
 export interface PhaseImbalanceResult {

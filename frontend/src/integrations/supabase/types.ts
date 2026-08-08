@@ -3331,6 +3331,65 @@ export type Database = {
           },
         ]
       }
+      reading_anomaly_remarks: {
+        Row: {
+          avg_flow_rate: number | null
+          deviation_pct: number
+          direction: string
+          flow_rate: number | null
+          id: string
+          logged_at: string
+          logged_by: string | null
+          meter_kind: string | null
+          plant_id: string
+          rate_unit: string
+          record_id: string
+          remark_text: string
+          table_name: string
+          tier: string
+        }
+        Insert: {
+          avg_flow_rate?: number | null
+          deviation_pct: number
+          direction: string
+          flow_rate?: number | null
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          meter_kind?: string | null
+          plant_id: string
+          rate_unit?: string
+          record_id: string
+          remark_text: string
+          table_name: string
+          tier: string
+        }
+        Update: {
+          avg_flow_rate?: number | null
+          deviation_pct?: number
+          direction?: string
+          flow_rate?: number | null
+          id?: string
+          logged_at?: string
+          logged_by?: string | null
+          meter_kind?: string | null
+          plant_id?: string
+          rate_unit?: string
+          record_id?: string
+          remark_text?: string
+          table_name?: string
+          tier?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_anomaly_remarks_plant_id_fkey"
+            columns: ["plant_id"]
+            isOneToOne: false
+            referencedRelation: "plants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reading_gap_reasons: {
         Row: {
           entity_id: string

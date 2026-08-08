@@ -16,9 +16,10 @@ import { deltaCache, hydrateFromStoredDeltas, flushDeltaCache } from '@/lib/delt
 import { usePlants } from '@/hooks/usePlants';
 import { fmtNum, nrwColor, ALERTS } from '@/lib/calculations';
 import {
-  evaluateROMeterSpike, evaluatePhaseImbalance, evaluatePhaseLoss, dpPsi,
+  evaluateROMeterSpike, computeROAverageFlowRate, evaluatePhaseImbalance, evaluatePhaseLoss, dpPsi,
   type ROMeterKind,
 } from '@/lib/roReadingGuards';
+import { computeRate, classifyDeviation, computeRollingAverageRateFromDeltas, type VolumePoint } from '@/lib/flowRateGuards';
 import { StatusPill } from '@/components/StatusPill';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -691,6 +692,52 @@ export default function Dashboard() {
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
   });
+
+  // ── 10-day per-train average flow rate, for the meter-spike scan below ────
+  // Deliberately a SEPARATE, narrower query from latestRO (which only
+  // fetches a 24h window) rather than widening that one — this page
+  // refetches every 2 minutes, so a full 10-day pull of every quality column
+  // for every train would be a meaningfully heavier and mostly-wasted
+  // repeat fetch. Only the 4 columns actually needed for the rolling
+  // average (see roReadingGuards.ts / flowRateGuards.ts) are selected here.
+  const { data: roHistory10d } = useQuery({
+    queryKey: ['dash-ro-history-10d', _qualityTrainIds],
+    queryFn: async () => {
+      if (!_qualityTrainIds.length) return [] as any[];
+      const since = subDays(new Date(), 10).toISOString();
+      const { data, error } = await (supabase.from('ro_train_readings' as any) as any)
+        .select('train_id,reading_datetime,feed_meter,permeate_meter,reject_meter')
+        .in('train_id', _qualityTrainIds)
+        .gte('reading_datetime', since)
+        .order('reading_datetime', { ascending: true });
+      if (error) throw new Error(`ro_train_readings (10d history): ${error.message}`);
+      return data ?? [];
+    },
+    enabled: _qualityTrainIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+  const roAvgFlowByTrain = useMemo(() => {
+    const byTrain = new Map<string, any[]>();
+    (roHistory10d ?? []).forEach((r: any) => {
+      const key = String(r.train_id ?? 'unknown');
+      if (!byTrain.has(key)) byTrain.set(key, []);
+      byTrain.get(key)!.push(r);
+    });
+    const out = new Map<string, Record<ROMeterKind, number | null>>();
+    byTrain.forEach((rows, trainId) => {
+      const rates: Record<ROMeterKind, number | null> = { feed: null, permeate: null, reject: null };
+      (['feed', 'permeate', 'reject'] as ROMeterKind[]).forEach((kind) => {
+        const col = `${kind}_meter`;
+        const points = rows
+          .filter((r: any) => r[col] != null)
+          .map((r: any) => ({ value: r[col], at: new Date(r.reading_datetime) }));
+        rates[kind] = computeROAverageFlowRate(points, 10);
+      });
+      out.set(trainId, rates);
+    });
+    return out;
+  }, [roHistory10d]);
+
   // ── Pre-treatment latest reading per train (AFM/MMF + filter housing DP,
   //    booster pump amperage) ───────────────────────────────────────────────
   // ro_pretreatment_readings has its own plant_id column (unlike
@@ -771,20 +818,39 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
     staleTime: 5 * 60_000,
   });
-  // Plant-average daily kWh over the trailing window, keyed by plant_id.
+  // Plant-average kWh/hr over the trailing window, keyed by plant_id. Was: a
+  // plain average of the stored daily_consumption_kwh values, silently
+  // assuming every reading was exactly 24h apart — see flowRateGuards.ts /
+  // computeRollingAverageRateFromDeltas for why that breaks whenever a day
+  // has no reading (each row's own kWh ÷ hours since the PREVIOUS row for
+  // that plant, not ÷24 always).
   const powerAvgByPlant = useMemo(() => {
-    const sums = new Map<string, { total: number; count: number }>();
+    const byPlant = new Map<string, VolumePoint[]>();
     (powerHistory ?? []).forEach((r: any) => {
       const v = Number(r.daily_consumption_kwh);
-      if (!Number.isFinite(v) || v <= 0) return;
-      const cur = sums.get(r.plant_id) ?? { total: 0, count: 0 };
-      cur.total += v; cur.count += 1;
-      sums.set(r.plant_id, cur);
+      if (!Number.isFinite(v) || v <= 0 || !r.reading_datetime) return;
+      const key = r.plant_id;
+      if (!byPlant.has(key)) byPlant.set(key, []);
+      byPlant.get(key)!.push({ volume: v, at: new Date(r.reading_datetime) });
     });
     const out = new Map<string, number>();
-    sums.forEach((v, k) => out.set(k, v.total / v.count));
+    byPlant.forEach((points, pid) => {
+      const avg = computeRollingAverageRateFromDeltas(points, 14);
+      if (avg != null) out.set(pid, avg);
+    });
     return out;
   }, [powerHistory]);
+
+  // Most recent reading strictly BEFORE today, per plant — needed to convert
+  // today's daily_consumption_kwh into an hourly rate comparable to
+  // powerAvgByPlant (also kWh/hr). See todayPowerRaw's prevRows above.
+  const prevPowerRowByPlant = useMemo(() => {
+    const m = new Map<string, { reading_datetime: string }>();
+    (todayPowerRaw?.prevRows ?? []).forEach((r: any) => {
+      if (r.plant_id && r.reading_datetime) m.set(r.plant_id, r);
+    });
+    return m;
+  }, [todayPowerRaw]);
 
   // ── Permeate fallback for production ─────────────────────────────────────────
   // When the selected plants have no product meter readings today AND are not
@@ -1417,6 +1483,14 @@ export default function Dashboard() {
   // permHighWarn, just applied to rows already sitting in the DB (including
   // ones written before this guard existed, or written via CSV import which
   // has no client-side guard at all).
+  // Ported to flow-rate comparison 2026-08-07 — see roReadingGuards.ts header
+  // for why comparing raw deltas directly (even "vs. the immediately-prior
+  // reading", which this used to do) breaks whenever the elapsed time
+  // between two readings differs, e.g. a normal reading after a skipped
+  // check-in interval. Rows are still walked chronologically per train, but
+  // each one is now compared to its own rolling 10-day average flow rate
+  // (roAvgFlowByTrain, computed above) with elapsed hours factored in, not
+  // to the single immediately-prior reading.
   const roMeterSpikes = useMemo(() => {
     const byTrain = new Map<string, any[]>();
     (latestRO ?? []).forEach((r: any) => {
@@ -1425,20 +1499,28 @@ export default function Dashboard() {
       byTrain.get(key)!.push(r);
     });
     const spikes: { row: any; kind: ROMeterKind; result: ReturnType<typeof evaluateROMeterSpike> }[] = [];
-    byTrain.forEach((rows) => {
+    byTrain.forEach((rows, trainId) => {
       const sorted = [...rows].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
+      const avgRates = roAvgFlowByTrain.get(trainId);
       for (let i = 1; i < sorted.length; i++) {
+        const hoursElapsed =
+          (new Date(sorted[i].reading_datetime).getTime() - new Date(sorted[i - 1].reading_datetime).getTime()) / 3_600_000;
         (['feed', 'permeate', 'reject'] as ROMeterKind[]).forEach((kind) => {
           const col = `${kind}_meter_delta`;
-          const result = evaluateROMeterSpike(kind, sorted[i][col], sorted[i - 1][col]);
-          if (result.isSpike) spikes.push({ row: sorted[i], kind, result });
+          const result = evaluateROMeterSpike(kind, sorted[i][col], hoursElapsed, avgRates?.[kind] ?? null);
+          // Dashboard's alert bell mirrors the same 'critical' bar
+          // PretreatmentAndROLog.tsx auto-quarantines on — the broader
+          // ±50% 'needs_remark' band doesn't need a bell alert here, since
+          // any row that reached that tier at save time already required
+          // (and got) an operator remark before it could be saved at all.
+          if (result.tier === 'critical') spikes.push({ row: sorted[i], kind, result });
         });
       }
     });
     return spikes;
-  }, [latestRO]);
+  }, [latestRO, roAvgFlowByTrain]);
 
   // ── Pre-treatment: latest reading per train + booster amperage vs prior ────
   const pretreatmentAlerts = useMemo(() => {
@@ -1735,26 +1817,29 @@ export default function Dashboard() {
       });
     });
 
-    // Power consumption — spike vs. this plant's own 14-day rolling average.
-    // Deliberately relative (see ALERTS.power_spike_multiplier comment) —
-    // no absolute kWh ceiling is used since plant sizes vary widely.
+    // Power consumption — spike vs. this plant's own 14-day rolling average
+    // RATE (kWh/hr), not the raw daily total. Deliberately relative (see
+    // ALERTS.power_spike_multiplier comment) — no absolute kWh ceiling is
+    // used since plant sizes vary widely.
     // Skipped when todayPowerRaw fell back to a stale/prior-day reading
     // (powerIsStale) — that's not actually today's consumption, so comparing
     // it to the rolling average would mislabel old data as "today's spike".
     (powerIsStale ? [] : (todayPower ?? [])).forEach((r: any) => {
       const pid = r.plant_id ?? selectedPlantId ?? '';
       const todayKwh = Number(r.daily_consumption_kwh);
-      const avgKwh = powerAvgByPlant.get(pid);
-      if (
-        Number.isFinite(todayKwh) && todayKwh > 0 &&
-        avgKwh != null && avgKwh > 0 &&
-        todayKwh > avgKwh * ALERTS.power_spike_multiplier
-      ) {
+      const avgRate = powerAvgByPlant.get(pid) ?? null;
+      const prevRow = prevPowerRowByPlant.get(pid);
+      const hoursElapsed = prevRow && r.reading_datetime
+        ? (new Date(r.reading_datetime).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000
+        : null;
+      const rate = computeRate(Number.isFinite(todayKwh) ? todayKwh : null, hoursElapsed);
+      const result = classifyDeviation(rate, avgRate, ALERTS.power_spike_multiplier);
+      if (result.tier === 'critical') {
         storeAlerts.push({
           id:          `power-spike-${pid}-${r.reading_datetime}`,
           severity:    'warning',
           title:       `Power spike: ${fmtNum(todayKwh, 0)} kWh`,
-          description: `${plantNameById.get(pid) ?? 'Plant'} — today's consumption ${fmtNum(todayKwh, 0)} kWh is ${Math.round((todayKwh / avgKwh - 1) * 100)}% above the 14-day average (${fmtNum(avgKwh, 0)} kWh)`,
+          description: `${plantNameById.get(pid) ?? 'Plant'} — consumption rate ${result.rate!.toFixed(1)} kWh/hr is ${result.deviationPct}% above the 14-day average (${result.avgRate!.toFixed(1)} kWh/hr)`,
           source:      'Power',
           plantId:     pid,
           timestamp:   Date.now(),

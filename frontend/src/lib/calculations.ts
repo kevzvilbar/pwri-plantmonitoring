@@ -53,7 +53,19 @@ export const ALERTS = {
   permeate_ph_max: 8.5,
   recovery_min: 65,
   recovery_max: 75,
-  avg_multiplier_warn: 2.5,
+  // Well/locator readings do NOT use a constant here — they import
+  // SPIKE_MULTIPLIER from lib/readingGuards.ts instead, because
+  // fn_locator_reading_integrity (the DB trigger that's the actual source of
+  // truth for locator pending_review) hardcodes 2.0 in SQL. A separate
+  // 2.5 lived here until 2026-08-07 and was only ever used by the client-side
+  // cosmetic banner — meaning a reading between 2.0x-2.5x average got
+  // silently sent to pending_review by the DB with no warning ever shown to
+  // the operator before Save. Product and blending have no DB trigger of
+  // their own, so ALERTS remains the sole authority for them — hence two
+  // separate, independently-tunable constants below instead of reviving one
+  // shared name that different meter types would drift back out of sync on.
+  product_spike_multiplier: 2.5,
+  blending_spike_multiplier: 2.5,
   geofence_radius_m_default: 100,
   nrw_green_max: 13,
   nrw_amber_max: 16,
@@ -84,10 +96,11 @@ export const ALERTS = {
   // that SAME unit's immediately-prior reading, not an absolute ceiling.
   pretreatment_pump_amp_spike_multiplier: 1.6,
 
-  // ── Daily power consumption ─────────────────────────────────────────────
-  // Spike vs. the plant's own rolling average (same "beyond the limit"
-  // shape as avg_multiplier_warn, kept separate so power's threshold can be
-  // tuned independently of well/locator/product meters).
+  // ── Power consumption rate ───────────────────────────────────────────────
+  // Spike vs. the plant's own rolling average kWh/hr (same "beyond the
+  // limit" shape as product_spike_multiplier/blending_spike_multiplier, kept
+  // separate so power's threshold can be tuned independently of the water
+  // meters).
   power_spike_multiplier: 2.0,
 
   // ── RO train meter deltas (feed/permeate/reject) ────────────────────────

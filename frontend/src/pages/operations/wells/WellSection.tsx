@@ -32,14 +32,17 @@ import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircl
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
 import { OdometerRollerInput, MobileCarousel, type OdometerAlertState } from '@/components/OdometerRollerInput';
-import { evaluateReadingGuard } from '@/lib/readingGuards';
+import { evaluateReadingGuard, SPIKE_MULTIPLIER } from '@/lib/readingGuards';
+import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
@@ -521,6 +524,9 @@ function WellRow({
   const [savingNtu, setSavingNtu]               = useState(false);
   const [savingPressure, setSavingPressure]     = useState(false);
   const [savingPower, setSavingPower]           = useState(false);
+  // Required whenever the flow rate falls outside ±50% of the 10-day average
+  // (see flowRateGuards.ts) — cleared after every successful save.
+  const [anomalyRemark, setAnomalyRemark] = useState('');
   const [sharedPowerReading, setSharedPowerReading] = useState('');
   const [savingSharedPower, setSavingSharedPower]   = useState(false);
   const [showHistory, setShowHistory]           = useState(false);
@@ -576,14 +582,29 @@ function WellRow({
   const meterChanged = reading !== '' && (previousMeter == null || cur !== previousMeter);
   const dailyVol   = meterChanged && previousMeter != null ? cur - previousMeter : null;
   const belowPrev  = previousMeter != null && cur > 0 && cur < previousMeter;
-  // Q = V / t: compare current flow rate against 10-day average flow rate (m³/hr)
+  // Q = V / t: compare current flow rate against 10-day average flow rate (m³/hr).
+  // Same shared classifier as LocatorSection, same SPIKE_MULTIPLIER — see
+  // flowRateGuards.ts / readingGuards.ts.
+  //
+  // FINDING (2026-08-07, found while wiring this): the comment on the save()
+  // payload below claims "previous_reading: owned by DB trigger
+  // fn_well_reading_integrity()" but no such trigger exists anywhere in
+  // supabase/migrations — unlike locator_readings (fn_locator_reading_integrity,
+  // confirmed present), well_readings has NO insert-time trigger at all. That
+  // means norm_status='pending_review' for a well spike is never actually
+  // persisted server-side; evaluateReadingGuard()'s 'pending_review' result
+  // only ever produces a toast, and the DB always keeps whatever default
+  // norm_status the row was inserted with. Left as-is here — this is a
+  // pre-existing server-side gap, not something to silently patch as a side
+  // effect of a client-side flow-rate fix — but worth a second look
+  // independent of this change.
   const hoursElapsedWell = previousDt && reading
     ? (new Date(customDt).getTime() - new Date(previousDt).getTime()) / 3_600_000
     : null;
-  const wellFlowRate = dailyVol != null && hoursElapsedWell != null && hoursElapsedWell > 0
-    ? dailyVol / hoursElapsedWell
-    : null;
-  const highVol    = avgVol != null && wellFlowRate != null && wellFlowRate > avgVol * ALERTS.avg_multiplier_warn;
+  const wellFlowRate = computeRate(dailyVol, hoursElapsedWell);
+  const deviationWell = classifyDeviation(wellFlowRate, avgVol, SPIKE_MULTIPLIER);
+  const highVol = deviationWell.tier !== 'ok';
+  const anomalyRemarkRequired = deviationWell.tier !== 'ok' && !anomalyRemark.trim();
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
   const atLimit    = !editingId && todayCount >= WELL_MAX_READINGS_PER_DAY;
@@ -605,6 +626,10 @@ function WellRow({
   const save = async () => {
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
+    if (anomalyRemarkRequired) {
+      toast.error(`${well.name}: this reading is outside the normal range — add a remark before saving.`);
+      return;
+    }
 
     let guardReason: 'backward' | 'spike' | null = null;
 
@@ -685,6 +710,24 @@ function WellRow({
         .update({ reading_id: savedRow.id })
         .eq('id', meterReplacePending.replacementId);
     }
+
+    // Best-effort — the reading itself already saved successfully above,
+    // this never blocks or rolls it back. See flowRateGuards.ts.
+    if (deviationWell.tier !== 'ok' && savedRow?.id) {
+      void submitAnomalyRemark({
+        table_name: 'well_readings',
+        record_id: savedRow.id,
+        plant_id: plantId,
+        tier: deviationWell.tier,
+        direction: deviationWell.direction!,
+        deviation_pct: deviationWell.deviationPct!,
+        flow_rate: deviationWell.rate,
+        avg_flow_rate: deviationWell.avgRate,
+        rate_unit: 'm3/hr',
+        remark_text: anomalyRemark,
+      });
+    }
+    setAnomalyRemark('');
 
     let isPending = savedRow?.norm_status === 'pending_review';
 
@@ -1010,7 +1053,7 @@ function WellRow({
                 )}
               </div>
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit}
+                onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
                 className="w-full h-10 text-sm bg-primary hover:bg-primary/90 active:bg-primary text-white shadow-sm"
                 title="Save water meter reading">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Update' : 'Save'}
@@ -1027,7 +1070,7 @@ function WellRow({
                 data-testid={`well-meter-input-${well.id}`}
               />
               <Button
-                onClick={save} disabled={saving || !meterChanged || atLimit}
+                onClick={save} disabled={saving || !meterChanged || atLimit || anomalyRemarkRequired}
                 size="sm"
                 className="h-7 px-2.5 shrink-0 bg-primary hover:bg-primary/90 active:bg-primary text-white text-xs shadow-sm"
                 title="Save water meter reading">
@@ -1161,46 +1204,48 @@ function WellRow({
       </div>
 
       {/* ── Warning banners ── */}
-      {reading && (belowPrev || highVol) && (
+      {reading && belowPrev && (
         <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
           <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
-          {belowPrev && (
-            <span className="text-warn pl-5">
-              Meter reading is below the previous value — possible meter rollback or data entry error.
-              If the meter was replaced, check "Meter replaced" above instead.
-            </span>
-          )}
-          {belowPrev && (
-            <div className="pl-5 flex flex-wrap items-center gap-2 pt-1">
-              <label className="flex items-center gap-1.5 text-warn cursor-pointer">
-                <Checkbox checked={isRollover} onCheckedChange={(v) => setIsRollover(v === true)} />
-                This is a meter rollover (odometer wrapped around), not an error
-              </label>
-              {isRollover && (
-                <span className="flex items-center gap-1.5">
-                  <span className="text-warn">Wrap point:</span>
-                  <Input
-                    value={rolloverMax}
-                    onChange={(e) => setRolloverMax(e.target.value)}
-                    className="h-6 w-24 text-xs"
-                    inputMode="numeric"
-                  />
-                  {well.meter_rollover_max == null && (
-                    <span className="text-warn/70 text-2xs">(guess — confirm against the meter, or set it once in Edit Well)</span>
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-          {highVol && (
-            <span className="text-warn pl-5">
-              Flow rate is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the 10-day average — unusually high.
-            </span>
-          )}
+          <span className="text-warn pl-5">
+            Meter reading is below the previous value — possible meter rollback or data entry error.
+            If the meter was replaced, check "Meter replaced" above instead.
+          </span>
+          <div className="pl-5 flex flex-wrap items-center gap-2 pt-1">
+            <label className="flex items-center gap-1.5 text-warn cursor-pointer">
+              <Checkbox checked={isRollover} onCheckedChange={(v) => setIsRollover(v === true)} />
+              This is a meter rollover (odometer wrapped around), not an error
+            </label>
+            {isRollover && (
+              <span className="flex items-center gap-1.5">
+                <span className="text-warn">Wrap point:</span>
+                <Input
+                  value={rolloverMax}
+                  onChange={(e) => setRolloverMax(e.target.value)}
+                  className="h-6 w-24 text-xs"
+                  inputMode="numeric"
+                />
+                {well.meter_rollover_max == null && (
+                  <span className="text-warn/70 text-2xs">(guess — confirm against the meter, or set it once in Edit Well)</span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
+      )}
+
+      {reading && !belowPrev && highVol && (
+        <AnomalyRemarkBanner
+          result={deviationWell}
+          label={well.name}
+          unit="m3/hr"
+          windowDays={10}
+          remark={anomalyRemark}
+          onRemarkChange={setAnomalyRemark}
+        />
       )}
 
       {showHistory && (

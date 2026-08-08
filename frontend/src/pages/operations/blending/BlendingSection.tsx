@@ -30,12 +30,18 @@ import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircl
 
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
 import {
+  computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, MIN_ELAPSED_DAYS,
+  type VolumePoint,
+} from '@/lib/flowRateGuards';
+import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
+import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import {
-  GridPylonIcon, WELL_MAX_READINGS_PER_DAY, READING_COOLDOWN_MINUTES, SPIKE_MULTIPLIER,
+  GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
@@ -259,7 +265,11 @@ export function BlendingForm() {
   const blendingWells  = useMemo(() => (wells ?? []).filter((w: any) => blendingIds.has(w.id)), [wells, blendingIds]);
 
   const { data: volumeData } = useQuery<{
-    by_well: { well_id: string; volume_m3: number; today_volume_m3: number; previous_volume_m3: number | null; previous_event_date: string | null }[];
+    by_well: {
+      well_id: string; volume_m3: number; today_volume_m3: number;
+      previous_volume_m3: number | null; previous_event_date: string | null;
+      avg_rate_m3_per_day: number | null;
+    }[];
   }>({
     queryKey: ['blending-today', plantId],
     queryFn: async () => {
@@ -279,6 +289,7 @@ export function BlendingForm() {
       const byWell = new Map<string, {
         well_id: string; volume_m3: number; today_volume_m3: number;
         previous_volume_m3: number | null; previous_event_date: string | null;
+        byDay: Map<string, number>;
       }>();
 
       for (const ev of (events ?? []) as any[]) {
@@ -290,10 +301,12 @@ export function BlendingForm() {
           byWell.set(wid, {
             well_id: wid, volume_m3: 0, today_volume_m3: 0,
             previous_volume_m3: null, previous_event_date: null,
+            byDay: new Map(),
           });
         }
         const cur = byWell.get(wid)!;
         cur.volume_m3 += vol;
+        cur.byDay.set(day, (cur.byDay.get(day) ?? 0) + vol);
         if (day === today) {
           cur.today_volume_m3 += vol;
         } else if (day && day < today) {
@@ -307,12 +320,27 @@ export function BlendingForm() {
 
       const byWellList = Array.from(byWell.values())
         .sort((a, b) => b.volume_m3 - a.volume_m3)
-        .map((w) => ({
-          ...w,
-          volume_m3: Math.round(w.volume_m3 * 100) / 100,
-          today_volume_m3: Math.round(w.today_volume_m3 * 100) / 100,
-          previous_volume_m3: w.previous_volume_m3 !== null ? Math.round(w.previous_volume_m3 * 100) / 100 : null,
-        }));
+        .map((w) => {
+          // Q = V / t at day granularity — blending_events only stores a
+          // DATE (event_date), not a timestamp, so hours aren't available;
+          // each calendar day with events becomes one point, and each
+          // point's rate is that day's TOTAL volume ÷ days since the
+          // previous day WITH an event (not ÷1, so a day with no blending
+          // event doesn't silently get treated as "0 that day" or get
+          // smeared into a false same-length gap the way a plain average
+          // of volume_m3 across events would).
+          const points: VolumePoint[] = Array.from(w.byDay.entries())
+            .map(([day, volume]) => ({ volume, at: new Date(`${day}T00:00:00`) }));
+          const avgRate = computeRollingAverageRateFromDeltas(points, span, MIN_ELAPSED_DAYS, 86_400_000);
+          return {
+            well_id: w.well_id,
+            volume_m3: Math.round(w.volume_m3 * 100) / 100,
+            today_volume_m3: Math.round(w.today_volume_m3 * 100) / 100,
+            previous_volume_m3: w.previous_volume_m3 !== null ? Math.round(w.previous_volume_m3 * 100) / 100 : null,
+            previous_event_date: w.previous_event_date,
+            avg_rate_m3_per_day: avgRate,
+          };
+        });
 
       return { by_well: byWellList };
     },
@@ -327,6 +355,18 @@ export function BlendingForm() {
   const prevByWell = useMemo(() => {
     const m: Record<string, { volume: number | null; date: string | null }> = {};
     for (const w of volumeData?.by_well ?? []) m[w.well_id] = { volume: w.previous_volume_m3 ?? null, date: w.previous_event_date ?? null };
+    return m;
+  }, [volumeData]);
+  // Real rolling-average rate (m³/day), distinct from prevByWell's single
+  // most-recent-day snapshot above. Was: avgVol was literally just
+  // prevByWell[...].volume reused — i.e. "the average" was one prior day's
+  // volume, not an average of anything, and not normalized for gap days
+  // between blending events (blending_events only stores a DATE, so this is
+  // day-granularity, not hourly, like the other odometer inputs — see
+  // computeRollingAverageRateFromDeltas's call above with 86_400_000ms/day).
+  const avgRateByWell = useMemo(() => {
+    const m: Record<string, number | null> = {};
+    for (const w of volumeData?.by_well ?? []) m[w.well_id] = w.avg_rate_m3_per_day ?? null;
     return m;
   }, [volumeData]);
 
@@ -438,7 +478,7 @@ export function BlendingForm() {
                     todayVolume={todayByWell[w.id] ?? 0}
                     previousVolume={prevByWell[w.id]?.volume ?? null}
                     previousDate={prevByWell[w.id]?.date ?? null}
-                    avgVol={prevByWell[w.id]?.volume ?? null}
+                    avgVol={avgRateByWell[w.id] ?? null}
                     dbLatestRaw={latestRawByWell[w.id] ?? null}
                     onSaved={() => {
                       qc.invalidateQueries({ queryKey: ['blending-today', plantId] });
@@ -557,6 +597,8 @@ function BlendingRow({
   const prevCumulative: number | null =
     prevRawReading?.reading ?? dbLatestRaw?.reading ?? previousVolume ?? null;
 
+  const eventDate = customDt.slice(0, 10);
+
   const deltaRaw = volume !== ''
     ? prevCumulative != null ? +volume - prevCumulative : null
     : null;
@@ -568,11 +610,23 @@ function BlendingRow({
 
   // ── Warning flags (mirrors well / locator logic) ───────────────────────────
   const blendBelowPrev = deltaRaw != null && deltaRaw < 0;
-  // Above-average: compare current entry volume against avgVol (or previousVolume as
-  // fallback reference) scaled by the shared ALERTS multiplier.
-  const avgRef = avgVol ?? previousVolume;
-  const blendHighVol = avgRef != null && deltaRaw != null
-    && deltaRaw > avgRef * ALERTS.avg_multiplier_warn;
+  // Q = V / t at day granularity — blending_events is keyed one row per
+  // (well, day), so "t" here is days since the previous row for this well,
+  // not a fixed 1. avgVol is now avgRateByWell (m³/day, a real rolling
+  // average — see the query above), not the single previous day's volume it
+  // used to be, so a gap of several days between blending events no longer
+  // makes every entry after it look like a huge, false spike.
+  const prevDateStr = prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate ?? null;
+  const daysElapsedBlend = prevDateStr
+    ? (new Date(`${eventDate}T00:00:00`).getTime() - new Date(`${prevDateStr}T00:00:00`).getTime()) / 86_400_000
+    : null;
+  const blendRate = computeRate(deltaRaw, daysElapsedBlend, MIN_ELAPSED_DAYS);
+  const deviationBlend = classifyDeviation(blendRate, avgVol ?? null, ALERTS.blending_spike_multiplier);
+  const blendHighVol = deviationBlend.tier !== 'ok';
+  // Required whenever the rate falls outside ±50% of the rolling average
+  // (see flowRateGuards.ts) — cleared after every successful save.
+  const [anomalyRemark, setAnomalyRemark] = useState('');
+  const anomalyRemarkRequired = blendHighVol && !anomalyRemark.trim();
 
   // ── Status chip: "Not logged" → "Ready to save" → "Logged today" ──────────
   // Replaces having to parse "prev: — · today: 0 m³ logged" — the color alone
@@ -593,8 +647,10 @@ function BlendingRow({
   }
 
   const save = async () => {
-    const eventDate = customDt.slice(0, 10);
-
+    if (anomalyRemarkRequired) {
+      toast.error(`${well.name}: this reading is outside the normal range — add a remark before saving.`);
+      return;
+    }
     // Client-side preview/guard only — mirrors deltaRaw when a previous
     // reading is known, or the raw entry itself as a placeholder when this
     // looks like a first-ever reading. What actually gets stored is decided
@@ -612,12 +668,12 @@ function BlendingRow({
     }
     // Warn on suspicious values (same behaviour as locator / well — save proceeds).
     if (blendBelowPrev) toast.info(`${well.name}: reading below previous — saved anyway`);
-    else if (blendHighVol) toast.info(`${well.name}: blending volume unusually high vs. reference — saved anyway`);
     setSaving(true);
     try {
       const { data: existing } = await (supabase.from('blending_events' as any) as any)
         .select('id').eq('well_id', well.id).eq('event_date', eventDate).limit(1);
       let error: any;
+      let savedId: string | null = existing?.length ? existing[0].id : null;
       if (existing?.length) {
         // previous_reading intentionally omitted on UPDATE — carries forward
         // unchanged (trg_blending_set_reading only auto-resolves it on
@@ -630,13 +686,38 @@ function BlendingRow({
             raw_meter_reading: +volume })
           .eq('id', existing[0].id));
       } else {
-        ({ error } = await (supabase.from('blending_events' as any) as any)
+        const { data: inserted, error: insertErr } = await (supabase.from('blending_events' as any) as any)
           .insert({ well_id: well.id, plant_id: plantId, well_name: well.name, plant_name: plantName,
             event_date: eventDate, reading_datetime: new Date(customDt).toISOString(),
             raw_meter_reading: +volume,
-            ...(prevCumulative != null ? { previous_reading: prevCumulative } : {}) }));
+            ...(prevCumulative != null ? { previous_reading: prevCumulative } : {}) })
+          .select('id').single();
+        error = insertErr;
+        savedId = (inserted as any)?.id ?? null;
       }
       if (error) throw error;
+
+      // Best-effort — the reading itself already saved successfully above,
+      // this never blocks or rolls it back. See flowRateGuards.ts. Note:
+      // blending_events has no norm_status column, so unlike locator/well/
+      // product/RO, a 'critical' reading here still isn't auto-queued for
+      // supervisor review — just remarked and visually flagged. See the
+      // `escalates={false}` passed to AnomalyRemarkBanner below.
+      if (blendHighVol && savedId) {
+        void submitAnomalyRemark({
+          table_name: 'blending_events',
+          record_id: savedId,
+          plant_id: plantId,
+          tier: deviationBlend.tier as 'needs_remark' | 'critical',
+          direction: deviationBlend.direction!,
+          deviation_pct: deviationBlend.deviationPct!,
+          flow_rate: deviationBlend.rate,
+          avg_flow_rate: deviationBlend.avgRate,
+          rate_unit: 'm3/day',
+          remark_text: anomalyRemark,
+        });
+      }
+      setAnomalyRemark('');
 
       // Persist the cumulative meter reading locally so the next save can
       // compute the correct Δ. Purely a same-device UX cache now — the
@@ -777,29 +858,34 @@ function BlendingRow({
       )}
 
       {/* Row 5: Save button — full-width on mobile */}
-      <Button onClick={save} disabled={saving || !volumeChanged}
+      <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired}
         className={isMobile ? 'w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-white hover:bg-primary/90'}>
         {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : 'Save'}
       </Button>
 
       {/* Warning banner */}
-      {volume !== '' && (blendBelowPrev || blendHighVol) && (
+      {volume !== '' && blendBelowPrev && (
         <div className="flex flex-col gap-1 text-xs bg-warn-soft border border-warn px-3 py-2 rounded-lg">
           <span className="flex items-center gap-1.5 font-semibold text-warn">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Verify before saving
           </span>
-          {blendBelowPrev && (
-            <span className="text-warn pl-5">
-              Reading is below the previous value — possible meter rollback or data entry error.
-            </span>
-          )}
-          {blendHighVol && (
-            <span className="text-warn pl-5">
-              Volume is more than {Math.round(ALERTS.avg_multiplier_warn * 100 - 100)}% above the reference — unusually high.
-            </span>
-          )}
+          <span className="text-warn pl-5">
+            Reading is below the previous value — possible meter rollback or data entry error.
+          </span>
         </div>
+      )}
+
+      {volume !== '' && !blendBelowPrev && blendHighVol && (
+        <AnomalyRemarkBanner
+          result={deviationBlend}
+          label={well.name}
+          unit="m3/day"
+          windowDays={14}
+          remark={anomalyRemark}
+          onRemarkChange={setAnomalyRemark}
+          escalates={false}
+        />
       )}
 
       {showHistory && (
