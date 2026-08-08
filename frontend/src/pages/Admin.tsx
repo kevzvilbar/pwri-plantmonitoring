@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermission } from '@/hooks/usePermission';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { ShieldAlert, Users, Building2, ClipboardList, Database, ClipboardCheck, ArrowRight } from 'lucide-react';
@@ -71,7 +72,9 @@ export default function Admin() {
   // Count visible tabs to size the grid correctly
   // Manager sees: Plants, Audit (2)
   // Admin sees:   Users, Plants, Audit, Migrations (4)
-  const tabCount = isAdmin ? 4 : 2;
+  const canViewUsers = usePermission('admin_users', 'view');
+  const canViewMigrations = usePermission('admin_migrations', 'view');
+  const tabCount = canViewUsers ? 4 : 2;
 
   return (
     <div className="space-y-4 animate-fade-in" data-testid="admin-page">
@@ -80,9 +83,9 @@ export default function Admin() {
         subtitle="Manage users, plants, and the deletion audit trail. Soft-delete keeps audit history; hard-delete is blocked while dependencies exist (Admin can override with explicit confirmation)."
       />
 
-      <Tabs defaultValue={isAdmin ? 'users' : 'plants'}>
+      <Tabs defaultValue={canViewUsers ? 'users' : 'plants'}>
         <TabsList className={`grid grid-cols-${tabCount} w-full`}>
-          <TabsTrigger value="users" disabled={!isAdmin} data-testid="admin-tab-users">
+          <TabsTrigger value="users" disabled={!canViewUsers} data-testid="admin-tab-users">
             <Users className="h-3.5 w-3.5 mr-1" /> Users
           </TabsTrigger>
           <TabsTrigger value="plants" data-testid="admin-tab-plants">
@@ -91,7 +94,7 @@ export default function Admin() {
           <TabsTrigger value="audit" data-testid="admin-tab-audit">
             <ClipboardList className="h-3.5 w-3.5 mr-1" /> Audit log
           </TabsTrigger>
-          {isAdmin && (
+          {canViewMigrations && (
             <TabsTrigger value="migrations" data-testid="admin-tab-migrations">
               <Database className="h-3.5 w-3.5 mr-1" /> Migrations
             </TabsTrigger>
@@ -109,7 +112,7 @@ export default function Admin() {
           </a>
         </div>
 
-        {isAdmin && (
+        {canViewUsers && (
           <TabsContent value="users" className="mt-3">
             <UsersPanel />
           </TabsContent>
@@ -120,7 +123,7 @@ export default function Admin() {
         <TabsContent value="audit" className="mt-3">
           <AuditLogPanel />
         </TabsContent>
-        {isAdmin && (
+        {canViewMigrations && (
           <TabsContent value="migrations" className="mt-3">
             <MigrationsPanel />
           </TabsContent>

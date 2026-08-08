@@ -67,11 +67,15 @@ export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   profile: { view: ALL },
 };
 
-// Modules where Data Analyst sees a redirect instead of the page itself.
-// Mirrors the banner logic already in Admin.tsx (lines ~39-46).
+// Data Analyst (without Manager) never reaches any admin_* tab — Admin.tsx
+// redirects once at page entry, before tabs render. Modeled per-module here
+// (rather than as a single page-level flag) so a future custom-role editor
+// can still show "redirected" instead of a raw deny on each row.
 export const REDIRECTS: Partial<Record<ModuleKey, { for: Role; to: string }>> = {
+  admin_users: { for: 'Data Analyst', to: '/data-corrections' },
   admin_plants: { for: 'Data Analyst', to: '/data-corrections' },
   admin_audit: { for: 'Data Analyst', to: '/data-corrections' },
+  admin_migrations: { for: 'Data Analyst', to: '/data-corrections' },
 };
 
 export function hasPermission(roles: Role[], moduleKey: ModuleKey, action: Action = 'view'): boolean {
