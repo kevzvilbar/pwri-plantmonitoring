@@ -198,6 +198,24 @@ export function fmtRelative(d: string | Date | null | undefined): string {
   return fmtDate(d);
 }
 
+/**
+ * Tone + label for a "last reading" freshness badge: accent within a day,
+ * warn 1–2 days, danger beyond that. Deliberately not called a "flag" —
+ * that word already means the derived-locator review-flag workflow
+ * (locator_derived_review_flags) elsewhere in this app. Shared by the
+ * Operations entry card and the Plant detail asset card for the same
+ * locator, so the two screens never disagree about how stale it is.
+ */
+export function lastReadingFreshness(d: string | Date | null | undefined): {
+  tone: 'accent' | 'warn' | 'danger' | 'muted';
+  label: string;
+} {
+  if (!d) return { tone: 'muted', label: 'No reading yet' };
+  const hours = (Date.now() - new Date(d).getTime()) / 3_600_000;
+  const tone = hours < 24 ? 'accent' : hours < 48 ? 'warn' : 'danger';
+  return { tone, label: `Last reading: ${fmtRelative(d)}` };
+}
+
 // ── Toast message helpers ─────────────────────────────────────────────────────
 // Standardizes save-confirmation messages across Operations, ROTrains, etc.
 

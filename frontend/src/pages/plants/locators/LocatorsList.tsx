@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, ShieldAlert, CalendarClock, ArrowUpRight } from 'lucide-react';
 // Icon-audit fix: "Replace Meter" and "Replacement History" now use the
 // purpose-built ChangeMeterIcon instead of Wrench, matching ProductMeters.tsx
 // / PowerMeters.tsx, which already use it for the same action.
@@ -37,6 +37,7 @@ import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { DataState } from '@/components/DataState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
+import { lastReadingFreshness } from '@/lib/format';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -52,8 +53,9 @@ import { ReasonDialog } from '@/components/ReasonDialog';
 import type { ReasonCategory, LockReasonCategory } from '@/lib/reasonCodes';
 import { LOCK_REASON_CATEGORIES } from '@/lib/reasonCodes';
 
-export function LocatorsList({ plantId }: { plantId: string }) {
+export function LocatorsList({ plantId, highlightId }: { plantId: string; highlightId?: string | null }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isManager, isAdmin, user, activeOperator } = useAuth();
   const [adding, setAdding] = useState(false);
   const [showLocatorCsv, setShowLocatorCsv] = useState(false);
@@ -192,6 +194,37 @@ export function LocatorsList({ plantId }: { plantId: string }) {
     },
   });
 
+  // "Last reading" per locator, for the freshness badge — same view a
+  // migration added for this feature (locator_readings_latest), so this
+  // reads one row per locator instead of the full history.
+  const { data: latestReadings } = useQuery({
+    queryKey: ['locators-latest-readings', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('locator_readings_latest' as any) as any)
+        .select('locator_id, reading_datetime')
+        .eq('plant_id', plantId);
+      return (data ?? []) as { locator_id: string; reading_datetime: string }[];
+    },
+  });
+  const latestByLocator = useMemo(() => {
+    const map: Record<string, string> = {};
+    latestReadings?.forEach(r => { map[r.locator_id] = r.reading_datetime; });
+    return map;
+  }, [latestReadings]);
+
+  // Scroll to and briefly highlight the card linked to from Operations.
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [pulseId, setPulseId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = cardRefs.current[highlightId];
+    if (!el) return; // locators list hasn't rendered this card yet — next render will retry
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPulseId(highlightId);
+    const t = setTimeout(() => setPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, locators]);
+
   // Admin selection / bulk-delete state.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -297,8 +330,11 @@ export function LocatorsList({ plantId }: { plantId: string }) {
         return (
           <Card
             key={l.id}
+            ref={(el) => { cardRefs.current[l.id] = el; }}
             className={`p-3 hover:shadow-elev border-l-2 transition-colors ${
               checked ? 'ring-1 ring-primary' : ''
+            } ${
+              pulseId === l.id ? 'ring-2 ring-accent shadow-elev' : ''
             } ${
               l.status === 'Active'
                 ? 'border-l-emerald-400 dark:border-l-emerald-600'
@@ -339,6 +375,38 @@ export function LocatorsList({ plantId }: { plantId: string }) {
                         </div>
                       );
                     })()}
+                    {/* "Last reading" freshness — see lastReadingFreshness()
+                        in lib/format.ts for why this isn't called a "flag".
+                        Same data + thresholds as the Operations entry card,
+                        via locator_readings_latest. */}
+                    {(() => {
+                      const fresh = lastReadingFreshness(latestByLocator[l.id]);
+                      return (
+                        <div className="mt-1">
+                          <StatusPill tone={fresh.tone}>
+                            <CalendarClock className="h-2.5 w-2.5" />
+                            {fresh.label}
+                          </StatusPill>
+                        </div>
+                      );
+                    })()}
+                    {/* Cross-navigation to this locator's entry card in
+                        Operations. A separate small link, not a click on
+                        the card body — the card already owns clicks for
+                        the inline history toggle above. */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/operations?tab=locator&highlight=${l.id}`);
+                      }}
+                      title="Open this locator in Operations"
+                      aria-label="Open this locator in Operations"
+                      className="mt-1 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+                    >
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                      Operations
+                    </button>
                     {/* Meter lock state — independent of the Active/Inactive
                         status pill to the right. Managers get a checkbox to
                         toggle it (checking it opens a reason dialog, same as

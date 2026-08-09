@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useRef, useId, type ReactNode } from 'rea
 // When is_meter_replacement is toggled we call deltaCache.invalidate(trainId)
 // to force a Tier-2 raw recompute on the next render.
 import { deltaCache } from '@/lib/deltaCache';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -694,7 +694,29 @@ function PlantDetail({ plantId }: { plantId: string }) {
   const qc = useQueryClient();
   const plant = plants?.find(p => p.id === plantId);
 
-  const [tab, setTab] = useState<'locators' | 'wells' | 'product' | 'trains' | 'power' | 'configuration'>('locators');
+  // URL-synced tab (mirrors pages/operations/index.tsx's pattern) so a link
+  // from Operations — "Open this locator in Plant detail" — has somewhere
+  // reliable to land, and so the tab survives a refresh or the back button.
+  type PlantTab = 'locators' | 'wells' | 'product' | 'trains' | 'power' | 'configuration';
+  const VALID_PLANT_TABS = new Set<PlantTab>(['locators', 'wells', 'product', 'trains', 'power', 'configuration']);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab') as PlantTab | null;
+  const [tab, setTabState] = useState<PlantTab>(urlTab && VALID_PLANT_TABS.has(urlTab) ? urlTab : 'locators');
+  useEffect(() => {
+    if (urlTab && VALID_PLANT_TABS.has(urlTab) && urlTab !== tab) setTabState(urlTab);
+  }, [urlTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setTab = (next: PlantTab) => {
+    setTabState(next);
+    const sp = new URLSearchParams(searchParams);
+    sp.set('tab', next);
+    // Switching tabs by hand clears any pending highlight from a previous link.
+    sp.delete('highlight');
+    setSearchParams(sp, { replace: true });
+  };
+  // Which card to scroll to and briefly highlight after landing here via a
+  // cross-navigation link (currently only Locators sends one — see
+  // LocatorSection.tsx's "Plant detail" button).
+  const highlightId = searchParams.get('highlight');
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoSaving, setInfoSaving] = useState(false);
   const [infoForm, setInfoForm] = useState({ name: '', address: '', capacity: '' });
@@ -949,7 +971,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
         ))}
       </div>
 
-      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} /></div>
+      <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} /></div>
       <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>

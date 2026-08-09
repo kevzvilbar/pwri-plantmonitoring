@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PlantSelector } from '@/components/PlantSelector';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,13 +20,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
-import { fmtSaveToast } from '@/lib/format';
+import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, RefreshCw, PencilLine, ShieldAlert, ArrowUpRight } from 'lucide-react';
 import { DerivedMeterIcon } from '@/components/icons/water-icons';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
@@ -455,12 +455,20 @@ async function insertDerivedOverrideRows(
 // Well readings:
 // well_name*, current_reading*, reading_datetime, previous_reading, power_meter_reading, solar_meter_reading
 
-export function LocatorReadingForm() {
+export function LocatorReadingForm({ highlightId }: { highlightId?: string | null } = {}) {
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+
+  // Scroll to and briefly highlight the row linked to from Plant detail.
+  // Desktop only: MobileCarousel (below) shows one locator at a time with
+  // no way to jump to a specific id from outside it yet — see the note
+  // where it's rendered. Worth fixing, but it's a shared component used by
+  // Power/Blending/Product too, so that's a follow-up, not part of this.
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [pulseId, setPulseId] = useState<string | null>(null);
 
   // Fetch per-plant locator reading limit from Plant Configuration (manager-configurable)
   const { data: locatorReadingLimit } = useQuery({
@@ -497,6 +505,16 @@ export function LocatorReadingForm() {
     },
     enabled: !!plantId,
   });
+
+  useEffect(() => {
+    if (!highlightId || isMobile) return;
+    const el = rowRefs.current[highlightId];
+    if (!el) return; // row not rendered yet — next render (once locators load) will retry
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPulseId(highlightId);
+    const t = setTimeout(() => setPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, isMobile, locators]);
 
   // BUG FIX: locator_readings has NO plant_id column — filtering by it returns 0 rows.
   // Two-step query: resolve active locator IDs for this plant, then fetch readings
@@ -686,6 +704,8 @@ export function LocatorReadingForm() {
                   maxReadingsPerDay={maxLocatorReadings}
                   gapReason={gapReasonsByLocator[l.id] ?? null}
                   onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['locator-gap-reasons', plantId, todayDateStr] })}
+                  rowRef={(el) => { rowRefs.current[l.id] = el; }}
+                  pulsing={pulseId === l.id}
                 />
               )}
             />
@@ -716,7 +736,7 @@ export function LocatorReadingForm() {
 
 function LocatorRow({
   locator, plantId, previous, previousDt, latestReading, todayReadings, avgVol, userId, onSaved, isManagerOrAdmin, maxReadingsPerDay = 3,
-  gapReason, onGapReasonSaved,
+  gapReason, onGapReasonSaved, rowRef, pulsing,
 }: {
   locator: any; plantId: string; previous: number | null; previousDt: string | null;
   latestReading?: any | null;
@@ -726,6 +746,8 @@ function LocatorRow({
   maxReadingsPerDay?: number;
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  pulsing?: boolean;
 }) {
   const isMobile = useIsMobile();
   const qc = useQueryClient();
@@ -817,6 +839,8 @@ function LocatorRow({
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
   const atLimit    = !editingId && todayCount >= maxReadingsPerDay;
+  const freshness  = lastReadingFreshness(previousDt);
+  const navigate   = useNavigate();
 
   // ── Alert state for odometer drum ─────────────────────────────────────────
   const odometerAlert: OdometerAlertState =
@@ -1297,11 +1321,35 @@ function LocatorRow({
   );
 
   return (
-    <div className="px-4 py-3 space-y-2.5">
+    <div
+      ref={rowRef}
+      className={`px-4 py-3 space-y-2.5 transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset' : ''}`}
+    >
       {/* Row 1: Name + editing badge (full width — no truncation) */}
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground break-words">{locator.name}</div>
+          {/* "Last reading" freshness — see lastReadingFreshness() above for
+              why this isn't called a "flag". */}
+          <StatusPill tone={freshness.tone}>
+            <CalendarClock className="h-3 w-3" />
+            {freshness.label}
+          </StatusPill>
+          {/* Cross-navigation to the same locator's card in Plant detail
+              (Config tab, meter brand/serial, "fed by" meter, lock state).
+              Deliberately a separate small icon, not a click on the whole
+              card — this row already owns clicks for status toggle, edit,
+              delete, and the reading input itself. */}
+          <button
+            type="button"
+            onClick={() => navigate(`/plants/${plantId}?tab=locators&highlight=${locator.id}`)}
+            title="Open this locator in Plant detail"
+            aria-label="Open this locator in Plant detail"
+            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+            Plant detail
+          </button>
           {/* Meter lock state — separate concept from the supervisor-approval
               "Locked" badge further down this card. Intentionally a
               different icon (ShieldAlert, not Lock) and tone so the two
