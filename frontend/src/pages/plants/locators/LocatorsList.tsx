@@ -296,7 +296,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
           {isAdmin && locators && locators.length > 0 && (
             <button
               onClick={toggleAll}
-              className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+              className="text-2xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
               data-testid="locators-toggle-all"
             >
               {selected.size === locators.length ? 'Clear' : 'Select all'}
@@ -445,7 +445,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
                     type="button"
                     onClick={(e) => { e.stopPropagation(); toggleLocatorStatus(l); }}
                     title={isManager ? `Click to toggle status (currently ${l.status})` : l.status}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full shrink-0 border transition-colors ${
                       l.status === 'Active'
                         ? 'text-accent bg-accent-soft border-accent/30 hover:bg-accent-soft/70'
                         : 'text-muted-foreground bg-muted border-border hover:bg-muted/80'
@@ -471,7 +471,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
             <div className="mt-1.5 flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => setDetail(l.id)}
-                className="text-[11px] text-primary hover:underline inline-flex items-center gap-0.5"
+                className="text-2xs text-primary hover:underline inline-flex items-center gap-0.5"
               >
                 Details →
               </button>
@@ -636,7 +636,7 @@ function LocatorDetail({ locatorId, onBack }: { locatorId: string; onBack: () =>
               </a>
             )}
           </div>
-          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${
+          <span className={`inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${
             locator.status === 'Active'
               ? 'text-accent bg-accent-soft border-accent/30'
               : 'text-muted-foreground bg-muted border-border'

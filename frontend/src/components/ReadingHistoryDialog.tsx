@@ -834,13 +834,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <p className="font-medium text-foreground">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-[11px]">Date &amp; Time</Label>
+                <Label className="text-2xs">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
                   className="h-8 text-xs" />
               </div>
               <div>
-                <Label className="text-[11px]">
+                <Label className="text-2xs">
                   {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
@@ -849,7 +849,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               </div>
               {module === 'well' && (
                 <div>
-                  <Label className="text-[11px]">Power Meter (kWh)</Label>
+                  <Label className="text-2xs">Power Meter (kWh)</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -857,7 +857,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-[11px]">TDS (ppm)</Label>
+                  <Label className="text-2xs">TDS (ppm)</Label>
                   <Input type="number" step="any" value={editRow.value4 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value4: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -865,7 +865,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-[11px]">NTU</Label>
+                  <Label className="text-2xs">NTU</Label>
                   <Input type="number" step="any" value={editRow.value6 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -873,7 +873,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-[11px]">Pressure (psi)</Label>
+                  <Label className="text-2xs">Pressure (psi)</Label>
                   <Input type="number" step="any" value={editRow.value5 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -881,7 +881,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'power' && (
                 <div>
-                  <Label className="text-[11px]">Solar Power Reading (kWh)</Label>
+                  <Label className="text-2xs">Solar Power Reading (kWh)</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -908,7 +908,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                   }}
                   className="h-3.5 w-3.5 accent-kpi-solar"
                 />
-                <span className="text-[11px] text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
+                <span className="text-2xs text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
               </label>
             )}
             <CorrectionReasonField
@@ -1178,13 +1178,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           {/* Meter column placeholder (hidden in filtered view) */}
                           <td />
                           {/* Reading */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-[11px]">
+                          <td className="px-3 py-1.5 text-right font-mono-num text-2xs">
                             <span className={isSolar ? 'text-kpi-solar' : 'text-kpi-grid'}>
                               {curr != null ? fmtNum(curr) : '—'}
                             </span>
                           </td>
                           {/* Δ raw */}
-                          <td className="px-3 py-1.5 text-right font-mono-num text-[11px]">
+                          <td className="px-3 py-1.5 text-right font-mono-num text-2xs">
                             {isRepl
                               ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0</span>
                               : rawDelta != null ? fmtNum(rawDelta) : '—'
@@ -1195,7 +1195,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             {mMult !== 1 ? `×${mMult}` : '×1'}
                           </td>
                           {/* Effective kWh */}
-                          <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-[11px]',
+                          <td className={['px-3 py-1.5 text-right font-mono-num font-medium text-2xs',
                             effective != null && effective < 0 ? 'text-destructive' : isSolar ? 'text-kpi-solar' : 'text-kpi-grid',
                           ].join(' ')}>
                             {effective != null ? fmtNum(effective) : '—'}
@@ -1293,17 +1293,17 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               {anyEditable && <td />}
                               {/* Meter label */}
                               <td className="px-3 py-1 pl-6">
-                                <span className="flex items-center gap-1 text-[11px]">
+                                <span className="flex items-center gap-1 text-2xs">
                                   <GridPylonIcon className="h-2.5 w-2.5 text-kpi-grid shrink-0" />
                                   <span className="text-muted-foreground truncate">{mLabel}</span>
                                 </span>
                               </td>
                               {/* Reading */}
-                              <td className="px-3 py-1 text-right font-mono-num text-kpi-grid text-[11px]">
+                              <td className="px-3 py-1 text-right font-mono-num text-kpi-grid text-2xs">
                                 {curr != null ? fmtNum(curr) : '—'}
                               </td>
                               {/* Δ raw */}
-                              <td className="px-3 py-1 text-right font-mono-num text-[11px]">
+                              <td className="px-3 py-1 text-right font-mono-num text-2xs">
                                 {isGridRepl
                                   ? <span className="text-kpi-grid font-medium">0</span>
                                   : rawDelta != null ? fmtNum(rawDelta) : '—'
@@ -1315,7 +1315,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                               </td>
                               {/* Effective kWh */}
                               <td className={[
-                                'px-3 py-1 text-right font-mono-num font-medium text-[11px]',
+                                'px-3 py-1 text-right font-mono-num font-medium text-2xs',
                                 effective != null && effective < 0 ? 'text-destructive' : 'text-kpi-grid',
                               ].join(' ')}>
                                 {effective != null ? fmtNum(effective) : '—'}
@@ -1353,17 +1353,17 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             {anyEditable && <td />}
                             {/* Meter label */}
                             <td className="px-3 py-1 pl-6">
-                              <span className="flex items-center gap-1 text-[11px]">
+                              <span className="flex items-center gap-1 text-2xs">
                                 <span className="text-kpi-solar text-xs leading-none">☀</span>
                                 <span className="text-muted-foreground">Solar</span>
                               </span>
                             </td>
                             {/* Reading */}
-                            <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-[11px]">
+                            <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-2xs">
                               {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
                             </td>
                             {/* Δ Solar */}
-                            <td className="px-3 py-1 text-right font-mono-num text-[11px]">
+                            <td className="px-3 py-1 text-right font-mono-num text-2xs">
                               {isSolarRepl
                                 ? <span className="text-kpi-solar font-medium">0</span>
                                 : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)

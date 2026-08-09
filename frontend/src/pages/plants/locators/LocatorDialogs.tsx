@@ -248,7 +248,7 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               </SelectContent>
             </Select>
             {form.is_derived && (
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className="text-2xs text-muted-foreground mt-1">
                 Locked to Direct — this locator has no physical meter, so there's no
                 cumulative reading to enter or diff against.
               </p>
@@ -315,7 +315,7 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-2xs text-muted-foreground mt-1">
                   Can be a meter on a different plant — this is exactly how Hamas (SRP)
                   derives from the Mambaling product meter today. Sibling locators are
                   everything else whose "Supplied by" above points at the same mother meter.
@@ -524,7 +524,7 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-2xs text-muted-foreground mt-1">
                   Can be a meter on a different plant. Sibling locators are everything
                   else whose own "Supplied by" above points at this same meter.
                 </p>

@@ -682,7 +682,7 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
               <MapPin className="h-3.5 w-3.5 text-kpi-locator" />
               <span className="text-xs font-semibold text-foreground/80 tracking-tight">Active Locators</span>
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
+            <span className="text-2xs text-muted-foreground tabular-nums bg-muted px-2 py-0.5 rounded-full">
               {locators?.length ?? 0} total
             </span>
           </div>
@@ -1399,7 +1399,7 @@ function LocatorRow({
         {/* Date picker always visible, not fighting for space with the name */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               // Clicking inside the input's own box only focuses/places the
               // cursor in most browsers — it does not open the picker
@@ -1715,7 +1715,7 @@ function SharedPowerMeterRow({
         {/* Date picker */}
         <label className="shrink-0 cursor-pointer relative">
           <span
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
+            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground bg-muted border border-border/70 rounded-md px-3.5 py-1.5 font-mono-num whitespace-nowrap hover:bg-muted/80 transition-colors"
             onClick={(e) => {
               e.preventDefault();
               const el = dtInputRef.current;
