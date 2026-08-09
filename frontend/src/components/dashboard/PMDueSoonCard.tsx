@@ -67,13 +67,21 @@ export function PMDueSoonCard({ plantIds }: Props) {
   // PERF FIX: Add .limit() to avoid loading unnecessary template records.
   // Only fetch the most recently modified templates since we only display top 3.
   // Fetch slightly more (MAX_ITEMS * 5) to account for filtering by date range.
+  //
+  // ── Bug fix ──────────────────────────────────────────────────────────────
+  // This ordered by 'updated_at', but checklist_templates has no such column
+  // (only created_at — see 20260419_initial_schema_enums_and_roles.sql) and
+  // no code path ever updates a template row (Maintenance.tsx only inserts),
+  // so PostgREST rejected every query with 42703 "column ... does not exist".
+  // Ordering by created_at gives the same "most recently added" result and
+  // matches actual behavior, with no schema change required.
   const { data: templates } = useQuery({
     queryKey: ['pm-templates', plantIds],
     queryFn: async () => {
       let q = supabase
         .from('checklist_templates')
         .select('id, plant_id, equipment_name, frequency, category, schedule_start_date')
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(MAX_ITEMS * 5);  // PERF: Limit query to ~15 records instead of all
       if (plantIds.length) q = q.in('plant_id', plantIds);
       const { data } = await q;
