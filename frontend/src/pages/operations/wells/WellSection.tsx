@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PlantSelector } from '@/components/PlantSelector';
 import { useBlendingWells } from '../shared';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,13 +21,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
-import { fmtSaveToast } from '@/lib/format';
+import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, MessageCircleOff, CalendarClock, ArrowUpRight } from 'lucide-react';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -218,12 +218,18 @@ async function insertWellReadings(
   return { count, errors };
 }
 
-export function WellReadingForm() {
+export function WellReadingForm({ highlightId }: { highlightId?: string | null } = {}) {
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+
+  // Scroll to and briefly highlight the row linked to from Plant detail.
+  // Desktop only — see the matching note in LocatorSection.tsx's
+  // LocatorReadingForm; MobileCarousel doesn't support jumping to an id yet.
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [pulseId, setPulseId] = useState<string | null>(null);
 
   // Load plant meter config to detect shared power meter groups
   const { data: meterConfig } = useQuery({
@@ -266,6 +272,16 @@ export function WellReadingForm() {
       : [],
     enabled: !!plantId,
   });
+
+  useEffect(() => {
+    if (!highlightId || isMobile) return;
+    const el = rowRefs.current[highlightId];
+    if (!el) return; // row not rendered yet — next render (once wells load) will retry
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPulseId(highlightId);
+    const t = setTimeout(() => setPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, isMobile, wells]);
 
   const { data: recentReadings } = useQuery({
     queryKey: ['op-well-recent', plantId],
@@ -321,6 +337,34 @@ export function WellReadingForm() {
     }
     return { latestByWell: latest, todayByWell: today, avgByWell: avgs };
   }, [recentReadings]);
+
+  // "Last reading" freshness — display-only, deliberately NOT fed into
+  // latestByWell above. recentReadings is windowed to 30 days (kept as-is:
+  // previousMeter/previousPower/hoursElapsedWell derive from it and feed the
+  // save-time delta + flow-rate deviation check, which isn't something to
+  // change as a side effect of a badge). A well last read 45 days ago would
+  // otherwise show "No reading yet" here instead of "45 days ago" — this
+  // query, sourced from the unbounded well_readings_latest view, is only
+  // to get that specific message right.
+  const { data: freshWellReadings } = useQuery({
+    queryKey: ['op-well-latest-fresh', plantId],
+    meta: { silent: true },
+    queryFn: async () => {
+      if (!plantId) return [];
+      const { data, error } = await (supabase.from('well_readings_latest' as any) as any)
+        .select('well_id, reading_datetime')
+        .eq('plant_id', plantId);
+      if (error) { console.warn('[op-well-latest-fresh] query failed:', error.message); return []; }
+      return (data ?? []) as { well_id: string; reading_datetime: string }[];
+    },
+    enabled: !!plantId,
+    refetchInterval: 120_000,
+  });
+  const freshDtByWell = useMemo(() => {
+    const map: Record<string, string> = {};
+    freshWellReadings?.forEach(r => { map[r.well_id] = r.reading_datetime; });
+    return map;
+  }, [freshWellReadings]);
 
   const { data: blendingData } = useBlendingWells(plantId);
   const blendingSet = useMemo(
@@ -452,6 +496,7 @@ export function WellReadingForm() {
                       previousMeter={latestByWell[item.w.id]?.current_reading ?? null}
                       previousPower={item.previousPower}
                       previousDt={latestByWell[item.w.id]?.reading_datetime ?? null}
+                      freshDt={freshDtByWell[item.w.id] ?? null}
                       avgVol={avgByWell[item.w.id] ?? null}
                       todayReadings={todayByWell[item.w.id] ?? []}
                       userId={user?.id}
@@ -463,6 +508,8 @@ export function WellReadingForm() {
                       sharedPower={item.sharedPower}
                       gapReason={gapReasonsByWell[item.w.id] ?? null}
                       onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['well-gap-reasons', plantId, todayDateStr] })}
+                      rowRef={(el) => { rowRefs.current[item.w.id] = el; }}
+                      pulsing={pulseId === item.w.id}
                     />
                   )}
                 />
@@ -494,12 +541,16 @@ export function WellReadingForm() {
 }
 
 function WellRow({
-  well, plantId, previousMeter, previousPower, previousDt, avgVol, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin, canAutoApprove, isInSharedPowerGroup,
-  sharedPower, gapReason, onGapReasonSaved,
+  well, plantId, previousMeter, previousPower, previousDt, freshDt, avgVol, todayReadings, userId, isBlending, onSaved, isManagerOrAdmin, canAutoApprove, isInSharedPowerGroup,
+  sharedPower, gapReason, onGapReasonSaved, rowRef, pulsing,
 }: {
   well: any; plantId: string;
   previousMeter: number | null; previousPower: number | null;
   previousDt: string | null; avgVol: number | null;
+  /** Latest reading time from the unbounded well_readings_latest view —
+   *  display-only, for the freshness badge. See the note where the query
+   *  that produces this lives, in WellReadingForm above. */
+  freshDt?: string | null;
   todayReadings: any[]; userId: string | undefined;
   isBlending: boolean; onSaved: () => void;
   isManagerOrAdmin: boolean;
@@ -509,8 +560,11 @@ function WellRow({
   sharedPower?: { groupName: string; primaryWellId: string; previousPower: number | null };
   gapReason?: any | null;
   onGapReasonSaved?: () => void;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  pulsing?: boolean;
 }) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const [reading, setReading]                   = useState('');
   const lastPrefilledMeter = useRef<string | null>(null);
@@ -911,13 +965,36 @@ function WellRow({
   };
 
   return (
-    <div className="border border-border/70 rounded-lg overflow-hidden bg-card" data-testid={`well-row-${well.id}`}>
+    <div
+      ref={rowRef}
+      className={`border border-border/70 rounded-lg overflow-hidden bg-card transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset' : ''}`}
+      data-testid={`well-row-${well.id}`}
+    >
 
       {/* ── Header: name + badges left | status + date + actions right ── */}
       <div className="flex items-start justify-between flex-wrap gap-2 px-3 py-2 bg-muted/30 border-b border-border/60">
         {/* Left: name + badges — allow wrap so name is never hidden */}
         <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
           <span className="text-sm font-semibold text-foreground break-words">{well.name}</span>
+          {(() => {
+            const fresh = lastReadingFreshness(freshDt);
+            return (
+              <StatusPill tone={fresh.tone}>
+                <CalendarClock className="h-2.5 w-2.5" />
+                {fresh.label}
+              </StatusPill>
+            );
+          })()}
+          <button
+            type="button"
+            onClick={() => navigate(`/plants/${plantId}?tab=wells&highlight=${well.id}`)}
+            title="Open this well in Plant detail"
+            aria-label="Open this well in Plant detail"
+            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+          >
+            <ArrowUpRight className="h-2.5 w-2.5" />
+            Plant detail
+          </button>
           {isBlending && (
             <span className="shrink-0 text-2xs font-semibold text-primary bg-primary-soft border border-primary/60 px-1.5 py-0.5 rounded-full" data-testid={`blending-badge-${well.id}`}>Blending</span>
           )}

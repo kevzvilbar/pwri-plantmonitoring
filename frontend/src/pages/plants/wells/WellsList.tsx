@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, CalendarClock, ArrowUpRight } from 'lucide-react';
 // Icon-audit fix: "Replace Meter" now uses the purpose-built ChangeMeterIcon
 // instead of Wrench, matching ProductMeters.tsx / PowerMeters.tsx, which
 // already use it for the same action. The "Edit" button below now uses
@@ -37,6 +37,7 @@ import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
+import { lastReadingFreshness } from '@/lib/format';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -51,8 +52,9 @@ import { EntityHistoryChart, MeterDetailButton } from '../charts/EntityHistoryCh
 import { CollapsibleSection, GridPylonIcon, usePlantMeterConfig, logStatusChange } from '../shared';
 import { ReasonDialog } from '@/components/ReasonDialog';
 
-export function WellsList({ plantId }: { plantId: string }) {
+export function WellsList({ plantId, highlightId }: { plantId: string; highlightId?: string | null }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isManager, isAdmin, user, activeOperator } = useAuth();
   const [wellDeleteReason, setWellDeleteReason] = useState('');
   const [wellDeleteBusy, setWellDeleteBusy] = useState(false);
@@ -77,6 +79,35 @@ export function WellsList({ plantId }: { plantId: string }) {
     queryKey: ['wells', plantId],
     queryFn: async () => (await supabase.from('wells').select('*').eq('plant_id', plantId).order('name')).data ?? [],
   });
+
+  // "Last reading" per well, for the freshness badge — same view + thresholds
+  // as the Operations Well tab, via lib/format.ts's lastReadingFreshness.
+  const { data: latestWellReadings } = useQuery({
+    queryKey: ['wells-latest-readings', plantId],
+    queryFn: async () => {
+      const { data } = await (supabase.from('well_readings_latest' as any) as any)
+        .select('well_id, reading_datetime')
+        .eq('plant_id', plantId);
+      return (data ?? []) as { well_id: string; reading_datetime: string }[];
+    },
+  });
+  const latestByWellId = useMemo(() => {
+    const map: Record<string, string> = {};
+    latestWellReadings?.forEach(r => { map[r.well_id] = r.reading_datetime; });
+    return map;
+  }, [latestWellReadings]);
+
+  const wellCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [wellPulseId, setWellPulseId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = wellCardRefs.current[highlightId];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setWellPulseId(highlightId);
+    const t = setTimeout(() => setWellPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, wells]);
 
   // Toggle a single well Active ↔ Inactive and write audit log.
   // Going Inactive requires a reason (offlineTarget opens ReasonDialog);
@@ -365,7 +396,10 @@ export function WellsList({ plantId }: { plantId: string }) {
         return (
           <Card
             key={w.id}
+            ref={(el) => { wellCardRefs.current[w.id] = el; }}
             className={`p-3 hover:shadow-elev border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
+              wellPulseId === w.id ? 'ring-2 ring-accent shadow-elev' : ''
+            } ${
               w.status === 'Active'
                 ? 'border-l-emerald-400 dark:border-l-emerald-600'
                 : 'border-l-muted-foreground/30'
@@ -414,6 +448,34 @@ export function WellsList({ plantId }: { plantId: string }) {
                           Blending
                         </span>
                       )}
+                    </div>
+                    {/* "Last reading" freshness + cross-navigation to this
+                        well's entry row in Operations — see the matching
+                        block in LocatorsList.tsx for why this isn't a
+                        whole-card click. */}
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {(() => {
+                        const fresh = lastReadingFreshness(latestByWellId[w.id]);
+                        return (
+                          <StatusPill tone={fresh.tone}>
+                            <CalendarClock className="h-2.5 w-2.5" />
+                            {fresh.label}
+                          </StatusPill>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/operations?tab=well&highlight=${w.id}`);
+                        }}
+                        title="Open this well in Operations"
+                        aria-label="Open this well in Operations"
+                        className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+                      >
+                        <ArrowUpRight className="h-2.5 w-2.5" />
+                        Operations
+                      </button>
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                       {(w.diameter != null || w.drilling_depth_m != null) && (
