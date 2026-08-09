@@ -47,6 +47,14 @@ describe('PERMISSION_MATRIX — guardrails', () => {
     expect(hasPermission(['Manager'], 'costs', 'budget')).toBe(true);
     expect(hasPermission(['Admin'], 'costs', 'budget')).toBe(true);
   });
+
+  it('Compliance threshold edit matches admin_write_thresholds RLS exactly (Admin/Data Analyst only, not Manager)', () => {
+    expect(hasPermission(['Operator'], 'compliance', 'edit')).toBe(false);
+    expect(hasPermission(['Technician'], 'compliance', 'edit')).toBe(false);
+    expect(hasPermission(['Manager'], 'compliance', 'edit')).toBe(false);
+    expect(hasPermission(['Data Analyst'], 'compliance', 'edit')).toBe(true);
+    expect(hasPermission(['Admin'], 'compliance', 'edit')).toBe(true);
+  });
 });
 
 // This block is the executable version of Appendix A. It's deliberately
@@ -58,6 +66,7 @@ const APPENDIX_A: Array<{ module: ModuleKey; action: Action; allowed: Role[] }> 
   { module: 'dashboard', action: 'view', allowed: ROLES },
   { module: 'ai_assistant', action: 'view', allowed: ['Technician', 'Manager', 'Data Analyst', 'Admin'] },
   { module: 'compliance', action: 'view', allowed: ['Technician', 'Manager', 'Data Analyst', 'Admin'] },
+  { module: 'compliance', action: 'edit', allowed: ['Data Analyst', 'Admin'] },
   { module: 'plants', action: 'edit', allowed: ['Manager', 'Admin'] },
   { module: 'employees', action: 'view', allowed: ROLES },
   { module: 'data_analysis_review', action: 'edit', allowed: ['Data Analyst', 'Admin'] },

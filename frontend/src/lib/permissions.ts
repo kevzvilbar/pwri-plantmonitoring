@@ -79,7 +79,11 @@ const MANAGE: readonly Role[] = ['Manager', 'Admin'];
 export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   dashboard: { view: ALL },
   ai_assistant: { view: ELEVATED },
-  compliance: { view: ELEVATED },
+  // edit matches admin_write_thresholds RLS policy on compliance_thresholds
+  // exactly (supabase/migrations/20260515_supabase_only_and_data_analysis.sql)
+  // — Manager is deliberately excluded here even though it's "elevated",
+  // because the DB would reject a Manager's write regardless of what the UI shows.
+  compliance: { view: ELEVATED, edit: ['Data Analyst', 'Admin'] },
   plants: { view: ALL, edit: MANAGE },
   operations: { view: ALL },
   ro_trains: { view: ALL },
