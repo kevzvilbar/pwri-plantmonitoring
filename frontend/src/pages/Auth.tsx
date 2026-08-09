@@ -315,6 +315,15 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const [password, setPass]   = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy]       = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Ticks the resend cooldown down once a second. Mirrors Supabase's own
+  // 60s-between-sends rate limit client-side so "Resend code" disables
+  // itself instead of the user hitting a raw rate-limit error on double-tap.
+  useEffect(() => {
+    const t = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Step 1: send OTP ──
   // ── Bug fix ────────────────────────────────────────────────────────────────
@@ -324,13 +333,15 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   // for this: it issues a recovery-typed token via the "Reset Password" email
   // template, which is what step 2 needs to fire PASSWORD_RECOVERY instead of
   // SIGNED_IN (see handleVerifyCode below).
-  const handleSendCode = async () => {
+  const handleSendCode = async (isResend = false) => {
     const ve = emailSchema.safeParse(email);
     if (!ve.success) { toast.error(ve.error.issues[0].message); return; }
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
     setBusy(false);
     if (error) { toast.error(friendlyError(error)); return; }
+    setCooldown(60);
+    if (isResend) toast.success('New code sent — check your email.');
     setStep('code');
   };
 
@@ -405,11 +416,11 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSendCode(false)}
           autoFocus
         />
       </div>
-      <Button onClick={handleSendCode} disabled={busy} className="w-full">
+      <Button onClick={() => handleSendCode(false)} disabled={busy} className="w-full">
         {busy ? 'Sending…' : 'Send code'}
       </Button>
       <Button variant="ghost" size="sm" className="w-full" onClick={onBack}>
@@ -443,8 +454,13 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
         <button type="button" onClick={() => setStep('email')} className="hover:text-foreground underline underline-offset-2">
           Change email
         </button>
-        <button type="button" onClick={handleSendCode} disabled={busy} className="hover:text-foreground underline underline-offset-2">
-          Resend code
+        <button
+          type="button"
+          onClick={() => handleSendCode(true)}
+          disabled={busy || cooldown > 0}
+          className="hover:text-foreground underline underline-offset-2 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+        >
+          {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
         </button>
       </div>
     </div>

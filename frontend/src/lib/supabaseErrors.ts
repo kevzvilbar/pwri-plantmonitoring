@@ -100,6 +100,10 @@ export function friendlyError(err: AnyError, fallback = 'An unexpected error occ
   }
 
   // 6. Auth errors
+  const rateLimitMatch = msg.match(/for security purposes.*after (\d+) ?seconds?/i);
+  if (rateLimitMatch) {
+    return `Please wait about ${rateLimitMatch[1]} seconds before requesting another code.`;
+  }
   if (msg.toLowerCase().includes('invalid login credentials')) {
     return 'Incorrect email or password.';
   }
