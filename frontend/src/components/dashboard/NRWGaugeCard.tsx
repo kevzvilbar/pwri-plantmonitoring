@@ -1,7 +1,9 @@
+import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { ALERTS } from '@/lib/calculations';
+import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
+import { useAppStore } from '@/store/appStore';
 import { cn } from '@/lib/utils';
 import { TONE_BG, TONE_ICON, type StatTone } from './types';
 
@@ -9,14 +11,21 @@ import { TONE_BG, TONE_ICON, type StatTone } from './types';
 // declared once as the `font-numeral` Tailwind token (tailwind.config.ts)
 // and loaded via the single app-wide @import in index.css.
 
-// ── Colour ramp — mirrors nrwColor() thresholds from calculations.ts ─────────
-// Resolves to the same StatTone used by every other KPI card, so the gauge's
-// green/amber/rose bands stay in lockstep with TONE_BG/TONE_ICON below and
-// with the theme (light/dark, alt brand themes) instead of a hardcoded ramp.
-function nrwTone(pct: number | null): StatTone {
-  if (pct === null)                return undefined;
-  if (pct < ALERTS.nrw_green_max) return 'accent';
-  if (pct < ALERTS.nrw_amber_max) return 'warn';
+// ── Colour ramp ──────────────────────────────────────────────────────────
+// Was hardcoded to ALERTS.nrw_green_max/nrw_amber_max (calculations.ts) —
+// a completely separate, non-editable 13%/16% ramp that had nothing to do
+// with the "NRW Pct Max" an admin actually sets on the Compliance page's
+// Thresholds tab (global default 20%, overridable per plant — e.g. 8% for
+// SRP). This gauge would keep showing "(limit 13%)" and coloring off that
+// stale number even for a plant with its own configured override. Now
+// banded the same way ComplianceRadarCard already bands its axes off the
+// one real `nrw_pct_max` threshold: accent below 70% of it, warn from
+// there up to the limit, danger at/over — so the two compliance-driven
+// widgets on this dashboard always agree.
+function nrwTone(pct: number | null, limitPct: number): StatTone {
+  if (pct === null)            return undefined;
+  if (pct < limitPct * 0.7)   return 'accent';
+  if (pct < limitPct)         return 'warn';
   return 'danger';
 }
 
@@ -32,7 +41,8 @@ function nrwFill(tone: StatTone): string {
 // below: startAngle=180 at the left foot, sweeping to endAngle=0 at the
 // right foot) and that angle to an (x, y) point at a given radius — used to
 // place the threshold tick mark at the exact spot on the ring that
-// corresponds to ALERTS.nrw_green_max, independent of the current value.
+// corresponds to the compliance-configured limit, independent of the
+// current value.
 function polarPoint(cx: number, cy: number, r: number, pct: number) {
   const angleRad = ((180 - (pct / 100) * 180) * Math.PI) / 180;
   return { x: cx + r * Math.cos(angleRad), y: cy - r * Math.sin(angleRad) };
@@ -45,7 +55,27 @@ interface Props {
 }
 
 export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
-  const tone       = nrwTone(nrw);
+  // Same scope convention the Compliance page itself uses (Compliance.tsx:
+  // `thresholdScope = scope === 'plant' ? plantId : 'global'`) — a specific
+  // plant selected on the dashboard reads that plant's override if one
+  // exists, "All Plants" reads the global default. loadThresholds() is the
+  // exact function the Compliance page and ComplianceRadarCard already call,
+  // so this can't drift from what the Thresholds tab actually has saved.
+  const selectedPlantId = useAppStore((s) => s.selectedPlantId);
+  const thresholdScope  = selectedPlantId || 'global';
+  const { data: thresholds } = useQuery({
+    queryKey: ['thresholds', thresholdScope],
+    queryFn:  () => loadThresholds(thresholdScope),
+    staleTime: 2 * 60_000,
+  });
+  // DEFAULT_THRESHOLDS.nrw_pct_max (20%) only while the query is still
+  // in flight on first load — the same fallback loadThresholds() itself
+  // uses internally if the read fails, so there's no moment where this
+  // shows a number that isn't one of "the real saved value" or "the same
+  // documented default everything else falls back to."
+  const limitPct = thresholds?.nrw_pct_max ?? DEFAULT_THRESHOLDS.nrw_pct_max;
+
+  const tone       = nrwTone(nrw, limitPct);
   const trackColor = 'hsl(var(--muted))';
   const fillColor  = nrwFill(tone);
   const displayVal = Math.min(Math.max(nrw ?? 0, 0), 100);
@@ -57,11 +87,13 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
   // without the two ends colliding into a lozenge at low values.
   const cornerRadius = 6;
 
-  // Threshold tick — marks ALERTS.nrw_green_max on the ring so the compliance
-  // limit is visible at a glance, not just in the "(limit N%)" text below.
-  const limitPct = ALERTS.nrw_green_max;
-  const tickInner = polarPoint(cx, cy, innerRadius - 3, limitPct);
-  const tickOuter = polarPoint(cx, cy, outerRadius + 3, limitPct);
+  // Threshold tick — marks the compliance limit on the ring so it's visible
+  // at a glance, not just in the "(limit N%)" text below. Clamped into the
+  // gauge's own 0–100 domain: a plant can configure nrw_pct_max above 100
+  // (unusual, but the input doesn't forbid it), which would otherwise place
+  // the tick past the right foot at an angle the arc never reaches.
+  const tickInner = polarPoint(cx, cy, innerRadius - 3, Math.min(limitPct, 100));
+  const tickOuter = polarPoint(cx, cy, outerRadius + 3, Math.min(limitPct, 100));
 
   // Trend vs yesterday
   const delta = nrw != null && yNrw != null && yNrw !== 0
@@ -81,7 +113,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
         onClick ? 'cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all' : 'cursor-default',
       )}
       onClick={onClick}
-      aria-label={`NRW gauge: ${nrw ?? '—'}% (target < ${ALERTS.nrw_green_max}%)`}
+      aria-label={`NRW gauge: ${nrw ?? '—'}% (target < ${limitPct}%)`}
     >
       {/* Half-donut gauge — slightly larger on wider (mobile full-row) layout */}
       <div className="shrink-0" aria-hidden>
@@ -175,7 +207,7 @@ export function NRWGaugeCard({ nrw, yNrw, onClick }: Props) {
         <div className="text-xs text-muted-foreground mt-0.5 leading-tight">
           NRW
           <span className="ml-1 text-3xs opacity-60">
-            (limit {ALERTS.nrw_green_max}%)
+            (limit {limitPct}%)
           </span>
         </div>
 
