@@ -5,12 +5,16 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 
 // Used to manually override a derived (is_derived) locator's computed value
 // — e.g. Hamas at SRP — for a Manager / Data Analyst / Admin. A reason is
 // required so the override shows up meaningfully in reading_edit_audit_log
-// rather than as an unexplained number change. See LocatorSection.tsx's
+// rather than as an unexplained number change. Was a free-text Textarea;
+// now the same CORRECTION_REASONS dropdown every other reading-edit surface
+// uses, so an override rolls up into the same reason taxonomy instead of
+// being the one place that still took arbitrary prose. See LocatorSection.tsx's
 // is_derived block for the caller, and fn_sweep_derived_meters() /
 // fn_flag_derived_review() in supabase/migrations/20260727_hamas_phase*.sql
 // for what happens to this value afterward (it can be superseded by a later
@@ -28,10 +32,11 @@ export function DerivedMeterOverrideDialog({
 }) {
   const [value, setValue] = useState('');
   const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
 
-  const reset = () => { setValue(''); setReason(''); };
+  const reset = () => { setValue(''); setReason(''); setCustomReason(''); };
   const parsed = value === '' ? null : Number(value);
-  const canConfirm = parsed != null && Number.isFinite(parsed) && reason.trim().length > 0;
+  const canConfirm = parsed != null && Number.isFinite(parsed) && !!reason;
 
   return (
     <AlertDialog
@@ -60,16 +65,11 @@ export function DerivedMeterOverrideDialog({
               placeholder={currentValue != null ? `Currently ${currentValue.toFixed(2)}` : 'e.g. 250.00'}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
-              Reason <span className="text-danger">*</span>
-            </Label>
-            <Textarea
-              value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder="Why is this being overridden? e.g. sibling meter was misread yesterday, corrected here directly."
-              rows={3}
-            />
-          </div>
+          <CorrectionReasonField
+            reason={reason} onReasonChange={setReason}
+            customReason={customReason} onCustomReasonChange={setCustomReason}
+            label="Reason for this override"
+          />
         </div>
 
         <AlertDialogFooter>
@@ -79,7 +79,7 @@ export function DerivedMeterOverrideDialog({
             onClick={async (e) => {
               e.preventDefault();
               if (!canConfirm || parsed == null) return;
-              await onConfirm(parsed, reason.trim());
+              await onConfirm(parsed, resolveReason(reason, customReason));
               reset();
             }}
           >

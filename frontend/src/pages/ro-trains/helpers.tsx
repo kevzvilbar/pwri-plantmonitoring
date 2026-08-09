@@ -143,6 +143,15 @@ export async function logReadingEdit(entry: {
   actor_label: string | null;
   /** For update/delete: { field: { old, new } }. For import: metadata blob. */
   changes?: Record<string, any>;
+  /**
+   * Why this edit was made — one of CORRECTION_REASONS (correctionReasons.ts),
+   * already resolved through resolveReason() if 'Other' was picked. Required
+   * by every caller for action 'update' (enforced client-side, same as
+   * CorrectionRequestDialog/EditValueModal — see
+   * 20260809_reading_edit_audit_log_reason.sql for why this isn't a DB-level
+   * NOT NULL). Left undefined for 'delete'/'import', which don't require one.
+   */
+  reason?: string | null;
 }) {
   try {
     await (supabase.from('reading_edit_audit_log' as any) as any).insert([{
@@ -154,6 +163,7 @@ export async function logReadingEdit(entry: {
       actor_user_id: entry.actor_user_id,
       actor_label:   entry.actor_label,
       changes:       entry.changes ?? null,
+      reason:        entry.reason ?? null,
     }]);
   } catch { /* silently ignore if table missing — migration not yet run */ }
 }

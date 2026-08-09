@@ -433,6 +433,7 @@ async function insertDerivedOverrideRows(
         actor_user_id: userId,
         actor_label: actorLabel,
         changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
+        reason,
       });
       // Sync the override value to mirror product_meter_readings so any
       // mirrored product meter (e.g. Mambaling's HAMAS) stays in step with the
@@ -1095,6 +1096,7 @@ function LocatorRow({
         actor_user_id: userId ?? null,
         actor_label: actorLabel,
         changes: { ...diffFields(before, { current_reading: value, is_estimated: false }), override_reason: { old: null, new: reason } },
+        reason,
       });
 
       // Sync the override value to mirror product_meter_readings so any

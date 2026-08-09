@@ -18,6 +18,8 @@ import { Loader2, Pencil, History, Trash2 } from 'lucide-react';
 import { DataState } from '@/components/DataState';
 import { cn } from '@/lib/utils';
 import { DOSING_KEYS, canEditEntry, diffFields, logReadingEdit } from '../../ro-trains';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 
 // ─── Chemical Dosing Historical Log ──────────────────────────────────────────
 export function DosingHistoryLog() {
@@ -86,6 +88,8 @@ export function DosingHistoryLog() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<any | null>(null);
   const [editV, setEditV]   = useState<Record<string, string>>({});
+  const [editReason, setEditReason] = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   const startEdit = (row: any) => {
@@ -95,6 +99,8 @@ export function DosingHistoryLog() {
     }
     setEditId(row.id);
     setEditRow(row);
+    setEditReason('');
+    setEditCustomReason('');
     setEditV({
       log_datetime: row.log_datetime ? format(new Date(row.log_datetime), "yyyy-MM-dd'T'HH:mm") : '',
       chlorine_kg:               String(row.chlorine_kg    ?? ''),
@@ -112,6 +118,7 @@ export function DosingHistoryLog() {
       toast.error('You no longer have permission to edit this entry.');
       return;
     }
+    if (!editReason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     const num = (k: string) => editV[k] !== '' ? +editV[k] : null;
     const costCalc = DOSING_KEYS.reduce((s, c) => {
@@ -141,11 +148,14 @@ export function DosingHistoryLog() {
       actor_user_id: user?.id ?? null,
       actor_label: actorLabel,
       changes: diffFields(editRow, payload),
+      reason: resolveReason(editReason, editCustomReason),
     });
 
     toast.success('Dosing record updated');
     setEditId(null);
     setEditRow(null);
+    setEditReason('');
+    setEditCustomReason('');
     qc.invalidateQueries({ queryKey: ['dosing-history'] });
     qc.invalidateQueries({ queryKey: ['chem-stock-computed'] });
   };
@@ -369,7 +379,7 @@ export function DosingHistoryLog() {
                           size="sm"
                           className="h-6 px-2 text-2xs bg-primary text-white hover:bg-primary/90"
                           onClick={saveEdit}
-                          disabled={saving}
+                          disabled={saving || !editReason}
                         >
                           {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
                         </Button>
@@ -377,7 +387,7 @@ export function DosingHistoryLog() {
                           size="sm"
                           variant="ghost"
                           className="h-6 px-2 text-2xs"
-                          onClick={() => { setEditId(null); setEditRow(null); }}
+                          onClick={() => { setEditId(null); setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
                           disabled={saving}
                         >
                           Cancel
@@ -420,23 +430,29 @@ export function DosingHistoryLog() {
 
                 {/* ── Chemical values grid ── */}
                 {isEditing ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/40">
-                    {FIELD_LABELS.map(({ key, label, unit }) => (
-                      <div key={key}>
-                        <Label className="text-2xs text-muted-foreground">{label}</Label>
-                        <div className="relative">
-                          <Input
-                            type="number" step="any"
-                            value={editV[key] ?? ''}
-                            onChange={e => setEditV({ ...editV, [key]: e.target.value })}
-                            className="h-7 text-xs pr-7"
-                            placeholder="0"
-                          />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-muted-foreground pointer-events-none">{unit}</span>
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/40">
+                      {FIELD_LABELS.map(({ key, label, unit }) => (
+                        <div key={key}>
+                          <Label className="text-2xs text-muted-foreground">{label}</Label>
+                          <div className="relative">
+                            <Input
+                              type="number" step="any"
+                              value={editV[key] ?? ''}
+                              onChange={e => setEditV({ ...editV, [key]: e.target.value })}
+                              className="h-7 text-xs pr-7"
+                              placeholder="0"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-muted-foreground pointer-events-none">{unit}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                    <CorrectionReasonField
+                      reason={editReason} onReasonChange={setEditReason}
+                      customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+                    />
+                  </>
                 ) : (
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {DOSING_KEYS.map(({ key, name, unit }) => {

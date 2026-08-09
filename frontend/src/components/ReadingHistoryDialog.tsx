@@ -7,6 +7,8 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { useDraft } from '@/hooks/useDraft';
 import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
 import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -115,6 +117,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   const [appliedFrom, setAppliedFrom] = useState(customFrom);
   const [appliedTo, setAppliedTo]     = useState(customTo);
   const [editRow, setEditRow] = useState<HistoryEditState | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -287,6 +291,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       toast.error('You can only edit your own entries, within 8 hours of submitting them.');
       return;
     }
+    setEditReason('');
+    setEditCustomReason('');
     const dt = r.reading_datetime ?? r.created_at ?? '';
     const dtStr = dt ? format(new Date(dt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
     if (module === 'well') {
@@ -595,6 +601,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       setEditRow(null);
       return;
     }
+    if (!editReason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     let error: any = null;
     const dtIso = new Date(editRow.datetime).toISOString();
@@ -736,9 +743,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           is_meter_replacement: !!editRow.isMeterReplacement,
         },
       ),
+      reason: resolveReason(editReason, editCustomReason),
     });
     toast.success('Reading updated');
     setEditRow(null);
+    setEditReason('');
+    setEditCustomReason('');
     qc.invalidateQueries({ queryKey });
     // Also invalidate the parent form queries so "Last 7 readings" refreshes
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
@@ -901,12 +911,18 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                 <span className="text-[11px] text-muted-foreground">Meter replacement / PMS (zeroes Δ)</span>
               </label>
             )}
+            <CorrectionReasonField
+              reason={editReason} onReasonChange={setEditReason}
+              customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+            />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !editReason}
                 className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">
+              <Button size="sm" variant="outline"
+                onClick={() => { setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
+                disabled={saving} className="h-7 text-xs px-3">
                 Cancel
               </Button>
             </div>

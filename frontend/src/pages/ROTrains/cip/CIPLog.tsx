@@ -18,6 +18,8 @@ import { ExportButton } from '@/components/ExportButton';
 import { Loader2, Pencil, History, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_CIP_CHEMICALS, CIP_BUILTIN_DB_MAP, CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, EDIT_WINDOW_HOURS, canEditEntry, diffFields, logReadingEdit } from '../../ro-trains';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 
 import { CIPSummaryContent } from './CIPSummaryContent';
 import { CIPVolumetric } from './CIPVolumetric';
@@ -185,6 +187,8 @@ export function CIPLog() {
   const [editStart, setEditStart] = useState('');
   const [editEnd, setEditEnd]     = useState('');
   const [editRemarks, setEditRemarks] = useState('');
+  const [editReason, setEditReason] = useState('');
+  const [editCustomReason, setEditCustomReason] = useState('');
   const [saving, setSaving]       = useState(false);
   // ── Delete state ─────────────────────────────────────────────────────────
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -200,6 +204,8 @@ export function CIPLog() {
     }
     setEditId(c.id);
     setEditRow(c);
+    setEditReason('');
+    setEditCustomReason('');
     setEditStart(c.start_datetime ? format(new Date(c.start_datetime), "yyyy-MM-dd'T'HH:mm") : '');
     setEditEnd(c.end_datetime     ? format(new Date(c.end_datetime),   "yyyy-MM-dd'T'HH:mm") : '');
     // Restore built-in chemical values
@@ -226,6 +232,7 @@ export function CIPLog() {
       toast.error('You no longer have permission to edit this entry.');
       return;
     }
+    if (!editReason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     const payload: Record<string, any> = {
       start_datetime: editStart ? new Date(editStart).toISOString() : null,
@@ -270,10 +277,12 @@ export function CIPLog() {
       actor_user_id: user?.id ?? null,
       actor_label: actorLabel,
       changes: diffFields(editRow, payload),
+      reason: resolveReason(editReason, editCustomReason),
     });
 
     toast.success('CIP record updated');
     setEditId(null); setEditRow(null);
+    setEditReason(''); setEditCustomReason('');
     qc.invalidateQueries({ queryKey: ['cip-history'] });
   };
 
@@ -615,10 +624,16 @@ export function CIPLog() {
                       placeholder="Any observations..."
                       className="text-xs min-h-[60px] resize-none" />
                   </div>
+                  <CorrectionReasonField
+                    reason={editReason} onReasonChange={setEditReason}
+                    customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
+                  />
                 </div>
                 <DialogFooter>
-                  <Button variant="ghost" onClick={() => { setEditId(null); setEditRow(null); }} disabled={saving}>Cancel</Button>
-                  <Button onClick={saveEdit} disabled={saving} className="bg-primary text-white hover:bg-primary/90">
+                  <Button variant="ghost"
+                    onClick={() => { setEditId(null); setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
+                    disabled={saving}>Cancel</Button>
+                  <Button onClick={saveEdit} disabled={saving || !editReason} className="bg-primary text-white hover:bg-primary/90">
                     {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
                     Save Changes
                   </Button>

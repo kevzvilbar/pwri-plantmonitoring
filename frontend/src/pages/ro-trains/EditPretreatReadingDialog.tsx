@@ -26,6 +26,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, EDIT_WINDOW_HOURS } from './helpers';
@@ -78,6 +80,8 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
   const [hpp, setHpp]               = useState(toStr(row.hpp_target_pressure_psi));
   const [bagFilters, setBagFilters] = useState(toStr(row.bag_filters_changed));
   const [remarks, setRemarks]       = useState(row.remarks ?? '');
+  const [reason, setReason]         = useState('');
+  const [customReason, setCustomReason] = useState('');
 
   const [afmUnits, setAfmUnits] = useState<AfmUnitState[]>(() =>
     (Array.isArray(row.afm_units) ? row.afm_units : []).map((u) => ({
@@ -111,6 +115,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
+    if (!reason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
 
     const payload = {
@@ -162,6 +167,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
       actor_user_id: user?.id ?? null,
       actor_label:   actorLabel,
       changes:       diffFields(row, payload),
+      reason:        resolveReason(reason, customReason),
     });
 
     setSaving(false);
@@ -329,6 +335,11 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
           </div>
 
+          <CorrectionReasonField
+            reason={reason} onReasonChange={setReason}
+            customReason={customReason} onCustomReasonChange={setCustomReason}
+          />
+
           <p className="text-xs text-muted-foreground">
             {hasFullAccess
               ? 'As a Manager, Data Analyst, or Admin, you can edit any reading at any time.'
@@ -337,7 +348,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !canSave}>
+          <Button onClick={handleSave} disabled={saving || !canSave || !reason}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
           </Button>
         </DialogFooter>

@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
@@ -51,6 +53,8 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
   const [dt, setDt]         = useState(row.reading_datetime
     ? format(new Date(row.reading_datetime), "yyyy-MM-dd'T'HH:mm") : '');
   const [remarks, setRemarks] = useState(row.remarks ?? '');
+  const [reason, setReason]   = useState('');
+  const [customReason, setCustomReason] = useState('');
   const [vals, setVals]     = useState<Record<string, string>>(() =>
     Object.fromEntries(
       RO_EDIT_NUMERIC_FIELDS.map((f) => [f.key, row[f.key] != null ? String(row[f.key]) : '']),
@@ -61,6 +65,7 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
+    if (!reason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     const num = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? +vals[k] : null);
 
@@ -102,6 +107,7 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
       actor_user_id: user?.id ?? null,
       actor_label:   actorLabel,
       changes:       diffFields(row, payload),
+      reason:        resolveReason(reason, customReason),
     });
 
     setSaving(false);
@@ -137,10 +143,14 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
             <Label className="text-xs">Remarks</Label>
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
           </div>
+          <CorrectionReasonField
+            reason={reason} onReasonChange={setReason}
+            customReason={customReason} onCustomReasonChange={setCustomReason}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !canSave}>
+          <Button onClick={handleSave} disabled={saving || !canSave || !reason}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
           </Button>
         </DialogFooter>
