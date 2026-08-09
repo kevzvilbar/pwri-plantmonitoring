@@ -37,7 +37,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
 import { supabase } from '@/integrations/supabase/client';
 import { rangeKeyToDays } from './types';
-import { DRILL_COLORS } from './TrendChart';
+import { DRILL_COLORS } from './TrendChartLegend';
 
 interface Props {
   plantIds: string[];

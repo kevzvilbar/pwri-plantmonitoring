@@ -23,7 +23,7 @@ import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
 import { rangeKeyToDays } from './types';
 import { fetchPlantMetrics, loadThresholds, type Thresholds } from '@/pages/Compliance';
-import { DRILL_COLORS } from './TrendChart';
+import { DRILL_COLORS } from './TrendChartLegend';
 
 // Same numeral treatment StatCard/NRWGaugeCard use for every KPI value on
 // this dashboard — keeps the radar's numbers visually consistent with the

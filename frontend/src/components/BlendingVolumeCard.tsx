@@ -10,7 +10,7 @@ import { fmtNum } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppStore } from '@/store/appStore';
 import { rangeKeyToDays } from '@/components/dashboard/types';
-import { DRILL_COLORS, ModernChartLegend } from '@/components/dashboard/TrendChart';
+import { DRILL_COLORS, ModernChartLegend } from '@/components/dashboard/TrendChartLegend';
 
 // Per-day series entry. `by_well` is a well_id → volume pivot for that single
 // day — needed for the "By well" stacked view and the richer tooltip/drill
