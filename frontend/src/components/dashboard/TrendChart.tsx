@@ -1330,7 +1330,7 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsLocReadings,
   });
 
-  const { data: locReadings, isFetching: fetchingLoc, error: errLoc } = useQuery({
+  const { data: locReadings, isFetching: fetchingLoc, error: errLoc, refetch: refetchLoc } = useQuery({
     queryKey: ['trend-loc', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       const locatorIds = _locatorIdsForReadings ?? [];
@@ -1355,7 +1355,7 @@ export function TrendChart({
   // the product line. These are the authoritative source for Production volume,
   // distinct from well (raw water) meters and locator (distribution) meters.
   // The table is not in the generated Supabase types so we cast as `never`.
-  const { data: productReadings, isFetching: fetchingProduct, error: errProduct } = useQuery({
+  const { data: productReadings, isFetching: fetchingProduct, error: errProduct, refetch: refetchProduct } = useQuery({
     queryKey: ['trend-product', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       // Try with is_meter_replacement first; fall back gracefully if column
@@ -1394,7 +1394,7 @@ export function TrendChart({
   // Fetching well_id here (instead of relying on plant_id alone) lets
   // computeEntityDeltas group correctly by individual meter rather than by
   // plant, preventing cross-well subtraction that produced the -4,853,089 bug.
-  const { data: wellReadings, isFetching: fetchingWell, error: errWell } = useQuery({
+  const { data: wellReadings, isFetching: fetchingWell, error: errWell, refetch: refetchWell } = useQuery({
     queryKey: ['trend-well', metric, startKey, endKey, plantIds],
     queryFn: () => supaSelect<any>(
       'well_readings',
@@ -1427,7 +1427,7 @@ export function TrendChart({
   const _roTrainIdsForReadings = _roTrainMeta?.ids;
   const _trainPlantMap = _roTrainMeta?.trainPlantMap ?? new Map<string, string>();
 
-  const { data: roReadings, isFetching: fetchingRo, error: errRo } = useQuery({
+  const { data: roReadings, isFetching: fetchingRo, error: errRo, refetch: refetchRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds, _roTrainIdsForReadings],
     queryFn: async () => {
       const trainIds = _roTrainIdsForReadings ?? [];
@@ -1535,7 +1535,7 @@ export function TrendChart({
   // computeEntityDeltas can diff consecutive meter_reading_kwh values correctly.
   // We also grab one row BEFORE startISO (per plant) to seed the delta for
   // the very first in-window reading — without it the first bar is always 0.
-  const { data: powerReadings, isFetching: fetchingPower, error: errPower } = useQuery({
+  const { data: powerReadings, isFetching: fetchingPower, error: errPower, refetch: refetchPower } = useQuery({
     queryKey: ['trend-power', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       // Fetch in-window rows (standard path)
@@ -1575,7 +1575,7 @@ export function TrendChart({
   //      qty × unit_price (same logic as ROTrains dosing history display).
   //      Old records saved before prices were configured have calculated_cost = 0.
   //   Chem Cost (₱/m³) = total_chem_₱_per_day / production_m3
-  const { data: costReadings, isFetching: fetchingCost, error: errCost } = useQuery({
+  const { data: costReadings, isFetching: fetchingCost, error: errCost, refetch: refetchCost } = useQuery({
     queryKey: ['trend-cost', metric, startKey, endKey, plantIds],
     queryFn: async () => {
       const today = format(new Date(), 'yyyy-MM-dd');
@@ -1721,6 +1721,24 @@ export function TrendChart({
 
   const isFetching = fetchingLoc || fetchingWell || fetchingRo || fetchingPower || fetchingCost || fetchingProduct;
   const queryError = (errLoc || errWell || errRo || errPower || errCost || errProduct) as Error | null;
+  // Only re-fires the query(ies) that actually failed — a locator fetch
+  // succeeding shouldn't get re-run just because the RO one timed out.
+  // "TypeError: Failed to fetch" (the error shape shown in the toast — see
+  // App.tsx's queryCache.onError) is a browser-level failure to complete the
+  // request at all (network drop, an ad-blocker/privacy extension blocking
+  // the Supabase domain, a brief Supabase outage) — not a database or RLS
+  // error, which would come back as a normal Postgrest error body instead.
+  // React Query already retries once and re-fetches on reconnect
+  // automatically, but until now there was no way to just try again by hand
+  // without reloading the whole page.
+  const retryFailedQueries = () => {
+    if (errLoc) refetchLoc();
+    if (errWell) refetchWell();
+    if (errRo) refetchRo();
+    if (errPower) refetchPower();
+    if (errCost) refetchCost();
+    if (errProduct) refetchProduct();
+  };
 
   const chartData = useMemo(() => {
     // ── Tariff lookup: for each plant, sorted array of {effectiveDate, ratePerKwh} ─
@@ -3729,6 +3747,14 @@ export function TrendChart({
             <div className="rounded-md border border-danger bg-danger-soft/95 px-3 py-2 text-xs text-danger shadow-sm pointer-events-auto max-w-md text-center">
               <div className="font-semibold mb-0.5">Couldn't load trend data</div>
               <div className="text-xs opacity-80">{queryError.message}</div>
+              <button
+                type="button"
+                onClick={retryFailedQueries}
+                disabled={isFetching}
+                className="mt-1.5 text-xs font-medium underline underline-offset-2 disabled:opacity-50 disabled:no-underline"
+              >
+                {isFetching ? 'Retrying…' : 'Retry'}
+              </button>
             </div>
           </div>
         )}
