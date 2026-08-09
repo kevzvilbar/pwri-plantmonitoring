@@ -268,9 +268,12 @@ export function CIPLog() {
 
     const actorLabel = `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
       || activeOperator?.username || null;
-    // Log edit — cast table_name since cip_logs isn't in the type union yet
+    // table_name was previously cast to 'chemical_dosing_logs' as any — see
+    // helpers.tsx and the 20260809_reading_audit_log_add_cip_logs.sql
+    // migration, which added the real 'cip_logs' value so this no longer
+    // has to lie to get past the type union / DB check constraint.
     await logReadingEdit({
-      table_name: 'chemical_dosing_logs' as any,
+      table_name: 'cip_logs',
       record_id:  editId,
       plant_id:   editRow.plant_id ?? null,
       train_id:   editRow.train_id ?? null,
