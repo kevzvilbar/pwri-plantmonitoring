@@ -801,12 +801,23 @@ function PendingReviewTab() {
 
   const resolveOne = async (row: FlaggedRow, decision: 'normal' | 'retracted') => {
     setBusy(p => ({ ...p, [row.id]: true }));
-    const { error } = await (supabase
+    // NOTE: .select('id') is required here, not cosmetic. Without it, a
+    // silent RLS/lock mismatch returns { data: [], error: null } — same
+    // failure mode approveRequest/rejectRequest already guard against above.
+    // Skipping it means "approved" toasts fire even when nothing changed,
+    // and the row reappears on next refetch with no visible explanation.
+    const { data: updated, error } = await (supabase
       .from(row.source_table as any)
       .update({ norm_status: decision })
-      .eq('id', row.id) as any);
+      .eq('id', row.id)
+      .select('id') as any);
 
-    if (!error) {
+    if (error) {
+      toast.error(friendlyError(error));
+    } else if (!updated?.length) {
+      toast.error(`${row.entity_name}: update didn't apply — check permissions or whether this reading is locked, then refresh.`);
+      invalidate();
+    } else {
       await (supabase.from('reading_normalizations' as any).insert({
         source_table: row.source_table, source_id: row.id,
         action: decision === 'normal' ? 'normalize' : 'retract',
@@ -825,8 +836,6 @@ function PendingReviewTab() {
       );
       toast.success(decision === 'normal' ? `${row.entity_name}: approved` : `${row.entity_name}: rejected`);
       invalidate();
-    } else {
-      toast.error(friendlyError(error));
     }
     setBusy(p => ({ ...p, [row.id]: false }));
   };
@@ -836,9 +845,17 @@ function PendingReviewTab() {
     setBulkBusy(true);
     const targets = rows.filter(r => selected.has(r.id));
     const succeeded: FlaggedRow[] = [];
+    const failed: FlaggedRow[] = [];
     for (const row of targets) {
-      const { error } = await (supabase.from(row.source_table as any).update({ norm_status: decision }).eq('id', row.id) as any);
-      if (!error) succeeded.push(row);
+      // Same .select('id') requirement as resolveOne — an unaffected row
+      // must not be counted as succeeded just because there was no error.
+      const { data: updated, error } = await (supabase
+        .from(row.source_table as any)
+        .update({ norm_status: decision })
+        .eq('id', row.id)
+        .select('id') as any);
+      if (!error && updated?.length) succeeded.push(row);
+      else failed.push(row);
     }
     if (succeeded.length) {
       await (supabase.from('reading_normalizations' as any).insert(
@@ -878,7 +895,14 @@ function PendingReviewTab() {
       }
     }
     const ok = succeeded.length;
-    toast.success(`${ok} of ${targets.length} readings ${decision === 'normal' ? 'approved' : 'rejected'}`);
+    if (ok) {
+      toast.success(`${ok} of ${targets.length} readings ${decision === 'normal' ? 'approved' : 'rejected'}`);
+    }
+    if (failed.length) {
+      toast.error(
+        `${failed.length} row(s) didn't update — permission or lock issue: ${failed.map(f => f.entity_name).join(', ')}`,
+      );
+    }
     setSelected(new Set());
     setBulkBusy(false);
     invalidate();
