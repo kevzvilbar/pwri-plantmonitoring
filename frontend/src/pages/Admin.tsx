@@ -16,6 +16,14 @@ export default function Admin() {
   const { isAdmin, isManager, isDataAnalyst, loading } = useAuth();
   const navigate = useNavigate();
 
+  // Hooks must run unconditionally on every render — hoisted above the
+  // early returns below (loading / access-denied / data-analyst-redirect).
+  // Harmless to call while `loading` is still true: usePermission just
+  // resolves against whatever useAuth()/useMyCustomRole() currently have,
+  // and the result isn't read until after those returns anyway.
+  const canViewUsers = usePermission('admin_users', 'view');
+  const canViewMigrations = usePermission('admin_migrations', 'view');
+
   if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
 
   // Data Analysts access the console for the Normalization tab only.
@@ -73,8 +81,6 @@ export default function Admin() {
   // Count visible tabs to size the grid correctly
   // Manager sees: Plants, Audit (2)
   // Admin sees:   Users, Plants, Audit, Migrations, Roles (5)
-  const canViewUsers = usePermission('admin_users', 'view');
-  const canViewMigrations = usePermission('admin_migrations', 'view');
   // Roles editor is Admin-only, same gate as Users/Migrations — it can grant
   // access to everything else, so it stays out of Manager's reach.
   const canManageRoles = isAdmin;

@@ -357,29 +357,6 @@ export default function Exports() {
   const [activePreset, setActivePreset] = useState<number | null>(30);
   const [exportAllState, setExportAllState] = useState<'idle' | 'busy' | 'done'>('idle');
 
-  // Was previously enforced only by hiding the nav link (AppSidebar/BottomNav)
-  // — this page itself, and the tables it reads from Exports.tsx line 155,
-  // had no role check, so a direct /exports visit bypassed the intended
-  // Technician/Operator restriction from Appendix A. Underlying table RLS
-  // still applies regardless, but the page should agree with the nav.
-  if (!canView) {
-    return (
-      <Card className="p-6 text-center space-y-2" data-testid="exports-access-denied">
-        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
-        <h2 className="font-semibold">Access denied</h2>
-        <p className="text-sm text-muted-foreground">
-          Data Exports is available to Manager, Data Analyst, and Admin.
-        </p>
-        <button
-          className="text-sm text-accent hover:underline"
-          onClick={() => navigate('/')}
-        >
-          Back to dashboard
-        </button>
-      </Card>
-    );
-  }
-
   const handlePreset = (days: number) => {
     applyPreset(days, setFrom, setTo);
     setActivePreset(days);
@@ -407,6 +384,32 @@ export default function Exports() {
     else toast.success(`All tables exported — ${total.toLocaleString()} total rows`);
     setTimeout(() => setExportAllState('idle'), 3000);
   }, [plantId, from, to]);
+
+  // Was previously enforced only by hiding the nav link (AppSidebar/BottomNav)
+  // — this page itself, and the tables it reads from Exports.tsx line 155,
+  // had no role check, so a direct /exports visit bypassed the intended
+  // Technician/Operator restriction from Appendix A. Underlying table RLS
+  // still applies regardless, but the page should agree with the nav. Kept
+  // below the exportAll hook (rather than right after `canView` is read) so
+  // that hook always runs in the same order every render — an early return
+  // before it made the React Hook conditional.
+  if (!canView) {
+    return (
+      <Card className="p-6 text-center space-y-2" data-testid="exports-access-denied">
+        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
+        <h2 className="font-semibold">Access denied</h2>
+        <p className="text-sm text-muted-foreground">
+          Data Exports is available to Manager, Data Analyst, and Admin.
+        </p>
+        <button
+          className="text-sm text-accent hover:underline"
+          onClick={() => navigate('/')}
+        >
+          Back to dashboard
+        </button>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4 animate-fade-in">

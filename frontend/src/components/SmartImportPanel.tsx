@@ -751,28 +751,6 @@ export default function SmartImportPanel() {
   const [importLog, setImportLog] = useState<string[]>([]);
   const [skipInvalid, setSkipInvalid] = useState(true);
 
-  // Same gap as Exports.tsx: this component inserts directly into tables
-  // (see the .insert(insertBatch) call further down) with no role check of
-  // its own — only the hidden nav link stood between a Technician and a
-  // direct /import visit.
-  if (!canView) {
-    return (
-      <Card className="p-6 text-center space-y-2" data-testid="import-access-denied">
-        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
-        <h2 className="font-semibold">Access denied</h2>
-        <p className="text-sm text-muted-foreground">
-          Smart Import is available to Manager, Data Analyst, and Admin.
-        </p>
-        <button
-          className="text-sm text-accent hover:underline"
-          onClick={() => navigate('/')}
-        >
-          Back to dashboard
-        </button>
-      </Card>
-    );
-  }
-
   const config = CONFIG_MAP[selected];
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -951,6 +929,30 @@ export default function SmartImportPanel() {
       toast.info(`Import done — ${warnCount} row(s) skipped (entity not found)`);
     }
   }, [plantId, parsedRows, skipInvalid, config]);
+
+  // Same gap as Exports.tsx: this component inserts directly into tables
+  // (see the .insert(insertBatch) call above) with no role check of its own
+  // — only the hidden nav link stood between a Technician and a direct
+  // /import visit. Kept below all hooks (rather than right after `canView`
+  // is read) so the hooks above always run in the same order every render —
+  // an early return before them made React Hooks conditional.
+  if (!canView) {
+    return (
+      <Card className="p-6 text-center space-y-2" data-testid="import-access-denied">
+        <ShieldAlert className="h-8 w-8 mx-auto text-danger" />
+        <h2 className="font-semibold">Access denied</h2>
+        <p className="text-sm text-muted-foreground">
+          Smart Import is available to Manager, Data Analyst, and Admin.
+        </p>
+        <button
+          className="text-sm text-accent hover:underline"
+          onClick={() => navigate('/')}
+        >
+          Back to dashboard
+        </button>
+      </Card>
+    );
+  }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const validCount = parsedRows.filter(r => r.valid).length;

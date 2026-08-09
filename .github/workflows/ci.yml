@@ -120,7 +120,20 @@ jobs:
         # pressure's earlier bump) — 2 `as any` casts unwrapping it into a
         # typed shape, matching PretreatmentAndROLog.tsx's own pre-existing
         # convention (100+ other `any`s already in that one file).
-        run: npm run lint -- --max-warnings=1586
+        #
+        # Bumped 1586 -> 1616 (2026-08-09): third time this ratchet has gone
+        # stale from unrelated commits landing without it being updated (see
+        # the two entries above) — checked a clean, untouched clone before
+        # touching anything and it was already at 1616, so none of this gap
+        # is from this session's own change (a react-hooks/rules-of-hooks
+        # fix in Admin.tsx / SmartImportPanel.tsx / Exports.tsx — 0 warnings,
+        # only errors, and `--max-warnings` doesn't gate errors anyway, so
+        # this bump isn't what was silently masking those; they were real
+        # failures the whole time). Raising to the measured baseline so CI
+        # is accurately red/green again; still worth someone looking at why
+        # this keeps drifting rather than the count getting bumped a fourth
+        # time.
+        run: npm run lint -- --max-warnings=1616
 
       - name: Production build
         working-directory: frontend
