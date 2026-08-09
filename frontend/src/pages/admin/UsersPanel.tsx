@@ -55,11 +55,11 @@ const OPERATORS_PER_PAGE = 8;
 // ── Avatar styles ─────────────────────────────────────────────────────────────
 
 const ROLE_AVATAR: Record<string, string> = {
-  Admin:           'bg-[#CECBF6] text-[#3C3489]',
-  'Data Analyst':  'bg-[#C7E9F4] text-[#0C5878]',
-  Manager:         'bg-[#9FE1CB] text-[#085041]',
-  Technician:      'bg-[#FAC775] text-[#633806]',
-  Operator:        'bg-[#D3D1C7] text-[#444441]',
+  Admin:           'bg-role-admin/15 text-role-admin',
+  'Data Analyst':  'bg-role-analyst/15 text-role-analyst',
+  Manager:         'bg-role-manager/15 text-role-manager',
+  Technician:      'bg-role-technician/15 text-role-technician',
+  Operator:        'bg-muted text-muted-foreground',
   'No role':       'bg-muted text-muted-foreground',
 };
 

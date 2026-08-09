@@ -93,27 +93,22 @@ const presenceConfig: Record<PresenceState, { label: string; dot: string; badge:
 // Per-user deterministic colour accent
 // ---------------------------------------------------------------------------
 
-const TILE_ACCENTS = [
-  'border-l-sky-400', 'border-l-violet-400', 'border-l-teal-400', 'border-l-rose-400',
-  'border-l-amber-400', 'border-l-indigo-400', 'border-l-emerald-400', 'border-l-pink-400',
-];
-
 const AVATAR_COLORS = [
   'bg-info', 'bg-kpi-ro', 'bg-primary', 'bg-danger',
   'bg-warn', 'bg-kpi-ro', 'bg-accent', 'bg-danger',
 ];
 
 const PLANT_COLUMN_ACCENTS = [
-  { header: 'from-info to-info',      border: 'border-info',   bg: 'bg-info-soft',    text: 'text-info',    line: '#0ea5e9' },
-  { header: 'from-primary to-primary',    border: 'border-primary',  bg: 'bg-primary-soft',   text: 'text-primary',   line: '#14b8a6' },
-  { header: 'from-highlight to-highlight',    border: 'border-highlight',  bg: 'bg-highlight-soft',   text: 'text-highlight',   line: '#06b6d4' },
-  { header: 'from-info to-primary',     border: 'border-info',   bg: 'bg-info-soft',   text: 'text-info',    line: '#0369a1' },
-  { header: 'from-primary to-highlight',    border: 'border-primary',  bg: 'bg-primary-soft',  text: 'text-primary',   line: '#0f766e' },
-  { header: 'from-highlight to-info',     border: 'border-highlight',  bg: 'bg-highlight-soft',  text: 'text-highlight',   line: '#0e7490' },
+  { header: 'from-info to-info',      border: 'border-info',   bg: 'bg-info-soft',    text: 'text-info',    line: 'hsl(var(--org-line-1))' },
+  { header: 'from-primary to-primary',    border: 'border-primary',  bg: 'bg-primary-soft',   text: 'text-primary',   line: 'hsl(var(--org-line-2))' },
+  { header: 'from-highlight to-highlight',    border: 'border-highlight',  bg: 'bg-highlight-soft',   text: 'text-highlight',   line: 'hsl(var(--org-line-3))' },
+  { header: 'from-info to-primary',     border: 'border-info',   bg: 'bg-info-soft',   text: 'text-info',    line: 'hsl(var(--org-line-4))' },
+  { header: 'from-primary to-highlight',    border: 'border-primary',  bg: 'bg-primary-soft',  text: 'text-primary',   line: 'hsl(var(--org-line-5))' },
+  { header: 'from-highlight to-info',     border: 'border-highlight',  bg: 'bg-highlight-soft',  text: 'text-highlight',   line: 'hsl(var(--org-line-6))' },
 ];
 
 const DEPTH_SHADES = [
-  'bg-white',
+  'bg-card',
   'bg-info-soft/80',
   'bg-info-soft/70',
   'bg-primary-soft/80',
@@ -121,13 +116,17 @@ const DEPTH_SHADES = [
   'bg-highlight-soft/80',
 ];
 
-const CONNECTOR_COLORS = ['#0ea5e9', '#14b8a6', '#06b6d4', '#0369a1', '#0f766e', '#0e7490'];
+// Same 6-color set as PLANT_COLUMN_ACCENTS.line above — both read from the
+// --org-line-* tokens instead of maintaining two independent hardcoded copies.
+const CONNECTOR_COLORS = [
+  'hsl(var(--org-line-1))', 'hsl(var(--org-line-2))', 'hsl(var(--org-line-3))',
+  'hsl(var(--org-line-4))', 'hsl(var(--org-line-5))', 'hsl(var(--org-line-6))',
+];
 
 function hashId(id: string) {
   return id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 }
 
-function accentForId(id: string)  { return TILE_ACCENTS[hashId(id) % TILE_ACCENTS.length]; }
 function avatarColor(id: string)  { return AVATAR_COLORS[hashId(id) % AVATAR_COLORS.length]; }
 
 function initials(s: StaffMember) {
@@ -905,15 +904,18 @@ function OrgChart({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]
 type KpiRange2 = 'today' | 7 | 14 | 30;
 type KpiViewMode = 'team' | 'individual';
 
-// Each input type column definition
+// Each input type column definition — same 7-category taxonomy as the
+// app's kpi-* dashboard tokens (Wells/Locator/RO/Meter/Solar/Grid/Chem),
+// so a reading type reads as the same color here as it does everywhere
+// else in the app.
 const INPUT_COLS = [
-  { key: 'wells',         label: 'Wells',       full: 'Wells Reading',    color: '#0ea5e9' },
-  { key: 'locator',       label: 'Locator',     full: 'Locator Reading',  color: '#14b8a6' },
-  { key: 'ro_train',      label: 'RO Train',    full: 'RO Train (hourly)',color: '#8b5cf6' },
-  { key: 'product_meter', label: 'Prod. Meter', full: 'Product Meter',    color: '#f59e0b' },
-  { key: 'solar',         label: 'Solar',       full: 'Solar Reading',    color: '#f97316' },
-  { key: 'grid',          label: 'Grid',        full: 'Grid Reading',     color: '#64748b' },
-  { key: 'chemicals',     label: 'Chemicals',   full: 'Chemical Dosing',  color: '#10b981' },
+  { key: 'wells',         label: 'Wells',       full: 'Wells Reading',    color: 'hsl(var(--kpi-wells))' },
+  { key: 'locator',       label: 'Locator',     full: 'Locator Reading',  color: 'hsl(var(--kpi-locator))' },
+  { key: 'ro_train',      label: 'RO Train',    full: 'RO Train (hourly)',color: 'hsl(var(--kpi-ro))' },
+  { key: 'product_meter', label: 'Prod. Meter', full: 'Product Meter',    color: 'hsl(var(--kpi-meter))' },
+  { key: 'solar',         label: 'Solar',       full: 'Solar Reading',    color: 'hsl(var(--kpi-solar))' },
+  { key: 'grid',          label: 'Grid',        full: 'Grid Reading',     color: 'hsl(var(--kpi-grid))' },
+  { key: 'chemicals',     label: 'Chemicals',   full: 'Chemical Dosing',  color: 'hsl(var(--kpi-chem))' },
 ] as const;
 
 type InputColKey = typeof INPUT_COLS[number]['key'];
@@ -937,12 +939,12 @@ function roTargetForPlant(plant: { ro_hourly_target?: number | string | null } |
 }
 
 const KPI_STATUS = {
-  complete: { color: '#22c55e', label: 'Complete' },
-  partial:  { color: '#eab308', label: 'Partial'  },
-  minimal:  { color: '#f97316', label: 'Minimal'  },
-  missed:   { color: '#ef4444', label: 'Missed'   },
-  pending:  { color: '#38bdf8', label: 'Pending (today)' },
-  na:       { color: '#e5e7eb', label: 'N/A'      },
+  complete: { color: 'hsl(var(--reading-status-complete))', label: 'Complete' },
+  partial:  { color: 'hsl(var(--reading-status-partial))',  label: 'Partial'  },
+  minimal:  { color: 'hsl(var(--reading-status-minimal))',  label: 'Minimal'  },
+  missed:   { color: 'hsl(var(--reading-status-missed))',   label: 'Missed'   },
+  pending:  { color: 'hsl(var(--reading-status-pending))',  label: 'Pending (today)' },
+  na:       { color: 'hsl(var(--reading-status-na))',       label: 'N/A'      },
 } as const;
 
 // A cell for the CURRENT day with a score of exactly 0 reads as "Pending",

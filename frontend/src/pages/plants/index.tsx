@@ -200,12 +200,15 @@ export default function Plants() {
   // block tint, capacity number, and health ring — all from one value.
   // Falls back to a round-robin palette for plants not in the map.
   const PLANT_COLOR_MAP: Record<string, string> = {
-    'Guizo':     '#0EA5E9', // sky-500
-    'Mambaling': '#0D9488', // teal-600
-    'SRP':       '#06B6D4', // cyan-500
-    'Umapad':    '#0F766E', // teal-700
+    'Guizo':     'hsl(var(--plant-1))',
+    'Mambaling': 'hsl(var(--plant-2))',
+    'SRP':       'hsl(var(--plant-3))',
+    'Umapad':    'hsl(var(--plant-4))',
   };
-  const PLANT_COLOR_PALETTE = ['#0EA5E9', '#0D9488', '#06B6D4', '#0F766E', '#0891B2', '#0E7490'];
+  const PLANT_COLOR_PALETTE = [
+    'hsl(var(--plant-1))', 'hsl(var(--plant-2))', 'hsl(var(--plant-3))',
+    'hsl(var(--plant-4))', 'hsl(var(--plant-5))', 'hsl(var(--plant-6))',
+  ];
 
   function getPlantColor(plant: any, index: number): string {
     if ((plant as any).color) return (plant as any).color;
@@ -215,11 +218,11 @@ export default function Plants() {
   // ── Colour helpers ────────────────────────────────────────────────────────
   // Metric chip semantics: ≥75% teal (good), 40–74% sky (mid), <40% red (danger)
   function statBarColor(active: number, total: number): { bar: string; textColor: string; bg: string; border: string; dot: string } {
-    if (total === 0) return { bar: 'bg-muted', textColor: 'text-muted-foreground', bg: 'bg-muted/40', border: 'border-border/40', dot: '#94a3b8' };
+    if (total === 0) return { bar: 'bg-muted', textColor: 'text-muted-foreground', bg: 'bg-muted/40', border: 'border-border/40', dot: 'hsl(var(--muted-foreground))' };
     const r = active / total;
-    if (r >= 0.75) return { bar: 'bg-primary',  textColor: 'text-primary',  bg: 'bg-primary-soft',  border: 'border-primary',  dot: '#0D9488' };
-    if (r >= 0.4)  return { bar: 'bg-info',   textColor: 'text-info',    bg: 'bg-info-soft',    border: 'border-info',    dot: '#0EA5E9' };
-    return                { bar: 'bg-danger',   textColor: 'text-danger',    bg: 'bg-danger-soft',    border: 'border-danger',    dot: '#ef4444' };
+    if (r >= 0.75) return { bar: 'bg-primary',  textColor: 'text-primary',  bg: 'bg-primary-soft',  border: 'border-primary',  dot: 'hsl(var(--primary))' };
+    if (r >= 0.4)  return { bar: 'bg-info',   textColor: 'text-info',    bg: 'bg-info-soft',    border: 'border-info',    dot: 'hsl(var(--info))' };
+    return                { bar: 'bg-danger',   textColor: 'text-danger',    bg: 'bg-danger-soft',    border: 'border-danger',    dot: 'hsl(var(--danger))' };
   }
 
   function roUtilColors(pct: number) {

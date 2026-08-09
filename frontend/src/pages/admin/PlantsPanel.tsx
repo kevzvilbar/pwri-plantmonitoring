@@ -44,14 +44,16 @@ export function PlantsPanel() {
           )}
         </div>
       </div>
+      {/* ── Plant list ── */}
+      <div className="stagger-grid space-y-2">
       {filtered.map((p) => {
         const active = p.status === 'Active';
         return (
           <Card
             key={p.id}
-            className={`p-3 border-l-2 transition-colors ${
+            className={`p-3 border-l-2 card-interactive ${
               active
-                ? 'border-l-emerald-500/70 bg-gradient-to-r from-accent-soft/40 to-transparent'
+                ? 'border-l-accent/70 bg-gradient-to-r from-accent-soft/40 to-transparent'
                 : 'border-l-muted-foreground/40 bg-muted/20 opacity-90'
             }`}
             data-testid={`admin-plant-card-${p.id}`}
@@ -84,6 +86,7 @@ export function PlantsPanel() {
       {filtered.length === 0 && (
         <Card className="p-4 text-center text-xs text-muted-foreground">No plants</Card>
       )}
+      </div>
     </div>
   );
 }

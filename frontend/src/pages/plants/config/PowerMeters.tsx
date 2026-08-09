@@ -212,8 +212,8 @@ export function GridMeterListRows({
               onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
               className="text-sm bg-transparent border-b border-info focus:outline-none focus:ring-1 focus:ring-info rounded-t w-full" />
             {/* Keep multiplier visible while editing name — styled like the readout below */}
-            <div className="flex items-center gap-1 justify-self-center bg-slate-900 rounded-md px-2 py-1">
-              <span className="text-xs text-slate-500 font-mono">×</span>
+            <div className="digital-readout justify-self-center">
+              <span className="text-xs digital-readout-dim font-mono">×</span>
               <span className="text-xs font-mono font-semibold text-info" style={{ textShadow: '0 0 8px currentColor' }}>{mult}</span>
             </div>
             <div className="flex items-center gap-1 w-10 justify-end">
@@ -233,8 +233,8 @@ export function GridMeterListRows({
             <span className="text-sm truncate font-medium" title={name}>{name}</span>
 
             {/* Multiplier cell — styled like a meter's own digital readout. Uses local state so typing is not interrupted */}
-            <div className="flex items-center gap-1 justify-self-center bg-slate-900 dark:bg-slate-950 border border-slate-700 rounded-md px-2 py-1">
-              <span className="text-xs text-slate-500 font-mono shrink-0">×</span>
+            <div className="digital-readout justify-self-center">
+              <span className="text-xs digital-readout-dim font-mono shrink-0">×</span>
               <input
                 type="number" step="any" min="0.001"
                 value={multInputs[i] ?? String(mult)}

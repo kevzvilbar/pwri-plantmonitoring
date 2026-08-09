@@ -957,7 +957,7 @@ function LinearRegressionChart({
           <span className="w-2.5 h-2.5 rounded-full inline-block bg-danger opacity-85" /> Outlier
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:'rgb(20 184 166)'}} /> Corrected
+          <span className="w-2.5 h-2.5 rounded-full inline-block bg-accent" /> Corrected
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full inline-block bg-current opacity-35" /> Normal

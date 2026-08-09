@@ -23,6 +23,9 @@ import {
 } from './types';
 import { useAppStore } from '@/store/appStore';
 import { reasonCategoryLabel, reasonEntityPrefix } from '@/lib/reasonCodes';
+import {
+  C_PRODUCTION, C_CONSUMPTION, C_NRW, C_RAWWATER, C_RECOVERY, C_TDS, C_GRID_PV,
+} from '@/lib/chartColors';
 
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 type DrillMode = 'default' | 'drilldown' | 'drillup';
@@ -37,22 +40,16 @@ export const DRILL_COLORS = [
   'hsl(var(--chart-4))',
   'hsl(var(--chart-5))',
   'hsl(var(--chart-6))',
-  '#f59e0b',
-  '#8b5cf6',
-  '#ec4899',
-  '#14b8a6',
-  '#f97316',
-  '#84cc16',
+  'hsl(var(--chart-7))',
+  'hsl(var(--chart-8))',
+  'hsl(var(--chart-9))',
+  'hsl(var(--chart-10))',
+  'hsl(var(--chart-11))',
+  'hsl(var(--chart-12))',
 ];
 
 // ─── Modern chart metric palette ─────────────────────────────────────────────
-const C_PRODUCTION  = '#22c55e';  // green-500  — water produced
-const C_CONSUMPTION = '#3b82f6';  // blue-500   — water consumed
-const C_NRW         = '#eab308';  // yellow-500 — non-revenue water
-const C_RAWWATER    = '#06b6d4';  // cyan-500   — raw (untreated) water
-const C_RECOVERY    = '#fb923c';  // orange-400 — RO recovery rate
-const C_TDS         = '#a78bfa';  // violet-400 — permeate TDS
-const C_GRID_PV     = '#f59e0b';  // amber-400  — grid power / PV ratio
+// Shared with EntityHistoryChart.tsx via lib/chartColors.ts — see that file.
 
 // ─── Modern inline chart legend ──────────────────────────────────────────────
 // Exported so other dashboard cards (e.g. BlendingVolumeCard's by-well
@@ -2759,7 +2756,7 @@ export function TrendChart({
         padding: '9px 12px',
         minWidth: 148,
         maxWidth: 300,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        boxShadow: 'var(--shadow-elev)',
         backdropFilter: 'blur(8px)',
       }}>
         <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 12, letterSpacing: '-0.01em' }}>{label}</p>
@@ -2820,7 +2817,7 @@ export function TrendChart({
         background: 'hsl(var(--card))',
         border: '1px solid hsl(var(--border))',
         borderRadius: 8, fontSize: 11, padding: '8px 10px',
-        minWidth: 200, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.92, backdropFilter: 'blur(4px)',
+        minWidth: 200, boxShadow: 'var(--shadow-elev)', opacity: 0.92, backdropFilter: 'blur(4px)',
       }}>
         <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
         <p style={{ margin: '1px 0', color: C_GRID_PV }}>
@@ -3779,7 +3776,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6 }} />
@@ -3818,7 +3815,7 @@ export function TrendChart({
               />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any) => [v != null ? `${v} ${roUnit}` : '—', metric === 'tds' ? 'Avg TDS' : 'Avg Recovery']}
                 labelFormatter={(label) => label}
               />
@@ -3839,7 +3836,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6 }} />
@@ -3864,7 +3861,7 @@ export function TrendChart({
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
               />
               <Legend wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6 }} />
@@ -3941,7 +3938,7 @@ export function TrendChart({
                 tickLine={false}
               />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.10)' }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any, name: string) => [
                   v != null ? `₱${(+v).toFixed(4)}/m³` : '—',
                   name,
@@ -4026,7 +4023,7 @@ export function TrendChart({
                   <div style={{
                     background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',
                     borderRadius: 8, fontSize: 11, padding: '8px 10px',
-                    minWidth: 160, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.92, backdropFilter: 'blur(4px)',
+                    minWidth: 160, boxShadow: 'var(--shadow-elev)', opacity: 0.92, backdropFilter: 'blur(4px)',
                   }}>
                     <p style={{ margin: '0 0 5px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{label}</p>
                     {hasSolarData && kwhSource !== 'grid' && solarVal > 0 && (
@@ -4107,7 +4104,7 @@ export function TrendChart({
                     background: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: 8, fontSize: 11, padding: '8px 10px',
-                    minWidth: 170, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', opacity: 0.92, backdropFilter: 'blur(4px)',
+                    minWidth: 170, boxShadow: 'var(--shadow-elev)', opacity: 0.92, backdropFilter: 'blur(4px)',
                   }}>
                     <p style={{ margin: '0 0 5px', fontWeight: 600 }}>{label}</p>
                     <p style={{ margin: '1px 0', color: dotColor, fontWeight: 700 }}>

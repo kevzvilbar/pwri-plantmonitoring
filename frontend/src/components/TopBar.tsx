@@ -184,7 +184,7 @@ export function TopBar() {
             />
             <div
               style={{ display: 'none' }}
-              className="h-7 w-7 rounded-lg bg-[hsl(175_84%_31%)] items-center justify-center shrink-0"
+              className="h-7 w-7 rounded-lg bg-primary items-center justify-center shrink-0"
             >
               <span className="text-white font-bold text-xs select-none">PW</span>
             </div>

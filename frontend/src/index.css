@@ -188,6 +188,103 @@
     --topo-customNode-lane:    210 40% 98%;
     --topo-customNode-accent:  215 19% 35%;   /* only kind where accent ≠ border */
 
+    /* ── Digital readout (LCD-style meter display) ─────────────────
+       Deliberately dark regardless of light/dark theme — mimics a
+       physical meter's glowing digital counter, so it must NOT ride
+       the normal surface tokens (bg-card etc. follow the theme).
+       Used by PowerMeters.tsx's multiplier readout; the glowing
+       digit itself stays on the semantic `info` token. */
+    --display:        215 45% 10%;
+    --display-border: 215 25% 28%;
+    --display-dim:    215 15% 55%;
+
+    /* ── CIP chemical identity accents ──────────────────────────────
+       Distinguishes chemical cards on the CIP log (Caustic Soda / HCl
+       / SLS / custom) so a tech can tell them apart at a glance —
+       the same "identity color" role topo-* plays for the plant-flow
+       diagram. Deliberately its own set, not reused from warn/danger:
+       an HCl card isn't an alert, it's just HCl. */
+    --chem-caustic: 174 62% 42%;
+    --chem-hcl:      32 90% 50%;
+    --chem-sls:      48 92% 50%;
+    --chem-custom:  271 70% 60%;
+
+    /* Filter-cost/usage chart categories (FilterCostChart / FilterUsageChart) */
+    --filter-cartridge: 239 84% 67%;
+    --filter-bag:        38 92% 50%;
+
+    /* BlendingVolumeCard.tsx "Total" bar/gradient fill */
+    --blend-total: 255 92% 76%;
+
+    /* Employees.tsx daily-compliance status legend (KPI_STATUS) — a
+       6-point completion gradient, distinct from the 4-state
+       accent/warn/danger/info alert system so it gets its own set. */
+    --reading-status-complete: 142 71% 45%;
+    --reading-status-partial:   45 93% 47%;
+    --reading-status-minimal:   25 95% 53%;
+    --reading-status-missed:     0 84% 60%;
+    --reading-status-pending:  198 93% 60%;
+    --reading-status-na:       220 13% 91%;
+
+    /* User role identity accents (UsersPanel avatar badges) ─────
+       One hue per higher-privilege role. Operator / "No role" fall
+       back to the neutral muted token instead of getting their own
+       hue — matches the original design's own choice to leave the
+       most common, lowest-privilege role visually undistinguished. */
+    --role-admin:      246 60% 58%;
+    --role-analyst:    198 75% 42%;
+    --role-manager:    163 65% 38%;
+    --role-technician:  35 88% 48%;
+
+    /* Per-plant identity accents (teal-cyan family, plants/index.tsx) ─
+       Each plant gets a unique color driving its left accent strip,
+       capacity tint, and health ring — all from one token. Named plants
+       map onto the first 4; anything else round-robins the full 6. */
+    --plant-1: 199 89% 48%;
+    --plant-2: 175 84% 32%;
+    --plant-3: 189 94% 43%;
+    --plant-4: 175 77% 26%;
+    --plant-5: 192 91% 36%;
+    --plant-6: 193 82% 31%;
+
+    /* Dashboard trend-metric identity — the same metric (production,
+       consumption, NRW, etc.) always renders in the same color on
+       both the Dashboard trend chart and the per-entity history
+       chart. Both import from lib/chartColors.ts, which points here,
+       instead of each hardcoding its own copy. */
+    --metric-production:  142 71% 45%;
+    --metric-consumption: 217 91% 60%;
+    --metric-nrw:          45 93% 47%;
+    --metric-rawwater:    189 94% 43%;
+    --metric-recovery:     27 96% 61%;
+    --metric-tds:         255 92% 76%;
+    --metric-gridpv:       38 92% 50%;
+
+    /* Employees.tsx org-tree connector lines — PLANT_COLUMN_ACCENTS.line
+       and CONNECTOR_COLORS used to be two separately-hardcoded copies of
+       this exact 6-color set; now both read from here so they can't
+       drift apart. Indexed by tree depth, so distinct shades matter more
+       than semantic naming here. */
+    --org-line-1: 199 89% 48%;
+    --org-line-2: 173 80% 40%;
+    --org-line-3: 189 94% 43%;
+    --org-line-4: 201 96% 32%;
+    --org-line-5: 175 77% 26%;
+    --org-line-6: 193 82% 31%;
+
+    /* Drill-down palette extension (7–12) — cycles when more than 6
+       locators/plants are shown at once (per-locator lines, plus
+       ComplianceRadarCard polygons and CostSunburst arcs share this
+       exact array). The original hardcoded tail nearly duplicated
+       chart-4 and chart-6, which defeats the point of extending past
+       6 colors — these fill the gaps in the wheel instead. */
+    --chart-7:  118 55% 38%;   /* Green   */
+    --chart-8:  228 70% 60%;   /* Indigo  */
+    --chart-9:  330 81% 60%;   /* Pink    */
+    --chart-10: 173 80% 40%;   /* Teal    */
+    --chart-11: 300 60% 50%;   /* Magenta */
+    --chart-12: 84  81% 44%;   /* Lime    */
+
     /* ── Elevation shadows ──────────────────────────────────────── */
     --shadow-card:  0 1px 2px 0 hsl(215 50% 11% / 0.04),
                     0 1px 3px 0 hsl(215 50% 11% / 0.06);
@@ -233,6 +330,49 @@
     --input:               215 28% 22%;
     --ring:                175 65% 48%;
     --topbar-muted:        210 20% 52%;
+
+    /* Digital readout — slightly deeper housing in dark mode, same idea */
+    --display:        215 55% 6%;
+    --display-border: 215 30% 24%;
+    --display-dim:    215 15% 48%;
+
+    /* CIP chemical identity accents (dark) — desaturated for readability */
+    --chem-caustic: 174 50% 52%;
+    --chem-hcl:      32 85% 58%;
+    --chem-sls:      48 80% 58%;
+    --chem-custom:  271 65% 68%;
+
+    /* Role identity accents (dark) */
+    --role-admin:      246 55% 68%;
+    --role-analyst:    198 65% 55%;
+    --role-manager:    163 55% 50%;
+    --role-technician:  35 80% 58%;
+
+    /* Per-plant identity accents (dark) */
+    --plant-1: 199 75% 58%;
+    --plant-2: 175 70% 42%;
+    --plant-3: 189 80% 52%;
+    --plant-4: 175 65% 38%;
+    --plant-5: 192 75% 46%;
+    --plant-6: 193 68% 42%;
+
+    /* Employees.tsx daily-compliance status legend (dark) — na flips
+       from a near-white chip to a near-black one, everything else
+       just brightens slightly for a dark background. */
+    --reading-status-complete: 142 60% 55%;
+    --reading-status-partial:   45 85% 58%;
+    --reading-status-minimal:   25 85% 62%;
+    --reading-status-missed:     0 75% 65%;
+    --reading-status-pending:  198 85% 65%;
+    --reading-status-na:       220 13% 22%;
+
+    /* Employees.tsx org-tree connector lines (dark) */
+    --org-line-1: 201 75% 55%;
+    --org-line-2: 173 65% 48%;
+    --org-line-3: 189 75% 52%;
+    --org-line-4: 201 80% 42%;
+    --org-line-5: 175 60% 38%;
+    --org-line-6: 193 65% 42%;
 
     /* ── Hero / stat card gradients (dark) ───────────────────────── */
     --gradient-stat:      linear-gradient(135deg, hsl(210 55% 10%) 0%, hsl(175 60% 18%) 100%);
@@ -651,6 +791,17 @@
 
   /* ── Field group spacing ───────────────────────────────────────── */
   .field-group { @apply space-y-1.5; }
+
+  /* ── Digital readout — LCD-style housing for meter/multiplier
+     displays (PowerMeters.tsx). Pair with a glowing `text-info`
+     digit + `style={{ textShadow: '0 0 8px currentColor' }}`. ──── */
+  .digital-readout {
+    @apply flex items-center gap-1 rounded-md border px-2 py-1;
+    background: hsl(var(--display));
+    border-color: hsl(var(--display-border));
+  }
+  .digital-readout-dim { color: hsl(var(--display-dim)); }
+
 }
 
 /* ── Keyframe definitions ─────────────────────────────────────────────────── */

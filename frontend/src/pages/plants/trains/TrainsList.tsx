@@ -275,8 +275,8 @@ export function TrainsList({ plantId }: { plantId: string }) {
         const ft = effectiveFilterType(t);
         const effectiveStatus = deriveTrainStatus(t);
         const borderColor =
-          effectiveStatus === 'Running'     ? 'border-l-emerald-400 dark:border-l-emerald-600' :
-          effectiveStatus === 'Maintenance' ? 'border-l-amber-400 dark:border-l-amber-500'     :
+          effectiveStatus === 'Running'     ? 'border-l-accent' :
+          effectiveStatus === 'Maintenance' ? 'border-l-warn'   :
                                               'border-l-muted-foreground/30';
         const activeKey = activeSection[t.id] ?? null;
         const trainLabel = `Train ${t.train_number}${t.name ? ` · ${t.name}` : ''}`;
@@ -289,7 +289,7 @@ export function TrainsList({ plantId }: { plantId: string }) {
         const numCtrl  = t.num_controllers    ?? 0;
 
         return (
-          <Card key={t.id} className={`overflow-hidden border-l-2 transition-shadow duration-200 hover:shadow-elev ${borderColor}`} data-testid={`train-card-${t.id}`}>
+          <Card key={t.id} className={`overflow-hidden border-l-2 card-interactive ${borderColor}`} data-testid={`train-card-${t.id}`}>
             {/* ── Train header ── */}
             <div className="p-3 flex justify-between items-start gap-2">
               <div className="min-w-0 flex-1">

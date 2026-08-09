@@ -389,6 +389,8 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
           )}
         </div>
       </div>
+      {/* ── Well list ── */}
+      <div className="stagger-grid space-y-2">
       {wells?.map((w: any) => {
         const checked = selected.has(w.id);
         const isBlending = blendingSet.has(w.id);
@@ -397,11 +399,11 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
           <Card
             key={w.id}
             ref={(el) => { wellCardRefs.current[w.id] = el; }}
-            className={`p-3 hover:shadow-elev border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
+            className={`p-3 card-interactive border-l-2 ${checked ? 'ring-1 ring-primary' : ''} ${
               wellPulseId === w.id ? 'ring-2 ring-accent shadow-elev' : ''
             } ${
               w.status === 'Active'
-                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                ? 'border-l-accent'
                 : 'border-l-muted-foreground/30'
             } ${isBlending ? 'border-primary' : ''}`}
             data-testid={`well-card-${w.id}`}
@@ -598,6 +600,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
         );
       })}
       {!wells?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Wells Yet</Card>}
+      </div>
       {adding && (
         <AddWellDialog plantId={plantId} onClose={() => {
           setAdding(false);

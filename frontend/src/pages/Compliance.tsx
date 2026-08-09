@@ -264,7 +264,7 @@ function Sparkline({
         <polyline
           points={pts}
           fill="none"
-          stroke="#6366f1"
+          stroke="hsl(var(--muted-foreground))"
           strokeWidth="1.5"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -279,7 +279,7 @@ function Sparkline({
               cx={toX(i)}
               cy={toY(v.val)}
               r="2.5"
-              fill={breached ? 'hsl(var(--danger))' : '#6366f1'}
+              fill={breached ? 'hsl(var(--danger))' : 'hsl(var(--muted-foreground))'}
             />
           );
         })}

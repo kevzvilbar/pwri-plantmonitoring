@@ -1188,7 +1188,7 @@ function Rollup() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {/* stacked: chem sits below power, so only the top segment (power) is rounded — same convention as the kWh Solar/Grid stack in TrendChart.tsx */}
                   <Bar dataKey="chem" stackId="c" fill="url(#costsChemFill)" name="Chem ₱" radius={[0, 0, 0, 0]} maxBarSize={32} />
@@ -1744,8 +1744,8 @@ function Compare() {
                       <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.55} />
                     </linearGradient>
                     <linearGradient id="cmpSolarFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.55} />
+                      <stop offset="5%" stopColor="hsl(var(--kpi-solar))" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="hsl(var(--kpi-solar))" stopOpacity={0.55} />
                     </linearGradient>
                     <linearGradient id="cmpEffFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--chart-3))" stopOpacity={0.95} />
@@ -1755,7 +1755,7 @@ function Compare() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(dailyChartData.length / 10) - 1)} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }}
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }}
                     formatter={(v: any, name: string) => [v != null ? `${(+v).toLocaleString()} kWh` : '—', name]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {/* grouped, not stacked — each series stands on its own, so every bar gets the full top radius */}
@@ -1772,7 +1772,7 @@ function Compare() {
                     formatter={(v: any, name: string) => [v != null ? `${(+v).toLocaleString()} kWh` : '—', name]} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="grid"      stroke="hsl(var(--chart-1))" strokeWidth={2}   dot={false} name="Grid kWh" connectNulls />
-                  <Line type="monotone" dataKey="solar"     stroke="#22c55e"              strokeWidth={2}   dot={false} name="Solar kWh" connectNulls />
+                  <Line type="monotone" dataKey="solar"     stroke="hsl(var(--kpi-solar))"  strokeWidth={2}   dot={false} name="Solar kWh" connectNulls />
                   <Line type="monotone" dataKey="effective" stroke="hsl(var(--chart-3))" strokeWidth={1.5} dot={false} strokeDasharray="4 3" name="Eff. kWh (×mult)" connectNulls />
                 </LineChart>
               )}
@@ -1806,7 +1806,7 @@ function Compare() {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-elev)', backdropFilter: 'blur(8px)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="billed"    fill="url(#billsBilledFill)" name="Billed kWh"         radius={[6, 6, 0, 0]} maxBarSize={32} />
                   <Bar dataKey="daily"     fill="url(#billsDailyFill)"  name="Sum daily kWh"      radius={[6, 6, 0, 0]} maxBarSize={32} />

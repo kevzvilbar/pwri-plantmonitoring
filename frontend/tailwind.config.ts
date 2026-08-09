@@ -98,6 +98,27 @@ export default {
           grid:    "hsl(var(--kpi-grid))",
           chem:    "hsl(var(--kpi-chem))",
         },
+        // Digital-readout housing (PowerMeters.tsx multiplier display) —
+        // deliberately dark-always, not part of the light/dark surface set.
+        display: {
+          DEFAULT: "hsl(var(--display))",
+          border: "hsl(var(--display-border))",
+          dim: "hsl(var(--display-dim))",
+        },
+        // CIP chemical identity accents (see index.css for rationale).
+        chem: {
+          caustic: "hsl(var(--chem-caustic))",
+          hcl: "hsl(var(--chem-hcl))",
+          sls: "hsl(var(--chem-sls))",
+          custom: "hsl(var(--chem-custom))",
+        },
+        // User role identity accents (UsersPanel avatar badges).
+        role: {
+          admin: "hsl(var(--role-admin))",
+          analyst: "hsl(var(--role-analyst))",
+          manager: "hsl(var(--role-manager))",
+          technician: "hsl(var(--role-technician))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",

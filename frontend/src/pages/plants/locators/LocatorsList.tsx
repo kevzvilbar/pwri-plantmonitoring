@@ -325,19 +325,21 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
           )}
         </div>
       </div>
+      {/* ── Locator list ── */}
+      <div className="stagger-grid space-y-2">
       {locators?.map((l: any) => {
         const checked = selected.has(l.id);
         return (
           <Card
             key={l.id}
             ref={(el) => { cardRefs.current[l.id] = el; }}
-            className={`p-3 hover:shadow-elev border-l-2 transition-colors ${
+            className={`p-3 card-interactive border-l-2 ${
               checked ? 'ring-1 ring-primary' : ''
             } ${
               pulseId === l.id ? 'ring-2 ring-accent shadow-elev' : ''
             } ${
               l.status === 'Active'
-                ? 'border-l-emerald-400 dark:border-l-emerald-600'
+                ? 'border-l-accent'
                 : 'border-l-muted-foreground/30'
             }`}
             data-testid={`locator-card-${l.id}`}
@@ -484,6 +486,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
         );
       })}
       {!locators?.length && <Card className="p-4 text-center text-xs text-muted-foreground">No Locators Yet</Card>}
+      </div>
       {adding && <AddLocatorDialog plantId={plantId} onClose={() => { setAdding(false); qc.invalidateQueries({ queryKey: ['locators', plantId] }); qc.invalidateQueries({ queryKey: ['product-meters-plant-locators', plantId] }); }} />}
       {editing && <EditLocatorDialog locator={editing} onClose={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['locators', plantId] }); qc.invalidateQueries({ queryKey: ['product-meters-plant-locators', plantId] }); }} />}
       {showLocatorCsv && (

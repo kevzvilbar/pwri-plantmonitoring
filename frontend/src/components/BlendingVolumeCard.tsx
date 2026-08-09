@@ -116,7 +116,7 @@ interface Props {
 // Base bar color — kept identical to the previous hardcoded fill so the
 // card's brand color doesn't shift, just gets a modern gradient + rounded
 // top corners to match the rest of the dashboard's chart language.
-const TOTAL_FILL = '#a78bfa'; // violet-400
+const TOTAL_FILL = 'hsl(var(--blend-total))';
 
 // Stacked "by well" view caps at this many individually-colored wells; the
 // remainder rolls up into a single "Other" segment so the legend/stack stay
@@ -247,7 +247,7 @@ export function BlendingVolumeCard({ plantIds }: Props) {
         padding: '9px 12px',
         minWidth: 168,
         maxWidth: 260,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        boxShadow: 'var(--shadow-elev)',
         backdropFilter: 'blur(8px)',
       }}>
         <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 12, letterSpacing: '-0.01em' }}>{label}</p>

@@ -656,12 +656,12 @@ export function MigrationsPanel() {
               key={f.filename}
               className={`p-3 border-l-2 ${
                 f.status === 'pending'
-                  ? 'border-l-rose-500/70'
+                  ? 'border-l-danger/70'
                   : f.status === 'partial'
-                    ? 'border-l-amber-500/70'
+                    ? 'border-l-warn/70'
                     : f.status === 'applied'
-                      ? 'border-l-emerald-500/60 opacity-90'
-                      : 'border-l-zinc-300'
+                      ? 'border-l-accent/60 opacity-90'
+                      : 'border-l-muted-foreground/40'
               }`}
               data-testid={`migration-${f.filename}`}
             >

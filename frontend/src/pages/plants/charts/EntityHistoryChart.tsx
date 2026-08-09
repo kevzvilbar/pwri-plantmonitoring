@@ -36,14 +36,10 @@ import { fmtNum, calc, nrwColor, ALERTS } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-
-
-// Same palette as the plant-wide NRW chart in components/dashboard/TrendChart.tsx
-// (C_PRODUCTION/C_CONSUMPTION/C_NRW there) — kept as local literals rather than a
-// cross-file import so this component doesn't reach into Dashboard internals.
-const C_PRODUCTION  = '#22c55e';  // green-500  — mother meter's own volume
-const C_CONSUMPTION = '#3b82f6';  // blue-500   — sibling locators' combined volume
-const C_NRW         = '#eab308';  // yellow-500 — non-revenue water %
+// Same palette as the plant-wide NRW chart in components/dashboard/TrendChart.tsx.
+// Both import from lib/chartColors.ts (a neutral shared module, not a reach into
+// Dashboard internals) so the two charts can't silently drift apart.
+import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
 
 export interface HistoryRow { date: string; consumption: number; reading?: number; }
 

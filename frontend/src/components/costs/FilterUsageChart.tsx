@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { MonthlyFilterUsage } from "@/lib/filterUsage";
+import { C_FILTER_CARTRIDGE, C_FILTER_BAG } from "@/lib/chartColors";
 
 interface Props {
   data: MonthlyFilterUsage[];
@@ -34,8 +35,8 @@ export function FilterUsageChart({ data }: Props) {
               <YAxis fontSize={12} allowDecimals={false} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="cartridge_count" name="Cartridge" stackId="usage" fill="#6366f1" />
-              <Bar dataKey="bag_count" name="Bag" stackId="usage" fill="#f59e0b" />
+              <Bar dataKey="cartridge_count" name="Cartridge" stackId="usage" fill={C_FILTER_CARTRIDGE} />
+              <Bar dataKey="bag_count" name="Bag" stackId="usage" fill={C_FILTER_BAG} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -51,8 +52,8 @@ export function FilterUsageChart({ data }: Props) {
               <YAxis fontSize={12} tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(value: number) => `₱${value.toLocaleString()}`} />
               <Legend />
-              <Bar dataKey="cartridge_cost" name="Cartridge (₱)" stackId="cost" fill="#6366f1" />
-              <Bar dataKey="bag_cost" name="Bag (₱)" stackId="cost" fill="#f59e0b" />
+              <Bar dataKey="cartridge_cost" name="Cartridge (₱)" stackId="cost" fill={C_FILTER_CARTRIDGE} />
+              <Bar dataKey="bag_cost" name="Bag (₱)" stackId="cost" fill={C_FILTER_BAG} />
             </BarChart>
           </ResponsiveContainer>
         </div>

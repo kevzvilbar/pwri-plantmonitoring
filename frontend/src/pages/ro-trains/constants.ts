@@ -42,34 +42,37 @@ export const CIP_BUILTIN_DB_MAP: Record<string, string> = {
   'SLS':          'sls_g',
 };
 
-/** Accent colours for each CIP chemical card (built-ins first, then fallback palette). */
+/**
+ * Accent colours for each CIP chemical card (built-ins first, then fallback
+ * palette). Backed by the --chem-* tokens in index.css — see that file for
+ * why these are their own identity-color set rather than reusing warn/danger.
+ * (The `bg` field this used to carry was dead: every entry set it to the
+ * same literal string and no call site ever read it — removed rather than
+ * carried forward.)
+ */
 export const CIP_CHEM_ACCENTS: Record<string, {
-  border: string; bg: string; bar: string; badge: string;
+  border: string; bar: string; badge: string;
 }> = {
   'Caustic Soda': {
-    border: 'border-teal-400 bg-teal-50/40 dark:bg-teal-950/30',
-    bg:     'border-border bg-muted/20',
-    bar:    'bg-teal-500',
-    badge:  'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
+    border: 'border-chem-caustic bg-chem-caustic/10',
+    bar:    'bg-chem-caustic',
+    badge:  'bg-chem-caustic/15 text-chem-caustic',
   },
   'HCl': {
-    border: 'border-amber-400 bg-amber-50/40 dark:bg-amber-950/30',
-    bg:     'border-border bg-muted/20',
-    bar:    'bg-amber-400',
-    badge:  'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300',
+    border: 'border-chem-hcl bg-chem-hcl/10',
+    bar:    'bg-chem-hcl',
+    badge:  'bg-chem-hcl/15 text-chem-hcl',
   },
   'SLS': {
-    border: 'border-yellow-400 bg-yellow-50/40 dark:bg-yellow-950/30',
-    bg:     'border-border bg-muted/20',
-    bar:    'bg-yellow-400',
-    badge:  'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
+    border: 'border-chem-sls bg-chem-sls/10',
+    bar:    'bg-chem-sls',
+    badge:  'bg-chem-sls/15 text-chem-sls',
   },
 };
 
 /** Fallback accent for custom / user-defined CIP chemicals. */
 export const CIP_CUSTOM_ACCENT = {
-  border: 'border-purple-400 bg-purple-50/40 dark:bg-purple-950/30',
-  bg:     'border-border bg-muted/20',
-  bar:    'bg-purple-400',
-  badge:  'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
+  border: 'border-chem-custom bg-chem-custom/10',
+  bar:    'bg-chem-custom',
+  badge:  'bg-chem-custom/15 text-chem-custom',
 };

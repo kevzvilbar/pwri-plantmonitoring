@@ -915,12 +915,13 @@ export function ProductMetersCard({ plant }: { plant: any }) {
       )}
 
       {/* ── Meter cards — clickable to view history ── */}
+      <div className="stagger-grid space-y-2">
       {meters?.map((m: any, idx: number) => (
         <Card
           key={m.id}
-          className={`p-3 hover:shadow-elev transition-shadow border-l-2 ${
+          className={`p-3 card-interactive border-l-2 ${
             (m.status ?? 'Active') === 'Active'
-              ? 'border-l-emerald-400 dark:border-l-emerald-600'
+              ? 'border-l-accent'
               : 'border-l-muted-foreground/30'
           }`}
           data-testid={`product-meter-card-${m.id}`}
@@ -1070,6 +1071,7 @@ export function ProductMetersCard({ plant }: { plant: any }) {
           No product meters yet.{canEdit ? ' Click Add to create one.' : ''}
         </Card>
       )}
+      </div>
 
       {/* ── Add meter dialog ── */}
       {addOpen && (

@@ -196,7 +196,7 @@ export function ComplianceRadarCard({ plantIds }: Props) {
                 <Tooltip
                   contentStyle={{
                     background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))',
-                    borderRadius: 10, fontSize: 11, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)',
                   }}
                   formatter={(v: number) => (v == null ? '—' : `${v}%`)}
                 />

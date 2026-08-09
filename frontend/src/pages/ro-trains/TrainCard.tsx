@@ -125,13 +125,13 @@ export function TrainCard({
         <span className={cn('font-mono-num font-semibold', recWarn ? 'text-warn' : 'text-foreground')}>
           {recovery}
         </span>
-        <Sparkline values={recoveryVals} color={recWarn ? '#f59e0b' : '#6b7280'} />
+        <Sparkline values={recoveryVals} color={recWarn ? 'hsl(var(--warn))' : 'hsl(var(--muted-foreground))'} />
         <span className="ml-1">·</span>
         <span>Perm TDS:</span>
         <span className={cn('font-mono-num font-semibold', tdsWarn ? 'text-danger' : 'text-foreground')}>
           {permTDS}
         </span>
-        <Sparkline values={tdsVals} color={tdsWarn ? '#ef4444' : '#6b7280'} />
+        <Sparkline values={tdsVals} color={tdsWarn ? 'hsl(var(--danger))' : 'hsl(var(--muted-foreground))'} />
       </div>
 
       {/* Footer */}

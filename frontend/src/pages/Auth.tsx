@@ -898,7 +898,7 @@ export default function Auth() {
             />
             <div
               style={{ display: 'none' }}
-              className="h-16 w-16 rounded-2xl shadow-elev bg-[hsl(175_84%_31%)] items-center justify-center"
+              className="h-16 w-16 rounded-2xl shadow-elev bg-primary items-center justify-center"
             >
               <span className="text-white font-bold text-2xl select-none">PW</span>
             </div>
