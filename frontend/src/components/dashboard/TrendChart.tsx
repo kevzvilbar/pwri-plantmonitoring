@@ -549,6 +549,8 @@ function DataSummaryPopup({
   locReadings, productReadings, wellReadings, costReadings,
   roReadings,
   permeateIsProductionPlants,
+  productExcludedPlants,
+  trainPlantMap,
   locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
   directLocatorIds,
 }: {
@@ -562,7 +564,16 @@ function DataSummaryPopup({
   wellReadings: any[];
   costReadings: any[];
   roReadings?: any[];
+  // Plants with permeate switched on — covers BOTH exclusive 'permeate' mode
+  // and 'both' mode (product meter + permeate summed). See chartData Step 2.
   permeateIsProductionPlants?: Set<string>;
+  // Plants in EXCLUSIVE 'permeate' mode only — their product-meter readings
+  // must be dropped to avoid double-counting the same water. 'both'-mode
+  // plants are NOT in this set. See chartData Step 1.
+  productExcludedPlants?: Set<string>;
+  // train_id → plant_id, needed to know which plant an ro_train_readings row
+  // belongs to (that table doesn't carry plant_id directly).
+  trainPlantMap?: Map<string, string>;
   locatorNames?: Map<string, string>;
   productMeterNames?: Map<string, string>;
   wellNames?: Map<string, string>;
@@ -654,13 +665,18 @@ function DataSummaryPopup({
 
   // Build entity lists and pivots
   // --- Production entities ---
-  // When the plant uses permeate_is_production, production volume comes from
-  // roReadings (permeate meter deltas) rather than a dedicated product meter.
-  // In that case productReadings is empty, so we fall back to roReadings here.
-  const usePermeate = (metric === 'production' || metric === 'nrw' || metric === 'pv')
-    && (filteredProductReadings ?? []).length === 0
-    && (roReadings ?? []).length > 0;
-
+  // Production can come from a dedicated product meter, from the RO permeate
+  // meter (ro_production_source = 'permeate'), or from BOTH summed together
+  // (ro_production_source = 'both' — e.g. Mambaling: HAMAS product meter +
+  // RO permeate, "two independent sources, totals are added together").
+  // This mirrors chartData's Step 1 / Step 2 accumulation above so the
+  // Overview tab and this Production tab always agree with each other:
+  //   - productExcludedPlants: plants in EXCLUSIVE 'permeate' mode — their
+  //     product-meter readings are dropped (same water the permeate meter
+  //     already counts). 'both'-mode plants are NOT in this set, so their
+  //     product meter is kept.
+  //   - permeateIsProductionPlants: every plant with permeate switched on
+  //     ('permeate' AND 'both' modes) — their permeate deltas are added in.
   const filteredRoReadings = useMemo(() => {
     if (!roReadings) return [];
     if (!parsedFrom && !parsedTo) return roReadings;
@@ -672,25 +688,56 @@ function DataSummaryPopup({
     });
   }, [roReadings, filterFrom, filterTo]);
 
-  const prodEntities = useMemo<{ id: string; label: string }[]>(() => {
+  const prodMeterReadingsForPivot = useMemo(
+    () => (filteredProductReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
+    [filteredProductReadings, productExcludedPlants],
+  );
+
+  const permeateReadingsForPivot = useMemo(() => {
+    if (!permeateIsProductionPlants || permeateIsProductionPlants.size === 0) return [];
+    return filteredRoReadings.filter((r: any) => {
+      const plantId = trainPlantMap?.get(r.train_id);
+      return plantId ? permeateIsProductionPlants.has(plantId) : false;
+    });
+  }, [filteredRoReadings, permeateIsProductionPlants, trainPlantMap]);
+
+  const hasProductMeterData = (metric === 'production' || metric === 'nrw') && prodMeterReadingsForPivot.length > 0;
+  const hasPermeateData     = (metric === 'production' || metric === 'nrw' || metric === 'pv') && permeateReadingsForPivot.length > 0;
+
+  // "Permeate is the sole production source" — still drives the footer label
+  // and gap-reason entityType for the common single-source case. False when
+  // both sources are present (prodEntities/prodPivot below then include both
+  // kinds of columns, correctly summed into Total Prod.).
+  const usePermeate = hasPermeateData && !hasProductMeterData;
+
+  const prodEntities = useMemo<{ id: string; label: string; kind: 'well' | 'meter' | 'ro_train' }[]>(() => {
     if (metric === 'rawwater' || metric === 'pv') {
       // wells
       const ids = Array.from(new Set((filteredWellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
-      return ids.map((id) => ({ id, label: wellNames?.get(id) ?? `Well ${id.slice(-4)}` }))
+      return ids.map((id) => ({ id, label: wellNames?.get(id) ?? `Well ${id.slice(-4)}`, kind: 'well' as const }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
-    if (usePermeate) {
-      // Permeate-is-production: use RO train IDs as entities, labelled by their
-      // actual train names from the roTrainNames lookup (same map used in the chart).
-      const ids = Array.from(new Set(filteredRoReadings.map((r: any) => r.train_id).filter(Boolean)));
-      return ids.map((id) => ({ id, label: roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}` }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+
+    const entities: { id: string; label: string; kind: 'meter' | 'ro_train' }[] = [];
+    if (hasProductMeterData) {
+      const ids = Array.from(new Set(prodMeterReadingsForPivot.map((r: any) => r.meter_id).filter(Boolean)));
+      entities.push(...ids.map((id) => ({
+        id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}`, kind: 'meter' as const,
+      })));
     }
-    // product meters
-    const ids = Array.from(new Set((filteredProductReadings ?? []).map((r: any) => r.meter_id).filter(Boolean)));
-    return ids.map((id) => ({ id, label: productMeterNames?.get(id) ?? `Meter ${id.slice(-4)}` }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate, productMeterNames, wellNames, roTrainNames]);
+    if (hasPermeateData) {
+      const ids = Array.from(new Set(permeateReadingsForPivot.map((r: any) => r.train_id).filter(Boolean)));
+      entities.push(...ids.map((id) => ({
+        id,
+        // Disambiguate from the product-meter column when both are shown together.
+        label: hasProductMeterData
+          ? `${roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}`} (Permeate)`
+          : roTrainNames?.get(id) ?? `Train ${String(id).slice(-4)}`,
+        kind: 'ro_train' as const,
+      })));
+    }
+    return entities.sort((a, b) => a.label.localeCompare(b.label));
+  }, [metric, filteredWellReadings, wellNames, hasProductMeterData, hasPermeateData, prodMeterReadingsForPivot, permeateReadingsForPivot, productMeterNames, roTrainNames]);
 
   const prodPivot = useMemo(() => {
     if (metric === 'rawwater' || metric === 'pv') {
@@ -699,15 +746,29 @@ function DataSummaryPopup({
         'well_id',
       );
     }
-    if (usePermeate) {
-      // Build pivot from permeate_meter_delta stored in roReadings.
-      // Mirror the primary path in TrendChart.chartData: use permeate_meter_delta
-      // when available, fall back to current − previous.
-      const roSorted = [...filteredRoReadings].sort(
+
+    const pivot = new Map<string, Map<string, number>>();
+    const dateKeySet = new Set<string>();
+
+    if (hasProductMeterData) {
+      const { pivot: meterPivot, dateKeys: meterDateKeys } = buildEntityPivot(
+        [...prodMeterReadingsForPivot].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
+        'meter_id',
+      );
+      meterDateKeys.forEach((dk) => {
+        dateKeySet.add(dk);
+        if (!pivot.has(dk)) pivot.set(dk, new Map());
+        meterPivot.get(dk)?.forEach((v, k) => pivot.get(dk)!.set(k, (pivot.get(dk)!.get(k) ?? 0) + v));
+      });
+    }
+
+    if (hasPermeateData) {
+      // Build pivot from permeate_meter_delta stored in roReadings. Mirrors
+      // the primary path in TrendChart.chartData Step 2: use
+      // permeate_meter_delta when available, fall back to current − previous.
+      const roSorted = [...permeateReadingsForPivot].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
-      const pivot = new Map<string, Map<string, number>>();
-      const dateKeys: string[] = [];
       roSorted.forEach((r: any) => {
         if (r.is_meter_replacement) return;
         const delta = r.permeate_meter_delta != null
@@ -717,17 +778,15 @@ function DataSummaryPopup({
             : null;
         if (delta === null || delta === 0) return;
         const dk = format(new Date(r.reading_datetime), 'yyyy-MM-dd');
-        if (!pivot.has(dk)) { pivot.set(dk, new Map()); dateKeys.push(dk); }
+        dateKeySet.add(dk);
+        if (!pivot.has(dk)) pivot.set(dk, new Map());
         const tid = r.train_id ?? '__';
         pivot.get(dk)!.set(tid, (pivot.get(dk)!.get(tid) ?? 0) + delta);
       });
-      return { pivot, dateKeys: Array.from(new Set(dateKeys)).sort() };
     }
-    return buildEntityPivot(
-      [...(filteredProductReadings ?? [])].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
-      'meter_id',
-    );
-  }, [metric, filteredProductReadings, filteredWellReadings, filteredRoReadings, usePermeate]);
+
+    return { pivot, dateKeys: Array.from(dateKeySet).sort() };
+  }, [metric, filteredWellReadings, hasProductMeterData, hasPermeateData, prodMeterReadingsForPivot, permeateReadingsForPivot]);
   const prodPivotMap = prodPivot.pivot;
   const prodDateKeys = prodPivot.dateKeys;
 
@@ -931,7 +990,7 @@ function DataSummaryPopup({
                   totalLabel={metric === 'rawwater' ? 'Total Raw (m³)' : 'Total Prod. (m³)'}
                   unit="m³"
                   colorClass="text-primary"
-                  entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : usePermeate ? 'ro_train' : undefined}
+                  entityType={metric === 'rawwater' || metric === 'pv' ? 'well' : hasPermeateData ? 'ro_train' : undefined}
                 />
               )}
               {activeTab === 'consumption' && hasConsTab && (
@@ -952,7 +1011,19 @@ function DataSummaryPopup({
         <div className="px-5 py-2 border-t shrink-0 flex items-center gap-3 text-2xs text-muted-foreground bg-muted/20">
           <span className="font-medium">{tabDates.length} days in range</span>
           {activeTab === 'production' && hasProdTab && (
-            <span>· {prodEntities.length} {metric === 'rawwater' ? 'wells' : usePermeate ? 'RO trains' : 'product meters'}</span>
+            <span>· {
+              metric === 'rawwater' || metric === 'pv'
+                ? `${prodEntities.length} wells`
+                : (() => {
+                    const meterCount = prodEntities.filter((e) => e.kind === 'meter').length;
+                    const roCount    = prodEntities.filter((e) => e.kind === 'ro_train').length;
+                    if (meterCount > 0 && roCount > 0) {
+                      return `${meterCount} product meter${meterCount === 1 ? '' : 's'} + ${roCount} RO train${roCount === 1 ? '' : 's'} (permeate)`;
+                    }
+                    if (roCount > 0) return `${roCount} RO train${roCount === 1 ? '' : 's'}`;
+                    return `${meterCount} product meter${meterCount === 1 ? '' : 's'}`;
+                  })()
+            }</span>
           )}
           {activeTab === 'consumption' && hasConsTab && (
             <span>· {consEntities.length} locators</span>
@@ -3615,6 +3686,8 @@ export function TrendChart({
           costReadings={costReadings ?? []}
           roReadings={roReadings ?? []}
           permeateIsProductionPlants={permeateIsProductionPlants}
+          productExcludedPlants={productExcludedPlants}
+          trainPlantMap={_trainPlantMap}
           locatorNames={locatorNames}
           productMeterNames={productMeterNames}
           wellNames={wellNames}
