@@ -10,11 +10,9 @@ import {
   Search, BarChart2, ChevronLeft, Info,
   Crown, Briefcase, Cog, UserCircle,
   RefreshCw, ZoomIn,
-  LogIn, KeyRound, Compass, LayoutDashboard, Droplet, Waypoints,
-  Wrench, AlertTriangle, DollarSign, Upload, Download,
-  FlaskConical, ClipboardCheck, Award, ShieldAlert,
 } from 'lucide-react';
-import { ROTrainIcon } from '@/components/icons/water-icons';
+import { BookReader } from '@/components/manual/BookReader';
+import { BOOK_PARTS } from '@/components/manual/bookChapters';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlants } from '@/hooks/usePlants';
@@ -1787,368 +1785,83 @@ function PendingApprovals({ staff }: { staff: StaffMember[] }) {
 // App Manual
 // ---------------------------------------------------------------------------
 
-type ManualSection = { id: string; title: string; icon: ReactNode; content: ReactNode };
-type ManualGroup = { label: string; sections: ManualSection[] };
-
-const MANUAL_GROUPS: ManualGroup[] = [
-  {
-    label: 'Getting Started & Access',
-    sections: [
-      {
-        id: 'getting-started',
-        title: 'Getting Started',
-        icon: <LogIn className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>There are two account types. <strong className="text-foreground">Operators</strong> share one email/device per plant — each person just picks their own username at sign-in — and are limited to a single plant. Everyone else (Admin, Manager, Technician, Data Analyst, etc.) signs up with their own unique email and can be assigned to multiple plants.</p>
-            <p>New accounts land in <strong className="text-foreground">Pending</strong> status. An Admin reviews the account and assigns its real role during approval — until then you&rsquo;ll see an &ldquo;awaiting approval&rdquo; screen (use <strong className="text-foreground">Refresh status</strong> to drop straight into the app the moment you&rsquo;re approved).</p>
-            <p>Forgot your password? Use <strong className="text-foreground">Forgot password?</strong> on the sign-in tab — an 8-digit code is emailed to you. On a shared plant device, use <strong className="text-foreground">Switch operator</strong> (account menu) at the start of every shift so readings are attributed to the right person.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'roles-permissions',
-        title: 'Roles & Permissions',
-        icon: <KeyRound className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2.5 text-xs">
-            <div className="space-y-1.5">
-              {ROLE_HIERARCHY.map(({ role, icon, color }) => {
-                const descs: Record<string, string> = {
-                  Admin: 'Full access to every module, including the complete Admin Console — user approval, role assignment, plant lifecycle, migrations, and audit log.',
-                  Manager: 'Full operational visibility plus Exports, Data Analysis (view-only), Data Corrections, Budget, and a limited Admin Console (Plants + Audit only).',
-                  'Data Analyst': 'Everything a Manager can see for data purposes, plus full edit access in Data Analysis & Data Corrections. Redirected to Data Corrections instead of the Admin Console.',
-                  Technician: 'Same page-level navigation as Manager/Admin, but Manager-and-above-only actions inside a page — deletions, budget, admin tools — stay blocked.',
-                  Operator: 'Narrowest access — Dashboard, Plants, Operations, RO Trains, Maintenance, Incidents, Employees, and Profile only.',
-                };
-                return (
-                  <div key={role} className="flex gap-2">
-                    <span className={cn('inline-flex items-center gap-1 font-semibold text-foreground w-28 shrink-0 text-2xs', color)}>
-                      {icon} {role}
-                    </span>
-                    <span className="text-muted-foreground">{descs[role] ?? '—'}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-muted-foreground">A user can hold more than one role — the system always grants the <strong className="text-foreground">most generous</strong> applicable permission. <strong className="text-foreground">Designation</strong> (job title, e.g. &ldquo;Maintenance Technician&rdquo;) is descriptive only; <strong className="text-foreground">role</strong> is what actually controls access. Admins can also build named custom roles on top of a system role from Admin Console → Roles.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'navigating',
-        title: 'Navigating the App',
-        icon: <Compass className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>The sidebar is organized into named groups — Overview, Operations, Maintenance, Finance, Team, Data, Analysis, Admin — and which groups you see depends on your role. On a phone, the sidebar collapses into a bottom navigation bar with a <strong className="text-foreground">More</strong> sheet for less-frequent pages.</p>
-            <p>The top bar always shows a <strong className="text-foreground">plant selector</strong> (Operators are locked to their one assigned plant; everyone else can switch freely), a <strong className="text-foreground">notification bell</strong> for active alerts — compliance breaches, low chemical stock, overdue PM, downtime — which can be snoozed or dismissed, a theme control, and your account menu.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Daily Operations',
-    sections: [
-      {
-        id: 'dashboard',
-        title: 'Dashboard',
-        icon: <LayoutDashboard className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Your landing page after sign-in — a rolled-up view of one plant&rsquo;s production, quality, cost, and outstanding work. Switch between <strong className="text-foreground">Inline</strong>, <strong className="text-foreground">Sections</strong>, and <strong className="text-foreground">Dialog</strong> layouts for however you like to scan it.</p>
-            <p>Four KPI clusters — Overview, Quality, Production Cost, Plant Health Trend — plus focused cards like the NRW gauge, data completeness radar, cost sunburst, PM due-soon, and pending-review counts.</p>
-            <p>The Dashboard is <strong className="text-foreground">read-only</strong>. To fix a number, go to the module that owns it, or use Data Corrections for a reading that&rsquo;s already been submitted.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'plants',
-        title: 'Plants',
-        icon: <Building2 className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Where the physical structure of your operation lives. Each plant&rsquo;s detail page has six tabs: <strong className="text-foreground">Locators, Wells, Product, Trains, Power,</strong> and <strong className="text-foreground">Configuration</strong>.</p>
-            <p>A <strong className="text-foreground">derived locator</strong> has no physical meter of its own — its volume is computed automatically as the mother meter&rsquo;s reading minus its sibling locators&rsquo; volumes.</p>
-            <p>Swapping a physical meter? Use <strong className="text-foreground">Replace meter</strong> rather than just editing the reading — it cleanly breaks the history at the swap point so the system doesn&rsquo;t compute a false usage spike.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'operations',
-        title: 'Wells & Locators — Daily Readings',
-        icon: <Droplet className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Five tabs — <strong className="text-foreground">Locator, Well, Product, Blending, Power</strong> — matching the assets set up under Plants. Pick the plant, then save each reading on its own card as you take it.</p>
-            <p>Every save is checked automatically: a 45-minute cooldown per asset, duplicate blocking, and backward-reading / spike detection — both of the latter are still <strong className="text-foreground">saved</strong>, just tagged pending review for a supervisor rather than rejected. Wells cap out at 3 readings/day.</p>
-            <p>Tick <strong className="text-foreground">Meter replacement/Estimated</strong> or <strong className="text-foreground">Meter rollover</strong> when an abnormal-looking reading is legitimate. Found a mistake after the fact? Don&rsquo;t submit a second reading — use Data Corrections.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'ro-trains',
-        title: 'RO Trains & Pre-Treatment',
-        icon: <ROTrainIcon className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Four tabs: <strong className="text-foreground">Overview, Pre-Treatment & RO, CIP,</strong> and <strong className="text-foreground">Chemical Dosing</strong>. The Pre-Treatment & RO log covers backwash, HPP, filters, feed/permeate/reject flows, and water quality — salt rejection % and ΔP are computed for you.</p>
-            <p><strong className="text-foreground">CIP</strong> logs cleaning cycles (Caustic Soda, HCl, SLS by default, plus any plant-specific chemicals). <strong className="text-foreground">Chemical Dosing</strong> logs day-to-day treatment chemicals and free-chlorine residual tests, and estimates cost from the current unit price automatically.</p>
-            <p>You can edit an entry you personally recorded for up to <strong className="text-foreground">8 hours</strong> after creation — after that, or for someone else&rsquo;s entry, use Data Corrections.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'topology',
-        title: 'Network Topology',
-        icon: <Waypoints className="h-3.5 w-3.5" />,
-        content: (
-          <div className="text-xs text-muted-foreground">
-            <p>A visual, drag-and-drop diagram of how a plant&rsquo;s assets connect — locators feeding wells, wells feeding RO trains, and so on. It&rsquo;s auto-populated from real plant data and can be extended with custom nodes (tanks, valves, off-system points). Hidden for Operators; editing is Manager/Admin.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Maintenance & Response',
-    sections: [
-      {
-        id: 'pm-schedule',
-        title: 'PM Schedule',
-        icon: <Wrench className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Three tabs: <strong className="text-foreground">Calendar, Add Equipment,</strong> and <strong className="text-foreground">Records</strong>. Use <strong className="text-foreground">Generate Standard PMS Library</strong> for one-tap setup of common equipment categories (Genset, RO, Dosing Pump, Controllers, Cartridge Filter, Pumps & Motors, pH/NTU/Colorimeter) — anything that already exists is skipped automatically.</p>
-            <p>For anything else, add custom equipment with its own category, one or more frequencies, a start date, and optional custom checklist steps. Completing a checklist logs it to Records and rolls the schedule forward to its next due date.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'incidents',
-        title: 'Incidents',
-        icon: <AlertTriangle className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Three tabs: <strong className="text-foreground">Open, Report,</strong> and <strong className="text-foreground">History</strong>. Reporting captures type, severity, what/where/when/who, weather, and immediate action taken — drafts autosave as you type.</p>
-            <p>Closing an incident requires root cause, corrective action, and preventive measures before it moves from Open to History.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Finance',
-    sections: [
-      {
-        id: 'costs',
-        title: 'Costs & Tariffs',
-        icon: <DollarSign className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Hidden for Operators. Up to six tabs depending on role: <strong className="text-foreground">Rollup, Power, Compare, Prices, Filters,</strong> and — Manager/Admin only — <strong className="text-foreground">Budget</strong>.</p>
-            <p>Log a monthly electric bill under Power (total kWh is calculated from your meter readings). Keep chemical and filter unit prices current under Prices/Filters with an effective date, so past cost calculations keep using the price that actually applied at the time.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Team',
-    sections: [
-      {
-        id: 'staff',
-        title: 'Staff Directory',
-        icon: <Users className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>The <strong className="text-foreground">Staff</strong> tab lists every team member as a tile. Search and filter by plant, then select a person to open their profile drawer and a direct-message window.</p>
-            <p>Direct messages are <strong className="text-foreground">ephemeral</strong> — auto-deleted after roughly 8 hours. It&rsquo;s a quick coordination channel for shift handovers, not a permanent record; anything worth keeping belongs in the relevant module instead (Incidents, Data Corrections notes, etc.).</p>
-          </div>
-        ),
-      },
-      {
-        id: 'kpi',
-        title: 'Employee KPI',
-        icon: <BarChart2 className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>The <strong className="text-foreground">KPI</strong> tab is a heatmap of daily field activity — well, locator, and RO train readings — per plant and employee.</p>
-            <p>Green = all reading types logged · Yellow = partial · Orange = minimal · Red = none. Click a plant row to drill down by individual employee.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'org-chart',
-        title: 'Org Chart',
-        icon: <GitBranch className="h-3.5 w-3.5" />,
-        content: (
-          <div className="text-xs text-muted-foreground">
-            <p>The <strong className="text-foreground">Reporting Tree</strong> is always visible on this Info tab, grouped by plant. It&rsquo;s built from each person&rsquo;s <strong className="text-foreground">immediate head/supervisor</strong> assignment on their profile.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Data & Analysis',
-    sections: [
-      {
-        id: 'smart-import',
-        title: 'Smart Import',
-        icon: <Upload className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Manager/Data Analyst/Admin only. Bulk-load historical or backfill data from a CSV instead of typing it in one record at a time, grouped by category — Operations, RO Trains, Chemical, Power, Finance.</p>
-            <p>Download the built-in template first, check the parsed preview before committing, and optionally enable <strong className="text-foreground">skip invalid rows</strong> so a few bad rows don&rsquo;t block the whole file.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'exports',
-        title: 'Data Exports',
-        icon: <Download className="h-3.5 w-3.5" />,
-        content: (
-          <div className="text-xs text-muted-foreground">
-            <p>Manager/Data Analyst/Admin only. Set a plant and date-range filter, then export any table individually — or use <strong className="text-foreground">Export All</strong> to pull every table for that scope in one action, useful for a full backup or handover package.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'data-analysis',
-        title: 'Data Analysis & Review',
-        icon: <FlaskConical className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>The one place raw historical readings can be statistically checked and corrected — every other page is read-only with respect to history. <strong className="text-foreground">Manager</strong> access is view-only; <strong className="text-foreground">Data Analyst/Admin</strong> can run the tool and edit values.</p>
-            <p>Run an OLS regression against a column to flag outliers by Z-score, review each proposed corrected value, then <strong className="text-foreground">Apply</strong> or <strong className="text-foreground">Retract</strong>. Every edit — regression or manual — is written to the audit trail.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'data-corrections',
-        title: 'Data Corrections',
-        icon: <ClipboardCheck className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Manager/Data Analyst/Admin only. Four tabs: <strong className="text-foreground">Pending, Inbox, History, Operators</strong>. Pending lists auto-flagged backward/spike readings plus correction requests — <strong className="text-foreground">Approve, Edit value,</strong> or <strong className="text-foreground">Reject</strong>, with bulk actions available.</p>
-            <p>Approving a reading <strong className="text-foreground">locks</strong> it — an Unlock button reopens it if needed. Inbox is a separate safety net for readings marked &ldquo;normal&rdquo; that still compute to a negative daily volume.</p>
-            <p>If a reading is outside your own edit window, or belongs to someone else, submit a correction request from that reading instead of trying to edit it directly.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'manager-scorecard',
-        title: 'Manager Scorecard',
-        icon: <Award className="h-3.5 w-3.5" />,
-        content: (
-          <div className="text-xs text-muted-foreground">
-            <p>Visible to Manager, Data Analyst, and Admin. A per-plant data-quality rollup — completeness, unexplained gaps, and open exceptions — over a selectable window, so oversight doesn&rsquo;t require reconciling other pages by hand.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Oversight',
-    sections: [
-      {
-        id: 'compliance',
-        title: 'Compliance',
-        icon: <ShieldCheck className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Hidden for Operators. Scores your plant(s) against ten configurable thresholds — NRW %, downtime, permeate TDS/pH, raw turbidity, ΔP, recovery %, PV ratio, and chemical stock. The <strong className="text-foreground">Status</strong> tab shows an overall banner, a 0–100 score, and any violations.</p>
-            <p>Use <strong className="text-foreground">What-if</strong> to try hypothetical metric values and see the violation list and score update live, without saving anything or waiting on new data. Editing thresholds themselves is Manager/Admin only.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'admin-console',
-        title: 'Admin Console',
-        icon: <ShieldAlert className="h-3.5 w-3.5" />,
-        content: (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p>What you see depends on role: <strong className="text-foreground">Admin</strong> gets all five tabs (Users, Plants, Audit, Migrations, Roles); <strong className="text-foreground">Manager</strong> sees Plants and Audit only; <strong className="text-foreground">Data Analyst</strong> is redirected to Data Corrections; Technician/Operator have no access.</p>
-            <p>User and plant deletion always follow the same pattern: <strong className="text-foreground">Soft delete</strong> (reversible, never blocked), <strong className="text-foreground">Hard delete</strong> (blocked if dependent records exist), <strong className="text-foreground">Force delete</strong> (explicit override, cascades, irreversible). The <strong className="text-foreground">Roles</strong> tab (Admin only) is where named custom roles get built on top of a system role.</p>
-          </div>
-        ),
-      },
-      {
-        id: 'profile',
-        title: 'My Profile',
-        icon: <UserCircle className="h-3.5 w-3.5" />,
-        content: (
-          <div className="text-xs text-muted-foreground">
-            <p>Shows your active plant, role and computed access level, identity details, email, and assigned plants (read-only — ask an Admin to change that list). Non-operators can change their own login email directly; shared-device Operators should ask an Admin instead, since the email is shared across the whole crew.</p>
-          </div>
-        ),
-      },
-    ],
-  },
-];
+const ALL_MANUAL_CHAPTERS = BOOK_PARTS.flatMap((p) => p.chapters);
 
 function AppManual() {
-  const [openSet, setOpenSet] = useState<Set<string>>(new Set());
+  const [bookOpen, setBookOpen] = useState(false);
+  const [initialChapterId, setInitialChapterId] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState('');
-  const toggle = (id: string) =>
-    setOpenSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+
+  const openAt = (chapterId?: string) => {
+    setInitialChapterId(chapterId);
+    setBookOpen(true);
+  };
 
   const q = query.trim().toLowerCase();
-  const filteredGroups = q
-    ? MANUAL_GROUPS
-        .map((g) => ({ ...g, sections: g.sections.filter((s) => s.title.toLowerCase().includes(q)) }))
-        .filter((g) => g.sections.length > 0)
-    : MANUAL_GROUPS;
+  const suggestions = q
+    ? ALL_MANUAL_CHAPTERS.filter(
+        (c) => c.title.toLowerCase().includes(q) || c.dek.toLowerCase().includes(q),
+      ).slice(0, 6)
+    : [];
 
   return (
-    <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search the manual…"
-          className="pl-8 h-8 text-xs"
-        />
+    <div className="rounded-lg border overflow-hidden bg-gradient-to-br from-primary/5 via-background to-background">
+      <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-5">
+        <div className="shrink-0 w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
+          <BookOpen className="h-6 w-6 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-book-heading text-2xl font-semibold text-foreground leading-tight">
+            Operations Manual
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            {ALL_MANUAL_CHAPTERS.length} chapters, from your first sign-in to running the Admin Console —
+            open it as a book, or search for a topic below.
+          </p>
+        </div>
+        <button
+          onClick={() => openAt(undefined)}
+          className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <BookOpen className="h-3.5 w-3.5" /> Open Manual
+        </button>
       </div>
 
-      {filteredGroups.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center py-4">No sections match &ldquo;{query}&rdquo;.</p>
-      )}
-
-      {filteredGroups.map((group) => (
-        <div key={group.label} className="space-y-1.5">
-          <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground px-0.5">
-            {group.label}
-          </div>
-          {group.sections.map((s) => (
-            <div key={s.id} className="border rounded-lg overflow-hidden">
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
-                onClick={() => toggle(s.id)}
-              >
-                <span className="text-muted-foreground">{s.icon}</span>
-                <span className="text-sm font-medium flex-1">{s.title}</span>
-                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', openSet.has(s.id) && 'rotate-180')} />
-              </button>
-              {openSet.has(s.id) && (
-                <div className="px-4 pb-3 pt-1 border-t bg-muted/20">
-                  {s.content}
-                </div>
-              )}
-            </div>
-          ))}
+      <div className="px-5 sm:px-6 pb-5 sm:pb-6">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Jump to a topic — e.g. “compliance thresholds” or “delete a user”…"
+            className="pl-8 h-9 text-xs bg-background"
+          />
         </div>
-      ))}
+        {suggestions.length > 0 && (
+          <div className="mt-2 border rounded-md overflow-hidden bg-background">
+            {suggestions.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openAt(c.id)}
+                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors border-b last:border-b-0"
+              >
+                <span className="font-sans tabular-nums text-muted-foreground w-4 text-right shrink-0">{c.number}</span>
+                <span className="text-foreground font-medium">{c.title}</span>
+                <span className="text-muted-foreground truncate">— {c.dek}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {q && suggestions.length === 0 && (
+          <p className="text-2xs text-muted-foreground mt-2 px-1">No chapters match &ldquo;{query}&rdquo;.</p>
+        )}
+      </div>
+
+      <BookReader open={bookOpen} onOpenChange={setBookOpen} initialChapterId={initialChapterId} />
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Info Tab

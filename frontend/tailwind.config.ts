@@ -26,6 +26,15 @@ export default {
         // sunburst/radar labels) — same low-contrast, circular-bowl look
         // across every card that shows a headline number.
         numeral: ['DM Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Reading-optimized serif pairing used only by the full-screen
+        // Manual reader (components/manual/*) — a deliberate departure
+        // from the app's Inter/DM Sans system to signal "this is a book,
+        // sit and read it" the same way a printed manual would, while
+        // every other screen in the product stays on the dashboard type
+        // system above. Chapter titles/heads use book-heading; body copy
+        // uses book-body.
+        'book-heading': ['Cormorant Garamond', 'Georgia', 'serif'],
+        'book-body': ['Libre Baskerville', 'Georgia', 'serif'],
       },
       colors: {
         border: "hsl(var(--border))",
