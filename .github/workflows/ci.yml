@@ -63,77 +63,20 @@ jobs:
         # again, that's the second time; worth finding out why it keeps
         # slipping rather than just re-adding the flag a third time.
 
-      - name: Lint (ESLint)
+      - name: Lint ceiling (ESLint warning count vs. committed baseline)
         working-directory: frontend
-        # NOTE (2026-08-04): --max-warnings=0 was failing this step on every
-        # push/PR — 1540 pre-existing @typescript-eslint/no-explicit-any
-        # warnings across the codebase exceed it, unrelated to any specific
-        # change. Per this file's own guidance above ("raise this to a
-        # specific count and chip it down over time"), ratcheted to the
-        # measured baseline so the gate actually blocks *new* warnings
-        # without requiring an emergency mass `any`-cleanup first.
-        #
-        # Bumped 1540 -> 1547 same day: fixing the stale-types.ts drift (see
-        # the types-sync check above) resolved 21 real tsc errors in
-        # Employees.tsx / ProductMeters.tsx, at the cost of 7 new `any` casts
-        # sidestepping a Supabase-js embedded-query type-inference limit and
-        # a graceful-degradation fallback-query pattern — both consistent
-        # with `any` usage already present nearby in those exact functions.
-        # A real type error fixed by a lint warning is a good trade; this
-        # number should still only ever go down from here as `any` gets
-        # cleaned up elsewhere.
-        #
-        # Bumped 1547 -> 1555 (2026-08-06): wiring canEditEntry/logReadingEdit
-        # permission gating into ReadingHistoryDialog.tsx (previously
-        # `const canEditDelete = true`, unconditionally, for every module)
-        # added 8 new `(r: any)` params on rows.find/.filter/.some calls,
-        # matching the untyped shape `rows` (from an ungenerlc'd useQuery)
-        # already has everywhere else in that file — same trade-off as the
-        # bump above, not a regression in kind, just more of the same
-        # pre-existing pattern touched by a larger change.
-        # Bumped 1555 -> 1565 (2026-08-06, later same day): two things
-        # bundled into one bump since I only checked when starting my own
-        # change: intervening commits (meter_rollover_followup.patch,
-        # icon-audit-fixes.patch) had already pushed the real count to 1562
-        # without updating this number -- meaning CI would have started
-        # failing on the very next PR regardless of what it touched. Adding
-        # Trash2/AlertDialog delete buttons to TrainLogModal.tsx (RO +
-        # pre-treatment logs, previously had edit but no delete at all) added
-        # 3 more on top of that (an untyped `row: any` in the pending-delete
-        # state, matching this file's own pre-existing convention -- 27 other
-        # `any`s already in it before this change). 1562 + 3 = 1565.
-        # Bumped 1565 -> 1586 (2026-08-07): checked a completely untouched
-        # clone before assuming this bump was all mine — it wasn't. This
-        # number was already stale at 1584 (a gap of 19) before I made any
-        # change, from several unrelated commits landing between when it was
-        # last set to 1565 and now (LocatorSection token-consistency and
-        # meter-replacement patches, dashboard/chart work, nav changes,
-        # topbar/scorecard fixes) without anyone re-running this check. This
-        # is the second time in this session this ratchet has drifted out of
-        # sync from unrelated work rather than the commit that actually
-        # pushed it over — worth someone checking why lint isn't being run
-        # (or its output isn't being read) before commits land, rather than
-        # this getting caught here again a third time.
-        #
-        # The other 2 (1584 -> 1586) are mine: booster pump target setpoints
-        # (ro_trains.booster_pump_targets, JSONB, same pattern as HPP target
-        # pressure's earlier bump) — 2 `as any` casts unwrapping it into a
-        # typed shape, matching PretreatmentAndROLog.tsx's own pre-existing
-        # convention (100+ other `any`s already in that one file).
-        #
-        # Bumped 1586 -> 1616 (2026-08-09): third time this ratchet has gone
-        # stale from unrelated commits landing without it being updated (see
-        # the two entries above) — checked a clean, untouched clone before
-        # touching anything and it was already at 1616, so none of this gap
-        # is from this session's own change (a react-hooks/rules-of-hooks
-        # fix in Admin.tsx / SmartImportPanel.tsx / Exports.tsx — 0 warnings,
-        # only errors, and `--max-warnings` doesn't gate errors anyway, so
-        # this bump isn't what was silently masking those; they were real
-        # failures the whole time). Raising to the measured baseline so CI
-        # is accurately red/green again; still worth someone looking at why
-        # this keeps drifting rather than the count getting bumped a fourth
-        # time.
-        run: npm run lint -- --max-warnings=1616
+        run: node scripts/check-lint-ceiling.mjs
+        # Replaces a hand-edited `--max-warnings=N` flag that was bumped five
+        # times in six days (1540 -> 1547 -> 1555 -> 1565 -> 1586 -> 1616,
+        # 2026-08-04 through 2026-08-09) as `@typescript-eslint/no-explicit-any`
+        # warnings accumulated faster than they were fixed, and drifted stale
+        # three of those five times from unrelated commits landing without
+        # the flag being updated — meaning this gate had already gone stale
+        # a fourth time (1620 actual vs. 1616 committed) before this script
+        # replaced it. See lint-ceiling.json's `history` field for the
+        # ongoing count instead of prose comments here; run
+        # `node scripts/check-lint-ceiling.mjs --update` locally and commit
+        # the result to move the ceiling in either direction on purpose.
 
       - name: Production build
         working-directory: frontend
