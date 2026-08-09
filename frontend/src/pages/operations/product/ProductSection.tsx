@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PlantSelector } from '@/components/PlantSelector';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,13 +19,13 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/StatusPill';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
-import { fmtSaveToast } from '@/lib/format';
+import { fmtSaveToast, lastReadingFreshness } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, ArrowUpRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -51,7 +51,7 @@ import {
   logProductionCalc,
 } from '../shared';
 
-export function ProductForm() {
+export function ProductForm({ highlightId }: { highlightId?: string | null } = {}) {
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const { user, isAdmin, isManager, isDataAnalyst } = useAuth();
@@ -59,6 +59,12 @@ export function ProductForm() {
   const [plantId, setPlantId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const canEdit = isAdmin || isManager || isDataAnalyst;
+  const navigate = useNavigate();
+
+  // Scroll to and briefly highlight the row linked to from Plant detail.
+  // Desktop only — same MobileCarousel limitation noted in LocatorSection.tsx.
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [pulseId, setPulseId] = useState<string | null>(null);
 
   // Product meters for the selected plant
   // NOTE: uses 'op-product-meters' key (NOT 'product-meters') to avoid colliding with
@@ -127,25 +133,30 @@ export function ProductForm() {
     enabled: !!plantId,
   });
 
-  // Latest reading per meter
+  useEffect(() => {
+    if (!highlightId || isMobile) return;
+    const el = rowRefs.current[highlightId];
+    if (!el) return; // row not rendered yet — next render (once meters load) will retry
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPulseId(highlightId);
+    const t = setTimeout(() => setPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, isMobile, meters]);
+
+  // Latest reading per meter — sourced from product_meter_readings_latest
+  // (DISTINCT ON meter_id in Postgres), not a client-side "last 200 rows,
+  // keep first seen per meter_id" reduction. That older approach silently
+  // drops a rarely-read meter from the map entirely once frequently-read
+  // meters fill the 200-row window — see the migration for detail.
   const { data: latestReadings } = useQuery({
-    queryKey: ['product-readings-latest', plantId],
+    queryKey: ['product-readings-latest-v2', plantId],
     queryFn: async () => {
       if (!plantId) return [];
-      const { data, error } = await supabase
-        .from('product_meter_readings' as any)
+      const { data, error } = await (supabase.from('product_meter_readings_latest' as any) as any)
         .select('*')
-        .eq('plant_id', plantId)
-        .order('reading_datetime', { ascending: false })
-        .limit(200);
+        .eq('plant_id', plantId);
       if (error) throw error;
-      // Return only latest per meter_id
-      const seen = new Set<string>();
-      return ((data ?? []) as any[]).filter((r) => {
-        if (seen.has(r.meter_id)) return false;
-        seen.add(r.meter_id);
-        return true;
-      });
+      return (data ?? []) as any[];
     },
     enabled: !!plantId,
   });
@@ -222,7 +233,7 @@ export function ProductForm() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['op-product-meters', plantId] });
-    qc.invalidateQueries({ queryKey: ['product-readings-latest', plantId] });
+    qc.invalidateQueries({ queryKey: ['product-readings-latest-v2', plantId] });
     // Targeted Dashboard stat-card keys so new readings appear immediately
     qc.invalidateQueries({ queryKey: ['dash-product-meters-today'] });
     qc.invalidateQueries({ queryKey: ['dash-product-meters-yest'] });
@@ -302,6 +313,8 @@ export function ProductForm() {
                     canEdit={canEdit}
                     onSaved={invalidate}
                     mirrorSource={m.derived_from_locator_id ? mirrorSourceById[m.derived_from_locator_id] : null}
+                    rowRef={(el) => { rowRefs.current[m.id] = el; }}
+                    pulsing={pulseId === m.id}
                   />
                 )}
               />
@@ -489,7 +502,7 @@ function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded:
 // ── Product meter row ─────────────────────────────────────────────────────────
 
 function ProductMeterRow({
-  meter, plantId, latest, avgVol, userId, canEdit, onSaved, mirrorSource,
+  meter, plantId, latest, avgVol, userId, canEdit, onSaved, mirrorSource, rowRef, pulsing,
 }: {
   meter: any;
   plantId: string;
@@ -499,8 +512,11 @@ function ProductMeterRow({
   canEdit: boolean;
   onSaved: () => void;
   mirrorSource?: { locatorName: string; plantName: string } | null;
+  rowRef?: (el: HTMLDivElement | null) => void;
+  pulsing?: boolean;
 }) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [reading, setReading] = useState('');
   const lastPrefilledProduct = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -673,7 +689,11 @@ function ProductMeterRow({
   }
 
   return (
-    <div className="p-3 space-y-2" data-testid={`product-meter-row-${meter.id}`}>
+    <div
+      ref={rowRef}
+      className={`p-3 space-y-2 transition-shadow ${pulsing ? 'ring-2 ring-accent ring-inset rounded-lg' : ''}`}
+      data-testid={`product-meter-row-${meter.id}`}
+    >
       {/* Row 1: Name | compact date picker on right */}
       <div className="min-w-0">
         <div className="flex items-center justify-between gap-2 min-w-0">
@@ -703,6 +723,30 @@ function ProductMeterRow({
               className="absolute inset-0 opacity-0 w-full h-full pointer-events-none"
               title="Reading date & time" tabIndex={-1} />
           </label>
+        </div>
+        {/* "Last reading" freshness + link to this meter's card in Plant
+            detail — see LocatorSection.tsx's lastReadingFreshness for why
+            this isn't called a "flag". */}
+        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+          {(() => {
+            const fresh = lastReadingFreshness(latest?.reading_datetime);
+            return (
+              <StatusPill tone={fresh.tone}>
+                <CalendarClock className="h-2.5 w-2.5" />
+                {fresh.label}
+              </StatusPill>
+            );
+          })()}
+          <button
+            type="button"
+            onClick={() => navigate(`/plants/${plantId}?tab=product&highlight=${meter.id}`)}
+            title="Open this meter in Plant detail"
+            aria-label="Open this meter in Plant detail"
+            className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+          >
+            <ArrowUpRight className="h-2.5 w-2.5" />
+            Plant detail
+          </button>
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">
           prev: <span className="font-mono-num">{previous == null ? '—' : fmtNum(previous)}</span>

@@ -28,8 +28,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
+import { lastReadingFreshness } from '@/lib/format';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, CalendarClock, ArrowUpRight } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
@@ -700,8 +701,9 @@ export function AddProductMeterDialog({
   );
 }
 
-export function ProductMetersCard({ plant }: { plant: any }) {
+export function ProductMetersCard({ plant, highlightId }: { plant: any; highlightId?: string | null }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isManager, isAdmin, user } = useAuth();
   const canEdit = isManager || isAdmin;
 
@@ -823,6 +825,36 @@ export function ProductMetersCard({ plant }: { plant: any }) {
     return map;
   }, [meterReplacements]);
 
+  // "Last reading" per meter, for the freshness badge — same view + shared
+  // lastReadingFreshness() thresholds as the Operations Product tab.
+  const { data: latestMeterReadings } = useQuery({
+    queryKey: ['product-meters-latest-readings', plant.id],
+    queryFn: async () => {
+      const { data } = await (supabase.from('product_meter_readings_latest' as any) as any)
+        .select('meter_id, reading_datetime')
+        .eq('plant_id', plant.id);
+      return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+    },
+  });
+  const latestDtByMeter = useMemo(() => {
+    const map: Record<string, string> = {};
+    latestMeterReadings?.forEach(r => { map[r.meter_id] = r.reading_datetime; });
+    return map;
+  }, [latestMeterReadings]);
+
+  // Scroll to and briefly highlight the card linked to from Operations.
+  const meterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [meterPulseId, setMeterPulseId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = meterCardRefs.current[highlightId];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setMeterPulseId(highlightId);
+    const t = setTimeout(() => setMeterPulseId(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId, meters]);
+
   // ── Add meter ─────────────────────────────────────────────────────────────
   const [addOpen, setAddOpen]           = useState(false);
   const [assignTarget, setAssignTarget] = useState<any>(null);
@@ -919,11 +951,12 @@ export function ProductMetersCard({ plant }: { plant: any }) {
       {meters?.map((m: any, idx: number) => (
         <Card
           key={m.id}
+          ref={(el) => { meterCardRefs.current[m.id] = el; }}
           className={`p-3 card-interactive border-l-2 ${
             (m.status ?? 'Active') === 'Active'
               ? 'border-l-accent'
               : 'border-l-muted-foreground/30'
-          }`}
+          } ${meterPulseId === m.id ? 'ring-2 ring-accent shadow-elev' : ''}`}
           data-testid={`product-meter-card-${m.id}`}
         >
           {(() => {
@@ -947,6 +980,30 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                   />
                   <div className="text-xs text-muted-foreground">
                     Product Meter · {(m.status ?? 'Active') === 'Active' ? 'Reading active' : 'Inactive'}
+                  </div>
+                  {/* "Last reading" freshness + cross-navigation to this
+                      meter's row in Operations. stopPropagation so it
+                      doesn't also toggle the card's own history view. */}
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                    {(() => {
+                      const fresh = lastReadingFreshness(latestDtByMeter[m.id]);
+                      return (
+                        <StatusPill tone={fresh.tone}>
+                          <CalendarClock className="h-2.5 w-2.5" />
+                          {fresh.label}
+                        </StatusPill>
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/operations?tab=product&highlight=${m.id}`)}
+                      title="Open this meter in Operations"
+                      aria-label="Open this meter in Operations"
+                      className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded-full transition-colors"
+                    >
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                      Operations
+                    </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -981,14 +1038,21 @@ export function ProductMetersCard({ plant }: { plant: any }) {
                   <div className="mt-1.5 flex flex-wrap gap-1 items-center">
                     <Droplet className="h-3 w-3 text-primary shrink-0" />
                     {visible.map((l: any) => (
-                      <span key={l.id} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-2xs border ${
-                        l.is_derived
-                          ? 'bg-warn-soft text-warn border-warn'
-                          : 'bg-primary-soft text-primary border-primary'
-                      }`} title={l.is_derived ? `${l.name} — derived (no physical meter; residual computed by cron sweep)` : l.name}>
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/plants/${plant.id}?tab=locators&highlight=${l.id}`);
+                        }}
+                        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-2xs border transition-colors ${
+                          l.is_derived
+                            ? 'bg-warn-soft text-warn border-warn hover:bg-warn-soft/70'
+                            : 'bg-primary-soft text-primary border-primary hover:bg-primary-soft/70'
+                        }`} title={l.is_derived ? `${l.name} — derived (no physical meter; residual computed by cron sweep). Click to open in Locators.` : `${l.name} — click to open in Locators`}>
                         {l.is_derived && <span className="font-bold opacity-70">~</span>}
                         {l.name}
-                      </span>
+                      </button>
                     ))}
                     {overflow > 0 && (
                       <span className="text-2xs text-muted-foreground">+{overflow} more</span>

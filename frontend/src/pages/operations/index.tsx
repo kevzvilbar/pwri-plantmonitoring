@@ -106,7 +106,7 @@ export default function Operations() {
       <div>
         {tab === 'locator'  && <LocatorReadingForm highlightId={tab === 'locator' ? searchParams.get('highlight') : null} />}
         {tab === 'well'     && <WellReadingForm highlightId={tab === 'well' ? searchParams.get('highlight') : null} />}
-        {tab === 'product'  && <ProductForm />}
+        {tab === 'product'  && <ProductForm highlightId={tab === 'product' ? searchParams.get('highlight') : null} />}
         {tab === 'blending' && <BlendingForm />}
         {tab === 'power'    && <PowerForm />}
       </div>

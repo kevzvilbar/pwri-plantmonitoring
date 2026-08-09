@@ -976,7 +976,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
 
       <div className={tab === 'locators' ? undefined : 'hidden'}><LocatorsList plantId={plantId} highlightId={tab === 'locators' ? highlightId : null} /></div>
       <div className={tab === 'wells'    ? undefined : 'hidden'}><WellsList plantId={plantId} highlightId={tab === 'wells' ? highlightId : null} /></div>
-      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} /></div>
+      <div className={tab === 'product'  ? undefined : 'hidden'}><ProductMetersCard plant={plant} highlightId={tab === 'product' ? highlightId : null} /></div>
       <div className={tab === 'trains'   ? undefined : 'hidden'}>
         <TrainsList plantId={plantId} />
       </div>
