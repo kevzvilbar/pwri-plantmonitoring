@@ -574,12 +574,17 @@ function DataSummaryPopup({
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');
 
-  // Date range filter state — defaults to full range of available data
-  const allDates = chartData.map((d) => d.date as string);
+  // Date range filter state — defaults to full range of available data.
+  // NOTE: use isoDate (yyyy-MM-dd), not the display-only 'MMM d' date field —
+  // native <input type="date"> only accepts ISO format and silently renders
+  // blank ("mm/dd/yyyy") for anything else.
+  const allDates = chartData
+    .map((d) => (d.isoDate as string | undefined)?.slice(0, 10))
+    .filter((d): d is string => !!d);
   const defaultFrom = allDates.length ? allDates[0] : '';
   const defaultTo = allDates.length ? allDates[allDates.length - 1] : '';
-  const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo, setFilterTo] = useState('');
+  const [filterFrom, setFilterFrom] = useState(defaultFrom);
+  const [filterTo, setFilterTo] = useState(defaultTo);
 
   // Convert filterFrom/filterTo back to Date for comparison (use full range if empty)
   const parsedFrom = filterFrom ? new Date(`${filterFrom}T00:00:00`) : null;
@@ -879,9 +884,9 @@ function DataSummaryPopup({
               placeholder={defaultTo}
               className="h-6 w-[110px] text-2xs px-1.5"
             />
-            {(filterFrom || filterTo) && (
+            {(filterFrom !== defaultFrom || filterTo !== defaultTo) && (
               <button
-                onClick={() => { setFilterFrom(''); setFilterTo(''); }}
+                onClick={() => { setFilterFrom(defaultFrom); setFilterTo(defaultTo); }}
                 className="h-6 px-2 rounded text-2xs font-medium bg-muted text-muted-foreground hover:text-foreground border border-border transition-colors"
               >
                 Clear
