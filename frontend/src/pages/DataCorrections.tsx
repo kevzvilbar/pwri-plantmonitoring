@@ -643,7 +643,12 @@ async function supersedeOtherCorrectionRequests(
     .eq('source_id', sourceId)
     .eq('status', 'pending');
   if (excludeRequestId) q = q.neq('id', excludeRequestId);
-  await (q as any);
+  // Best-effort dedup step — a failure here shouldn't block the primary
+  // approve/reject action that's already succeeded, but it also shouldn't
+  // vanish silently, since it's the same class of "looks fine, quietly
+  // didn't happen" bug as the one on the primary update below.
+  const { error } = await (q as any);
+  if (error) console.error('supersedeOtherCorrectionRequests failed:', error);
 }
 
 function PendingReviewTab() {
@@ -723,10 +728,25 @@ function PendingReviewTab() {
       p_reason:      'Approved correction request: ' + req.reason,
     }) as any);
     if (error) { toast.error(friendlyError(error)); return; }
-    // 2. Mark request as approved (triggers operator notification)
-    await (supabase.from('correction_requests' as any)
+    // 2. Mark request as approved (triggers operator notification).
+    // .select('id') matters here: an UPDATE that RLS silently narrows to
+    // zero matching rows returns { data: [], error: null } — identical to
+    // a real success unless you check what actually came back. Without
+    // this check, the row keeps re-appearing as "pending" on every refetch
+    // with no visible reason why (see 20260723 migration's note that this
+    // table's RLS was set up outside the migration history and was never
+    // actually confirmed from code).
+    const { data: resolvedRows, error: resolveErr } = await (supabase
+      .from('correction_requests' as any)
       .update({ status: 'approved', resolved_by: user?.id, resolved_at: new Date().toISOString() })
-      .eq('id', req.id) as any);
+      .eq('id', req.id)
+      .select('id') as any);
+    if (resolveErr) { toast.error(friendlyError(resolveErr)); return; }
+    if (!resolvedRows?.length) {
+      toast.error('Reading corrected, but the request could not be marked approved — you may not have permission to update it. It will keep showing here until that\u2019s fixed.');
+      invalidate();
+      return;
+    }
     // 3. Close out any OTHER pending request for this same reading (e.g. a
     // second operator flagged it too) so it doesn't linger as a duplicate
     // approval prompt for a reading that's already been corrected.
@@ -742,10 +762,24 @@ function PendingReviewTab() {
   const rejectRequest = async (req: CorrectionRequest, resolutionNote: string) => {
     if (!resolutionNote.trim()) { toast.error('A reason is required to reject a correction request'); return; }
     // Revert to normal without changing value
-    await (supabase.from(req.source_table as any).update({ norm_status: 'normal' }).eq('id', req.source_id) as any);
-    await (supabase.from('correction_requests' as any)
+    const { error: revertErr } = await (supabase
+      .from(req.source_table as any).update({ norm_status: 'normal' }).eq('id', req.source_id) as any);
+    if (revertErr) { toast.error(friendlyError(revertErr)); return; }
+    // .select('id') for the same reason as approveRequest above: a silently
+    // RLS-blocked update returns { data: [], error: null }, not an error —
+    // without checking what actually came back, the request would keep
+    // reappearing as pending with no indication anything went wrong.
+    const { data: resolvedRows, error: resolveErr } = await (supabase
+      .from('correction_requests' as any)
       .update({ status: 'rejected', resolved_by: user?.id, resolved_at: new Date().toISOString(), resolution_note: resolutionNote || null })
-      .eq('id', req.id) as any);
+      .eq('id', req.id)
+      .select('id') as any);
+    if (resolveErr) { toast.error(friendlyError(resolveErr)); return; }
+    if (!resolvedRows?.length) {
+      toast.error('Could not mark this request as rejected — you may not have permission to update it.');
+      invalidate();
+      return;
+    }
     // The reading was just confirmed as fine (norm_status back to 'normal'),
     // so any OTHER still-pending request against the same reading is moot too.
     await supersedeOtherCorrectionRequests(
@@ -827,13 +861,21 @@ function PendingReviewTab() {
       const note = decision === 'normal'
         ? 'Superseded — reading approved via bulk action from Pending Review'
         : 'Superseded — reading rejected via bulk action from Pending Review';
-      await Promise.all([...bySourceTable.entries()].map(([sourceTable, ids]) =>
+      const results = await Promise.all([...bySourceTable.entries()].map(([sourceTable, ids]) =>
         supabase.from('correction_requests' as any)
           .update({ status: 'rejected', resolved_by: user?.id ?? null, resolved_at: new Date().toISOString(), resolution_note: note })
           .eq('source_table', sourceTable)
           .eq('status', 'pending')
           .in('source_id', ids) as any,
       ));
+      // Same class of "looks fine, quietly didn't happen" risk as
+      // supersedeOtherCorrectionRequests above — this is a best-effort
+      // cleanup step (the primary bulk approve/reject already succeeded
+      // via reading_normalizations), so it shouldn't block the user, but a
+      // failure here shouldn't vanish either.
+      for (const r of results) {
+        if ((r as any)?.error) console.error('bulkResolve correction_requests supersede failed:', (r as any).error);
+      }
     }
     const ok = succeeded.length;
     toast.success(`${ok} of ${targets.length} readings ${decision === 'normal' ? 'approved' : 'rejected'}`);
