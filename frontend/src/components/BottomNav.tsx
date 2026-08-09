@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Menu,
   Building2, Droplet,
-  Wrench, AlertTriangle, DollarSign, Users, Download, Upload, ShieldCheck,
+  Wrench, AlertTriangle, Users, Download, Upload, ShieldCheck,
   ShieldAlert,
   ClipboardCheck,
   GitBranch, FlaskConical, Award,
@@ -10,7 +10,7 @@ import {
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon (linked
 // membrane blocks) instead of the generic gear/Cog glyph, matching TrainsList
 // and the desktop sidebar so the concept renders the same everywhere.
-import { ROTrainIcon } from '@/components/icons/water-icons';
+import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { OPERATOR_DESIGNATION } from '@/components/DesignationCombobox';
@@ -69,7 +69,7 @@ const sideSheetGroups = [
   {
     title: 'Finance',
     items: [
-      { to: '/costs', label: 'Costs & Tariffs', icon: DollarSign },
+      { to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon },
     ],
   },
 ];

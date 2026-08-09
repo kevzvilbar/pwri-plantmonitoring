@@ -198,3 +198,22 @@ export function GridPylonIcon({ className = 'h-3.5 w-3.5' }: { className?: strin
     </svg>
   );
 }
+
+/**
+ * Peso sign (₱) — nav/tab icon for Costs & Tariffs. Every actual currency
+ * value in the app already renders with the ₱ glyph (BudgetTab, TrendChart,
+ * CostSunburst, Dashboard, Costs.tsx, CIPLog.tsx all format amounts as
+ * `₱${...}` — grepped, none use a literal $ for a value) except this one
+ * spot: the nav icon itself was lucide's `DollarSign`, since lucide has no
+ * peso glyph (it ships Dollar/Euro/Yen/Rupee/Ruble/Franc, no ₱). Drawn as a
+ * P-bowl with a single crossbar — the same construction as the Unicode ₱
+ * character — rather than reusing $'s S-curve, so it doesn't read as the
+ * wrong currency at a glance.
+ */
+export const PesoSignIcon = ({ size, ...props }: WaterIconProps) => (
+  <svg {...baseProps(size, props)}>
+    <path d="M9 5v14" />
+    <path d="M9 5h4a3.5 3.5 0 0 1 0 7H9" />
+    <path d="M6 12.5h10" />
+  </svg>
+);

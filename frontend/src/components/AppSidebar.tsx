@@ -1,12 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Droplet, Wrench, AlertTriangle,
-  Users, DollarSign, Download, Upload, ShieldCheck, ShieldAlert,
+  Users, Download, Upload, ShieldCheck, ShieldAlert,
   GitBranch, FlaskConical, ChevronLeft, ChevronRight,
   ClipboardCheck, Award } from 'lucide-react';
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
 // of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
-import { ROTrainIcon } from '@/components/icons/water-icons';
+import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -61,7 +61,7 @@ const groups: SidebarGroup[] = [
   {
     label: 'Finance',
     items: [
-      { to: '/costs', label: 'Costs & Tariffs', icon: DollarSign },
+      { to: '/costs', label: 'Costs & Tariffs', icon: PesoSignIcon },
     ],
   },
 ];
