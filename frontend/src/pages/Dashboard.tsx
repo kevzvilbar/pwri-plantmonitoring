@@ -1410,9 +1410,17 @@ export default function Dashboard() {
         }
       });
 
-      // Blending: most recent injections, informational only.
+      // Blending: most recent injections, informational only. Deliberately a
+      // much shorter window than downtime/recovery below (30 days) — this is
+      // a routine daily log per well, not something that needs following up
+      // on weeks later, and a 30-day net was the main reason the bell felt
+      // permanently full: on any given day it's still surfacing every well's
+      // reading from every day this month, not just what actually just
+      // happened. 2 days (today + yesterday) covers "came back the next
+      // morning" without dragging in a month of history.
+      const sinceBlending = format(subDays(new Date(), 2), 'yyyy-MM-dd');
       let qBe = supabase.from('blending_events' as any).select('*')
-        .gte('event_date', since).order('event_date', { ascending: false }).limit(50);
+        .gte('event_date', sinceBlending).order('event_date', { ascending: false }).limit(50);
       if (selectedPlantId) qBe = qBe.eq('plant_id', selectedPlantId);
       const { data: beRows, error: beErr } = await qBe;
       if (beErr) throw beErr;
