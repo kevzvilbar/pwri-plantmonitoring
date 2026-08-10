@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1620,
-  "lastUpdated": "2026-08-09",
+  "maxWarnings": 1624,
+  "lastUpdated": "2026-08-10",
   "history": [
     {
       "date": "2026-08-09",
@@ -8,14 +8,10 @@
       "previous": null
     },
     {
-      "date": "2026-08-09",
-      "maxWarnings": 1620,
-      "previous": 1650
-    },
-    {
-      "date": "2026-08-09",
-      "maxWarnings": 1620,
-      "previous": 1600
+      "date": "2026-08-10",
+      "maxWarnings": 1624,
+      "previous": 1620,
+      "reason": "DataAnalysis.tsx: exported runOLS/getResetThreshold/getZThreshold/median/RawReading/CorrectionRow so the regression-correction workflow could be unit tested (see DataAnalysis.test.ts). +4 react-refresh/only-export-components warnings, same accepted trade-off already present in Compliance.tsx for the same reason."
     }
   ]
 }

@@ -142,7 +142,7 @@ const POWER_SOURCE_OPTIONS = [
 
 type NormStatus = 'normal' | 'erroneous' | 'normalized' | 'retracted';
 
-interface RawReading {
+export interface RawReading {
   id: string;
   reading_datetime: string;
   plant_id?: string;
@@ -150,7 +150,7 @@ interface RawReading {
   [key: string]: unknown;
 }
 
-interface CorrectionRow {
+export interface CorrectionRow {
   reading_id: string;
   reading_datetime: string;
   original_value: number | null;
@@ -209,7 +209,7 @@ const RATE_COLUMNS = new Set([
 ]);
 
 /** Return the |delta| above which a consecutive change is treated as a reset/mis-entry. */
-function getResetThreshold(column: string): number {
+export function getResetThreshold(column: string): number {
   return RATE_COLUMNS.has(column) ? 500 : 1_000_000;
 }
 
@@ -218,27 +218,27 @@ function getResetThreshold(column: string): number {
  * Larger datasets have more natural variance; tighten the cutoff on small sets
  * so we don't miss obvious spikes, and relax it on large sets to reduce false positives.
  */
-function getZThreshold(n: number): number {
+export function getZThreshold(n: number): number {
   if (n < 20)  return 2.0;
   if (n < 100) return 2.5;
   return 3.0;
 }
 
-interface OLSResult {
+export interface OLSResult {
   corrections: CorrectionRow[];
   stats: { r_squared: number | null; slope: number | null; intercept: number | null };
   resetCount: number;
 }
 
 /** Median of a numeric array. */
-function median(arr: number[]): number {
+export function median(arr: number[]): number {
   if (!arr.length) return 0;
   const sorted = [...arr].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-function runOLS(readings: RawReading[], column: string): OLSResult {
+export function runOLS(readings: RawReading[], column: string): OLSResult {
   // ── Collect numeric pairs (dayOffset, value) ──────────────────────────────
   // x-axis = days since the first valid reading's timestamp (fractional days for
   // sub-daily tables like ro_train_readings).  This ensures the regression
