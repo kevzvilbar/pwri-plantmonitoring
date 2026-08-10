@@ -753,7 +753,7 @@
 
   /* Section divider label inside forms / cards */
   .section-label {
-    @apply text-[9.5px] font-bold uppercase tracking-[0.12em]
+    @apply text-3xs font-bold uppercase tracking-[0.12em]
            text-muted-foreground/50 px-0.5;
   }
 

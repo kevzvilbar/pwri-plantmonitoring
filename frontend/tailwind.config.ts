@@ -8,13 +8,21 @@ export default {
   theme: {
     container: { center: true, padding: "1rem", screens: { "2xl": "1400px" } },
     extend: {
-      // Compact type scale for dense data tables/badges — this app
-      // legitimately needs smaller-than-text-xs sizes in a lot of places
-      // (RO train readings, meter config grids, KPI badges), but today that's
-      // done with ~16 different one-off text-[Npx] arbitrary values (7px
-      // through 11.5px) instead of a deliberate scale. These two tokens plus
-      // the existing text-xs (12px) cover that range; see the design audit
-      // for the migration this unblocks.
+      // Compact type scale for dense data tables/badges (RO train readings,
+      // meter config grids, KPI badges) — text-xs (12px) is too large for a
+      // lot of that chrome. These two tokens cover it.
+      //
+      // This comment previously said ~16 one-off text-[Npx] values (7-11.5px)
+      // still needed migrating to these tokens; that's now done (verified via
+      // repo-wide search — see scripts/check-arbitrary-font-sizes.mjs, which
+      // enforces this staying true). The handful of remaining text-[Npx]
+      // usages in the codebase are deliberate, not debt, and are NOT part of
+      // this scale: components/manual/bookPrimitives.tsx uses its own serif
+      // reading-type system (see the book-heading/book-body comment below),
+      // components/OdometerRollerInput.tsx's larger digit sizes are a
+      // separate readability choice for that control, and the text-[0px] in
+      // pages/plants/index.tsx is a responsive label-collapse trick, not a
+      // font size at all (each is commented in place explaining why).
       fontSize: {
         '3xs': ['9px', { lineHeight: '12px' }],
         '2xs': ['10px', { lineHeight: '13px' }],

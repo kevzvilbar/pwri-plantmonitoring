@@ -63,6 +63,15 @@ jobs:
         # again, that's the second time; worth finding out why it keeps
         # slipping rather than just re-adding the flag a third time.
 
+      - name: Tests (vitest)
+        working-directory: frontend
+        run: npm test
+        # This step didn't exist before 2026-08-10 -- every test in this repo,
+        # including the guard-rail/regression-correction coverage added this
+        # session (see pwri-improvement-plan.md Phase 2), ran only when
+        # someone happened to run it locally. A red test suite could merge to
+        # main and nothing here would have said so.
+
       - name: Lint ceiling (ESLint warning count vs. committed baseline)
         working-directory: frontend
         run: node scripts/check-lint-ceiling.mjs
@@ -77,6 +86,19 @@ jobs:
         # ongoing count instead of prose comments here; run
         # `node scripts/check-lint-ceiling.mjs --update` locally and commit
         # the result to move the ceiling in either direction on purpose.
+
+      - name: Compact type-scale check (no undocumented text-[Npx] usages)
+        working-directory: frontend
+        run: node scripts/check-arbitrary-font-sizes.mjs
+        # tailwind.config.ts's text-3xs/text-2xs tokens exist so dense UI
+        # doesn't fall back to one-off text-[Npx] values; the migration that
+        # comment used to describe as unfinished (~16 occurrences, 7-11.5px)
+        # was actually already done by the time this check was written —
+        # only one real leftover (index.css's .section-label) plus a few
+        # deliberately-excluded non-debt usages (Manual reader's own serif
+        # type system, OdometerRollerInput's digit sizing, one responsive
+        # label-collapse trick that isn't really a font size). See the
+        # script's own header for the full allowlist and how to extend it.
 
       - name: Production build
         working-directory: frontend
