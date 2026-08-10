@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1624,
+  "maxWarnings": 1620,
   "lastUpdated": "2026-08-10",
   "history": [
     {
@@ -12,6 +12,12 @@
       "maxWarnings": 1624,
       "previous": 1620,
       "reason": "DataAnalysis.tsx: exported runOLS/getResetThreshold/getZThreshold/median/RawReading/CorrectionRow so the regression-correction workflow could be unit tested (see DataAnalysis.test.ts). +4 react-refresh/only-export-components warnings, same accepted trade-off already present in Compliance.tsx for the same reason."
+    },
+    {
+      "date": "2026-08-10",
+      "maxWarnings": 1620,
+      "previous": 1624,
+      "reason": "Moved runOLS and friends out of DataAnalysis.tsx into lib/regressionCorrection.ts (a plain .ts file, no JSX). react-refresh/only-export-components only fires on files exporting React components, so the 4 warnings from the previous entry disappeared entirely rather than needing to be carried indefinitely -- the extraction is a strictly better fix than accepting the trade-off in place."
     }
   ]
 }
