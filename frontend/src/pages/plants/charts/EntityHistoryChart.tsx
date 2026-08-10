@@ -129,6 +129,10 @@ export function EntityHistoryChart({
         raw = (data ?? []) as any[];
       }
 
+      // `raw` is already ordered ascending by reading_datetime, so a single
+      // running `last` value is enough to walk the chain — no Map needed
+      // since this query is always scoped to one entity.
+      let last: number | null = null;
       return raw.map((r: any) => {
         const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
         let consumption = 0;
@@ -137,11 +141,28 @@ export function EntityHistoryChart({
           // clamping. (daily_volume / previous_reading aren't meaningful
           // here and are ignored.)
           consumption = r.current_reading != null ? +r.current_reading : 0;
+        } else if (last != null && r.current_reading != null) {
+          // SELF-HEAL (checked before daily_volume): a predecessor has
+          // already been walked within this fetched window, so diff live
+          // against it instead of trusting the row's stored daily_volume.
+          // daily_volume/previous_reading are written once at insert time
+          // and nothing cascades an update to them when an earlier reading
+          // is later edited/deleted/replaced — a downstream row can be left
+          // pointing at a stale predecessor indefinitely. That's what made
+          // the "Mother Meter" bars climb across Aug 7-10 for Coke/Parkmall
+          // instead of showing each day's real volume — same root cause and
+          // fix as DataSummaryModal.tsx / TrendChart.tsx.
+          consumption = Math.max(0, +r.current_reading - last);
         } else if (r.daily_volume != null && +r.daily_volume > 0) {
+          // First row for this entity within the fetched window — no walked
+          // predecessor to diff against locally. Fall back to the stored
+          // daily_volume (may legitimately span >1 day if readings were
+          // skipped before the window).
           consumption = +r.daily_volume;
         } else if (r.current_reading != null && r.previous_reading != null) {
           consumption = Math.max(0, +r.current_reading - +r.previous_reading);
         }
+        if (r.current_reading != null) last = +r.current_reading;
         return { date: dateStr, consumption: +consumption.toFixed(2), reading: r.current_reading != null ? +r.current_reading : undefined };
       }).filter(r => r.date);
     },
