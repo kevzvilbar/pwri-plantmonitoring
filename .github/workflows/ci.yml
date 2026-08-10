@@ -90,6 +90,19 @@ jobs:
       - name: Compact type-scale check (no undocumented text-[Npx] usages)
         working-directory: frontend
         run: node scripts/check-arbitrary-font-sizes.mjs
+
+      - name: Theme contrast check (WCAG, all 7 brand themes)
+        working-directory: frontend
+        run: node scripts/check-theme-contrast.mjs
+        # Gates on 3:1 (the UI-component floor) today, not 4.5:1 (full AA
+        # text contrast) -- 3 of 7 themes (default, aerial-autumn,
+        # midnight-road) currently sit between those two bars for white
+        # button text on --primary (see the script's own header for the
+        # full writeup). Reported in the check's own output either way, so
+        # it's visible without blocking merges on a design decision this
+        # check shouldn't make unilaterally. Tighten MIN_RATIO to 4.5 once
+        # someone who owns the theme system has signed off on darkening
+        # --primary a few points in those three themes.
         # tailwind.config.ts's text-3xs/text-2xs tokens exist so dense UI
         # doesn't fall back to one-off text-[Npx] values; the migration that
         # comment used to describe as unfinished (~16 occurrences, 7-11.5px)
