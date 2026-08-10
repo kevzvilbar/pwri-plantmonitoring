@@ -952,7 +952,20 @@ export function TrendChart({
           return { r, delta, rawDelta: null, isMeterReplacement: false };
         }
 
-        if (dailyVolumeField && r[dailyVolumeField] != null) {
+        if (dailyVolumeField && r[dailyVolumeField] != null && !lastReading.has(entityKey)) {
+          // Only trust the stored daily_volume for the FIRST row of this
+          // entity within the fetched window, where there's no locally
+          // walked predecessor to diff against — that stored value may
+          // legitimately span >1 day if readings were skipped before the
+          // window. Once a predecessor HAS been walked (below), always diff
+          // live against it instead: daily_volume/previous_reading are
+          // written once at insert time and never cascaded when an earlier
+          // reading is later edited/deleted/replaced, so a downstream row can
+          // keep pointing at a stale predecessor indefinitely. That's what
+          // made Coke/Parkmall's Aug 7–10 daily_volume grow into a
+          // cumulative-looking total instead of a single day's delta — see
+          // the identical fix in DataSummaryModal.tsx's
+          // computePivotFromReadingsNoCache.
           // Clamp to 0: a negative daily_volume means the stored value is corrupt
           // (e.g. a partial or rolled-back write). Pass-through was the root cause
           // of the −898K consumption spike on May 29 that also tanked the NRW chart.

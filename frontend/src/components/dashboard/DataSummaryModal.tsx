@@ -111,18 +111,34 @@ export function computePivotFromReadingsNoCache(
         // diff, no dependence on the DB's daily_volume/previous_reading.
         delta = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
         lastReading.set(entityKey, +r.current_reading);
+      } else if (lastReading.has(entityKey)) {
+        // SELF-HEAL (checked before dailyVolumeField): once a predecessor for
+        // this entity has already been walked within the fetched window,
+        // always diff live against it instead of trusting the row's stored
+        // daily_volume/previous_reading. Those DB columns are written once at
+        // insert time and nothing cascades an update to them when an earlier
+        // reading is later edited/deleted/replaced — a downstream row can be
+        // left pointing at a now-stale predecessor indefinitely. That's what
+        // produced the Coke/Parkmall Aug 7–10 "wrong calculation": those
+        // rows' stored previous_reading was frozen at the Aug 5 reading, so
+        // daily_volume (current − frozen Aug 5 value) grew into a cumulative
+        // total each day instead of a single day's delta. The History
+        // dialogs (ReadingHistoryDialog.tsx / ProductSection.tsx) already
+        // recompute live from the adjacent row for the exact same reason —
+        // this mirrors that fix here so the Data Summary modal self-heals too.
+        delta = +r.current_reading - lastReading.get(entityKey)!;
+        lastReading.set(entityKey, +r.current_reading);
       } else if (dailyVolumeField && r[dailyVolumeField] != null) {
-        // Clamp to 0: a negative daily_volume is a corrupt stored value
-        // (e.g. partial write, rollback). Matches TrendChart's buildEntityPivot
-        // and the computeEntityDeltas fix — all three paths must be consistent.
+        // First row for this entity within the fetched window — no walked
+        // predecessor to diff against locally, so fall back to the stored
+        // daily_volume (may legitimately span >1 day if readings were
+        // skipped before the window). Clamp to 0: a negative daily_volume is
+        // a corrupt stored value (e.g. partial write, rollback).
         delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
-      } else if (!lastReading.has(entityKey)) {
+      } else {
         if (r.previous_reading != null && r.current_reading != null)
           delta = +r.current_reading - +r.previous_reading;
-        lastReading.set(entityKey, +r.current_reading);
-      } else {
-        delta = +r.current_reading - lastReading.get(entityKey)!;
         lastReading.set(entityKey, +r.current_reading);
       }
       const prev = pivot.get(dateKey)!.get(entityKey) ?? 0;
@@ -222,7 +238,16 @@ function computePivotFromReadings(
       // ── HYBRID: Tier-2 raw computation (cache miss) ───────────────────────
 
       let delta = 0;
-      if (dailyVolumeField && r[dailyVolumeField] != null) {
+      if (lastReading.has(entityKey)) {
+        // SELF-HEAL (checked before dailyVolumeField — see the identical fix
+        // and full explanation in computePivotFromReadingsNoCache above): a
+        // predecessor for this entity has already been walked in this
+        // window, so diff live against it rather than trusting a stored
+        // daily_volume that may have gone stale after an earlier
+        // edit/delete/replacement was never cascaded downstream.
+        delta = +r.current_reading - lastReading.get(entityKey)!;
+        lastReading.set(entityKey, +r.current_reading);
+      } else if (dailyVolumeField && r[dailyVolumeField] != null) {
         // daily_volume is GENERATED ALWAYS as (current_reading - previous_reading).
         // For the very first row in the fetched window (no lastReading yet), this
         // value correctly represents THAT reading's interval — which may span
@@ -232,17 +257,13 @@ function computePivotFromReadings(
         // rollback, etc.) — treat as 0 rather than propagating a huge negative.
         delta = Math.max(0, +r[dailyVolumeField]);
         lastReading.set(entityKey, +r.current_reading);
-      } else if (!lastReading.has(entityKey)) {
-        // FIX: No daily_volume and no prior row in range.
+      } else {
+        // No daily_volume and no prior row in range.
         // Use the stored previous_reading field (written by Operations.tsx at insert
         // time) instead of treating the full cumulative meter value as today's delta.
         // This prevents the "millions" spike when the date range starts mid-history.
         if (r.previous_reading != null && r.current_reading != null)
           delta = +r.current_reading - +r.previous_reading;
-        lastReading.set(entityKey, +r.current_reading);
-      } else {
-        // Normal: subtract the last seen reading. Pass through negatives.
-        delta = +r.current_reading - lastReading.get(entityKey)!;
         lastReading.set(entityKey, +r.current_reading);
       }
       // Populate the cache for subsequent renders / pivots in this session.
