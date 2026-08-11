@@ -593,7 +593,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
             {/* ── Inline history chart ── */}
             {selectedWell === w.id && (
               <div className="mt-3 pt-3 border-t">
-                <EntityHistoryChart entityId={w.id} entityType="well" entityName={w.name} />
+                <EntityHistoryChart entityId={w.id} entityType="well" entityName={w.name} isBlendingWell={isBlending} />
               </div>
             )}
           </Card>
@@ -735,6 +735,22 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
       return data ?? [];
     },
   });
+  // Is this well tagged in blending_wells? Drives the raw-water-vs-blended
+  // overlay on the Historical Consumption chart below (EntityHistoryChart's
+  // isBlendingWell prop). Scoped straight to well_id — no need for plantId
+  // here since blending_wells rows are already 1:1 with a well.
+  const { data: isBlendingWell } = useQuery<boolean>({
+    queryKey: ['well-is-blending', wellId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('blending_wells')
+        .select('well_id')
+        .eq('well_id', wellId)
+        .limit(1);
+      if (error) return false;
+      return (data ?? []).length > 0;
+    },
+  });
 
   if (!well) return (
     <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
@@ -823,7 +839,7 @@ function WellDetail({ wellId, onBack }: { wellId: string; onBack: () => void }) 
 
       {/* Historical Consumption Chart */}
       <Card className="p-3">
-        <EntityHistoryChart entityId={wellId} entityType="well" entityName={well.name} />
+        <EntityHistoryChart entityId={wellId} entityType="well" entityName={well.name} isBlendingWell={!!isBlendingWell} />
       </Card>
 
       {/* Hydraulic data */}

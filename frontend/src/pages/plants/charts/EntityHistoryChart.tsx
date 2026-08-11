@@ -39,7 +39,7 @@ import { format } from 'date-fns';
 // Same palette as the plant-wide NRW chart in components/dashboard/TrendChart.tsx.
 // Both import from lib/chartColors.ts (a neutral shared module, not a reach into
 // Dashboard internals) so the two charts can't silently drift apart.
-import { C_PRODUCTION, C_CONSUMPTION, C_NRW } from '@/lib/chartColors';
+import { C_PRODUCTION, C_CONSUMPTION, C_NRW, C_RAWWATER, C_BLEND_PCT, C_BLEND_VOLUME } from '@/lib/chartColors';
 
 export interface HistoryRow { date: string; consumption: number; reading?: number; }
 
@@ -61,6 +61,7 @@ export function EntityHistoryChart({
   entityName,
   defaultInputMode = 'raw',
   siblingLocators,
+  isBlendingWell,
 }: {
   entityId: string;
   entityType: 'locator' | 'well' | 'product_meter';
@@ -78,10 +79,18 @@ export function EntityHistoryChart({
    *  NRW% — same formula as the plant-wide Dashboard NRW (calc.nrw), scoped
    *  to just this meter and its own siblings. */
   siblingLocators?: SiblingLocator[];
+  /** Only meaningful for entityType === 'well'. True when this well is
+   *  tagged in blending_wells (Plants → Wells "Blending" toggle). When set,
+   *  the chart overlays this well's own blending_events volume alongside
+   *  its raw-water consumption, plus a % of raw output diverted to
+   *  blending — same overlay pattern as siblingLocators above, just scoped
+   *  to a single well's own two series instead of a meter + its locators. */
+  isBlendingWell?: boolean;
 }) {
   const isDirectMode = (entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct';
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
   const hasSiblings = entityType === 'product_meter' && !!siblingLocators?.length;
+  const hasBlending = entityType === 'well' && !!isBlendingWell;
   const siblingIds = useMemo(() => (siblingLocators ?? []).map(l => l.id), [siblingLocators]);
   const siblingModeById = useMemo(() => {
     const map = new Map<string, 'raw' | 'direct'>();
@@ -231,17 +240,66 @@ export function EntityHistoryChart({
     [siblingRows],
   );
 
+  // ─── This well's own blending_events (Operations → Blending) ───────────────
+  // A blending well is still metered normally (well_readings, the bars this
+  // chart already draws) — blending_events is a *separate* log of how much
+  // of that same well's raw output was diverted into the product line via
+  // blending on a given day. Same table BlendingVolumeCard.tsx reads for the
+  // plant-wide rollup, just scoped here to one well_id.
+  const { data: blendingRows = [], isLoading: blendingLoading } = useQuery<{ date: string; volume: number }[]>({
+    queryKey: ['entity-history-blending', entityId, range],
+    enabled: hasBlending,
+    queryFn: async () => {
+      const days = range === 'all' ? 9999 : parseInt(range);
+      const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('blending_events' as any)
+        .select('event_date, volume_m3')
+        .eq('well_id', entityId)
+        .gte('event_date', since);
+      if (error) return [];
+      return (data ?? [])
+        .map((r: any) => ({ date: String(r.event_date ?? '').slice(0, 10), volume: Number(r.volume_m3) || 0 }))
+        .filter((r: any) => r.date);
+    },
+    staleTime: 60_000,
+  });
+
+  // Sum across a day (a well can log more than one blending event on the same date)
+  const blendingByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    blendingRows.forEach(r => map.set(r.date, (map.get(r.date) ?? 0) + r.volume));
+    return map;
+  }, [blendingRows]);
+
+  const totalBlendingVolume = useMemo(
+    () => blendingRows.reduce((s, r) => s + r.volume, 0),
+    [blendingRows],
+  );
+
   // Chart data: mother meter's own dates, each with its siblings' total for
   // that same date (0 when siblings had no reading that day) and a per-day
   // NRW% — same calc.nrw(production, consumption) the plant-wide Dashboard
   // NRW chart uses, just scoped to this one meter and its own siblings.
+  // For a blending well, the same shape carries blendedVolume (that day's
+  // blending_events total) and blendedPct — the share of that day's raw
+  // output that was diverted to blending, not a loss/NRW-style formula.
   const chartData = useMemo(() => {
-    if (!hasSiblings) return aggregated;
-    return aggregated.map(r => {
-      const siblingTotal = +(siblingByDate.get(r.date) ?? 0).toFixed(2);
-      return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal) };
-    });
-  }, [aggregated, hasSiblings, siblingByDate]);
+    if (hasSiblings) {
+      return aggregated.map(r => {
+        const siblingTotal = +(siblingByDate.get(r.date) ?? 0).toFixed(2);
+        return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal) };
+      });
+    }
+    if (hasBlending) {
+      return aggregated.map(r => {
+        const blendedVolume = +(blendingByDate.get(r.date) ?? 0).toFixed(2);
+        const blendedPct = r.consumption > 0 ? +((blendedVolume / r.consumption) * 100).toFixed(1) : null;
+        return { ...r, blendedVolume, blendedPct };
+      });
+    }
+    return aggregated;
+  }, [aggregated, hasSiblings, siblingByDate, hasBlending, blendingByDate]);
 
   // Period NRW% — totals across the whole selected range, mirroring how the
   // Readings/Total/Avg-day stats above are also period aggregates rather
@@ -255,10 +313,14 @@ export function EntityHistoryChart({
     if (!aggregated.length) { toast.error('No data to export'); return; }
     const header = hasSiblings
       ? 'date,consumption_m3,reading,locators_total_m3,nrw_pct'
+      : hasBlending
+      ? 'date,raw_water_m3,reading,blended_m3,blended_pct'
       : 'date,consumption_m3,reading';
-    const lines = (hasSiblings ? chartData : aggregated).map((r: any) =>
+    const lines = ((hasSiblings || hasBlending) ? chartData : aggregated).map((r: any) =>
       hasSiblings
         ? `${r.date},${r.consumption},${r.reading ?? ''},${r.siblingTotal ?? ''},${r.nrw ?? ''}`
+        : hasBlending
+        ? `${r.date},${r.consumption},${r.reading ?? ''},${r.blendedVolume ?? ''},${r.blendedPct ?? ''}`
         : `${r.date},${r.consumption},${r.reading ?? ''}`
     );
     const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
@@ -274,6 +336,13 @@ export function EntityHistoryChart({
   const totalConsumption = aggregated.reduce((s, r) => s + r.consumption, 0);
   const avgConsumption = aggregated.length ? totalConsumption / aggregated.length : 0;
 
+  // Period % blended — totals across the whole selected range (same reasoning
+  // as periodNrw below: a ratio of period totals, not an average of noisy
+  // daily ratios that would overweight low-volume days).
+  const periodBlendedPct = hasBlending && totalConsumption > 0
+    ? +((totalBlendingVolume / totalConsumption) * 100).toFixed(1)
+    : null;
+
   const customTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
@@ -282,7 +351,7 @@ export function EntityHistoryChart({
         {payload.map((p: any) => (
           <p key={p.dataKey} style={{ color: p.color }}>
             {p.name}: <span className="font-mono font-semibold">{fmtNum(p.value)}</span>
-            {p.dataKey === 'nrw' ? '%' : ' m³'}
+            {p.dataKey === 'nrw' || p.dataKey === 'blendedPct' ? '%' : ' m³'}
           </p>
         ))}
       </div>
@@ -372,6 +441,33 @@ export function EntityHistoryChart({
         </div>
       )}
 
+      {/* This well's blended volume + % of its raw output diverted to
+          blending (blending_events, Operations → Blending), scoped to this
+          one well — not a loss/NRW formula, just blended ÷ raw output. */}
+      {hasBlending && aggregated.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/40 rounded-lg p-2 text-center">
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide">
+              Blended Total {blendingLoading && <Loader2 className="inline h-2.5 w-2.5 animate-spin ml-0.5" />}
+            </div>
+            <div className="font-mono font-semibold text-base" style={{ color: C_BLEND_VOLUME }}>
+              {fmtNum(totalBlendingVolume)}
+            </div>
+            <div className="text-muted-foreground text-3xs">m³</div>
+          </div>
+          <div className="rounded-lg p-2 text-center bg-muted/40">
+            <div className="text-muted-foreground text-2xs uppercase tracking-wide flex items-center justify-center gap-1">
+              <Droplet className="h-2.5 w-2.5 opacity-60" /> % Blended
+            </div>
+            <div className="font-mono font-semibold text-base" style={{ color: C_BLEND_PCT }}>
+              {periodBlendedPct == null ? '—' : periodBlendedPct}
+              <span className="text-2xs font-sans text-muted-foreground ml-0.5">%</span>
+            </div>
+            <div className="text-muted-foreground text-3xs">of raw output</div>
+          </div>
+        </div>
+      )}
+
       {/* Chart */}
       <DataState
         loading={isLoading}
@@ -412,6 +508,41 @@ export function EntityHistoryChart({
                 <Bar yAxisId="vol" dataKey="consumption" fill={C_PRODUCTION} name="Mother Meter" radius={[2,2,0,0]} />
                 <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
                 <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        ) : hasBlending ? (
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / chartData.length))}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.slice(5)} // show MM-DD
+                  interval="preserveStartEnd"
+                  angle={-30}
+                  textAnchor="end"
+                  height={36}
+                />
+                <YAxis
+                  yAxisId="vol"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  width={38}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)}
+                />
+                <YAxis
+                  yAxisId="pct"
+                  orientation="right"
+                  tick={{ fontSize: 9, fill: C_BLEND_PCT }}
+                  width={30}
+                  tickFormatter={(v: number) => `${v}%`}
+                />
+                <Tooltip content={customTooltip} />
+                <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
+                <Bar yAxisId="vol" dataKey="consumption" fill={C_RAWWATER} name="Raw Water" radius={[2,2,0,0]} />
+                <Bar yAxisId="vol" dataKey="blendedVolume" fill={C_BLEND_VOLUME} name="Blended" radius={[2,2,0,0]} />
+                <Line yAxisId="pct" type="monotone" dataKey="blendedPct" stroke={C_BLEND_PCT} strokeWidth={2} dot={{ r: 2.5, fill: C_BLEND_PCT, strokeWidth: 0 }} name="% Blended" connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

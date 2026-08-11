@@ -259,6 +259,11 @@
     --metric-recovery:     27 96% 61%;
     --metric-tds:         255 92% 76%;
     --metric-gridpv:       38 92% 50%;
+    /* % of a blending well's raw output that was diverted into blending —
+       EntityHistoryChart.tsx's per-well composed chart. Distinct hue from
+       --metric-nrw so the two ratio lines can't be mistaken for each other
+       if a reader has both charts open side by side. */
+    --metric-blendpct:    330 81% 60%;
 
     /* Employees.tsx org-tree connector lines — PLANT_COLUMN_ACCENTS.line
        and CONNECTOR_COLORS used to be two separately-hardcoded copies of
