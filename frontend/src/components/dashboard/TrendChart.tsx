@@ -40,18 +40,13 @@ import {
   buildTrendRows, buildEntityPivotRows, isGranularityUsable, rangeDaysBetween, getIsoWeekStart,
   type Granularity, type TrendFieldConfig,
 } from './TrendChartAggregate';
-// M2/M3 — shared granularity control, stack/group toggle, and breadcrumb
-// components, plus their underlying logic (kept in a separate plain-.ts
-// module so TrendChartDrill.tsx exports only components — see that file's
-// and TrendChartDrillKit.ts's header comments for why).
+// M2/M3 — shared granularity control, stack/group toggle, and drill
+// interaction primitives (breadcrumb, drillable bar shape, legend isolate).
 import {
-  GranularityControl, StackToggle, DrillBreadcrumb,
-} from './TrendChartDrill';
-import {
-  readStackMode, writeStackMode, type StackMode,
-  type DrillCrumb, makeDrillableBarShape, toggleIsolateEntity,
+  GranularityControl, StackToggle, readStackMode, writeStackMode, type StackMode,
+  DrillBreadcrumb, type DrillCrumb, makeDrillableBarShape, toggleIsolateEntity,
   focusToRange, nextFinerGranularity, type DrillFocus,
-} from './TrendChartDrillKit';
+} from './TrendChartDrill';
 
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 // 'drillup' used to be a third state meaning "monthly view" — now that time
@@ -301,6 +296,18 @@ export function TrendChart({
   type ProdDrillSource = 'locator' | 'source';
   const prodDrillSource: ProdDrillSource = viewBreakdown === 'by-source' ? 'source' : 'locator';
 
+  // ── Raw Water — By-well breakdown (M4, the deferred item now shipped) ──
+  // Kept as its OWN state, deliberately NOT folded into ViewBreakdown/
+  // hasConsumptionDrill: those are exercised by production/nrw's breakdown
+  // logic across ~15 call sites, and reusing them here would mean every one
+  // of those call sites needs to learn a third "is this a well?" branch to
+  // stay correct. A small parallel pair of state variables is a few more
+  // lines but touches zero existing production/nrw logic — much lower risk
+  // for what is explicitly the lowest-priority line item in the plan.
+  const [rawwaterBreakdown, setRawwaterBreakdown] = useState<'total' | 'by-well'>('total');
+  const [selectedWellIds, setSelectedWellIds] = useState<Set<string> | null>(null);
+  useEffect(() => { if (metric !== 'rawwater') { setRawwaterBreakdown('total'); setSelectedWellIds(null); } }, [metric]);
+
   // ── Stack vs grouped (M2) — only meaningful once entities/series render
   // as bars (Weekly/Monthly breakdown, NRW's own Production+Consumption
   // bars, kWh, Production Cost's composition view). Persisted per metric in
@@ -315,28 +322,13 @@ export function TrendChart({
   useEffect(() => { setStackModeState(readStackMode(metric, defaultStackModeFor(metric))); }, [metric]);
   const setStackMode = (m: StackMode) => { setStackModeState(m); writeStackMode(metric, m); };
 
-  // ── Raw Water: By-well breakdown (M4) ────────────────────────────────────
-  // Mirrors production/nrw's Total/By-locator pattern, scoped to Raw Water
-  // only. Deliberately smaller than that pattern: there's no by-source
-  // equivalent here, and (for now) no dedicated filter-picker panel —
-  // narrowing to specific wells goes through legend click-to-isolate
-  // (toggleIsolateEntity), the same mechanism every other chart's legend
-  // already uses. A full search/filter panel like locators' is a reasonable
-  // follow-up if a plant's well count grows large enough to need it.
-  // Declared before drillFocus below since that effect's deps reference it.
-  type RawWaterBreakdown = 'total' | 'by-well';
-  const [rawWaterBreakdown, setRawWaterBreakdown] = useState<RawWaterBreakdown>('total');
-  useEffect(() => { if (metric !== 'rawwater') setRawWaterBreakdown('total'); }, [metric]);
-  const [selectedWellIds, setSelectedWellIds] = useState<Set<string> | null>(null);
-
   // ── M3: local drill-focus — clicking a monthly/weekly bar narrows the
   // chart to that bucket at the next-finer granularity, WITHOUT touching
   // the shared global dashboard range (see TrendChartDrill.tsx's header
   // comment for why). Cleared by the breadcrumb or by re-clicking the
-  // active bucket. Wired into Production/NRW and Raw Water's By-well
-  // breakdown — the same primitive is ready for TDS/Recovery next.
+  // active bucket. Wired into Production/NRW and RO's By-train view; Plant
+  // Health can reuse the same primitive next.
   const [drillFocus, setDrillFocus] = useState<DrillFocus | null>(null);
-  useEffect(() => { setDrillFocus(null); }, [metric, viewBreakdown, rawWaterBreakdown]);
   useEffect(() => { if (viewGran === 'daily') setDrillFocus(null); }, [viewGran]);
 
   // Locator filter for drill modes — null means "all selected" (default)
@@ -358,6 +350,7 @@ export function TrendChart({
   // ── RO drill state (TDS / Recovery) ─────────────────────────────────────
   type RoDrillMode = 'default' | 'by-train' | 'by-hour';
   const [roDrillMode, setRoDrillMode] = useState<RoDrillMode>('default');
+  useEffect(() => { setDrillFocus(null); }, [metric, viewBreakdown, roDrillMode, rawwaterBreakdown]);
   const hasRoDrill = metric === 'tds' || metric === 'recovery';
   const [selectedTrainIds, setSelectedTrainIds] = useState<Set<string> | null>(null);
   const [trainSearch, setTrainSearch] = useState('');
@@ -373,16 +366,6 @@ export function TrendChart({
   type PhDrillMode = 'daily' | 'hourly' | 'weekly' | 'monthly';
   const [phDrillMode, setPhDrillMode] = useState<PhDrillMode>('daily');
   const hasPlantHealth = metric === 'plantHealth';
-
-  // ── Plant Health: Day → Hour click-drill (M3/M4) ─────────────────────────
-  // phHourlyData below is hour-of-day across the WHOLE fetched range (up to
-  // 720 bars on a 30D window) — useful as its own manual toggle, but far too
-  // dense to be what a click on a single day's dot should jump to. This
-  // narrows that same hourly data down to just the clicked day, the "Day→hour,
-  // nearly free" case the plan called out for TDS/Recovery/Plant Health.
-  // null = the Hourly tab shows its normal full-range view.
-  const [phDayFocus, setPhDayFocus] = useState<string | null>(null);
-  useEffect(() => { if (!hasPlantHealth) setPhDayFocus(null); }, [hasPlantHealth]);
 
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
@@ -1626,13 +1609,24 @@ export function TrendChart({
     [activeEntities, selectedLocatorIds],
   );
 
-  // ── Raw Water: By-well drill entities (M4) ────────────────────────────────
-  // wellDrillEntities — the Raw Water analogue of drillEntities, built off
-  // the same wellReadings/wellNames already fetched for the Total view's
-  // per-well delta sum, so opening By-well costs no extra query. Built
-  // whenever the metric is rawwater (not gated on rawWaterBreakdown) so the
-  // entity count is available immediately once the user opens the toggle.
-  const wellDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+  // filteredLocatorList: activeEntities filtered by search string (for the picker UI)
+  const filteredLocatorList = useMemo(
+    () => locatorSearch.trim() === ''
+      ? activeEntities
+      : activeEntities.filter((e) =>
+          e.label.toLowerCase().includes(locatorSearch.trim().toLowerCase()),
+        ),
+    [activeEntities, locatorSearch],
+  );
+
+  // ── Raw Water — well entities + per-well pivot rows ─────────────────────
+  // Same computeEntityDeltas/buildEntityPivot strategy chartData already
+  // uses for the well-summed Total series (see the "Raw Water = sum of
+  // per-well deltas" comment above) — this is the SAME data, just kept
+  // per-well instead of summed, then run through the same
+  // buildEntityPivotRows the Production/NRW breakdown uses for its
+  // daily/weekly/monthly bucketing. No new fetch, no new delta logic.
+  const wellEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (metric !== 'rawwater') return [];
     const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
     return ids
@@ -1644,24 +1638,25 @@ export function TrendChart({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [metric, wellReadings, wellNames]);
 
-  // visibleWellEntities: subset of wellDrillEntities that pass the current
-  // well selection (legend isolate). null selectedWellIds = all visible.
   const visibleWellEntities = useMemo(
-    () => selectedWellIds === null
-      ? wellDrillEntities
-      : wellDrillEntities.filter((e) => selectedWellIds.has(e.id)),
-    [wellDrillEntities, selectedWellIds],
+    () => selectedWellIds === null ? wellEntities : wellEntities.filter((e) => selectedWellIds.has(e.id)),
+    [wellEntities, selectedWellIds],
   );
 
-  // filteredLocatorList: activeEntities filtered by search string (for the picker UI)
-  const filteredLocatorList = useMemo(
-    () => locatorSearch.trim() === ''
-      ? activeEntities
-      : activeEntities.filter((e) =>
-          e.label.toLowerCase().includes(locatorSearch.trim().toLowerCase()),
-        ),
-    [activeEntities, locatorSearch],
-  );
+  const wellEntityRows = useMemo(() => {
+    if (metric !== 'rawwater' || rawwaterBreakdown !== 'by-well') return [];
+    const sorted = [...(wellReadings ?? [])].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id');
+    return buildEntityPivotRows(pivot, dateKeys, visibleWellEntities, viewGran, startKey, endKey);
+  }, [metric, rawwaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey]);
+
+  const handleWellLegendIsolate = (e: any) => {
+    const id = e?.dataKey as string | undefined;
+    if (!id) return;
+    setSelectedWellIds((prev) => toggleIsolateEntity(prev, id, wellEntities.map((x) => x.id)));
+  };
 
   // Helpers for the locator selector
   const allSelected = selectedLocatorIds === null || selectedLocatorIds.size === activeEntities.length;
@@ -1742,21 +1737,6 @@ export function TrendChart({
   }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings,
       usePermeateForSource, visibleEntities, _directLocatorIds, viewGran, startKey, endKey]);
 
-  // ── Raw Water: By-well breakdown rows (M4) ────────────────────────────────
-  // Same shape as entityRows above: buildEntityPivot (the existing per-well
-  // delta logic — daily_volume priority → sequential self-heal → DB
-  // previous_reading fallback, meter-replacement-aware) feeds
-  // buildEntityPivotRows for daily/weekly/monthly bucketing (M1). Gated on
-  // rawWaterBreakdown so it's not recomputed while the user is on Total.
-  const wellEntityRows = useMemo(() => {
-    if (metric !== 'rawwater' || rawWaterBreakdown !== 'by-well') return [];
-    const sorted = [...(wellReadings ?? [])].sort(
-      (a: any, b: any) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
-    );
-    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id');
-    return buildEntityPivotRows(pivot, dateKeys, visibleWellEntities, viewGran, startKey, endKey);
-  }, [metric, rawWaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey]);
-
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
   const roTrainEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
@@ -1805,6 +1785,15 @@ export function TrendChart({
   const roUnit   = metric === 'tds' ? 'ppm' : '%';
 
   /** Build per-train daily-average drill data */
+  // RO by-train breakdown — now Daily/Weekly/Monthly (M4's deferred item).
+  // Each entity's daily figure is already a per-train AVERAGE (sum/count of
+  // that train's readings that day), not a volume — summing daily averages
+  // into a week would be meaningless. buildEntityPivotRows' 'weighted-avg'
+  // mode instead takes Σ(value×sampleCount)/Σ(sampleCount), using a
+  // companion weightPivot of each day's per-train sample count, so a week
+  // with one noisy low-sample day doesn't skew the average as much as a
+  // day with plenty of readings. _total comes back as a genuine fleet-wide
+  // weighted average across all visible trains, for free.
   const roTrainDrillData = useMemo(() => {
     if (!hasRoDrill || roDrillMode !== 'by-train') return [];
     const readings = (roReadings ?? []).filter((r: any) => {
@@ -1825,16 +1814,28 @@ export function TrendChart({
     });
     const dateKeys = Array.from(acc.keys()).sort();
     if (dateKeys.length === 0) return [];
-    const allDates = fillDateRange(dateKeys[0], dateKeys[dateKeys.length - 1]);
-    return allDates.map((dk) => {
-      const row: any = { date: fmtDateKey(dk), isoDate: dk };
-      visibleTrainEntities.forEach(({ id }) => {
-        const a = acc.get(dk)?.get(id);
-        row[id] = a ? +(a.sum / a.count).toFixed(metric === 'tds' ? 0 : 1) : null;
+
+    // Daily average per train (unchanged math) — weightPivot carries each
+    // day's sample count so weekly/monthly can weight correctly.
+    const avgPivot = new Map<string, Map<string, number>>();
+    const weightPivot = new Map<string, Map<string, number>>();
+    acc.forEach((trainAcc, dk) => {
+      const avgRow = new Map<string, number>();
+      const wRow = new Map<string, number>();
+      trainAcc.forEach(({ sum, count }, tid) => {
+        avgRow.set(tid, +(sum / count).toFixed(metric === 'tds' ? 0 : 1));
+        wRow.set(tid, count);
       });
-      return row;
+      avgPivot.set(dk, avgRow);
+      weightPivot.set(dk, wRow);
     });
-  }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric]);
+
+    return buildEntityPivotRows(
+      avgPivot, dateKeys, visibleTrainEntities, viewGran, startKey, endKey,
+      { mode: 'weighted-avg', weightPivot },
+    );
+  }, [hasRoDrill, roDrillMode, roReadings, visibleTrainEntities, selectedTrainIds, valueKey, metric,
+      viewGran, startKey, endKey]);
 
   /** Build hourly drill data — one row per actual datetime slot, in chronological
    *  order. Each slot label is "MMM d, ha" (e.g. "May 3, 1pm"). The value is the
@@ -2019,33 +2020,12 @@ export function TrendChart({
       }));
   }, [hasPlantHealth, roReadings, phTotalTrains]);
 
-  // Hourly rows narrowed to the clicked day, when a day→hour drill is active.
-  // buildPhHealthRows' inferred return type unions its early-return (no
-  // phTotalTrains yet) and normal-return (has _slotKey) shapes, so this
-  // reads through `any` rather than fighting that union — same convention
-  // the rest of this file's Recharts/row-shaped callbacks already use.
-  const phFocusedHourlyData = phDayFocus
-    ? phHourlyData.filter((r: any) => typeof r._slotKey === 'string' && r._slotKey.startsWith(phDayFocus))
-    : phHourlyData;
-
   const phActiveData = hasPlantHealth
-    ? phDrillMode === 'hourly'  ? phFocusedHourlyData
+    ? phDrillMode === 'hourly'  ? phHourlyData
     : phDrillMode === 'weekly' ? phWeeklyData
     : phDrillMode === 'monthly' ? phMonthlyData
     : phDailyData
     : [];
-
-  // Bar click (well, dot click — Plant Health is a Line, not bars) → jump
-  // into that day's Hourly view. Mirrors handleDrillBarActivate's shape
-  // (payload → next state) but Plant Health keeps its own drill state
-  // machine on purpose (see the plan: merging the three drill systems was
-  // ruled out as more risk than this round needs).
-  const handlePhDayDotActivate = (payload: Record<string, unknown> | undefined) => {
-    const key = payload?._slotKey as string | undefined;
-    if (!key) return;
-    setPhDayFocus(key);
-    setPhDrillMode('hourly');
-  };
 
 
 
@@ -2143,20 +2123,11 @@ export function TrendChart({
   const focusedEntityRows = drillFocusRange
     ? entityRows.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey)
     : entityRows;
-  // Raw Water's By-well analogue of focusedEntityRows above.
-  const focusedWellEntityRows = drillFocusRange
-    ? wellEntityRows.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey)
-    : wellEntityRows;
 
   const drillCrumbs: DrillCrumb[] = drillFocus
     ? [
         { label: range === 'CUSTOM' ? 'Custom range' : range, onSelect: () => setDrillFocus(null) },
         { label: drillFocus.label },
-      ]
-    : phDayFocus
-    ? [
-        { label: range === 'CUSTOM' ? 'Custom range' : range, onSelect: () => { setPhDrillMode('daily'); setPhDayFocus(null); } },
-        { label: format(new Date(phDayFocus + 'T00:00:00'), 'MMM d') },
       ]
     : [];
 
@@ -2165,12 +2136,6 @@ export function TrendChart({
     const id = e?.dataKey as string | undefined;
     if (!id) return;
     setSelectedLocatorIds((prev) => toggleIsolateEntity(prev, id, activeEntities.map((x) => x.id)));
-  };
-  // Raw Water's By-well analogue of handleLegendIsolate above.
-  const handleWellLegendIsolate = (e: any) => {
-    const id = e?.dataKey as string | undefined;
-    if (!id) return;
-    setSelectedWellIds((prev) => toggleIsolateEntity(prev, id, wellDrillEntities.map((x) => x.id)));
   };
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
@@ -2330,15 +2295,14 @@ export function TrendChart({
                 )}
               </div>
             )}
-            {/* View — pv (M4: granularity only — no breakdown to add, a single
-                ratio has nothing meaningful to split by) */}
-            {usesSharedGranularity && metric === 'pv' && (
+            {/* View — pv (M4: granularity only, no breakdown available) */}
+            {metric === 'pv' && (
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} />
               </div>
             )}
-            {/* View + Breakdown — rawwater (M4: By-well) */}
+            {/* View + Breakdown — raw water (By-well, M4) */}
             {metric === 'rawwater' && (
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
@@ -2347,12 +2311,12 @@ export function TrendChart({
                 </div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
                 <div className="flex flex-wrap gap-1">
-                  <button onClick={() => { setRawWaterBreakdown('total'); setSelectedWellIds(null); }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', rawWaterBreakdown === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
-                  <button onClick={() => { setRawWaterBreakdown('by-well'); setSelectedWellIds(null); }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', rawWaterBreakdown === 'by-well' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>By well</button>
+                  <button onClick={() => { setRawwaterBreakdown('total'); setSelectedWellIds(null); }}
+                    className={['h-6 px-2 rounded text-2xs font-medium border', rawwaterBreakdown === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
+                  <button onClick={() => setRawwaterBreakdown('by-well')}
+                    className={['h-6 px-2 rounded text-2xs font-medium border', rawwaterBreakdown === 'by-well' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>By well</button>
                 </div>
-                {rawWaterBreakdown === 'by-well' && viewGran !== 'daily' && (
+                {rawwaterBreakdown === 'by-well' && viewGran !== 'daily' && (
                   <div className="mt-2">
                     <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bars</p>
                     <StackToggle value={stackMode} onChange={setStackMode} />
@@ -2369,11 +2333,10 @@ export function TrendChart({
                     value={roDrillMode === 'by-hour' ? 'daily' : viewGran}
                     onChange={(g) => {
                       setViewGran(g);
-                      // Weekly/Monthly only exist in RO's 'default' (Total)
-                      // sub-view for now — By-train stays daily-only until
-                      // that gets its own bar-rendered pass (see plan M4).
-                      if (roDrillMode !== 'default' && g !== 'daily') setRoDrillMode('default');
-                      else if (roDrillMode === 'by-hour') setRoDrillMode('default');
+                      // Hourly is a separate axis entirely — leaving it
+                      // returns to 'default' (Total). Both Total and
+                      // By-train now support Weekly/Monthly.
+                      if (roDrillMode === 'by-hour') setRoDrillMode('default');
                       setShowTrainFilter(false);
                     }}
                     rangeDays={rangeDays}
@@ -2387,11 +2350,17 @@ export function TrendChart({
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => { if (roDrillMode === 'by-train') { setRoDrillMode('default'); setShowTrainFilter(false); } }}
                     className={['h-6 px-2 rounded text-2xs font-medium border', roDrillMode !== 'by-train' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground border-border'].join(' ')}>Total</button>
-                  <button onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); if (viewGran !== 'daily') setViewGran('daily'); }}
+                  <button onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
                     className={['h-6 px-2 rounded text-2xs font-medium border flex items-center gap-1', roDrillMode === 'by-train' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground border-border'].join(' ')}>
                     <ChevronsDown className="h-3 w-3" />By train
                   </button>
                 </div>
+                {roDrillMode === 'by-train' && viewGran !== 'daily' && (
+                  <div className="mt-2">
+                    <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bars</p>
+                    <StackToggle value={stackMode} onChange={setStackMode} />
+                  </div>
+                )}
               </div>
             )}
             {/* View — plant health */}
@@ -2400,7 +2369,7 @@ export function TrendChart({
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <div className="flex flex-wrap gap-1">
                   {(['daily','hourly','weekly','monthly'] as const).map((m) => (
-                    <button key={m} onClick={() => { setPhDrillMode(m); setPhDayFocus(null); }}
+                    <button key={m} onClick={() => setPhDrillMode(m)}
                       disabled={m !== 'hourly' && !isGranularityUsable(m, rangeDays)}
                       className={['h-6 px-2 rounded text-2xs font-medium border capitalize', phDrillMode === m ? 'bg-primary text-white border-primary' : (m !== 'hourly' && !isGranularityUsable(m, rangeDays)) ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{m}</button>
                   ))}
@@ -2565,16 +2534,15 @@ export function TrendChart({
           </div>
         )}
 
-        {/* pv — granularity only (no breakdown to add — a single ratio has
-            nothing meaningful to split by) */}
+        {/* pv — granularity only (M4: no breakdown available) */}
         {metric === 'pv' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
-            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix="drill-pv" />
+            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
           </div>
         )}
 
-        {/* ── Raw Water — View granularity + By-well breakdown (M4) ──────── */}
+        {/* raw water — granularity + By-well breakdown (M4) */}
         {metric === 'rawwater' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
@@ -2582,35 +2550,29 @@ export function TrendChart({
               value={viewGran}
               onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }}
               rangeDays={rangeDays}
-              testIdPrefix="drill-rawwater"
+              testIdPrefix={`drill-${metric}`}
             />
             <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
             <button
-              onClick={() => { setRawWaterBreakdown('total'); setSelectedWellIds(null); }}
-              data-testid="drill-total-rawwater"
+              onClick={() => { setRawwaterBreakdown('total'); setSelectedWellIds(null); }}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
-                rawWaterBreakdown === 'total'
+                rawwaterBreakdown === 'total'
                   ? 'bg-primary text-white border-primary'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Combined total"
             >Total</button>
             <button
-              onClick={() => { setRawWaterBreakdown('by-well'); setSelectedWellIds(null); }}
-              data-testid="drill-by-well-rawwater"
+              onClick={() => setRawwaterBreakdown(rawwaterBreakdown === 'by-well' ? 'total' : 'by-well')}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
-                rawWaterBreakdown === 'by-well'
+                rawwaterBreakdown === 'by-well'
                   ? 'bg-chart-2 text-white border-chart-2'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Break down by well"
             >By well</button>
-
-            {/* ── Stack / Group (M2) — only once there's something to stack ── */}
-            {rawWaterBreakdown === 'by-well' && viewGran !== 'daily' && (
+            {rawwaterBreakdown === 'by-well' && viewGran !== 'daily' && (
               <>
                 <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
                 <StackToggle value={stackMode} onChange={setStackMode} testId="rawwater-stack-toggle" />
@@ -2719,11 +2681,10 @@ export function TrendChart({
               value={roDrillMode === 'by-hour' ? 'daily' : viewGran}
               onChange={(g) => {
                 setViewGran(g);
-                // Weekly/Monthly only exist in RO's 'default' (Total) view
-                // for now — By-train stays daily-only until it gets its own
-                // bar-rendered pass (plan M4).
-                if (roDrillMode !== 'default' && g !== 'daily') setRoDrillMode('default');
-                else if (roDrillMode === 'by-hour') setRoDrillMode('default');
+                // Hourly is a separate axis entirely — leaving it returns to
+                // 'default' (Total). Both Total and By-train now support
+                // Weekly/Monthly.
+                if (roDrillMode === 'by-hour') setRoDrillMode('default');
                 setShowTrainFilter(false);
               }}
               rangeDays={rangeDays}
@@ -2756,7 +2717,7 @@ export function TrendChart({
               title="Fleet average (all trains combined)"
             >Total</button>
             <button
-              onClick={() => { setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train'); if (viewGran !== 'daily') setViewGran('daily'); }}
+              onClick={() => setRoDrillMode(roDrillMode === 'by-train' ? 'default' : 'by-train')}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 roDrillMode === 'by-train'
@@ -2794,6 +2755,14 @@ export function TrendChart({
                 )}
               </button>
             )}
+
+            {/* ── Stack / Group (M2) — By-train bars, Weekly/Monthly only ── */}
+            {roDrillMode === 'by-train' && viewGran !== 'daily' && (
+              <>
+                <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
+                <StackToggle value={stackMode} onChange={setStackMode} testId="ro-train-stack-toggle" />
+              </>
+            )}
           </div>
         )}
         {/* ── Plant Health — granularity only (no entity breakdown) ────────── */}
@@ -2801,7 +2770,7 @@ export function TrendChart({
           <div className="flex items-center gap-0.5 shrink-0" title="Plant Health granularity">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
             <button
-              onClick={() => { setPhDrillMode('daily'); setPhDayFocus(null); }}
+              onClick={() => setPhDrillMode('daily')}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 phDrillMode === 'daily'
@@ -2814,20 +2783,20 @@ export function TrendChart({
               Daily
             </button>
             <button
-              onClick={() => { setPhDrillMode('hourly'); setPhDayFocus(null); }}
+              onClick={() => setPhDrillMode('hourly')}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 phDrillMode === 'hourly'
                   ? 'bg-chart-2 text-white border-chart-2'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title={phDayFocus ? 'Showing the drilled-into day — click again for the full range' : 'Hourly health — one slot per hour'}
+              title="Hourly health — one slot per hour"
             >
               <ChevronsDown className="h-3 w-3" />
               Hourly
             </button>
             <button
-              onClick={() => { if (isGranularityUsable('weekly', rangeDays)) { setPhDrillMode('weekly'); setPhDayFocus(null); } }}
+              onClick={() => isGranularityUsable('weekly', rangeDays) && setPhDrillMode('weekly')}
               disabled={!isGranularityUsable('weekly', rangeDays)}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
@@ -2843,7 +2812,7 @@ export function TrendChart({
               Weekly
             </button>
             <button
-              onClick={() => { if (isGranularityUsable('monthly', rangeDays)) { setPhDrillMode('monthly'); setPhDayFocus(null); } }}
+              onClick={() => isGranularityUsable('monthly', rangeDays) && setPhDrillMode('monthly')}
               disabled={!isGranularityUsable('monthly', rangeDays)}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
@@ -3237,9 +3206,7 @@ export function TrendChart({
         );
       })()}
 
-      {(hasConsumptionDrill || (metric === 'rawwater' && rawWaterBreakdown === 'by-well') || (hasPlantHealth && phDayFocus)) && (
-        <DrillBreadcrumb crumbs={drillCrumbs} />
-      )}
+      {(hasConsumptionDrill || (hasRoDrill && roDrillMode === 'by-train') || (metric === 'rawwater' && rawwaterBreakdown === 'by-well')) && <DrillBreadcrumb crumbs={drillCrumbs} />}
 
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
@@ -3296,7 +3263,7 @@ export function TrendChart({
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
-          {(hasRoDrill && roDrillMode === 'by-train') ? (
+          {(hasRoDrill && roDrillMode === 'by-train' && viewGran === 'daily') ? (
             <LineChart data={roTrainDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
@@ -3305,7 +3272,10 @@ export function TrendChart({
                 contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
                 formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
               />
-              <Legend wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6 }} />
+              <Legend
+                wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+                onClick={handleLegendIsolate}
+              />
               {visibleTrainEntities.map(({ id, label, color }) => (
                 <Line
                   key={id}
@@ -3319,6 +3289,43 @@ export function TrendChart({
                 />
               ))}
             </LineChart>
+          ) : (hasRoDrill && roDrillMode === 'by-train') ? (
+            // Weekly/Monthly (M4, deferred item now shipped) — per-train
+            // averages are volume-weighted by that bucket's sample count
+            // (see roTrainDrillData), rendered as grouped-or-stacked bars
+            // with the same Stack/Group toggle and partial-bucket styling
+            // the Production/NRW breakdown uses.
+            <ComposedChart
+              data={drillFocusRange ? roTrainDrillData.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey) : roTrainDrillData}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={44} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                formatter={(v: any, name: string) => [v != null ? `${v} ${roUnit}` : '—', name]}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+                onClick={handleLegendIsolate}
+              />
+              {visibleTrainEntities.map(({ id, label, color }) => (
+                <Bar
+                  key={id}
+                  dataKey={id}
+                  name={label}
+                  fill={color}
+                  maxBarSize={28}
+                  radius={[3, 3, 0, 0]}
+                  stackId={stackMode === 'stacked' ? 'trains' : undefined}
+                  shape={makeDrillableBarShape(
+                    handleDrillBarActivate,
+                    (p) => `Drill into ${p.date as string}`,
+                  )}
+                />
+              ))}
+            </ComposedChart>
           ) : (hasRoDrill && roDrillMode === 'by-hour') ? (
             <AreaChart data={roHourDrillData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
@@ -3770,39 +3777,7 @@ export function TrendChart({
                     dot={(props: any) => {
                       const { cx, cy, payload } = props;
                       const fill = dotFill(payload);
-                      // M3: Day→Hour click-drill. Only the Daily view's dots
-                      // are drillable — Hourly has nowhere finer to go, and
-                      // Weekly/Monthly rows carry no _slotKey (see
-                      // buildPhHealthRows callers above), so
-                      // handlePhDayDotActivate would no-op there anyway;
-                      // gating on phDrillMode keeps the pointer/keyboard
-                      // affordance from appearing where it wouldn't do
-                      // anything.
-                      const isDrillable = phDrillMode === 'daily' && !!payload?._slotKey;
-                      if (!isDrillable) {
-                        return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
-                      }
-                      const activate = () => handlePhDayDotActivate(payload);
-                      return (
-                        <g key={`dot-${cx}-${cy}`}>
-                          {/* Larger transparent hit target — the visible 3px
-                              dot is too small to reliably click or tab to;
-                              this widens the interactive area without
-                              changing what's drawn. */}
-                          <circle
-                            cx={cx} cy={cy} r={9} fill="transparent"
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`Drill into ${(payload?.date as string) ?? 'this day'}'s hourly health`}
-                            style={{ cursor: 'pointer', outline: 'none' }}
-                            onClick={activate}
-                            onKeyDown={(e: React.KeyboardEvent) => {
-                              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
-                            }}
-                          />
-                          <circle cx={cx} cy={cy} r={3} fill={fill} stroke={fill} pointerEvents="none" />
-                        </g>
-                      );
+                      return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
                     }}
                     stroke="hsl(var(--accent))"
                     connectNulls
@@ -3810,12 +3785,11 @@ export function TrendChart({
                 </ComposedChart>
               );
             })()
-          ) : (metric === 'rawwater' && rawWaterBreakdown === 'by-well' && viewGran === 'daily') ? (
-            // ── Raw Water, By-well, Daily (M4) ─────────────────────────────────────
-            // Same reasoning as production/nrw's entity breakdown: 5+ wells ×
-            // 30 daily bars is noisy as bars, so Daily stays line-based
-            // regardless of the Weekly/Monthly bar switch below.
-            <ComposedChart data={focusedWellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          ) : (metric === 'rawwater' && rawwaterBreakdown === 'by-well' && viewGran === 'daily') ? (
+            // By-well breakdown — daily stays line-based, same reasoning as
+            // the Production/NRW breakdown (a handful of wells × 30 daily
+            // bars reads better as lines than bars).
+            <ComposedChart data={wellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -3828,28 +3802,17 @@ export function TrendChart({
                 onClick={handleWellLegendIsolate}
               />
               {visibleWellEntities.map(({ id, label, color }) => (
-                <Line
-                  key={id}
-                  type="monotone"
-                  dataKey={id}
-                  name={label}
-                  stroke={color}
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
+                <Line key={id} type="monotone" dataKey={id} name={label} stroke={color} strokeWidth={2} dot={false} connectNulls />
               ))}
             </ComposedChart>
-          ) : (metric === 'rawwater' && rawWaterBreakdown === 'by-well') ? (
-            // ── Raw Water, By-well, Weekly/Monthly (M1+M2+M3+M4) ────────────────────
-            // Bars, grouped or stacked per the Stack/Group toggle; keyboard-
-            // focusable and clicking one drills into that bucket at the
-            // next-finer granularity, exactly like production/nrw's entity
-            // breakdown bars above — same makeDrillableBarShape, same
-            // handleDrillBarActivate (its daily-view "open breakdown" branch
-            // never fires here since By-well bars only render at
-            // Weekly/Monthly, so the two metrics don't interfere).
-            <ComposedChart data={focusedWellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          ) : (metric === 'rawwater' && rawwaterBreakdown === 'by-well') ? (
+            // Weekly/Monthly — grouped or stacked bars, click-to-drill,
+            // partial-bucket styling — identical machinery to the
+            // Production/NRW breakdown, just pointed at wellEntityRows.
+            <ComposedChart
+              data={drillFocusRange ? wellEntityRows.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey) : wellEntityRows}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -3870,15 +3833,12 @@ export function TrendChart({
                   maxBarSize={28}
                   radius={[3, 3, 0, 0]}
                   stackId={stackMode === 'stacked' ? 'wells' : undefined}
-                  shape={makeDrillableBarShape(
-                    handleDrillBarActivate,
-                    (payload) => `Drill into ${payload.date as string ?? label}`,
-                  )}
+                  shape={makeDrillableBarShape(handleDrillBarActivate, (p) => `Drill into ${p.date as string}`)}
                 />
               ))}
             </ComposedChart>
           ) : metric === 'rawwater' ? (
-            // ── Raw Water — smooth gradient area chart (Total) ─────────────────────
+            // ── Raw Water — smooth gradient area chart ────────────────────────────
             // trendRows (not chartData) so Weekly/Monthly (M4) apply.
             <AreaChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>

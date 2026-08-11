@@ -171,4 +171,42 @@ describe('buildEntityPivotRows', () => {
   it('returns an empty array when there is no data', () => {
     expect(buildEntityPivotRows(new Map(), [], entities, 'daily')).toEqual([]);
   });
+
+  it('weighted-avg mode: weekly average of per-day averages is weighted by sample count, not naive', () => {
+    // Train A: day1 avg=10 from 9 samples, day2 avg=100 from 1 sample.
+    // Naive average of the two daily averages = 55.
+    // Correct sample-weighted average = (10*9 + 100*1) / (9+1) = 190/10 = 19.
+    const pivot = new Map<string, Map<string, number>>([
+      ['2026-08-03', new Map([['a', 10]])],
+      ['2026-08-04', new Map([['a', 100]])],
+    ]);
+    const weightPivot = new Map<string, Map<string, number>>([
+      ['2026-08-03', new Map([['a', 9]])],
+      ['2026-08-04', new Map([['a', 1]])],
+    ]);
+    const out = buildEntityPivotRows(pivot, ['2026-08-03', '2026-08-04'], entities, 'weekly', undefined, undefined, { mode: 'weighted-avg', weightPivot });
+    expect(out).toHaveLength(1);
+    expect(out[0].a).toBeCloseTo(19, 4);
+  });
+
+  it('weighted-avg mode falls back to an unweighted mean without a weightPivot', () => {
+    const pivot = new Map<string, Map<string, number>>([
+      ['2026-08-03', new Map([['a', 10]])],
+      ['2026-08-04', new Map([['a', 30]])],
+    ]);
+    const out = buildEntityPivotRows(pivot, ['2026-08-03', '2026-08-04'], entities, 'weekly', undefined, undefined, { mode: 'weighted-avg' });
+    expect(out[0].a).toBeCloseTo(20, 4);
+  });
+
+  it('weighted-avg mode computes a fleet-wide _total across all entities', () => {
+    const pivot = new Map<string, Map<string, number>>([
+      ['2026-08-03', new Map([['a', 10], ['b', 20]])],
+    ]);
+    const weightPivot = new Map<string, Map<string, number>>([
+      ['2026-08-03', new Map([['a', 5], ['b', 5]])],
+    ]);
+    const out = buildEntityPivotRows(pivot, ['2026-08-03'], entities, 'weekly', undefined, undefined, { mode: 'weighted-avg', weightPivot });
+    // (10*5 + 20*5) / 10 = 15
+    expect(out[0]._total).toBeCloseTo(15, 4);
+  });
 });

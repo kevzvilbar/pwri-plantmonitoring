@@ -345,6 +345,18 @@ export interface BucketedEntityRow {
  * is what used to be drilldownData (daily-only, rendered as lines) and
  * drillupData (monthly-only, rendered as bars) — see TrendChart.tsx for how
  * the two call sites collapsed into one `entityRows` memo.
+ *
+ * `mode` controls how a bucket combines several days for one entity:
+ *   'sum'          (default) — volumes: a locator's weekly total = the sum
+ *                    of its daily values (production/consumption breakdown).
+ *   'weighted-avg' — rates: e.g. RO by-train TDS/Recovery, where each day's
+ *                    value is ALREADY a per-train average, not a volume.
+ *                    Summing those would be meaningless; this instead takes
+ *                    Σ(value×weight)/Σ(weight) using `weightPivot` (typically
+ *                    that day's sample count for that entity), falling back
+ *                    to an unweighted mean when no weightPivot is given.
+ *                    `_total` becomes the same weighted average across ALL
+ *                    entities combined — a fleet-wide figure for free.
  */
 export function buildEntityPivotRows(
   pivot: Map<string, Map<string, number>>,
@@ -353,9 +365,15 @@ export function buildEntityPivotRows(
   granularity: Granularity,
   rangeStartKey?: string,
   rangeEndKey?: string,
+  opts?: {
+    mode?: 'sum' | 'weighted-avg';
+    weightPivot?: Map<string, Map<string, number>>;
+  },
 ): BucketedEntityRow[] {
   if (dateKeys.length === 0) return [];
   const sortedKeys = [...dateKeys].sort();
+  const mode = opts?.mode ?? 'sum';
+  const weightPivot = opts?.weightPivot;
 
   if (granularity === 'daily') {
     // Fill every calendar day in range (not just days with data) so the
@@ -369,12 +387,13 @@ export function buildEntityPivotRows(
         date: shortMonthDay(cur), isoDate: dk, _total: 0, _partial: false,
       };
       let total = 0;
+      let n = 0;
       entities.forEach(({ id }) => {
         const v = pivot.get(dk)?.get(id) ?? null;
         row[id] = v;
-        if (v != null) total += v;
+        if (v != null) { total += v; n += 1; }
       });
-      row._total = total;
+      row._total = mode === 'weighted-avg' ? (n ? +(total / n).toFixed(2) : 0) : total;
       out.push(row);
       cur.setDate(cur.getDate() + 1);
     }
@@ -383,18 +402,28 @@ export function buildEntityPivotRows(
 
   type Bucket = {
     key: string; label: string; start: Date; end: Date;
-    values: Map<string, number>; dayCount: number;
+    values: Map<string, number>; // mode='sum': running sum. mode='weighted-avg': running Σ(value×weight)
+    weights: Map<string, number>; // mode='weighted-avg' only: running Σ(weight) per entity
+    dayCount: number;
   };
   const buckets = new Map<string, Bucket>();
   for (const dk of sortedKeys) {
     const local = new Date(`${dk}T00:00:00`);
     const { key, label, start, end } = resolveBucket(local, granularity);
     let b = buckets.get(key);
-    if (!b) { b = { key, label, start, end, values: new Map(), dayCount: 0 }; buckets.set(key, b); }
+    if (!b) { b = { key, label, start, end, values: new Map(), weights: new Map(), dayCount: 0 }; buckets.set(key, b); }
     b.dayCount += 1;
     entities.forEach(({ id }) => {
       const v = pivot.get(dk)?.get(id);
-      if (v != null) b.values.set(id, (b.values.get(id) ?? 0) + v);
+      if (v == null) return;
+      if (mode === 'weighted-avg') {
+        const w = weightPivot?.get(dk)?.get(id) ?? 1;
+        if (w <= 0) return;
+        b.values.set(id, (b.values.get(id) ?? 0) + v * w);
+        b.weights.set(id, (b.weights.get(id) ?? 0) + w);
+      } else {
+        b.values.set(id, (b.values.get(id) ?? 0) + v);
+      }
     });
   }
 
@@ -413,6 +442,18 @@ export function buildEntityPivotRows(
           || (rangeEnd && b.end.getTime() > rangeEnd.getTime())
         ),
       };
+      if (mode === 'weighted-avg') {
+        let totalWeightedSum = 0;
+        let totalWeight = 0;
+        entities.forEach(({ id }) => {
+          const w = b.weights.get(id) ?? 0;
+          const v = w ? +((b.values.get(id) ?? 0) / w).toFixed(2) : null;
+          row[id] = v;
+          if (v != null) { totalWeightedSum += (b.values.get(id) ?? 0); totalWeight += w; }
+        });
+        row._total = totalWeight ? +(totalWeightedSum / totalWeight).toFixed(2) : 0;
+        return row;
+      }
       let total = 0;
       entities.forEach(({ id }) => {
         const v = b.values.get(id) ?? null;
