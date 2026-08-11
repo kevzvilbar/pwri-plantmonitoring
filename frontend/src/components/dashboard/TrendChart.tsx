@@ -5,7 +5,7 @@ import { calc } from '@/lib/calculations';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronsDown, ChevronsUp, BarChart2, Filter, X, Check, Search, Sun, Zap, Download, MoreVertical, MessageCircleOff } from 'lucide-react';
+import { ChevronsDown, ChevronsUp, BarChart2, CalendarDays, Filter, X, Check, Search, Sun, Zap, Download, MoreVertical, MessageCircleOff } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -33,6 +33,7 @@ import {
 import { DRILL_COLORS, ModernChartLegend } from './TrendChartLegend';
 import { buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
 import { DataSummaryPopup } from './TrendChartDataSummaryPopup';
+import { rollupTotalRows, rollupEntityRows } from './TrendChartAggregation';
 
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 type DrillMode = 'default' | 'drilldown' | 'drillup';
@@ -211,22 +212,29 @@ export function TrendChart({
 
   // ── Unified view state (production / nrw) ────────────────────────────────
   // Two independent axes replace the old drillMode + prodDrillSource trio:
-  //   viewGran     → time granularity  (daily | monthly)
-  //   viewBreakdown → entity grouping  (total | by-locator | by-source)
+  //   viewGran      → time granularity  (daily | weekly | monthly)
+  //   viewBreakdown → entity grouping   (total | by-locator | by-source)
   // All downstream computation continues to use the derived `drillMode` and
   // `prodDrillSource` values below so the data layer needs zero changes.
-  type ViewGran = 'daily' | 'monthly';
+  type ViewGran = 'daily' | 'weekly' | 'monthly';
   type ViewBreakdown = 'total' | 'by-locator' | 'by-source';
   const [viewGran, setViewGran] = useState<ViewGran>('daily');
   const [viewBreakdown, setViewBreakdown] = useState<ViewBreakdown>('total');
   const hasConsumptionDrill = metric === 'production' || metric === 'nrw';
 
   // Derived backward-compat — consumed by computation useMemos unchanged.
+  //
+  // Fixed bug: this used to check viewGran === 'monthly' FIRST, so picking
+  // Monthly silently forced the per-locator/source breakdown open even when
+  // Breakdown was set to "Total" — there was no way to see a plain monthly
+  // total. Breakdown now decides drilldown vs. drillup/default on its own;
+  // granularity only decides which of the two entity-breakdown renders
+  // (daily → per-entity lines, weekly/monthly → per-entity grouped bars).
   type ProdDrillSource = 'locator' | 'source';
   const drillMode: DrillMode =
-    viewGran === 'monthly' ? 'drillup' :
-    viewBreakdown !== 'total' ? 'drilldown' :
-    'default';
+    viewBreakdown === 'total' ? 'default' :
+    viewGran === 'daily' ? 'drilldown' :
+    'drillup';
   const prodDrillSource: ProdDrillSource = viewBreakdown === 'by-source' ? 'source' : 'locator';
 
   // Locator filter for drill modes — null means "all selected" (default)
@@ -285,6 +293,25 @@ export function TrendChart({
       endKey: format(today, 'yyyy-MM-dd'),
     };
   }, [range, from, to]);
+
+  // A ~7-day window shows at most one (often partial) weekly or monthly
+  // bucket — not enough to actually compare periods against each other.
+  // Below this, Weekly/Monthly are disabled in the granularity control
+  // rather than rendering a chart with a single bar in it.
+  const rangeDays = useMemo(
+    () => Math.round((new Date(`${endKey}T00:00:00`).getTime() - new Date(`${startKey}T00:00:00`).getTime()) / 86_400_000) + 1,
+    [startKey, endKey],
+  );
+  const rangeTooShortForRollup = rangeDays < 10;
+
+  // Range is shared globally across every chart on the page (see
+  // useAppStore above) while viewGran is local to this chart instance — so
+  // a chart left on Weekly/Monthly can go stale if someone else narrows the
+  // range on a different chart's selector. Snap back to Daily rather than
+  // silently rendering the (now-disabled) button as if still active.
+  useEffect(() => {
+    if (rangeTooShortForRollup && viewGran !== 'daily') setViewGran('daily');
+  }, [rangeTooShortForRollup, viewGran]);
 
   const needsWellReadings = metric === 'nrw' || metric === 'rawwater' || metric === 'pv' || metric === 'productionCost';
   const needsProductMeterReadings = metric === 'production' || metric === 'nrw' || metric === 'pv' || metric === 'productionCost';
@@ -1555,32 +1582,22 @@ export function TrendChart({
     });
   }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities, _directLocatorIds]);
 
-  // drillupData: one row per month — grouped bars (not stacked) per entity
+  // drillupData: one row per week or month (per viewGran) — grouped bars
+  // (not stacked) per entity. Bucketing itself lives in
+  // TrendChartAggregation.rollupEntityRows — this memo's job is just
+  // building the same daily entity pivots drilldownData uses, then handing
+  // them off to be grouped at whichever granularity is active.
   const drillupData = useMemo(() => {
     if (!hasConsumptionDrill || drillMode !== 'drillup') return [];
     const isSource = metric === 'production' && prodDrillSource === 'source';
-
-    const buildMonthRows = (pivot: Map<string, Map<string, number>>, dateKeys: string[]) => {
-      const byMonth = new Map<string, Map<string, number>>();
-      dateKeys.forEach((dk) => {
-        const monthKey = dk.slice(0, 7);
-        if (!byMonth.has(monthKey)) byMonth.set(monthKey, new Map());
-        visibleEntities.forEach(({ id }) => {
-          const v = pivot.get(dk)?.get(id) ?? 0;
-          byMonth.get(monthKey)!.set(id, (byMonth.get(monthKey)!.get(id) ?? 0) + v);
-        });
-      });
-      return Array.from(byMonth.keys()).sort().map((mk) => {
-        const row: any = { date: format(new Date(`${mk}-01T00:00:00`), 'MMM yyyy'), isoDate: `${mk}-01` };
-        visibleEntities.forEach(({ id }) => { row[id] = byMonth.get(mk)!.get(id) ?? null; });
-        row._total = visibleEntities.reduce((s, { id }) => s + (byMonth.get(mk)!.get(id) ?? 0), 0);
-        return row;
-      });
-    };
+    const entityIds = visibleEntities.map(({ id }) => id);
+    // drillMode is only 'drillup' when viewGran !== 'daily' (see the drillMode
+    // derivation above), so this is always 'weekly' or 'monthly' here.
+    const bucketGran = viewGran as 'weekly' | 'monthly';
 
     if (isSource) {
       if (usePermeateForSource) {
-        // RO permeate monthly pivot
+        // RO permeate pivot
         const roSorted = [...(roReadings ?? [])].sort(
           (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
         );
@@ -1598,14 +1615,14 @@ export function TrendChart({
           if (!pivot.has(dk)) pivot.set(dk, new Map());
           pivot.get(dk)!.set(tid, (pivot.get(dk)!.get(tid) ?? 0) + delta);
         });
-        return buildMonthRows(pivot, Array.from(pivot.keys()).sort());
+        return rollupEntityRows(pivot, Array.from(pivot.keys()).sort(), entityIds, bucketGran);
       }
-      // Product meter monthly pivot
+      // Product meter pivot
       const sorted = [...(productReadings ?? [])].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
       const { pivot, dateKeys } = buildEntityPivot(sorted, 'meter_id');
-      return buildMonthRows(pivot, dateKeys);
+      return rollupEntityRows(pivot, dateKeys, entityIds, bucketGran);
     }
 
     // Default: locator consumption
@@ -1613,8 +1630,19 @@ export function TrendChart({
       (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
     );
     const { pivot, dateKeys } = buildEntityPivot(sorted, 'locator_id', _directLocatorIds);
-    return buildMonthRows(pivot, dateKeys);
-  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities, _directLocatorIds]);
+    return rollupEntityRows(pivot, dateKeys, entityIds, bucketGran);
+  }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, viewGran, locReadings, productReadings, roReadings, usePermeateForSource, visibleEntities, _directLocatorIds]);
+
+  // totalChartData: chartData rolled up to the active granularity when
+  // viewGran isn't 'daily'. Feeds the "Total" breakdown render branches
+  // (NRW's grouped-bar+line, production's overlapping-area default) — daily
+  // stays a pure passthrough so nothing changes for metrics that don't
+  // expose the granularity control at all (their viewGran never leaves
+  // 'daily', so this is always chartData unchanged for them).
+  const totalChartData = useMemo(
+    () => rollupTotalRows(chartData, viewGran),
+    [chartData, viewGran],
+  );
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -1855,9 +1883,14 @@ export function TrendChart({
   //  • If both a replacement AND a genuine negative exist on the same day, shows both
   const NegativeAwareTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
-    const chartRow = chartData.find((d) => d.date === label);
+    // totalChartData === chartData at Daily granularity, so this is a no-op
+    // for every metric except when Weekly/Monthly has actually rolled
+    // chartData up — needed so the label (a bucket's date range, not a
+    // single day) still resolves to the right row.
+    const chartRow = totalChartData.find((d) => d.date === label);
     const replacements: string[] = chartRow?._meterReplacements ?? [];
     const permeateSourceNames: string[] = chartRow?._permeateSourceNames ?? [];
+    const isPartialBucket: boolean = !!chartRow?._isPartial;
     return (
       <div style={{
         background: 'hsl(var(--card))',
@@ -1894,6 +1927,14 @@ export function TrendChart({
             <span style={{ fontSize: 11, lineHeight: 1 }}>💧</span>
             <span style={{ fontSize: 10, lineHeight: 1.4, opacity: 0.85 }}>
               Source: Permeate meter ({permeateSourceNames.join(', ')})
+            </span>
+          </div>
+        )}
+        {isPartialBucket && (
+          <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsl(var(--border))', display: 'flex', alignItems: 'flex-start', gap: 5, color: 'hsl(var(--muted-foreground))' }}>
+            <span style={{ fontSize: 11, lineHeight: 1 }}>◐</span>
+            <span style={{ fontSize: 10, lineHeight: 1.4, opacity: 0.85 }}>
+              Partial period — the selected range doesn't cover this whole {viewGran === 'weekly' ? 'week' : 'month'}
             </span>
           </div>
         )}
@@ -2039,8 +2080,14 @@ export function TrendChart({
                     className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none flex items-center gap-1', viewGran === 'daily' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
                     <BarChart2 className="h-3 w-3" />Daily
                   </button>
+                  <button onClick={() => { setViewGran('weekly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+                    disabled={rangeTooShortForRollup}
+                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none flex items-center gap-1', rangeTooShortForRollup ? 'bg-muted text-muted-foreground/40 border-border cursor-not-allowed' : viewGran === 'weekly' ? 'bg-accent text-accent-foreground border-accent' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    <CalendarDays className="h-3 w-3" />Weekly
+                  </button>
                   <button onClick={() => { setViewGran('monthly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
-                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none flex items-center gap-1', viewGran === 'monthly' ? 'bg-kpi-ro text-white border-kpi-ro' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
+                    disabled={rangeTooShortForRollup}
+                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none flex items-center gap-1', rangeTooShortForRollup ? 'bg-muted text-muted-foreground/40 border-border cursor-not-allowed' : viewGran === 'monthly' ? 'bg-kpi-ro text-white border-kpi-ro' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>
                     <ChevronsUp className="h-3 w-3" />Monthly
                   </button>
                 </div>
@@ -2240,15 +2287,35 @@ export function TrendChart({
               Daily
             </button>
             <button
-              onClick={() => { setViewGran('monthly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
-              data-testid={`drill-monthly-${metric}`}
+              onClick={() => { setViewGran('weekly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+              data-testid={`drill-weekly-${metric}`}
+              disabled={rangeTooShortForRollup}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
-                viewGran === 'monthly'
-                  ? 'bg-kpi-ro text-white border-kpi-ro'
-                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                rangeTooShortForRollup
+                  ? 'bg-muted text-muted-foreground/40 border-border cursor-not-allowed'
+                  : viewGran === 'weekly'
+                    ? 'bg-accent text-accent-foreground border-accent'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Monthly totals"
+              title={rangeTooShortForRollup ? 'Widen the date range to see weekly totals' : 'Weekly totals'}
+            >
+              <CalendarDays className="h-3 w-3" />
+              Weekly
+            </button>
+            <button
+              onClick={() => { setViewGran('monthly'); setSelectedLocatorIds(null); setShowLocatorFilter(false); }}
+              data-testid={`drill-monthly-${metric}`}
+              disabled={rangeTooShortForRollup}
+              className={[
+                'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                rangeTooShortForRollup
+                  ? 'bg-muted text-muted-foreground/40 border-border cursor-not-allowed'
+                  : viewGran === 'monthly'
+                    ? 'bg-kpi-ro text-white border-kpi-ro'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title={rangeTooShortForRollup ? 'Widen the date range to see monthly totals' : 'Monthly totals'}
             >
               <ChevronsUp className="h-3 w-3" />
               Monthly
@@ -2975,8 +3042,10 @@ export function TrendChart({
               ))}
             </ComposedChart>
           ) : (hasConsumptionDrill && drillMode === 'drillup') ? (
-            // Monthly view — grouped bars (one bar per entity per month, not stacked)
-            // This makes it easy to compare entities month-over-month.
+            // Weekly / Monthly view (per viewGran) — grouped bars, one per
+            // entity per bucket, not stacked. Makes it easy to compare
+            // entities period-over-period. (Was hardcoded to months only —
+            // see TrendChartAggregation.rollupEntityRows for the bucketing.)
             <ComposedChart data={drillupData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
@@ -2998,7 +3067,7 @@ export function TrendChart({
               ))}
             </ComposedChart>
           ) : metric === 'nrw' ? (
-            <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart data={totalChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
               <YAxis yAxisId="vol" tick={{ fontSize: 10 }} stroke={C_PRODUCTION} tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
@@ -3400,7 +3469,9 @@ export function TrendChart({
             </AreaChart>
           ) : (
             // ── Production / Recovery / TDS (default) — gradient area chart ────────
-            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            // totalChartData === chartData for recovery/tds (they never leave
+            // viewGran='daily' — no granularity control renders for them).
+            <AreaChart data={totalChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="productionFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={C_PRODUCTION} stopOpacity={0.25} />
