@@ -67,18 +67,34 @@ export function buildEntityPivot(
       // diff, no dependence on daily_volume/previous_reading.
       vol = r.current_reading != null ? Math.max(0, +r.current_reading) : 0;
       if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
+    } else if (lastSeen.has(entityId) && r.current_reading != null) {
+      // SELF-HEAL (checked before daily_volume — mirrors the identical fix in
+      // TrendChart.tsx's computeEntityDeltas and DataSummaryModal.tsx's
+      // computePivotFromReadings(NoCache), all patched together for the
+      // Coke/Parkmall Aug 7–10 incident): once a predecessor for this entity
+      // has already been walked sequentially within this window, always diff
+      // live against it rather than trusting a stored daily_volume/
+      // previous_reading. Those DB columns are written once at insert time
+      // and nothing cascades an update to them when an earlier reading is
+      // later edited/deleted/replaced — a downstream row can be left
+      // pointing at a now-stale predecessor indefinitely, which is what
+      // produced the Coke/Parkmall bug (a single day's delta growing into a
+      // cumulative-looking total). This function wasn't touched by that fix
+      // since it moved to its own file in the TrendChart extraction shortly
+      // before — same bug, same fix, applied here too.
+      vol = Math.max(0, +r.current_reading - lastSeen.get(entityId)!);
+      lastSeen.set(entityId, +r.current_reading);
     } else if (r.daily_volume != null) {
-      // Ground-truth operator/cached delta — use directly.
+      // Ground-truth operator/cached delta — no walked predecessor yet
+      // (first row for this entity in the window), so this is the correct
+      // source: it may legitimately span >1 day if readings were skipped
+      // before the window.
       vol = Math.max(0, +r.daily_volume);
       // Keep lastSeen in sync so a subsequent null-daily_volume row can delta
       // correctly against this reading.
       if (r.current_reading != null) lastSeen.set(entityId, +r.current_reading);
     } else if (r.current_reading != null) {
-      const prev = lastSeen.has(entityId)
-        ? lastSeen.get(entityId)!            // in-memory sequential prev (reliable)
-        : r.previous_reading != null
-          ? +r.previous_reading              // DB fallback (may be stale)
-          : null;
+      const prev = r.previous_reading != null ? +r.previous_reading : null; // DB fallback (may be stale) — no lastSeen yet, handled above
       vol = prev != null ? Math.max(0, +r.current_reading - prev) : 0;
       lastSeen.set(entityId, +r.current_reading);
     } else {
