@@ -40,13 +40,18 @@ import {
   buildTrendRows, buildEntityPivotRows, isGranularityUsable, rangeDaysBetween, getIsoWeekStart,
   type Granularity, type TrendFieldConfig,
 } from './TrendChartAggregate';
-// M2/M3 — shared granularity control, stack/group toggle, and drill
-// interaction primitives (breadcrumb, drillable bar shape, legend isolate).
+// M2/M3 — shared granularity control, stack/group toggle, and breadcrumb
+// components, plus their underlying logic (kept in a separate plain-.ts
+// module so TrendChartDrill.tsx exports only components — see that file's
+// and TrendChartDrillKit.ts's header comments for why).
 import {
-  GranularityControl, StackToggle, readStackMode, writeStackMode, type StackMode,
-  DrillBreadcrumb, type DrillCrumb, makeDrillableBarShape, toggleIsolateEntity,
-  focusToRange, nextFinerGranularity, type DrillFocus,
+  GranularityControl, StackToggle, DrillBreadcrumb,
 } from './TrendChartDrill';
+import {
+  readStackMode, writeStackMode, type StackMode,
+  type DrillCrumb, makeDrillableBarShape, toggleIsolateEntity,
+  focusToRange, nextFinerGranularity, type DrillFocus,
+} from './TrendChartDrillKit';
 
 // ─── Drill mode ──────────────────────────────────────────────────────────────
 // 'drillup' used to be a third state meaning "monthly view" — now that time
@@ -310,14 +315,28 @@ export function TrendChart({
   useEffect(() => { setStackModeState(readStackMode(metric, defaultStackModeFor(metric))); }, [metric]);
   const setStackMode = (m: StackMode) => { setStackModeState(m); writeStackMode(metric, m); };
 
+  // ── Raw Water: By-well breakdown (M4) ────────────────────────────────────
+  // Mirrors production/nrw's Total/By-locator pattern, scoped to Raw Water
+  // only. Deliberately smaller than that pattern: there's no by-source
+  // equivalent here, and (for now) no dedicated filter-picker panel —
+  // narrowing to specific wells goes through legend click-to-isolate
+  // (toggleIsolateEntity), the same mechanism every other chart's legend
+  // already uses. A full search/filter panel like locators' is a reasonable
+  // follow-up if a plant's well count grows large enough to need it.
+  // Declared before drillFocus below since that effect's deps reference it.
+  type RawWaterBreakdown = 'total' | 'by-well';
+  const [rawWaterBreakdown, setRawWaterBreakdown] = useState<RawWaterBreakdown>('total');
+  useEffect(() => { if (metric !== 'rawwater') setRawWaterBreakdown('total'); }, [metric]);
+  const [selectedWellIds, setSelectedWellIds] = useState<Set<string> | null>(null);
+
   // ── M3: local drill-focus — clicking a monthly/weekly bar narrows the
   // chart to that bucket at the next-finer granularity, WITHOUT touching
   // the shared global dashboard range (see TrendChartDrill.tsx's header
   // comment for why). Cleared by the breadcrumb or by re-clicking the
-  // active bucket. Currently wired into the Production/NRW chart — the
-  // same primitive is ready for TDS/Recovery and Plant Health next.
+  // active bucket. Wired into Production/NRW and Raw Water's By-well
+  // breakdown — the same primitive is ready for TDS/Recovery next.
   const [drillFocus, setDrillFocus] = useState<DrillFocus | null>(null);
-  useEffect(() => { setDrillFocus(null); }, [metric, viewBreakdown]);
+  useEffect(() => { setDrillFocus(null); }, [metric, viewBreakdown, rawWaterBreakdown]);
   useEffect(() => { if (viewGran === 'daily') setDrillFocus(null); }, [viewGran]);
 
   // Locator filter for drill modes — null means "all selected" (default)
@@ -354,6 +373,16 @@ export function TrendChart({
   type PhDrillMode = 'daily' | 'hourly' | 'weekly' | 'monthly';
   const [phDrillMode, setPhDrillMode] = useState<PhDrillMode>('daily');
   const hasPlantHealth = metric === 'plantHealth';
+
+  // ── Plant Health: Day → Hour click-drill (M3/M4) ─────────────────────────
+  // phHourlyData below is hour-of-day across the WHOLE fetched range (up to
+  // 720 bars on a 30D window) — useful as its own manual toggle, but far too
+  // dense to be what a click on a single day's dot should jump to. This
+  // narrows that same hourly data down to just the clicked day, the "Day→hour,
+  // nearly free" case the plan called out for TDS/Recovery/Plant Health.
+  // null = the Hourly tab shows its normal full-range view.
+  const [phDayFocus, setPhDayFocus] = useState<string | null>(null);
+  useEffect(() => { if (!hasPlantHealth) setPhDayFocus(null); }, [hasPlantHealth]);
 
   // Stable date-bounded ISO strings so react-query can cache properly.
   const { startISO, endISO, startKey, endKey } = useMemo(() => {
@@ -1597,6 +1626,33 @@ export function TrendChart({
     [activeEntities, selectedLocatorIds],
   );
 
+  // ── Raw Water: By-well drill entities (M4) ────────────────────────────────
+  // wellDrillEntities — the Raw Water analogue of drillEntities, built off
+  // the same wellReadings/wellNames already fetched for the Total view's
+  // per-well delta sum, so opening By-well costs no extra query. Built
+  // whenever the metric is rawwater (not gated on rawWaterBreakdown) so the
+  // entity count is available immediately once the user opens the toggle.
+  const wellDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    if (metric !== 'rawwater') return [];
+    const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
+    return ids
+      .map((id, i) => ({
+        id,
+        label: wellNames?.get(id) ?? `Well ${String(id).slice(-4)}`,
+        color: DRILL_COLORS[i % DRILL_COLORS.length],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [metric, wellReadings, wellNames]);
+
+  // visibleWellEntities: subset of wellDrillEntities that pass the current
+  // well selection (legend isolate). null selectedWellIds = all visible.
+  const visibleWellEntities = useMemo(
+    () => selectedWellIds === null
+      ? wellDrillEntities
+      : wellDrillEntities.filter((e) => selectedWellIds.has(e.id)),
+    [wellDrillEntities, selectedWellIds],
+  );
+
   // filteredLocatorList: activeEntities filtered by search string (for the picker UI)
   const filteredLocatorList = useMemo(
     () => locatorSearch.trim() === ''
@@ -1685,6 +1741,21 @@ export function TrendChart({
     return buildEntityPivotRows(pivot, dateKeys, visibleEntities, viewGran, startKey, endKey);
   }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings,
       usePermeateForSource, visibleEntities, _directLocatorIds, viewGran, startKey, endKey]);
+
+  // ── Raw Water: By-well breakdown rows (M4) ────────────────────────────────
+  // Same shape as entityRows above: buildEntityPivot (the existing per-well
+  // delta logic — daily_volume priority → sequential self-heal → DB
+  // previous_reading fallback, meter-replacement-aware) feeds
+  // buildEntityPivotRows for daily/weekly/monthly bucketing (M1). Gated on
+  // rawWaterBreakdown so it's not recomputed while the user is on Total.
+  const wellEntityRows = useMemo(() => {
+    if (metric !== 'rawwater' || rawWaterBreakdown !== 'by-well') return [];
+    const sorted = [...(wellReadings ?? [])].sort(
+      (a: any, b: any) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot, dateKeys } = buildEntityPivot(sorted, 'well_id');
+    return buildEntityPivotRows(pivot, dateKeys, visibleWellEntities, viewGran, startKey, endKey);
+  }, [metric, rawWaterBreakdown, wellReadings, visibleWellEntities, viewGran, startKey, endKey]);
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -1948,12 +2019,33 @@ export function TrendChart({
       }));
   }, [hasPlantHealth, roReadings, phTotalTrains]);
 
+  // Hourly rows narrowed to the clicked day, when a day→hour drill is active.
+  // buildPhHealthRows' inferred return type unions its early-return (no
+  // phTotalTrains yet) and normal-return (has _slotKey) shapes, so this
+  // reads through `any` rather than fighting that union — same convention
+  // the rest of this file's Recharts/row-shaped callbacks already use.
+  const phFocusedHourlyData = phDayFocus
+    ? phHourlyData.filter((r: any) => typeof r._slotKey === 'string' && r._slotKey.startsWith(phDayFocus))
+    : phHourlyData;
+
   const phActiveData = hasPlantHealth
-    ? phDrillMode === 'hourly'  ? phHourlyData
+    ? phDrillMode === 'hourly'  ? phFocusedHourlyData
     : phDrillMode === 'weekly' ? phWeeklyData
     : phDrillMode === 'monthly' ? phMonthlyData
     : phDailyData
     : [];
+
+  // Bar click (well, dot click — Plant Health is a Line, not bars) → jump
+  // into that day's Hourly view. Mirrors handleDrillBarActivate's shape
+  // (payload → next state) but Plant Health keeps its own drill state
+  // machine on purpose (see the plan: merging the three drill systems was
+  // ruled out as more risk than this round needs).
+  const handlePhDayDotActivate = (payload: Record<string, unknown> | undefined) => {
+    const key = payload?._slotKey as string | undefined;
+    if (!key) return;
+    setPhDayFocus(key);
+    setPhDrillMode('hourly');
+  };
 
 
 
@@ -2051,11 +2143,20 @@ export function TrendChart({
   const focusedEntityRows = drillFocusRange
     ? entityRows.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey)
     : entityRows;
+  // Raw Water's By-well analogue of focusedEntityRows above.
+  const focusedWellEntityRows = drillFocusRange
+    ? wellEntityRows.filter((r: any) => r.isoDate >= drillFocusRange.startKey && r.isoDate <= drillFocusRange.endKey)
+    : wellEntityRows;
 
   const drillCrumbs: DrillCrumb[] = drillFocus
     ? [
         { label: range === 'CUSTOM' ? 'Custom range' : range, onSelect: () => setDrillFocus(null) },
         { label: drillFocus.label },
+      ]
+    : phDayFocus
+    ? [
+        { label: range === 'CUSTOM' ? 'Custom range' : range, onSelect: () => { setPhDrillMode('daily'); setPhDayFocus(null); } },
+        { label: format(new Date(phDayFocus + 'T00:00:00'), 'MMM d') },
       ]
     : [];
 
@@ -2064,6 +2165,12 @@ export function TrendChart({
     const id = e?.dataKey as string | undefined;
     if (!id) return;
     setSelectedLocatorIds((prev) => toggleIsolateEntity(prev, id, activeEntities.map((x) => x.id)));
+  };
+  // Raw Water's By-well analogue of handleLegendIsolate above.
+  const handleWellLegendIsolate = (e: any) => {
+    const id = e?.dataKey as string | undefined;
+    if (!id) return;
+    setSelectedWellIds((prev) => toggleIsolateEntity(prev, id, wellDrillEntities.map((x) => x.id)));
   };
 
   // Format large numbers as 1.2K / 3.4M on the Y-axis so the axis
@@ -2223,11 +2330,34 @@ export function TrendChart({
                 )}
               </div>
             )}
-            {/* View — rawwater / productionCost / pv (M4: granularity only, no breakdown UI yet) */}
-            {usesSharedGranularity && !hasConsumptionDrill && (metric === 'rawwater' || metric === 'pv') && (
+            {/* View — pv (M4: granularity only — no breakdown to add, a single
+                ratio has nothing meaningful to split by) */}
+            {usesSharedGranularity && metric === 'pv' && (
               <div>
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} />
+              </div>
+            )}
+            {/* View + Breakdown — rawwater (M4: By-well) */}
+            {metric === 'rawwater' && (
+              <div>
+                <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
+                <div className="mb-2">
+                  <GranularityControl value={viewGran} onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }} rangeDays={rangeDays} />
+                </div>
+                <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Breakdown</p>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => { setRawWaterBreakdown('total'); setSelectedWellIds(null); }}
+                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', rawWaterBreakdown === 'total' ? 'bg-primary text-white border-primary' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>Total</button>
+                  <button onClick={() => { setRawWaterBreakdown('by-well'); setSelectedWellIds(null); }}
+                    className={['h-6 px-2 rounded text-2xs font-medium border transition-colors leading-none', rawWaterBreakdown === 'by-well' ? 'bg-chart-2 text-white border-chart-2' : 'bg-muted text-muted-foreground hover:text-foreground border-border'].join(' ')}>By well</button>
+                </div>
+                {rawWaterBreakdown === 'by-well' && viewGran !== 'daily' && (
+                  <div className="mt-2">
+                    <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bars</p>
+                    <StackToggle value={stackMode} onChange={setStackMode} />
+                  </div>
+                )}
               </div>
             )}
             {/* View + Breakdown — tds / recovery */}
@@ -2270,7 +2400,7 @@ export function TrendChart({
                 <p className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">View</p>
                 <div className="flex flex-wrap gap-1">
                   {(['daily','hourly','weekly','monthly'] as const).map((m) => (
-                    <button key={m} onClick={() => setPhDrillMode(m)}
+                    <button key={m} onClick={() => { setPhDrillMode(m); setPhDayFocus(null); }}
                       disabled={m !== 'hourly' && !isGranularityUsable(m, rangeDays)}
                       className={['h-6 px-2 rounded text-2xs font-medium border capitalize', phDrillMode === m ? 'bg-primary text-white border-primary' : (m !== 'hourly' && !isGranularityUsable(m, rangeDays)) ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border' : 'bg-muted text-muted-foreground border-border'].join(' ')}>{m}</button>
                   ))}
@@ -2435,11 +2565,57 @@ export function TrendChart({
           </div>
         )}
 
-        {/* rawwater / pv — granularity only (M4: no breakdown UI yet) */}
-        {(metric === 'rawwater' || metric === 'pv') && (
+        {/* pv — granularity only (no breakdown to add — a single ratio has
+            nothing meaningful to split by) */}
+        {metric === 'pv' && (
           <div className="flex items-center gap-0.5 shrink-0 ml-1">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
-            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix={`drill-${metric}`} />
+            <GranularityControl value={viewGran} onChange={setViewGran} rangeDays={rangeDays} testIdPrefix="drill-pv" />
+          </div>
+        )}
+
+        {/* ── Raw Water — View granularity + By-well breakdown (M4) ──────── */}
+        {metric === 'rawwater' && (
+          <div className="flex items-center gap-0.5 shrink-0 ml-1">
+            <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
+            <GranularityControl
+              value={viewGran}
+              onChange={(g) => { setViewGran(g); setSelectedWellIds(null); }}
+              rangeDays={rangeDays}
+              testIdPrefix="drill-rawwater"
+            />
+            <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
+            <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">Breakdown</span>
+            <button
+              onClick={() => { setRawWaterBreakdown('total'); setSelectedWellIds(null); }}
+              data-testid="drill-total-rawwater"
+              className={[
+                'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
+                rawWaterBreakdown === 'total'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Combined total"
+            >Total</button>
+            <button
+              onClick={() => { setRawWaterBreakdown('by-well'); setSelectedWellIds(null); }}
+              data-testid="drill-by-well-rawwater"
+              className={[
+                'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none border',
+                rawWaterBreakdown === 'by-well'
+                  ? 'bg-chart-2 text-white border-chart-2'
+                  : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+              ].join(' ')}
+              title="Break down by well"
+            >By well</button>
+
+            {/* ── Stack / Group (M2) — only once there's something to stack ── */}
+            {rawWaterBreakdown === 'by-well' && viewGran !== 'daily' && (
+              <>
+                <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
+                <StackToggle value={stackMode} onChange={setStackMode} testId="rawwater-stack-toggle" />
+              </>
+            )}
           </div>
         )}
 
@@ -2625,7 +2801,7 @@ export function TrendChart({
           <div className="flex items-center gap-0.5 shrink-0" title="Plant Health granularity">
             <span className="text-3xs text-muted-foreground uppercase tracking-wide mr-0.5 hidden sm:inline">View</span>
             <button
-              onClick={() => setPhDrillMode('daily')}
+              onClick={() => { setPhDrillMode('daily'); setPhDayFocus(null); }}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 phDrillMode === 'daily'
@@ -2638,20 +2814,20 @@ export function TrendChart({
               Daily
             </button>
             <button
-              onClick={() => setPhDrillMode('hourly')}
+              onClick={() => { setPhDrillMode('hourly'); setPhDayFocus(null); }}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
                 phDrillMode === 'hourly'
                   ? 'bg-chart-2 text-white border-chart-2'
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
-              title="Hourly health — one slot per hour"
+              title={phDayFocus ? 'Showing the drilled-into day — click again for the full range' : 'Hourly health — one slot per hour'}
             >
               <ChevronsDown className="h-3 w-3" />
               Hourly
             </button>
             <button
-              onClick={() => isGranularityUsable('weekly', rangeDays) && setPhDrillMode('weekly')}
+              onClick={() => { if (isGranularityUsable('weekly', rangeDays)) { setPhDrillMode('weekly'); setPhDayFocus(null); } }}
               disabled={!isGranularityUsable('weekly', rangeDays)}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
@@ -2667,7 +2843,7 @@ export function TrendChart({
               Weekly
             </button>
             <button
-              onClick={() => isGranularityUsable('monthly', rangeDays) && setPhDrillMode('monthly')}
+              onClick={() => { if (isGranularityUsable('monthly', rangeDays)) { setPhDrillMode('monthly'); setPhDayFocus(null); } }}
               disabled={!isGranularityUsable('monthly', rangeDays)}
               className={[
                 'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
@@ -3061,7 +3237,9 @@ export function TrendChart({
         );
       })()}
 
-      {hasConsumptionDrill && <DrillBreadcrumb crumbs={drillCrumbs} />}
+      {(hasConsumptionDrill || (metric === 'rawwater' && rawWaterBreakdown === 'by-well') || (hasPlantHealth && phDayFocus)) && (
+        <DrillBreadcrumb crumbs={drillCrumbs} />
+      )}
 
       <div className={`${chartHeight} w-full relative`} data-testid={`trend-chart-${metric}`}>
         {queryError && (
@@ -3592,7 +3770,39 @@ export function TrendChart({
                     dot={(props: any) => {
                       const { cx, cy, payload } = props;
                       const fill = dotFill(payload);
-                      return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
+                      // M3: Day→Hour click-drill. Only the Daily view's dots
+                      // are drillable — Hourly has nowhere finer to go, and
+                      // Weekly/Monthly rows carry no _slotKey (see
+                      // buildPhHealthRows callers above), so
+                      // handlePhDayDotActivate would no-op there anyway;
+                      // gating on phDrillMode keeps the pointer/keyboard
+                      // affordance from appearing where it wouldn't do
+                      // anything.
+                      const isDrillable = phDrillMode === 'daily' && !!payload?._slotKey;
+                      if (!isDrillable) {
+                        return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={fill} stroke={fill} />;
+                      }
+                      const activate = () => handlePhDayDotActivate(payload);
+                      return (
+                        <g key={`dot-${cx}-${cy}`}>
+                          {/* Larger transparent hit target — the visible 3px
+                              dot is too small to reliably click or tab to;
+                              this widens the interactive area without
+                              changing what's drawn. */}
+                          <circle
+                            cx={cx} cy={cy} r={9} fill="transparent"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Drill into ${(payload?.date as string) ?? 'this day'}'s hourly health`}
+                            style={{ cursor: 'pointer', outline: 'none' }}
+                            onClick={activate}
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+                            }}
+                          />
+                          <circle cx={cx} cy={cy} r={3} fill={fill} stroke={fill} pointerEvents="none" />
+                        </g>
+                      );
                     }}
                     stroke="hsl(var(--accent))"
                     connectNulls
@@ -3600,8 +3810,75 @@ export function TrendChart({
                 </ComposedChart>
               );
             })()
+          ) : (metric === 'rawwater' && rawWaterBreakdown === 'by-well' && viewGran === 'daily') ? (
+            // ── Raw Water, By-well, Daily (M4) ─────────────────────────────────────
+            // Same reasoning as production/nrw's entity breakdown: 5+ wells ×
+            // 30 daily bars is noisy as bars, so Daily stays line-based
+            // regardless of the Weekly/Monthly bar switch below.
+            <ComposedChart data={focusedWellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+                onClick={handleWellLegendIsolate}
+              />
+              {visibleWellEntities.map(({ id, label, color }) => (
+                <Line
+                  key={id}
+                  type="monotone"
+                  dataKey={id}
+                  name={label}
+                  stroke={color}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+            </ComposedChart>
+          ) : (metric === 'rawwater' && rawWaterBreakdown === 'by-well') ? (
+            // ── Raw Water, By-well, Weekly/Monthly (M1+M2+M3+M4) ────────────────────
+            // Bars, grouped or stacked per the Stack/Group toggle; keyboard-
+            // focusable and clicking one drills into that bucket at the
+            // next-finer granularity, exactly like production/nrw's entity
+            // breakdown bars above — same makeDrillableBarShape, same
+            // handleDrillBarActivate (its daily-view "open breakdown" branch
+            // never fires here since By-well bars only render at
+            // Weekly/Monthly, so the two metrics don't interfere).
+            <ComposedChart data={focusedWellEntityRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} strokeOpacity={0.6} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 500 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={formatYAxis} width={44} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, fontSize: 11, boxShadow: 'var(--shadow-elev)' }}
+                formatter={(v: any, name: string) => [v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—', name]}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', paddingTop: 6, cursor: 'pointer' }}
+                onClick={handleWellLegendIsolate}
+              />
+              {visibleWellEntities.map(({ id, label, color }) => (
+                <Bar
+                  key={id}
+                  dataKey={id}
+                  name={label}
+                  fill={color}
+                  maxBarSize={28}
+                  radius={[3, 3, 0, 0]}
+                  stackId={stackMode === 'stacked' ? 'wells' : undefined}
+                  shape={makeDrillableBarShape(
+                    handleDrillBarActivate,
+                    (payload) => `Drill into ${payload.date as string ?? label}`,
+                  )}
+                />
+              ))}
+            </ComposedChart>
           ) : metric === 'rawwater' ? (
-            // ── Raw Water — smooth gradient area chart ────────────────────────────
+            // ── Raw Water — smooth gradient area chart (Total) ─────────────────────
             // trendRows (not chartData) so Weekly/Monthly (M4) apply.
             <AreaChart data={trendRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>

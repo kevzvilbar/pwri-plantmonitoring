@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1627,
-  "lastUpdated": "2026-08-10",
+  "maxWarnings": 1641,
+  "lastUpdated": "2026-08-12",
   "history": [
     {
       "date": "2026-08-09",
@@ -24,6 +24,12 @@
       "maxWarnings": 1627,
       "previous": 1620,
       "reason": "ProductSection.tsx: wired ProductMeterHistoryDialog to the shared CorrectionReasonField/logReadingEdit pattern -- product meter edits were the one reading-edit surface missing a required correction reason and an audit-log entry (well/locator/power/blending/RO train/pretreatment/CIP/dosing already had both). DataCorrections.tsx: fetchPending() now joins reading_anomaly_remarks per pending row so the operator's own entry-time remark shows on each Pending Review card. +7 no-explicit-any warnings from the new supabase `.from(... as any)` calls and logReadingEdit payloads, same convention already used throughout these files."
+    },
+    {
+      "date": "2026-08-12",
+      "maxWarnings": 1641,
+      "previous": 1627,
+      "reason": "Reconciling drift accumulated across the weekly-granularity work (M1-M4 of pwri-improvement-plan.md) plus this pass's own changes -- CI has been red since before this pass started. Two parts: (1) buildEntityPivot-fix-rebased.patch, ro_pretreat_delete_rls_fix.sql, and reconciled-weekly-granularity.patch (the three commits after this file's previous 1627 entry) were never accompanied by a ceiling update -- actual was already 1635 as of the commit this file still claimed 1627 for, rising to 1640 by the most recent of the three. Not re-litigated here; treated as inherited baseline. (2) This pass's own net +1: TrendChartDrill.tsx was split into TrendChartDrill.tsx (GranularityControl/StackToggle/DrillBreadcrumb components only) and TrendChartDrillKit.ts (stack-mode persistence, drill-focus math, toggleIsolateEntity, makeDrillableBarShape -- plain .ts, no JSX, same fix already used once for lib/regressionCorrection.ts) which removed 7 react-refresh/only-export-components warnings; Raw Water's By-well breakdown and Plant Health's Day-to-Hour click-drill (extending M2/M3/M4 per the plan) added 8 no-explicit-any warnings from Recharts payload/row callbacks, the same convention already used throughout TrendChart.tsx (see e.g. the entity-breakdown Tooltip formatter and dot renderer this mirrors). TDS/Recovery's by-train view is the one chart from the plan still on daily-only lines with no Weekly/Monthly/stacking/drill -- left for a follow-up pass rather than rushed in here."
     }
   ]
 }
