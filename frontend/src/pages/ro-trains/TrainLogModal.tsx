@@ -366,7 +366,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
             // nested dialog with it) before the user can finish using it.
             // Must guard on every nested-dialog state, not just the two
             // row-edit ones this check used to cover.
-            if (editingRoRow || editingPretreatRow || replaceReadingId || correctionTarget || showImportRO || showImportPretreat) {
+            if (editingRoRow || editingPretreatRow || replaceReadingId || correctionTarget || showImportRO || showImportPretreat || pendingDelete) {
               e.preventDefault();
               return;
             }
