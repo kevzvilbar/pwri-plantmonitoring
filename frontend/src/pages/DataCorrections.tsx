@@ -65,6 +65,17 @@ interface FlaggedRow {
    *  the already-clamped daily_volume. See fetchPending for why the latter
    *  can't be trusted for this. */
   is_backward?: boolean;
+  /** The operator's own explanation for this reading, captured at save time
+   *  by AnomalyRemarkBanner / submitAnomalyRemark() (reading_anomaly_remarks)
+   *  whenever the reading's flow rate fell outside the normal band — the
+   *  same "needs_remark" / "critical" classification that (independently)
+   *  landed this row in Pending Review. Distinct from `notes` in
+   *  PendingReviewTab, which is the reviewer's own note when approving/
+   *  rejecting. Undefined while loading; null once loaded if no remark
+   *  exists (e.g. this row was flagged for backward/spike reasons the DB
+   *  trigger catches but the client-side flow-rate guard didn't, so no
+   *  remark was ever required at entry). */
+  anomaly_remark?: { text: string; tier: 'needs_remark' | 'critical'; logged_at: string } | null;
 }
 
 interface CorrectionRequest {
@@ -543,6 +554,24 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       .in('id', userIds) as any);
     const emailMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.email]));
 
+    // Resolve the operator's own anomaly remark for each row (AnomalyRemarkBanner
+    // at entry time, reading_anomaly_remarks) — so the reviewer sees WHY the
+    // operator says a flagged reading is correct, not just an empty note box.
+    // Ordered oldest→newest so the reduce below keeps the latest remark per
+    // record_id in the rare case a row picked up more than one (e.g. re-saved
+    // after the underlying reading was edited and flagged again).
+    const rowIds = rows.map((r: any) => r.id);
+    const { data: remarkRows } = await (supabase
+      .from('reading_anomaly_remarks' as any)
+      .select('record_id, remark_text, tier, logged_at')
+      .eq('table_name', table)
+      .in('record_id', rowIds)
+      .order('logged_at', { ascending: true }) as any);
+    const remarkMap = (remarkRows ?? []).reduce((acc: Record<string, any>, rem: any) => {
+      acc[rem.record_id] = { text: rem.remark_text, tier: rem.tier, logged_at: rem.logged_at };
+      return acc;
+    }, {} as Record<string, any>);
+
     for (const r of rows) {
       const vol = r.daily_volume ?? (r.previous_reading != null ? r.current_reading - r.previous_reading : null);
       // BUGFIX: this used to classify backward vs. spike by checking
@@ -567,6 +596,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         norm_status: r.norm_status,
         flag_reason: isBackward ? 'backward' : 'spike',
         is_backward: isBackward,
+        anomaly_remark: remarkMap[r.id] ?? null,
       });
     }
   }
@@ -1065,6 +1095,25 @@ function PendingReviewTab() {
                       <div><div className="text-muted-foreground">Current</div><div className="font-mono font-medium">{fmtNum(row.current_reading)}</div></div>
                       <div><div className="text-muted-foreground">Delta</div><DeltaBadge vol={row.daily_volume} /></div>
                     </div>
+
+                    {/* Operator's own remark, captured at entry time by
+                        AnomalyRemarkBanner when this reading's flow rate fell
+                        outside the normal band — separate from the reviewer's
+                        note in the Actions row below. */}
+                    {row.anomaly_remark ? (
+                      <div className={cn('flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border',
+                        row.anomaly_remark.tier === 'critical'
+                          ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                          : 'bg-warn-soft border-warn/40 text-warn')}>
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          <span className="font-medium">Operator remark: </span>
+                          <span className="font-normal text-foreground/90">"{row.anomaly_remark.text}"</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-2xs text-muted-foreground italic">No operator remark on file for this reading.</p>
+                    )}
 
                     {/* Chain context (item 4) */}
                     {isExp && (

@@ -44,6 +44,9 @@ import {
 } from '@/components/ReadingImportDialog';
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
+import { resolveReason } from '@/lib/correctionReasons';
+import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
 import {
   GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
@@ -889,12 +892,20 @@ function ProductMeterRow({
 
 function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; plantId: string; onClose: () => void }) {
   const qc = useQueryClient();
+  const { user, activeOperator } = useAuth();
   const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
   const [appliedFrom, setAppliedFrom] = useState(customFrom);
   const [appliedTo, setAppliedTo]     = useState(customTo);
   const [editRow, setEditRow] = useState<{ id: string; datetime: string; value: string } | null>(null);
+  // Required "why was this edit made" — same CORRECTION_REASONS dropdown
+  // every other edit-an-already-saved-reading dialog uses (RO train,
+  // pretreatment, locator, well, power, blending, dosing/CIP logs). This
+  // was the one reading table that never got wired to it — see
+  // 20260811_reading_audit_log_add_product_meter.sql.
+  const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -1006,10 +1017,16 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
     }
   };
 
+  const actorLabel = () =>
+    `${activeOperator?.first_name ?? ''} ${activeOperator?.last_name ?? ''}`.trim()
+    || activeOperator?.username || null;
+
   const saveEdit = async () => {
     if (!editRow) return;
+    if (!reason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     const newCur = +editRow.value;
+    const beforeRow = rows?.find((r: any) => r.id === editRow.id) ?? null;
     let updatePayload: Record<string, any>;
     if (meter.is_derived) {
       // Derived/mirrored meters store each day's own volume directly in
@@ -1047,9 +1064,18 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
     // figures) gets corrected too, not just this row. No-ops for derived
     // meters, which have no such chain — see resyncMeterChain.
     await resyncMeterChain(meter.id);
+    await logReadingEdit({
+      table_name:    'product_meter_readings',
+      record_id:     editRow.id,
+      plant_id:      plantId,
+      actor_user_id: user?.id ?? null,
+      actor_label:   actorLabel(),
+      changes:       diffFields(beforeRow ?? {}, updatePayload),
+      reason:        resolveReason(reason, customReason),
+    });
     setSaving(false);
     toast.success('Reading updated');
-    setEditRow(null);
+    setEditRow(null); setReason(''); setCustomReason('');
     qc.invalidateQueries({ queryKey });
     invalidateProductMeterDash(qc);
   };
@@ -1094,6 +1120,14 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
     setDeletingId(id);
     const { error } = await supabase.from('product_meter_readings' as any).delete().eq('id', id);
     if (error) { setDeletingId(null); toast.error(friendlyError(error)); return; }
+    await logReadingEdit({
+      table_name:    'product_meter_readings',
+      record_id:     id,
+      plant_id:      plantId,
+      action:        'delete',
+      actor_user_id: user?.id ?? null,
+      actor_label:   actorLabel(),
+    });
     // Removing a row closes a gap in the chain — the reading that came right
     // after it now needs to point its previous_reading at whatever came
     // right before it instead.
@@ -1157,12 +1191,18 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" />
               </div>
             </div>
+            <CorrectionReasonField
+              reason={reason} onReasonChange={setReason}
+              customReason={customReason} onCustomReasonChange={setCustomReason}
+            />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value}
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !reason}
                 className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setEditRow(null)} disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
+              <Button size="sm" variant="outline"
+                onClick={() => { setEditRow(null); setReason(''); setCustomReason(''); }}
+                disabled={saving} className="h-7 text-xs px-3">Cancel</Button>
             </div>
           </div>
         )}
@@ -1284,7 +1324,11 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                       <td className="px-2 py-1 text-center">
                         <div className="flex items-center justify-center gap-0.5">
                           <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
-                            onClick={() => { setPendingDeleteId(null); setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) }); }}
+                            onClick={() => {
+                              setPendingDeleteId(null);
+                              setReason(''); setCustomReason('');
+                              setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) });
+                            }}
                             className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
                             <Pencil className="h-3 w-3" />
                           </button>

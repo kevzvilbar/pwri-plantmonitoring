@@ -135,8 +135,13 @@ export async function logReadingEdit(entry: {
   // extends the matching DB check constraint the same way. 'cip_logs' added
   // 2026-08-09 — CIPLog.tsx was casting table_name to 'chemical_dosing_logs'
   // via `as any` to get past this union, silently mislabeling every CIP
-  // edit in the audit trail as a dosing edit.
-  table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs' | 'cip_logs' | 'locator_readings' | 'power_readings' | 'blending_events' | 'well_readings';
+  // edit in the audit trail as a dosing edit. 'product_meter_readings' added
+  // 2026-08-11 — ProductMeterHistoryDialog (ProductSection.tsx) was the one
+  // "edit an already-saved reading" surface that never got wired to this
+  // audit log or the required-reason field at all (unlike its siblings
+  // here); see 20260811_reading_audit_log_add_product_meter.sql for the
+  // matching DB check-constraint change.
+  table_name: 'ro_train_readings' | 'ro_pretreatment_readings' | 'chemical_dosing_logs' | 'cip_logs' | 'locator_readings' | 'power_readings' | 'blending_events' | 'well_readings' | 'product_meter_readings';
   /** Nullable for 'import' action — a CSV batch covers N records, not one. */
   record_id?: string | null;
   plant_id: string | null;

@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1620,
+  "maxWarnings": 1627,
   "lastUpdated": "2026-08-10",
   "history": [
     {
@@ -18,6 +18,12 @@
       "maxWarnings": 1620,
       "previous": 1624,
       "reason": "Moved runOLS and friends out of DataAnalysis.tsx into lib/regressionCorrection.ts (a plain .ts file, no JSX). react-refresh/only-export-components only fires on files exporting React components, so the 4 warnings from the previous entry disappeared entirely rather than needing to be carried indefinitely -- the extraction is a strictly better fix than accepting the trade-off in place."
+    },
+    {
+      "date": "2026-08-10",
+      "maxWarnings": 1627,
+      "previous": 1620,
+      "reason": "ProductSection.tsx: wired ProductMeterHistoryDialog to the shared CorrectionReasonField/logReadingEdit pattern -- product meter edits were the one reading-edit surface missing a required correction reason and an audit-log entry (well/locator/power/blending/RO train/pretreatment/CIP/dosing already had both). DataCorrections.tsx: fetchPending() now joins reading_anomaly_remarks per pending row so the operator's own entry-time remark shows on each Pending Review card. +7 no-explicit-any warnings from the new supabase `.from(... as any)` calls and logReadingEdit payloads, same convention already used throughout these files."
     }
   ]
 }
