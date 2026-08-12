@@ -130,3 +130,40 @@ describe('fillDateRange / fmtDateKey (sanity — unchanged by this fix)', () => 
     expect(fmtDateKey('2026-08-06')).toBe('Aug 6');
   });
 });
+
+describe('buildEntityPivot — direct-mode meters (HAMAS-style, hamas-production-fix.patch reproduction)', () => {
+  it(
+    'an is_derived product meter passed via directModeIds shows its real daily volume, ' +
+    'not a meaningless day-over-day diff — same scenario as the identical fix in ' +
+    'DataSummaryModal.test.ts (computePivotFromReadingsNoCache), reproduced here as a direct unit test for ' +
+    'buildEntityPivot itself, complementing the wiring fix already applied at its ' +
+    'call sites in TrendChart.tsx and TrendChartDataSummaryPopup.tsx (pwri-dashboard-fixes.patch, ' +
+    'fix-hamas-chart-missing-is-derived.patch) — this test covers the function directly, since ' +
+    'those call sites still had no dedicated unit test',
+    () => {
+      const readings = [
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-07'), current_reading: 4988, daily_volume: 4988 },
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-08'), current_reading: 5294, daily_volume: 5294 },
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-09'), current_reading: 5244, daily_volume: 5244 },
+      ];
+
+      // Without directModeIds: buildEntityPivot's non-direct branches never
+      // even look at daily_volume as "the" answer the way
+      // computePivotFromReadingsNoCache's simpler two-branch version does —
+      // it prefers a walked lastSeen predecessor once one exists, so Aug 8
+      // becomes current(5294) - lastSeen(4988) = 306, and Aug 9 becomes
+      // current(5244) - lastSeen(5294) = -50, clamped to 0 by this
+      // function's Math.max(0, ...) (unlike DataSummaryModal's sibling,
+      // which the reproduction test there notes does NOT clamp).
+      const { pivot: broken } = buildEntityPivot(readings, 'meter_id');
+      expect(broken.get('2026-08-08')!.get('hamas-mirror')).toBe(306);
+      expect(broken.get('2026-08-09')!.get('hamas-mirror')).toBe(0); // clamped, not -50
+
+      // With directModeIds: each day shows its own real volume.
+      const { pivot: fixed } = buildEntityPivot(readings, 'meter_id', new Set(['hamas-mirror']));
+      expect(fixed.get('2026-08-07')!.get('hamas-mirror')).toBe(4988);
+      expect(fixed.get('2026-08-08')!.get('hamas-mirror')).toBe(5294);
+      expect(fixed.get('2026-08-09')!.get('hamas-mirror')).toBe(5244);
+    },
+  );
+});
