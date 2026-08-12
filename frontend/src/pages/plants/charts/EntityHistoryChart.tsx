@@ -62,9 +62,18 @@ export interface SiblingLocator {
 // rather than reusing the narrow-hue --plant-N variables, since adjacent
 // stacked segments need strong mutual contrast, not brand-consistent
 // subtlety. 8 hues spread across the wheel; cycles via modulo past 8 siblings.
+//
+// Deliberately has no hue near 142 (green): the mother meter's own bar is
+// always C_PRODUCTION, hsl(142, 71%, 45%) (see the "Mother Meter" <Bar>
+// below). A sibling whose index happened to land on a green slot here would
+// render in essentially the same color as the mother meter's bar right next
+// to it — that's what was happening with HAMAS (index 3) before this
+// palette was reordered/replaced. The gap this leaves between the amber and
+// blue entries is intentional, not an oversight — don't fill it back in
+// with anything in the ~100-170 hue range.
 const SIBLING_PALETTE = [
   'hsl(199, 89%, 55%)', 'hsl(38, 92%, 55%)', 'hsl(271, 68%, 62%)',
-  'hsl(142, 62%, 45%)', 'hsl(0, 72%, 60%)', 'hsl(24, 90%, 58%)',
+  'hsl(330, 65%, 55%)', 'hsl(0, 72%, 60%)', 'hsl(24, 90%, 58%)',
   'hsl(291, 55%, 60%)', 'hsl(199, 40%, 70%)',
 ];
 

@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1641,
+  "maxWarnings": 1657,
   "lastUpdated": "2026-08-12",
   "history": [
     {
@@ -30,6 +30,12 @@
       "maxWarnings": 1641,
       "previous": 1627,
       "reason": "Reconciling drift accumulated across the weekly-granularity work (M1-M4 of pwri-improvement-plan.md) plus this pass's own changes -- CI has been red since before this pass started. Two parts: (1) buildEntityPivot-fix-rebased.patch, ro_pretreat_delete_rls_fix.sql, and reconciled-weekly-granularity.patch (the three commits after this file's previous 1627 entry) were never accompanied by a ceiling update -- actual was already 1635 as of the commit this file still claimed 1627 for, rising to 1640 by the most recent of the three. Not re-litigated here; treated as inherited baseline. (2) This pass's own net +1: TrendChartDrill.tsx was split into TrendChartDrill.tsx (GranularityControl/StackToggle/DrillBreadcrumb components only) and TrendChartDrillKit.ts (stack-mode persistence, drill-focus math, toggleIsolateEntity, makeDrillableBarShape -- plain .ts, no JSX, same fix already used once for lib/regressionCorrection.ts) which removed 7 react-refresh/only-export-components warnings; Raw Water's By-well breakdown and Plant Health's Day-to-Hour click-drill (extending M2/M3/M4 per the plan) added 8 no-explicit-any warnings from Recharts payload/row callbacks, the same convention already used throughout TrendChart.tsx (see e.g. the entity-breakdown Tooltip formatter and dot renderer this mirrors). TDS/Recovery's by-train view is the one chart from the plan still on daily-only lines with no Weekly/Monthly/stacking/drill -- left for a follow-up pass rather than rushed in here."
+    },
+    {
+      "date": "2026-08-12",
+      "maxWarnings": 1657,
+      "previous": 1641,
+      "reason": "Inherited drift, not re-litigated (same situation as the entry above): hamas-production-fix.patch (55e95f8) added a directMeterIds set to DataSummaryModal.tsx/TrendChart.tsx/TrendChartDataSummaryPopup.tsx/Dashboard.tsx -- the same 'is_derived meter as direct-volume' fix that had also been prepared independently on this end -- but its own +16 no-explicit-any warnings (from the new supabase `.from(product_meters as any)` filter/map callbacks building that set, same convention already used for directLocatorIds) were never folded into this file. pwri-dashboard-fixes.patch, sibling-locators-stacked-chart.patch, and hamas-mambaling-same-day-sweep.patch (the three commits after it) added none of their own. This pass's own change -- EntityHistoryChart.tsx: replaced the SIBLING_PALETTE slot that collided with the mother meter's own green (C_PRODUCTION, hue 142) with a rose hue (330) so a sibling locator can no longer render in the same color as the 'Mother Meter' bar/legend entry it sits next to -- added zero new warnings on its own."
     }
   ]
 }
