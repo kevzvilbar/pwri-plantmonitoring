@@ -31,8 +31,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet, AlertTriangle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area, Scatter, Legend } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -837,8 +837,142 @@ export function TrainMetricChart({
 }
 
 // ─── TrainRODetailCharts ──────────────────────────────────────────────────────
-// 2×3 grid of mini sparkline cards for RO performance metrics.
+// RO performance panel: a combined Feed/Permeate/Reject flow chart plus
+// individually-sized charts for the remaining metrics.
 // Source: ro_train_readings — no extra tables needed.
+//
+// Readings tagged norm_status = 'pending_review' | 'retracted' (the same spike
+// guard used by PretreatmentAndROLog.tsx and lib/readingGuards.ts) are dropped
+// from every average, peak, and axis domain below, and are surfaced instead as
+// a small ◇ marker on the day they occurred — so one bad meter entry can't
+// silently flatten the rest of the chart, but it also isn't hidden.
+
+const RO_FLAGGED_STATUSES = new Set(['pending_review', 'retracted']);
+const RO_FLAG_COLOR = 'hsl(38,92%,50%)';
+
+const RO_FLOW_METRICS: { key: string; label: string; color: string }[] = [
+  { key: 'feed_flow',     label: 'Feed',     color: 'hsl(216,72%,46%)' },
+  { key: 'permeate_flow', label: 'Permeate', color: 'hsl(174,72%,40%)' },
+  { key: 'reject_flow',   label: 'Reject',   color: 'hsl(0,65%,50%)'   },
+];
+
+const RO_OTHER_METRICS: { key: string; label: string; unit: string; color: string }[] = [
+  { key: 'feed_pressure_psi', label: 'Feed Pressure', unit: 'psi', color: 'hsl(261,55%,58%)' },
+  { key: 'permeate_tds',      label: 'Permeate TDS',  unit: 'ppm', color: 'hsl(38,84%,52%)'  },
+  { key: 'recovery_pct',      label: 'Recovery',      unit: '%',   color: 'hsl(150,60%,40%)' },
+  { key: 'permeate_volume',   label: 'Daily Volume',  unit: 'm³',  color: 'hsl(203,55%,48%)' },
+];
+
+/** Highest clean (non-flagged) value across one or more series, floored so an
+ *  all-null range still yields a sane axis instead of NaN/undefined. */
+function cleanMax(rows: any[], keys: string[]): number {
+  let max = 0;
+  for (const r of rows) for (const k of keys) if (r[k] != null && r[k] > max) max = r[k];
+  return max;
+}
+
+/** Flagged days rendered as a fixed-height marker just above the clean data —
+ *  its height is capped, so it never re-scales the axis the way the excluded
+ *  raw value would have. */
+function flagMarkerData(rows: any[], markerY: number) {
+  return rows.filter(r => r.flagged).map(r => ({ date: r.date, y: markerY }));
+}
+
+function RoFlagTooltip({ active, payload, label, unit }: any) {
+  if (!active || !payload?.length) return null;
+  const flaggedHit = payload.find((p: any) => p.dataKey === 'y');
+  if (flaggedHit) {
+    return (
+      <div className="rounded-md border bg-popover px-2 py-1.5 text-2xs shadow-md">
+        <div className="font-medium">{label}</div>
+        <div className="text-warn">Flagged reading — pending review, excluded from average</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md border bg-popover px-2 py-1.5 text-2xs shadow-md">
+      <div className="font-medium mb-0.5">{label}</div>
+      {payload.filter((p: any) => p.dataKey !== 'y').map((p: any) => (
+        <div key={p.dataKey} className="flex items-center gap-1.5" style={{ color: p.color }}>
+          <span>{p.name}: {fmtNum(p.value)}{unit ? ` ${unit}` : ''}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** One resized metric card: bar chart + flagged-day markers + axis + tooltip. */
+function RoMiniMetricChart({ m, rows }: { m: typeof RO_OTHER_METRICS[number]; rows: any[] }) {
+  const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
+  if (!vals.length) return null;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const peak = Math.max(...vals);
+  const domainMax = Math.max(peak * 1.15, 1);
+  const markerY = Math.max(peak * 1.08, domainMax * 0.9);
+  const markers = flagMarkerData(rows, markerY);
+  return (
+    <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
+        <span className="text-2xs text-muted-foreground shrink-0">{m.unit}</span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
+        <span className="text-2xs text-muted-foreground">avg · pk {fmtNum(peak)}</span>
+      </div>
+      <div className="h-24 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+            barSize={Math.max(2, Math.min(10, 220 / Math.max(rows.length, 1)))}>
+            <XAxis dataKey="date" hide />
+            <YAxis domain={[0, domainMax]} width={28} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+            <Tooltip content={<RoFlagTooltip unit={m.unit} />} />
+            <Bar dataKey={m.key} fill={m.color} radius={[1, 1, 0, 0]} />
+            {markers.length > 0 && <Scatter data={markers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" legendType="none" />}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/** The combined Feed / Permeate / Reject flow chart — this is the piece the
+ *  old 2×3 grid never had (feed flow wasn't charted anywhere), and the reason
+ *  for this enhancement in the first place. */
+function RoFlowChart({ rows }: { rows: any[] }) {
+  const flowKeys = RO_FLOW_METRICS.map(m => m.key);
+  const domainMax = Math.max(cleanMax(rows, flowKeys) * 1.15, 1);
+  const markerY = domainMax * 0.94;
+  const markers = flagMarkerData(rows, markerY);
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+      <div className="flex items-center justify-between gap-1 flex-wrap">
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">Flow Rate</span>
+        <span className="text-2xs text-muted-foreground shrink-0">m³/h</span>
+      </div>
+      <div className="h-48 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
+              interval="preserveStartEnd" minTickGap={40} />
+            <YAxis domain={[0, domainMax]} width={36} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+            <Tooltip content={<RoFlagTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" iconSize={10}
+              formatter={(v: string) => RO_FLOW_METRICS.find(m => m.label === v)?.label ?? v} />
+            {RO_FLOW_METRICS.map(m => (
+              <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color}
+                strokeWidth={1.75} dot={false} connectNulls activeDot={{ r: 3 }} />
+            ))}
+            {markers.length > 0 && (
+              <Scatter data={markers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" name="Flagged" />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
@@ -849,36 +983,46 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
       const days  = range === 'all' ? 9999 : parseInt(range);
       const since = new Date(Date.now() - days * 86400_000).toISOString();
       const { data } = await (supabase.from('ro_train_readings' as any) as any)
-        .select('reading_datetime,permeate_flow,feed_flow,reject_flow,feed_pressure_psi,reject_pressure_psi,permeate_tds,feed_tds,reject_tds,recovery_pct,permeate_meter_delta,temperature_c')
+        .select('reading_datetime,permeate_flow,feed_flow,reject_flow,feed_pressure_psi,reject_pressure_psi,permeate_tds,feed_tds,reject_tds,recovery_pct,permeate_meter_delta,temperature_c,norm_status')
         .eq('train_id', trainId)
         .gte('reading_datetime', since)
         .order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
+      const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
       const byDate = new Map<string, any>();
       for (const r of data as any[]) {
         const date = (r.reading_datetime as string)?.slice(0, 10) ?? '';
         if (!date) continue;
-        if (!byDate.has(date)) byDate.set(date, { date, _count: 0, perm_vol: 0 });
+        if (!byDate.has(date)) byDate.set(date, { date, _count: 0, _flagged: false, perm_vol: 0 });
         const e = byDate.get(date)!;
+        // Flagged readings never contribute to a day's average/peak/volume —
+        // they're excluded from the underlying numbers, not just hidden visually.
+        if (RO_FLAGGED_STATUSES.has(r.norm_status)) { e._flagged = true; continue; }
         e._count++;
-        const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
         for (const col of avgCols) if (r[col] != null) e[col] = (e[col] ?? 0) + +r[col];
         if (r.permeate_meter_delta != null && +r.permeate_meter_delta > 0) e.perm_vol += +r.permeate_meter_delta;
       }
       return Array.from(byDate.values()).map(e => {
-        const out: any = { date: e.date, permeate_volume: +e.perm_vol.toFixed(2) };
-        const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
-        for (const col of avgCols) if (e[col] != null) out[col] = +(e[col] / e._count).toFixed(2);
+        const out: any = {
+          date: e.date,
+          flagged: e._flagged,
+          permeate_volume: e._count > 0 ? +e.perm_vol.toFixed(2) : null,
+        };
+        for (const col of avgCols) out[col] = e._count > 0 && e[col] != null ? +(e[col] / e._count).toFixed(2) : null;
         return out;
       }).sort((a, b) => a.date.localeCompare(b.date));
     },
     staleTime: 60_000,
   });
 
+  const flaggedCount = rows.filter(r => r.flagged).length;
+
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data'); return; }
-    const cols = ['date','permeate_flow','feed_flow','reject_flow','feed_pressure_psi','permeate_tds','recovery_pct','permeate_volume'];
-    const blob = new Blob([[cols.join(','), ...rows.map(r => cols.map(c => r[c] ?? '').join(','))].join('\n')], { type: 'text/csv' });
+    const cols = ['date','feed_flow','permeate_flow','reject_flow','feed_pressure_psi','permeate_tds','recovery_pct','permeate_volume'];
+    const header = [...cols, 'flagged'];
+    const lines = rows.map(r => [...cols.map(c => r[c] ?? ''), r.flagged ? 'yes' : 'no'].join(','));
+    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
@@ -888,21 +1032,18 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
     toast.success('CSV exported');
   };
 
-  const miniMetrics: { key: string; label: string; unit: string; color: string }[] = [
-    { key: 'permeate_flow',     label: 'Permeate Flow',  unit: 'm³/h', color: 'hsl(174,72%,40%)' },
-    { key: 'feed_pressure_psi', label: 'Feed Pressure',  unit: 'psi',  color: 'hsl(216,72%,46%)' },
-    { key: 'permeate_tds',      label: 'Permeate TDS',   unit: 'ppm',  color: 'hsl(38,84%,52%)'  },
-    { key: 'recovery_pct',      label: 'Recovery',       unit: '%',    color: 'hsl(150,60%,40%)' },
-    { key: 'reject_flow',       label: 'Reject Flow',    unit: 'm³/h', color: 'hsl(0,65%,50%)'   },
-    { key: 'permeate_volume',   label: 'Daily Volume',   unit: 'm³',   color: 'hsl(174,72%,40%)' },
-  ];
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">RO Performance</span>
+          {flaggedCount > 0 && (
+            <span className="flex items-center gap-1 text-2xs text-warn">
+              <AlertTriangle className="h-3 w-3" />
+              {flaggedCount} flagged reading{flaggedCount === 1 ? '' : 's'} excluded — see ◇ markers
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
@@ -926,33 +1067,11 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
         onRetry={refetch}
         className="h-36"
       >
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {miniMetrics.map(m => {
-            const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
-            if (!vals.length) return null;
-            const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-            const max = Math.max(...vals);
-            return (
-              <div key={m.key} className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
-                  <span className="text-2xs text-muted-foreground shrink-0">{m.unit}</span>
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
-                  <span className="text-2xs text-muted-foreground">avg · pk {fmtNum(max)}</span>
-                </div>
-                <div className="h-14 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={rows} margin={{ top: 1, right: 0, bottom: 0, left: 0 }}
-                      barSize={Math.max(2, Math.min(8, 200 / Math.max(rows.length, 1)))}>
-                      <Bar dataKey={m.key} fill={m.color} radius={[1, 1, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            );
-          })}
+        <div className="space-y-2">
+          <RoFlowChart rows={rows} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {RO_OTHER_METRICS.map(m => <RoMiniMetricChart key={m.key} m={m} rows={rows} />)}
+          </div>
         </div>
       </DataState>
     </div>
