@@ -386,14 +386,19 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
 
   // Product meters to treat as "direct volume" for pivot purposes — is_derived
-  // meters (e.g. Mambaling's HAMAS, mirrored from SRP's derived HAMAS locator —
-  // see fn_sweep_derived_meters_for_date) have their current_reading written as
-  // the day's residual volume directly, never a cumulative meter value. Mirrors
-  // directLocatorIds above and ProductSection.tsx's own is_derived branch, which
-  // is why the HAMAS History dialog already shows the correct raw values while
-  // this pivot — previously missing this set entirely — did not: every product
-  // meter fell through to the self-heal (current − previous day) branch below,
-  // producing a meaningless day-over-day diff instead of that day's volume.
+  // mirrored meters such as Mambaling's "HAMAS" (mirrored from SRP's derived
+  // "HAMAS (Mambaling)" locator, see directLocatorIds above).
+  // fn_sweep_derived_meters_for_date() writes each day's already-computed
+  // volume straight into current_reading and pins previous_reading at 0, so
+  // every row stands alone by design — self-heal-diffing consecutive rows'
+  // current_reading (the default computePivotFromReadingsNoCache behavior
+  // once a predecessor has been walked) produces a bogus, often-negative
+  // delta on any day the value dips versus the day before, instead of that
+  // day's true volume. That's exactly what was making HAMAS's Production
+  // column show ~half its days blank and the rest a fraction of its real
+  // volume. See computePivotFromReadingsNoCache above and
+  // ProductSection.tsx's ProductMeterHistoryDialog, which already displays
+  // these meters' current_reading as-is for the same reason.
   const directMeterIds = useMemo(
     () => new Set((productMeters ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id)),
     [productMeters],

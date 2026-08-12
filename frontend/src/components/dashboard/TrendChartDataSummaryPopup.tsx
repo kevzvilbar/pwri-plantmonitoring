@@ -57,8 +57,11 @@ export function DataSummaryPopup({
   // Locators to treat as direct-volume — default_input_mode='direct' or
   // is_derived (e.g. SRP↔Mambaling HAMAS). See buildEntityPivot.
   directLocatorIds?: Set<string>;
-  // Product meters to treat as direct-volume — is_derived (e.g. Mambaling's
-  // HAMAS, mirrored from SRP's derived HAMAS locator). See buildEntityPivot.
+  // Product meters to treat as direct-volume — is_derived mirrored meters
+  // like Mambaling's "HAMAS" (see TrendChart.tsx's _directProductMeterIds).
+  // Same reasoning as directLocatorIds: these meters' current_reading is
+  // already that day's volume, never a cumulative reading to diff against
+  // the prior row. See buildEntityPivot.
   directMeterIds?: Set<string>;
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');

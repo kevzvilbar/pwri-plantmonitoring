@@ -215,25 +215,26 @@ export default function Dashboard() {
   });
 
   // Product meters to treat as "direct volume" for the stat cards below —
-  // is_derived meters (e.g. Mambaling's HAMAS, mirrored from SRP's derived
-  // HAMAS locator) have current_reading written as the day's residual volume
-  // directly, never a cumulative meter value. Mirrors _directLocatorIds above.
-  // Without this, the Production stat card (and TrendChart / DataSummaryModal,
-  // fixed the same way) trust the self-heal current-minus-yesterday branch,
-  // which produces a meaningless day-over-day diff of two independent daily
-  // volumes instead of that day's actual production.
-  const { data: _directMeterIds } = useQuery({
+  // is_derived mirrored meters such as Mambaling's "HAMAS" (mirrored from
+  // SRP's derived "HAMAS (Mambaling)" locator, see _directLocatorIds above).
+  // Same reasoning: fn_sweep_derived_meters_for_date() pins previous_reading
+  // at 0 and writes each day's already-computed volume straight into
+  // current_reading, so these rows have no cumulative chain to diff. Usually
+  // a no-op here since today's/yesterday's window normally holds one row per
+  // meter (falls through to the stored daily_volume, itself correct for
+  // these meters) — but if more than one reading was recorded the same day
+  // (e.g. a correction), the second row would otherwise self-heal-diff
+  // against the first as if it were a rising cumulative meter. Mirrors
+  // DataSummaryModal.tsx's identical fix for its Production pivot.
+  const { data: _directProductMeterIds } = useQuery({
     queryKey: ['dash-meter-direct-ids', plantIds],
     queryFn: async () => {
       if (!plantIds.length) return new Set<string>();
       const { data, error } = await (supabase.from('product_meters' as any) as any)
-        .select('id,is_derived')
-        .in('plant_id', plantIds);
+        .select('id,is_derived').in('plant_id', plantIds);
       if (error) throw error;
       return new Set<string>(
-        (data ?? [])
-          .filter((m: any) => m.is_derived === true)
-          .map((m: any) => m.id as string),
+        (data ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id as string),
       );
     },
     enabled: plantIds.length > 0,
@@ -1087,7 +1088,7 @@ export default function Dashboard() {
     // transient single-day deltas into deltaCache, which would be picked up
     // by DataSummaryModal's multi-day pivot and produce wrong totals.
     const meterTotal = pivotDayTotal(
-      computePivotFromReadingsNoCache(meterReadingsForProduction, 'meter_id', 'daily_volume', _directMeterIds), _todayKey,
+      computePivotFromReadingsNoCache(meterReadingsForProduction, 'meter_id', 'daily_volume', _directProductMeterIds), _todayKey,
     );
     const combined = meterTotal + roPermeateProduction;
     if (combined > 0) return combined;
@@ -1101,7 +1102,7 @@ export default function Dashboard() {
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0);
     return fallbackTotal;
-  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds, _directMeterIds]);
+  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds, _directProductMeterIds]);
 
   const consumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
@@ -1211,10 +1212,10 @@ export default function Dashboard() {
       // plants' product meter so yesterday's total stays comparable to today's.
       computePivotFromReadingsNoCache(
         (yProductMeters ?? []).filter((r: any) => !productExcludedPlantIds.has(r.plant_id)),
-        'meter_id', 'daily_volume', _directMeterIds,
+        'meter_id', 'daily_volume', _directProductMeterIds,
       ), _yesterdayKey,
     ) + yRoPermeateProduction,
-  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, _directMeterIds]);
+  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, _directProductMeterIds]);
 
   const yConsumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.

@@ -448,6 +448,34 @@ export function TrendChart({
     enabled: plantIds.length > 0 && needsProductMeterReadings,
   });
 
+  // Product meters whose is_derived = true — mirrored/residual meters like
+  // Mambaling's "HAMAS" (mirrored from SRP's derived "HAMAS (Mambaling)"
+  // locator — see _directLocatorIds above). fn_sweep_derived_meters_for_date()
+  // writes each day's already-computed volume straight into current_reading
+  // and pins previous_reading at 0, so every row stands alone by design.
+  // Without this set, computeEntityDeltas below diffs consecutive rows'
+  // current_reading as if it were a rising cumulative meter — producing a
+  // bogus, often-negative delta on any day the value happens to dip versus
+  // the day before, instead of that day's true volume. Same root cause and
+  // fix as DataSummaryModal.tsx's prodPivot (Production / Prod vs Consum
+  // tabs) — this mirrors that fix here so the main trend chart agrees with
+  // ProductSection.tsx's own History dialog for these meters.
+  const { data: _directProductMeterIds } = useQuery({
+    queryKey: ['trend-meter-direct-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return new Set<string>();
+      const { data } = await (supabase.from('product_meters' as never) as any)
+        .select('id,is_derived')
+        .in('plant_id', plantIds);
+      return new Set<string>(
+        (data ?? [])
+          .filter((m: any) => m.is_derived === true)
+          .map((m: any) => m.id as string),
+      );
+    },
+    enabled: plantIds.length > 0 && needsProductMeterReadings,
+  });
+
   // Plant names are used for power meter replacement messages and for the permeate-source
   // tooltip note when permeate_is_production = true.
   const { data: plantNames } = useQuery({
@@ -521,30 +549,6 @@ export function TrendChart({
       );
     },
     enabled: plantIds.length > 0 && needsLocReadings,
-  });
-
-  // Product meters whose is_derived = true — e.g. Mambaling's HAMAS, mirrored
-  // from SRP's derived HAMAS locator (see fn_sweep_derived_meters_for_date).
-  // Their current_reading is already the day's residual volume, never a
-  // cumulative meter value. Mirrors _directLocatorIds above. Passed into
-  // computeEntityDeltas/buildEntityPivot below so the chart line, the
-  // Overview table, and the Data Summary popup all agree with ProductSection's
-  // own is_derived branch (which is why the meter's History dialog already
-  // shows correct numbers even where this was missing).
-  const { data: _directMeterIds } = useQuery({
-    queryKey: ['trend-meter-direct-ids', plantIds],
-    queryFn: async () => {
-      if (!plantIds.length) return new Set<string>();
-      const { data } = await (supabase.from('product_meters' as any) as any)
-        .select('id,is_derived')
-        .in('plant_id', plantIds);
-      return new Set<string>(
-        (data ?? [])
-          .filter((m: any) => m.is_derived === true)
-          .map((m: any) => m.id as string),
-      );
-    },
-    enabled: plantIds.length > 0 && needsProductMeterReadings,
   });
 
   const { data: locReadings, isFetching: fetchingLoc, error: errLoc, refetch: refetchLoc } = useQuery({
@@ -1175,7 +1179,7 @@ export function TrendChart({
       (productReadings ?? []).filter((r: any) => !(productExcludedPlants?.has(r.plant_id))),
       'meter_id',
       'daily_volume',
-      { directModeIds: _directMeterIds },
+      { directModeIds: _directProductMeterIds },
     ).forEach(({ r, delta, rawDelta, isMeterReplacement }) => {
       const dt = new Date(r.reading_datetime);
       const key = format(dt, 'MMM d');
@@ -1537,7 +1541,7 @@ export function TrendChart({
     });
   }, [locReadings, wellReadings, productReadings, roReadings, powerReadings, costReadings, powerTariffs,
       billMultiplierMap, powerConfigMap, metric, wellNames, locatorNames, productMeterNames, plantNames,
-      permeateIsProductionPlants, _trainPlantMap, endKey, _directLocatorIds, _directMeterIds]);
+      permeateIsProductionPlants, _trainPlantMap, endKey, _directLocatorIds, _directProductMeterIds]);
 
   // ── trendRows: chartData bucketed to the active granularity (M1 + M4) ────
   // chartData itself stays DAILY, unchanged, always — it's still what feeds
@@ -1748,7 +1752,7 @@ export function TrendChart({
       const sorted = [...(productReadings ?? [])].sort(
         (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
       );
-      const built = buildEntityPivot(sorted, 'meter_id', _directMeterIds);
+      const built = buildEntityPivot(sorted, 'meter_id', _directProductMeterIds);
       pivot = built.pivot; dateKeys = built.dateKeys;
     } else {
       const sorted = [...(locReadings ?? [])].sort(
@@ -1760,7 +1764,7 @@ export function TrendChart({
 
     return buildEntityPivotRows(pivot, dateKeys, visibleEntities, viewGran, startKey, endKey);
   }, [hasConsumptionDrill, drillMode, prodDrillSource, metric, locReadings, productReadings, roReadings,
-      usePermeateForSource, visibleEntities, _directLocatorIds, _directMeterIds, viewGran, startKey, endKey]);
+      usePermeateForSource, visibleEntities, _directLocatorIds, _directProductMeterIds, viewGran, startKey, endKey]);
 
   // ── RO drill helpers ─────────────────────────────────────────────────────
   // Full list of trains found in the fetched roReadings
@@ -3082,7 +3086,7 @@ export function TrendChart({
           plantNames={plantNames}
           roTrainNames={roTrainNames}
           directLocatorIds={_directLocatorIds}
-          directMeterIds={_directMeterIds}
+          directMeterIds={_directProductMeterIds}
         />
       )}
 
