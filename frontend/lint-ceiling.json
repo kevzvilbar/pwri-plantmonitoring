@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 1657,
+  "maxWarnings": 1651,
   "lastUpdated": "2026-08-12",
   "history": [
     {
@@ -36,6 +36,12 @@
       "maxWarnings": 1657,
       "previous": 1641,
       "reason": "Inherited drift, not re-litigated (same situation as the entry above): hamas-production-fix.patch (55e95f8) added a directMeterIds set to DataSummaryModal.tsx/TrendChart.tsx/TrendChartDataSummaryPopup.tsx/Dashboard.tsx -- the same 'is_derived meter as direct-volume' fix that had also been prepared independently on this end -- but its own +16 no-explicit-any warnings (from the new supabase `.from(product_meters as any)` filter/map callbacks building that set, same convention already used for directLocatorIds) were never folded into this file. pwri-dashboard-fixes.patch, sibling-locators-stacked-chart.patch, and hamas-mambaling-same-day-sweep.patch (the three commits after it) added none of their own. This pass's own change -- EntityHistoryChart.tsx: replaced the SIBLING_PALETTE slot that collided with the mother meter's own green (C_PRODUCTION, hue 142) with a rose hue (330) so a sibling locator can no longer render in the same color as the 'Mother Meter' bar/legend entry it sits next to -- added zero new warnings on its own."
+    },
+    {
+      "date": "2026-08-12",
+      "maxWarnings": 1651,
+      "previous": 1657,
+      "reason": "Fixing a regression, not adding one -- net -6. trendchart-weekly-granularity-1.patch (4e3c952) was applied from what looks like a branch that forked before the 1641 entry above landed: it overwrote TrendChartDrill.tsx back to its pre-split, monolithic form (byte-identical to the commit before that split), silently orphaning TrendChartDrillKit.ts (0 importers afterward) and bringing back the 7 react-refresh/only-export-components warnings that split had removed -- the 1657 entry above inherited this without diagnosing it. Re-split TrendChartDrill.tsx (GranularityControl/StackToggle/DrillBreadcrumb only) from TrendChartDrillKit.ts (everything else) again, -7. Also restored Plant Health's Day-to-Hour click-drill (phDayFocus/phFocusedHourlyData/handlePhDayDotActivate), which the same stale-branch overwrite had dropped entirely -- +1 no-explicit-any from phFocusedHourlyData's row-shaped filter callback, same convention as everywhere else in this file. Also fixed a real bug introduced in the same reorganization (zero warning impact): TDS/Recovery's by-train Legend onClick was wired to handleLegendIsolate, which only updates selectedLocatorIds -- irrelevant to by-train, whose visibility depends on selectedTrainIds -- so clicking a train's legend entry silently did nothing. Added handleTrainLegendIsolate (mirrors handleWellLegendIsolate) and pointed both by-train Legends at it."
     }
   ]
 }
