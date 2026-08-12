@@ -66,12 +66,12 @@ export function EntityHistoryChart({
   entityId: string;
   entityType: 'locator' | 'well' | 'product_meter';
   entityName: string;
-  /** From locator.default_input_mode / well.default_input_mode. 'direct' means
-   *  current_reading already IS the period's volume (e.g. HAMAS) — chart that
-   *  value directly instead of Math.max(0, current - previous), which clamps
-   *  every ordinary day-to-day dip to zero and silently discards it from the
-   *  Total/Avg stats. Defaults to 'raw' (existing behavior) for every other
-   *  caller, including all product_meter usage. */
+  /** From locator.default_input_mode / well.default_input_mode, or
+   *  product_meters.is_derived for entityType === 'product_meter'. 'direct'
+   *  means current_reading already IS the period's volume (e.g. HAMAS) —
+   *  chart that value directly instead of Math.max(0, current - previous),
+   *  which clamps every ordinary day-to-day dip to zero and silently
+   *  discards it from the Total/Avg stats. Defaults to 'raw'. */
   defaultInputMode?: 'raw' | 'direct';
   /** Only meaningful for entityType === 'product_meter'. The locators this
    *  mother meter supplies (AssignLocatorsDialog). When present, the chart
@@ -87,7 +87,16 @@ export function EntityHistoryChart({
    *  to a single well's own two series instead of a meter + its locators. */
   isBlendingWell?: boolean;
 }) {
-  const isDirectMode = (entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct';
+  const isDirectMode = (
+    (entityType === 'locator' || entityType === 'well') && defaultInputMode === 'direct'
+  ) || (
+    // Product meters (e.g. Mambaling's HAMAS, mirrored from SRP's derived
+    // HAMAS locator) don't use default_input_mode — their equivalent flag is
+    // product_meters.is_derived, which the caller maps onto this same
+    // defaultInputMode='direct' contract. See ProductMeters.tsx's
+    // EntityHistoryChart invocation.
+    entityType === 'product_meter' && defaultInputMode === 'direct'
+  );
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
   const hasSiblings = entityType === 'product_meter' && !!siblingLocators?.length;
   const hasBlending = entityType === 'well' && !!isBlendingWell;

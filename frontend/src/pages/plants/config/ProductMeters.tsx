@@ -1116,6 +1116,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
                 entityId={m.id}
                 entityType="product_meter"
                 entityName={m.name ?? 'Meter'}
+                defaultInputMode={m.is_derived ? 'direct' : 'raw'}
                 siblingLocators={supplied.map((l: any) => ({
                   id: l.id,
                   name: l.name,

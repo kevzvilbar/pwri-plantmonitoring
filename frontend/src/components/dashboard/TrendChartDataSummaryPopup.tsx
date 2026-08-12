@@ -27,6 +27,7 @@ export function DataSummaryPopup({
   trainPlantMap,
   locatorNames, productMeterNames, wellNames, plantNames, roTrainNames,
   directLocatorIds,
+  directMeterIds,
 }: {
   open: boolean;
   onClose: () => void;
@@ -56,6 +57,9 @@ export function DataSummaryPopup({
   // Locators to treat as direct-volume — default_input_mode='direct' or
   // is_derived (e.g. SRP↔Mambaling HAMAS). See buildEntityPivot.
   directLocatorIds?: Set<string>;
+  // Product meters to treat as direct-volume — is_derived (e.g. Mambaling's
+  // HAMAS, mirrored from SRP's derived HAMAS locator). See buildEntityPivot.
+  directMeterIds?: Set<string>;
 }) {
   const [tab, setTab] = useState<DSMTab>('overview');
 
@@ -228,6 +232,7 @@ export function DataSummaryPopup({
       const { pivot: meterPivot, dateKeys: meterDateKeys } = buildEntityPivot(
         [...prodMeterReadingsForPivot].sort((a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime()),
         'meter_id',
+        directMeterIds,
       );
       meterDateKeys.forEach((dk) => {
         dateKeySet.add(dk);
@@ -260,7 +265,7 @@ export function DataSummaryPopup({
     }
 
     return { pivot, dateKeys: Array.from(dateKeySet).sort() };
-  }, [metric, filteredWellReadings, hasProductMeterData, hasPermeateData, prodMeterReadingsForPivot, permeateReadingsForPivot]);
+  }, [metric, filteredWellReadings, hasProductMeterData, hasPermeateData, prodMeterReadingsForPivot, permeateReadingsForPivot, directMeterIds]);
   const prodPivotMap = prodPivot.pivot;
   const prodDateKeys = prodPivot.dateKeys;
 

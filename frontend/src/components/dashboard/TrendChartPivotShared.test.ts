@@ -68,6 +68,33 @@ describe('buildEntityPivot — stale daily_volume self-heal', () => {
     expect(pivot.get('2026-08-08')!.get('loc-1')).toBe(20);
   });
 
+  it(
+    'reproduces and fixes the HAMAS dashboard bug: an is_derived product ' +
+    'meter (current_reading already IS the day\'s volume, not a cumulative ' +
+    'total) must use directModeIds, or the self-heal path above silently ' +
+    'diffs two unrelated days against each other instead',
+    () => {
+      // Values shaped like the real HAMAS History dialog: a day-to-day
+      // fluctuating volume, not a monotonically increasing meter. Without
+      // directModeIds, Aug 8 self-heals to 5294-4988=306 (a meaningless
+      // day-over-day diff that happened to be positive) and Aug 9 self-heals
+      // to 5244-5294=-50, clamped to 0 -- exactly the pattern of scrambled
+      // numbers and "-" gaps seen in the Data Summary modal's Production tab.
+      const readings = [
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-07'), current_reading: 4988, daily_volume: 4988 },
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-08'), current_reading: 5294, daily_volume: 5294 },
+        { meter_id: 'hamas-mirror', reading_datetime: iso('2026-08-09'), current_reading: 5244, daily_volume: 5244 },
+      ];
+
+      const { pivot } = buildEntityPivot(readings, 'meter_id', new Set(['hamas-mirror']));
+
+      // Each day's own volume, not a diff against the previous day.
+      expect(pivot.get('2026-08-07')!.get('hamas-mirror')).toBe(4988);
+      expect(pivot.get('2026-08-08')!.get('hamas-mirror')).toBe(5294);
+      expect(pivot.get('2026-08-09')!.get('hamas-mirror')).toBe(5244);
+    },
+  );
+
   it('direct-mode entities are unaffected by the self-heal path (no diffing at all)', () => {
     const readings = [
       { locator_id: 'loc-1', reading_datetime: iso('2026-08-06'), current_reading: 40 },

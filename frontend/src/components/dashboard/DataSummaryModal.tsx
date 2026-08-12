@@ -376,7 +376,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
     queryFn: async () => {
       if (!plantIds.length) return [];
       const { data } = await (supabase.from('product_meters' as any) as any)
-        .select('id,name,plant_id').in('plant_id', plantIds);
+        .select('id,name,plant_id,is_derived').in('plant_id', plantIds);
       return (data ?? []) as any[];
     },
     enabled: open && plantIds.length > 0,
@@ -384,6 +384,20 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
   });
 
   const meterIds = useMemo(() => (productMeters ?? []).map((m: any) => m.id), [productMeters]);
+
+  // Product meters to treat as "direct volume" for pivot purposes — is_derived
+  // meters (e.g. Mambaling's HAMAS, mirrored from SRP's derived HAMAS locator —
+  // see fn_sweep_derived_meters_for_date) have their current_reading written as
+  // the day's residual volume directly, never a cumulative meter value. Mirrors
+  // directLocatorIds above and ProductSection.tsx's own is_derived branch, which
+  // is why the HAMAS History dialog already shows the correct raw values while
+  // this pivot — previously missing this set entirely — did not: every product
+  // meter fell through to the self-heal (current − previous day) branch below,
+  // producing a meaningless day-over-day diff instead of that day's volume.
+  const directMeterIds = useMemo(
+    () => new Set((productMeters ?? []).filter((m: any) => m.is_derived === true).map((m: any) => m.id)),
+    [productMeters],
+  );
 
   const { data: prodReadings, isLoading: prodLoading } = useQuery({
     queryKey: ['dsm-prod-readings', meterIds, fromStr, toStr],
@@ -508,7 +522,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
         return pa.localeCompare(pb) || (a.name ?? '').localeCompare(b.name ?? '');
       });
     const includedReadings = (prodReadings ?? []).filter((r: any) => includedMeterIds.has(r.meter_id));
-    const pivot = computePivotFromReadingsNoCache(includedReadings, 'meter_id', 'daily_volume');
+    const pivot = computePivotFromReadingsNoCache(includedReadings, 'meter_id', 'daily_volume', directMeterIds);
 
     const estimatedKeys = new Set<string>();
     includedReadings.forEach((r: any) => {
@@ -527,7 +541,7 @@ export function DataSummaryModal({ open, onClose, plantIds, plantCodeById }: Dat
       cur2.setDate(cur2.getDate() + 1);
     }
     return { dates: allDates2, entities: sortedMeters, pivot, estimatedKeys };
-  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr, productExcludedPlantIds]);
+  }, [productMeters, prodReadings, plantCodeById, fromStr, toStr, productExcludedPlantIds, directMeterIds]);
 
   // ── RO permeate production (plants with permeate_is_production = true) ─────
   // This is the path that respects recalculateTrainDeltas.

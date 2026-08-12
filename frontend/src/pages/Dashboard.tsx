@@ -214,6 +214,31 @@ export default function Dashboard() {
     enabled: plantIds.length > 0,
   });
 
+  // Product meters to treat as "direct volume" for the stat cards below —
+  // is_derived meters (e.g. Mambaling's HAMAS, mirrored from SRP's derived
+  // HAMAS locator) have current_reading written as the day's residual volume
+  // directly, never a cumulative meter value. Mirrors _directLocatorIds above.
+  // Without this, the Production stat card (and TrendChart / DataSummaryModal,
+  // fixed the same way) trust the self-heal current-minus-yesterday branch,
+  // which produces a meaningless day-over-day diff of two independent daily
+  // volumes instead of that day's actual production.
+  const { data: _directMeterIds } = useQuery({
+    queryKey: ['dash-meter-direct-ids', plantIds],
+    queryFn: async () => {
+      if (!plantIds.length) return new Set<string>();
+      const { data, error } = await (supabase.from('product_meters' as any) as any)
+        .select('id,is_derived')
+        .in('plant_id', plantIds);
+      if (error) throw error;
+      return new Set<string>(
+        (data ?? [])
+          .filter((m: any) => m.is_derived === true)
+          .map((m: any) => m.id as string),
+      );
+    },
+    enabled: plantIds.length > 0,
+  });
+
   const { data: _wellIds } = useQuery({
     queryKey: ['dash-well-ids', plantIds],
     queryFn: async () => {
@@ -1062,7 +1087,7 @@ export default function Dashboard() {
     // transient single-day deltas into deltaCache, which would be picked up
     // by DataSummaryModal's multi-day pivot and produce wrong totals.
     const meterTotal = pivotDayTotal(
-      computePivotFromReadingsNoCache(meterReadingsForProduction, 'meter_id', 'daily_volume'), _todayKey,
+      computePivotFromReadingsNoCache(meterReadingsForProduction, 'meter_id', 'daily_volume', _directMeterIds), _todayKey,
     );
     const combined = meterTotal + roPermeateProduction;
     if (combined > 0) return combined;
@@ -1076,7 +1101,7 @@ export default function Dashboard() {
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0);
     return fallbackTotal;
-  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds]);
+  }, [todayProductMeters, _todayKey, roPermeateProduction, todayAllPermeate, _qualityTrainMeta2, permeateProductionPlantIds, productExcludedPlantIds, _directMeterIds]);
 
   const consumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
@@ -1186,10 +1211,10 @@ export default function Dashboard() {
       // plants' product meter so yesterday's total stays comparable to today's.
       computePivotFromReadingsNoCache(
         (yProductMeters ?? []).filter((r: any) => !productExcludedPlantIds.has(r.plant_id)),
-        'meter_id', 'daily_volume',
+        'meter_id', 'daily_volume', _directMeterIds,
       ), _yesterdayKey,
     ) + yRoPermeateProduction,
-  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds]);
+  [yProductMeters, _yesterdayKey, yRoPermeateProduction, productExcludedPlantIds, _directMeterIds]);
 
   const yConsumption = useMemo(() => pivotDayTotal(
     // FIX: Use no-cache variant — see production useMemo comment above.
