@@ -55,6 +55,25 @@ export interface SiblingLocator {
   defaultInputMode?: 'raw' | 'direct';
 }
 
+// Categorical palette for the "Stacked" sibling-locator view, where each
+// locator gets its own segment inside one bar (as opposed to the "Total"
+// view's single C_CONSUMPTION-colored "Locators Total" bar). Kept local and
+// cycled by index — mirrors TrainDetail.tsx's own local PALETTE pattern —
+// rather than reusing the narrow-hue --plant-N variables, since adjacent
+// stacked segments need strong mutual contrast, not brand-consistent
+// subtlety. 8 hues spread across the wheel; cycles via modulo past 8 siblings.
+const SIBLING_PALETTE = [
+  'hsl(199, 89%, 55%)', 'hsl(38, 92%, 55%)', 'hsl(271, 68%, 62%)',
+  'hsl(142, 62%, 45%)', 'hsl(0, 72%, 60%)', 'hsl(24, 90%, 58%)',
+  'hsl(291, 55%, 60%)', 'hsl(199, 40%, 70%)',
+];
+
+/** Recharts dataKey for one sibling locator's stacked bar segment. A raw
+ *  locator UUID works fine as an object key, but prefixing keeps chartData
+ *  fields visually distinct from consumption/siblingTotal/nrw at a glance
+ *  (in the React DevTools tree, CSV export, etc). */
+const siblingDataKey = (locatorId: string) => `sib_${locatorId}`;
+
 export function EntityHistoryChart({
   entityId,
   entityType,
@@ -100,6 +119,12 @@ export function EntityHistoryChart({
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
   const hasSiblings = entityType === 'product_meter' && !!siblingLocators?.length;
   const hasBlending = entityType === 'well' && !!isBlendingWell;
+  // "Total" (default, unchanged behavior): one C_CONSUMPTION bar = the sum
+  // of all sibling locators. "Stacked": that same bar broken into one
+  // segment per locator (SIBLING_PALETTE), so the composition is visible.
+  // Only meaningful with >1 sibling — a single locator looks identical
+  // either way, so the toggle stays hidden in that case (see JSX below).
+  const [siblingStacked, setSiblingStacked] = useState(false);
   const siblingIds = useMemo(() => (siblingLocators ?? []).map(l => l.id), [siblingLocators]);
   const siblingModeById = useMemo(() => {
     const map = new Map<string, 'raw' | 'direct'>();
@@ -207,7 +232,7 @@ export function EntityHistoryChart({
   // across locators instead of kept per-entity. Each locator's own raw/direct
   // input mode is honored (siblingModeById) so a mixed group (e.g. a normal
   // metered zone alongside a direct-input bulk zone) totals correctly.
-  const { data: siblingRows = [], isLoading: siblingsLoading } = useQuery<{ date: string; consumption: number }[]>({
+  const { data: siblingRows = [], isLoading: siblingsLoading } = useQuery<{ date: string; locatorId: string; consumption: number }[]>({
     queryKey: ['entity-history-siblings', entityId, range, siblingIds.join(',')],
     enabled: hasSiblings,
     queryFn: async () => {
@@ -231,7 +256,7 @@ export function EntityHistoryChart({
         } else if (r.current_reading != null && r.previous_reading != null) {
           consumption = Math.max(0, +r.current_reading - +r.previous_reading);
         }
-        return { date: dateStr, consumption };
+        return { date: dateStr, locatorId: r.locator_id as string, consumption };
       }).filter(r => r.date);
     },
     staleTime: 60_000,
@@ -241,6 +266,20 @@ export function EntityHistoryChart({
   const siblingByDate = useMemo(() => {
     const map = new Map<string, number>();
     siblingRows.forEach(r => map.set(r.date, (map.get(r.date) ?? 0) + r.consumption));
+    return map;
+  }, [siblingRows]);
+
+  // Same total, but kept per (date, locator) instead of collapsed to a
+  // single per-date number — feeds the "Stacked" chart view below, where
+  // each sibling locator gets its own bar segment instead of being folded
+  // into one "Locators Total" bar.
+  const siblingByDateAndLocator = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    siblingRows.forEach(r => {
+      if (!map.has(r.date)) map.set(r.date, new Map());
+      const dayMap = map.get(r.date)!;
+      dayMap.set(r.locatorId, (dayMap.get(r.locatorId) ?? 0) + r.consumption);
+    });
     return map;
   }, [siblingRows]);
 
@@ -297,7 +336,12 @@ export function EntityHistoryChart({
     if (hasSiblings) {
       return aggregated.map(r => {
         const siblingTotal = +(siblingByDate.get(r.date) ?? 0).toFixed(2);
-        return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal) };
+        const dayMap = siblingByDateAndLocator.get(r.date);
+        const perLocator: Record<string, number> = {};
+        (siblingLocators ?? []).forEach(l => {
+          perLocator[siblingDataKey(l.id)] = +(dayMap?.get(l.id) ?? 0).toFixed(2);
+        });
+        return { ...r, siblingTotal, nrw: calc.nrw(r.consumption, siblingTotal), ...perLocator };
       });
     }
     if (hasBlending) {
@@ -308,7 +352,7 @@ export function EntityHistoryChart({
       });
     }
     return aggregated;
-  }, [aggregated, hasSiblings, siblingByDate, hasBlending, blendingByDate]);
+  }, [aggregated, hasSiblings, siblingByDate, siblingByDateAndLocator, siblingLocators, hasBlending, blendingByDate]);
 
   // Period NRW% — totals across the whole selected range, mirroring how the
   // Readings/Total/Avg-day stats above are also period aggregates rather
@@ -320,14 +364,18 @@ export function EntityHistoryChart({
 
   const exportCSV = () => {
     if (!aggregated.length) { toast.error('No data to export'); return; }
+    const siblingCols = (siblingLocators ?? []).map(l => l.name.replace(/[,\n]/g, ' '));
     const header = hasSiblings
-      ? 'date,consumption_m3,reading,locators_total_m3,nrw_pct'
+      ? ['date,consumption_m3,reading,locators_total_m3,nrw_pct', ...siblingCols.map(n => `${n}_m3`)].join(',')
       : hasBlending
       ? 'date,raw_water_m3,reading,blended_m3,blended_pct'
       : 'date,consumption_m3,reading';
     const lines = ((hasSiblings || hasBlending) ? chartData : aggregated).map((r: any) =>
       hasSiblings
-        ? `${r.date},${r.consumption},${r.reading ?? ''},${r.siblingTotal ?? ''},${r.nrw ?? ''}`
+        ? [
+            `${r.date},${r.consumption},${r.reading ?? ''},${r.siblingTotal ?? ''},${r.nrw ?? ''}`,
+            ...(siblingLocators ?? []).map(l => r[siblingDataKey(l.id)] ?? ''),
+          ].join(',')
         : hasBlending
         ? `${r.date},${r.consumption},${r.reading ?? ''},${r.blendedVolume ?? ''},${r.blendedPct ?? ''}`
         : `${r.date},${r.consumption},${r.reading ?? ''}`
@@ -486,7 +534,27 @@ export function EntityHistoryChart({
         emptyTitle="No readings in this period"
       >
         {hasSiblings ? (
-          <div className="h-56 w-full">
+          <div className="h-60 w-full flex flex-col">
+            {(siblingLocators?.length ?? 0) > 1 && (
+              <div className="flex items-center justify-end gap-1.5 mb-1 shrink-0">
+                <span className="text-2xs text-muted-foreground">Locators:</span>
+                <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+                  {([
+                    { key: false, label: 'Total' },
+                    { key: true, label: 'Stacked' },
+                  ] as const).map(opt => (
+                    <button
+                      key={String(opt.key)}
+                      onClick={() => setSiblingStacked(opt.key)}
+                      className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${
+                        siblingStacked === opt.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 20, left: 0 }} barSize={Math.max(3, Math.min(16, 400 / chartData.length))}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
@@ -515,10 +583,30 @@ export function EntityHistoryChart({
                 <Tooltip content={customTooltip} />
                 <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.02em', paddingTop: 4 }} />
                 <Bar yAxisId="vol" dataKey="consumption" fill={C_PRODUCTION} name="Mother Meter" radius={[2,2,0,0]} />
-                <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
+                {siblingStacked && (siblingLocators?.length ?? 0) > 1 ? (
+                  // One bar per sibling locator, all sharing stackId="siblings"
+                  // so Recharts renders them as segments of a single column
+                  // (same total height as the "Total" view's one bar) instead
+                  // of side-by-side bars. Only the topmost segment in each
+                  // stack gets rounded corners, matching the single-bar look.
+                  (siblingLocators ?? []).map((l, i) => (
+                    <Bar
+                      key={l.id}
+                      yAxisId="vol"
+                      dataKey={siblingDataKey(l.id)}
+                      stackId="siblings"
+                      fill={SIBLING_PALETTE[i % SIBLING_PALETTE.length]}
+                      name={l.name}
+                      radius={i === (siblingLocators?.length ?? 0) - 1 ? [2, 2, 0, 0] : 0}
+                    />
+                  ))
+                ) : (
+                  <Bar yAxisId="vol" dataKey="siblingTotal" fill={C_CONSUMPTION} name="Locators Total" radius={[2,2,0,0]} />
+                )}
                 <Line yAxisId="pct" type="monotone" dataKey="nrw" stroke={C_NRW} strokeWidth={2} dot={{ r: 2.5, fill: C_NRW, strokeWidth: 0 }} name="NRW %" connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
+            </div>
           </div>
         ) : hasBlending ? (
           <div className="h-56 w-full">
