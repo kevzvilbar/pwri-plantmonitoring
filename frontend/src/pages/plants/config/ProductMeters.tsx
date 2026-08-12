@@ -713,6 +713,21 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
     // staleTime/gcTime: 0 — always fetch fresh from DB on mount; prevents
     // stale null-name rows being served from the in-memory React Query cache
     // after a DB fix. placeholderData removed for the same reason.
+    //
+    // is_derived is selected in every branch below (added while chasing a
+    // "HAMAS's own Historical Consumption chart doesn't match its History
+    // dialog" bug): m.is_derived feeds defaultInputMode={m.is_derived ?
+    // 'direct' : 'raw'} on this file's own <EntityHistoryChart> below, which
+    // is what tells that chart to use HAMAS's current_reading as-is instead
+    // of diffing it against the prior day. Without it here, m.is_derived was
+    // always undefined regardless of the real DB value, so the chart's
+    // "Mother Meter" bars silently fell back to raw delta mode — HAMAS
+    // resets previous_reading to 0 every sweep run (see
+    // fn_sweep_derived_meters_for_date), so that diff is close to
+    // meaningless day to day, which is exactly the small/noisy bars that
+    // didn't line up with the correct values already shown in the History
+    // dialog (ProductSection.tsx, which reads is_derived from its own
+    // separately-scoped query and has always gotten this right).
     staleTime: 0,
     gcTime: 0,
     queryFn: async () => {
@@ -725,7 +740,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
       // Try full schema first (status + sort_order + meter identity columns all present)
       let { data, error } = await supabase
         .from('product_meters' as any)
-        .select(`id, name, status, sort_order, ${METER_COLS}, created_at`)
+        .select(`id, name, status, sort_order, is_derived, ${METER_COLS}, created_at`)
         .eq('plant_id', plant.id)
         .order('sort_order', { ascending: true });
 
@@ -733,7 +748,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
       if (missingMeterCols(error?.message)) {
         ({ data, error } = await supabase
           .from('product_meters' as any)
-          .select('id, name, status, sort_order, created_at')
+          .select('id, name, status, sort_order, is_derived, created_at')
           .eq('plant_id', plant.id)
           .order('sort_order', { ascending: true }));
       }
@@ -742,13 +757,13 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
       if (error?.message?.includes('sort_order')) {
         ({ data, error } = await supabase
           .from('product_meters' as any)
-          .select(`id, name, status, ${METER_COLS}, created_at`)
+          .select(`id, name, status, is_derived, ${METER_COLS}, created_at`)
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true }));
         if (missingMeterCols(error?.message)) {
           ({ data, error } = await supabase
             .from('product_meters' as any)
-            .select('id, name, status, created_at')
+            .select('id, name, status, is_derived, created_at')
             .eq('plant_id', plant.id)
             .order('created_at', { ascending: true }));
         }
@@ -758,7 +773,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
       if (error?.message?.includes('status')) {
         const initialFallback = await supabase
           .from('product_meters' as any)
-          .select(`id, name, ${METER_COLS}, created_at`)
+          .select(`id, name, is_derived, ${METER_COLS}, created_at`)
           .eq('plant_id', plant.id)
           .order('created_at', { ascending: true });
         let fallback = initialFallback.data;
@@ -766,7 +781,7 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
         if (missingMeterCols(fbError?.message)) {
           ({ data: fallback } = await supabase
             .from('product_meters' as any)
-            .select('id, name, created_at')
+            .select('id, name, is_derived, created_at')
             .eq('plant_id', plant.id)
             .order('created_at', { ascending: true }));
         }
