@@ -76,6 +76,20 @@ interface FlaggedRow {
    *  trigger catches but the client-side flow-rate guard didn't, so no
    *  remark was ever required at entry). */
   anomaly_remark?: { text: string; tier: 'needs_remark' | 'critical'; logged_at: string } | null;
+  /** BUGFIX: this reading may instead (or also) have a required "Reason for
+   *  this edit" logged by CorrectionReasonField / logReadingEdit() when it
+   *  was edited via one of the History dialogs (ReadingHistoryDialog.tsx) —
+   *  a completely separate table (reading_edit_audit_log) from
+   *  anomaly_remark above (reading_anomaly_remarks). Previously fetchPending()
+   *  never queried this table at all, so a row with a genuine, mandatorily-
+   *  collected edit reason would still render "No operator remark on file
+   *  for this reading" — technically true of reading_anomaly_remarks, but
+   *  misleading to a reviewer who has no way to know a second, populated
+   *  audit trail exists for the same row. Undefined while loading; null
+   *  once loaded if this row was never edited (or was edited without RLS
+   *  read access to the log — see reading_edit_audit_log's Admin/Manager-
+   *  only SELECT policy, 20260717_reading_edit_audit_log.sql). */
+  edit_reason?: { text: string; actor_label: string | null; logged_at: string } | null;
 }
 
 interface CorrectionRequest {
@@ -572,6 +586,30 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
       return acc;
     }, {} as Record<string, any>);
 
+    // BUGFIX: a reading can also (or instead) carry a required "Reason for
+    // this edit" — a totally different field from the anomaly remark above,
+    // logged by CorrectionReasonField/logReadingEdit() to
+    // reading_edit_audit_log whenever someone edits an already-saved
+    // reading via the History dialogs. This was never queried here, so a
+    // row with a genuine, mandatorily-collected edit reason still rendered
+    // "No operator remark on file for this reading" — misleading, since a
+    // populated audit trail did exist for it, just in a table this page
+    // never looked at. Only 'update' actions carry a reason (see
+    // 20260809_reading_edit_audit_log_reason.sql); ordered oldest→newest so
+    // the reduce keeps the most recent edit's reason per record.
+    const { data: editReasonRows } = await (supabase
+      .from('reading_edit_audit_log' as any)
+      .select('record_id, reason, actor_label, edited_at')
+      .eq('table_name', table)
+      .eq('action', 'update')
+      .in('record_id', rowIds)
+      .not('reason', 'is', null)
+      .order('edited_at', { ascending: true }) as any);
+    const editReasonMap = (editReasonRows ?? []).reduce((acc: Record<string, any>, e: any) => {
+      acc[e.record_id] = { text: e.reason, actor_label: e.actor_label, logged_at: e.edited_at };
+      return acc;
+    }, {} as Record<string, any>);
+
     for (const r of rows) {
       const vol = r.daily_volume ?? (r.previous_reading != null ? r.current_reading - r.previous_reading : null);
       // BUGFIX: this used to classify backward vs. spike by checking
@@ -597,6 +635,7 @@ async function fetchPending(): Promise<{ rows: FlaggedRow[]; truncated: boolean 
         flag_reason: isBackward ? 'backward' : 'spike',
         is_backward: isBackward,
         anomaly_remark: remarkMap[r.id] ?? null,
+        edit_reason: editReasonMap[r.id] ?? null,
       });
     }
   }
@@ -1096,10 +1135,16 @@ function PendingReviewTab() {
                       <div><div className="text-muted-foreground">Delta</div><DeltaBadge vol={row.daily_volume} /></div>
                     </div>
 
-                    {/* Operator's own remark, captured at entry time by
-                        AnomalyRemarkBanner when this reading's flow rate fell
-                        outside the normal band — separate from the reviewer's
-                        note in the Actions row below. */}
+                    {/* Operator's own remark (reading_anomaly_remarks, captured
+                        at entry time by AnomalyRemarkBanner when this reading's
+                        flow rate fell outside the normal band) OR — a separate
+                        source, checked as a fallback — the required "reason for
+                        this edit" (reading_edit_audit_log) logged if this row
+                        was corrected via a History dialog. Distinct from the
+                        reviewer's own note in the Actions row below. A row can
+                        have neither (flagged fresh by the DB trigger, never
+                        edited) — that's the only case that should show the
+                        "nothing on file" message. */}
                     {row.anomaly_remark ? (
                       <div className={cn('flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border',
                         row.anomaly_remark.tier === 'critical'
@@ -1111,8 +1156,19 @@ function PendingReviewTab() {
                           <span className="font-normal text-foreground/90">"{row.anomaly_remark.text}"</span>
                         </span>
                       </div>
+                    ) : row.edit_reason ? (
+                      <div className="flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-info-soft border-info/40 text-info">
+                        <Pencil className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          <span className="font-medium">Edit reason: </span>
+                          <span className="font-normal text-foreground/90">"{row.edit_reason.text}"</span>
+                          {row.edit_reason.actor_label && (
+                            <span className="text-2xs text-muted-foreground"> — {row.edit_reason.actor_label}</span>
+                          )}
+                        </span>
+                      </div>
                     ) : (
-                      <p className="text-2xs text-muted-foreground italic">No operator remark on file for this reading.</p>
+                      <p className="text-2xs text-muted-foreground italic">No operator remark or edit reason on file for this reading.</p>
                     )}
 
                     {/* Chain context (item 4) */}
