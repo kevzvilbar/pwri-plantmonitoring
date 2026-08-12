@@ -87,7 +87,13 @@ export const PERMISSION_MATRIX: Record<ModuleKey, ModulePermissions> = {
   plants: { view: ALL, edit: MANAGE },
   operations: { view: ALL },
   ro_trains: { view: ALL },
-  network_topology: { view: ELEVATED },
+  // edit was dropped by 69bf66a9 ("Roles Panel") while building the custom
+  // roles UI and never restored (unlike `compliance` above, which got a
+  // follow-up patch). Without it, PlantTopology.tsx's `canEdit` — which
+  // gates the whole "Edit Links" connect/disconnect toolbar and custom-node
+  // drag handles — was false for every role, Admin included. Restored to
+  // its original Manager/Admin scope from 14d46150 ("Manual Role 2nd Patch").
+  network_topology: { view: ELEVATED, edit: MANAGE },
   pm_schedule: { view: ALL },
   incidents: { view: ALL },
   // Matches fn_manager_plant_scorecard's own has_role() check exactly

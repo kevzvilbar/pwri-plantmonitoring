@@ -55,6 +55,20 @@ describe('PERMISSION_MATRIX — guardrails', () => {
     expect(hasPermission(['Data Analyst'], 'compliance', 'edit')).toBe(true);
     expect(hasPermission(['Admin'], 'compliance', 'edit')).toBe(true);
   });
+
+  it('Network Topology wiring edits (Edit Links toolbar) are Manager/Admin, not view-only for every elevated role', () => {
+    // Regression guard: 69bf66a9 ("Roles Panel") accidentally dropped the
+    // `edit` action from this module's matrix entry while compliance's got
+    // fixed in a follow-up patch (b35b9cd5) and this one didn't. With no
+    // `edit` key, PlantTopology.tsx's canEdit (usePermission('network_topology',
+    // 'edit')) was false for every role, so the connect/disconnect wiring
+    // toolbar never rendered for anyone, Admin included.
+    expect(hasPermission(['Operator'], 'network_topology', 'edit')).toBe(false);
+    expect(hasPermission(['Technician'], 'network_topology', 'edit')).toBe(false);
+    expect(hasPermission(['Data Analyst'], 'network_topology', 'edit')).toBe(false);
+    expect(hasPermission(['Manager'], 'network_topology', 'edit')).toBe(true);
+    expect(hasPermission(['Admin'], 'network_topology', 'edit')).toBe(true);
+  });
 });
 
 // This block is the executable version of Appendix A. It's deliberately
