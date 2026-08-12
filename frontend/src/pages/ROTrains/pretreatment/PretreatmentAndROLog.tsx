@@ -144,7 +144,6 @@ export function PretreatmentAndROLog() {
   // Without this, the hook would be called with null → then a real ID → causing
   // React error #300 if the hook has conditional logic keyed on the null check.
   const { config: meterCfg } = usePlantMeterConfig(plantId || selectedPlantId || null);
-  const showFeedMeter      = meterCfg.ro_has_feed_meter;
   const showPermeateMeter  = meterCfg.ro_has_permeate_meter;
   const showRejectMeter    = meterCfg.ro_has_reject_meter;
   const showPowerMeter     = meterCfg.ro_has_per_train_electricity;
@@ -169,6 +168,8 @@ export function PretreatmentAndROLog() {
     enabled: !!plantId,
   });
   const train = useMemo(() => trains?.find((t: any) => t.id === trainId), [trains, trainId]);
+  const isSecondaryTrain = (train as any)?.unit_type === 'secondary';
+  const showFeedMeter    = !isSecondaryTrain && meterCfg.ro_has_feed_meter;
 
   // Auto-fill from the train's configured setpoint (Train Settings ->
   // EditTrainDialog) whenever the selected train changes or that value

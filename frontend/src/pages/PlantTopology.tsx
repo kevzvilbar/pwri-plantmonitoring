@@ -231,6 +231,15 @@ const EDITABLE_PAIRS: [NodeType, NodeType][] = [
   ['bulk',       'locator'],
   ['well',       'roTrain'],
   ['roTrain',    'well'],
+  // A primary train's permeate can feed a secondary (2nd-pass) RO train —
+  // e.g. Train 1's permeate -> Potable-RO. See unit_type/feed_source_train_id
+  // on ro_trains (20260813_secondary_ro_train_wiring.sql).
+  ['permeate',   'roTrain'],
+  // A secondary unit's reject can recirculate back into an upstream
+  // permeate stream instead of discharging to waste. See reject_routing on
+  // ro_trains — a recirculate reject was already counted once inside the
+  // upstream train's own permeate meter and must never be double-counted.
+  ['reject',     'permeate'],
   ['solarMeter', 'well'],   ['solarMeter', 'roTrain'],
   ['gridMeter',  'well'],   ['gridMeter',  'roTrain'],
 ];
@@ -320,7 +329,8 @@ function useTopologyData(plantId: string | null) {
         supabase.from('ro_trains').select(
           'id,train_number,name,status,shared_power_meter_group,' +
           'num_afm,num_booster_pumps,num_hp_pumps,num_cartridge_filters,num_controllers,' +
-          'filter_media_type,filter_housing_type'
+          'filter_media_type,filter_housing_type,' +
+          'unit_type,feed_source_train_id,reject_routing'
         ).eq('plant_id', plantId).order('train_number'),
         supabase.from('locators').select('id,name,status,product_meter_id').eq('plant_id', plantId).order('name'),
         (supabase.from('product_meters' as any) as any).select('id,name,status').eq('plant_id', plantId).order('name'),
@@ -423,7 +433,9 @@ function buildTopology(
   // ── RO trains — with equipment detail ──
   roTrains.forEach((r: any) => {
     const detail = buildTrainDetail(r);
-    const trainLabel = r.name ? `Train ${r.train_number} · ${r.name}` : `RO Train ${r.train_number}`;
+    const isSecondary = r.unit_type === 'secondary';
+    const trainLabel = (r.name ? `Train ${r.train_number} · ${r.name}` : `RO Train ${r.train_number}`)
+      + (isSecondary ? ' (2nd pass)' : '');
     nodes.push({
       id: r.id,
       type: 'roTrain',
@@ -432,7 +444,12 @@ function buildTopology(
       group: r.shared_power_meter_group ?? undefined,
       detail,
     });
-    fixedLinks.push({ from: hasFeedMeter ? fmId : ptId, to: r.id });
+    // Secondary units are fed by an upstream train's permeate (an editable
+    // link, seeded as a default below from feed_source_train_id) — not by
+    // the plant's shared feed meter, so skip the usual fixed link for them.
+    if (!isSecondary) {
+      fixedLinks.push({ from: hasFeedMeter ? fmId : ptId, to: r.id });
+    }
   });
 
   // ── Permeate / Reject — one per train ──
@@ -492,6 +509,15 @@ function buildTopology(
   locators.forEach((l: any) => {
     if (l.product_meter_id)
       defaultEditLinks.push({ from: l.product_meter_id, to: l.id, editable: true });
+  });
+
+  roTrains.forEach((r: any) => {
+    if (r.unit_type === 'secondary' && r.feed_source_train_id) {
+      defaultEditLinks.push({ from: `permeate-${r.feed_source_train_id}`, to: r.id, editable: true });
+      if (r.reject_routing === 'recirculate') {
+        defaultEditLinks.push({ from: `reject-${r.id}`, to: `permeate-${r.feed_source_train_id}`, editable: true });
+      }
+    }
   });
 
   const firstGridMeter = hasGrid ? `grid-meter-${plantId}-0` : null;
