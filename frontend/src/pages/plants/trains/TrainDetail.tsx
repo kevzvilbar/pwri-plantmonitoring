@@ -31,12 +31,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet, AlertTriangle, Maximize2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area, Scatter, Legend } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 
 import { PLANT_CHEMICALS } from '../shared';
@@ -844,11 +844,27 @@ export function TrainMetricChart({
 // Readings tagged norm_status = 'pending_review' | 'retracted' (the same spike
 // guard used by PretreatmentAndROLog.tsx and lib/readingGuards.ts) are dropped
 // from every average, peak, and axis domain below, and are surfaced instead as
-// a small ◇ marker on the day they occurred — so one bad meter entry can't
-// silently flatten the rest of the chart, but it also isn't hidden.
+// a small ◇ marker in the detail view — so one bad meter entry can't silently
+// flatten the rest of the chart, but it also isn't hidden.
+//
+// The glance grid matches the original compact layout exactly (6 small cards,
+// no axis). Click a card to open a wider, more detailed chart in a dialog —
+// Permeate Flow and Reject Flow both open the same Feed/Permeate/Reject
+// overlay, since that's one chart, not two.
+
+type RoModalKey = 'flow' | 'feed_pressure_psi' | 'permeate_tds' | 'recovery_pct' | 'permeate_volume';
 
 const RO_FLAGGED_STATUSES = new Set(['pending_review', 'retracted']);
 const RO_FLAG_COLOR = 'hsl(38,92%,50%)';
+
+const RO_GLANCE_METRICS: { key: string; label: string; unit: string; color: string; modalKey: RoModalKey }[] = [
+  { key: 'permeate_flow',     label: 'Permeate Flow', unit: 'm³/h', color: 'hsl(174,72%,40%)', modalKey: 'flow' },
+  { key: 'feed_pressure_psi', label: 'Feed Pressure', unit: 'psi',  color: 'hsl(216,72%,46%)', modalKey: 'feed_pressure_psi' },
+  { key: 'permeate_tds',      label: 'Permeate TDS',  unit: 'ppm',  color: 'hsl(38,84%,52%)',  modalKey: 'permeate_tds' },
+  { key: 'recovery_pct',      label: 'Recovery',      unit: '%',    color: 'hsl(150,60%,40%)', modalKey: 'recovery_pct' },
+  { key: 'reject_flow',       label: 'Reject Flow',   unit: 'm³/h', color: 'hsl(0,65%,50%)',   modalKey: 'flow' },
+  { key: 'permeate_volume',   label: 'Daily Volume',  unit: 'm³',   color: 'hsl(174,72%,40%)', modalKey: 'permeate_volume' },
+];
 
 const RO_FLOW_METRICS: { key: string; label: string; color: string }[] = [
   { key: 'feed_flow',     label: 'Feed',     color: 'hsl(216,72%,46%)' },
@@ -857,11 +873,19 @@ const RO_FLOW_METRICS: { key: string; label: string; color: string }[] = [
 ];
 
 const RO_OTHER_METRICS: { key: string; label: string; unit: string; color: string }[] = [
-  { key: 'feed_pressure_psi', label: 'Feed Pressure', unit: 'psi', color: 'hsl(261,55%,58%)' },
+  { key: 'feed_pressure_psi', label: 'Feed Pressure', unit: 'psi', color: 'hsl(216,72%,46%)' },
   { key: 'permeate_tds',      label: 'Permeate TDS',  unit: 'ppm', color: 'hsl(38,84%,52%)'  },
   { key: 'recovery_pct',      label: 'Recovery',      unit: '%',   color: 'hsl(150,60%,40%)' },
-  { key: 'permeate_volume',   label: 'Daily Volume',  unit: 'm³',  color: 'hsl(203,55%,48%)' },
+  { key: 'permeate_volume',   label: 'Daily Volume',  unit: 'm³',  color: 'hsl(174,72%,40%)' },
 ];
+
+const RO_MODAL_META: Record<RoModalKey, { title: string; unit: string }> = {
+  flow:               { title: 'Flow Rate',      unit: 'm³/h' },
+  feed_pressure_psi:  { title: 'Feed Pressure',  unit: 'psi'  },
+  permeate_tds:       { title: 'Permeate TDS',   unit: 'ppm'  },
+  recovery_pct:       { title: 'Recovery',       unit: '%'    },
+  permeate_volume:    { title: 'Daily Volume',   unit: 'm³'   },
+};
 
 /** Highest clean (non-flagged) value across one or more series, floored so an
  *  all-null range still yields a sane axis instead of NaN/undefined. */
@@ -901,68 +925,111 @@ function RoFlagTooltip({ active, payload, label, unit }: any) {
   );
 }
 
-/** One resized metric card: bar chart + flagged-day markers + axis + tooltip. */
-function RoMiniMetricChart({ m, rows }: { m: typeof RO_OTHER_METRICS[number]; rows: any[] }) {
+/** One compact glance card — same size and style as the original 2×3 grid.
+ *  Clickable: opens the wider, detailed chart for this metric in a dialog. */
+function RoGlanceTile({ m, rows, flaggedCount, onOpen }: {
+  m: typeof RO_GLANCE_METRICS[number];
+  rows: any[];
+  flaggedCount: number;
+  onOpen: () => void;
+}) {
   const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
   if (!vals.length) return null;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const peak = Math.max(...vals);
+  return (
+    <button type="button" onClick={onOpen}
+      className="group relative text-left rounded-lg border bg-muted/20 p-2.5 space-y-1.5 transition-colors hover:border-primary/50 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
+      {flaggedCount > 0 && (
+        <span className="absolute top-2.5 right-2.5 h-1.5 w-1.5 rounded-full"
+          style={{ background: RO_FLAG_COLOR }}
+          title={`${flaggedCount} flagged reading${flaggedCount === 1 ? '' : 's'} in range — click for detail`} />
+      )}
+      <div className="flex items-center justify-between gap-1 pr-3">
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
+        <span className="flex items-center gap-1 text-2xs text-muted-foreground shrink-0">
+          {m.unit}
+          <Maximize2 className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
+        <span className="text-2xs text-muted-foreground">avg · pk {fmtNum(peak)}</span>
+      </div>
+      <div className="h-14 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 1, right: 0, bottom: 0, left: 0 }}
+            barSize={Math.max(2, Math.min(8, 200 / Math.max(rows.length, 1)))}>
+            <Bar dataKey={m.key} fill={m.color} radius={[1, 1, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </button>
+  );
+}
+
+/** Detail view for a single metric — wider, with a real axis and flagged markers.
+ *  Opens in the dialog when a glance tile (other than the two flow tiles) is clicked. */
+function RoDetailMetricChart({ m, rows }: { m: typeof RO_OTHER_METRICS[number]; rows: any[] }) {
+  const vals = rows.map(r => r[m.key]).filter((v): v is number => v != null);
+  if (!vals.length) return <p className="py-10 text-center text-sm text-muted-foreground">No readings in this period.</p>;
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   const peak = Math.max(...vals);
   const domainMax = Math.max(peak * 1.15, 1);
   const markerY = Math.max(peak * 1.08, domainMax * 0.9);
   const markers = flagMarkerData(rows, markerY);
   return (
-    <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
-      <div className="flex items-center justify-between gap-1">
-        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide truncate">{m.label}</span>
-        <span className="text-2xs text-muted-foreground shrink-0">{m.unit}</span>
+    <div className="space-y-3">
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
+        <span className="text-sm text-muted-foreground">{m.unit} avg · peak {fmtNum(peak)}</span>
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-sm font-mono font-semibold" style={{ color: m.color }}>{fmtNum(avg)}</span>
-        <span className="text-2xs text-muted-foreground">avg · pk {fmtNum(peak)}</span>
-      </div>
-      <div className="h-24 w-full">
+      <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
-            barSize={Math.max(2, Math.min(10, 220 / Math.max(rows.length, 1)))}>
-            <XAxis dataKey="date" hide />
-            <YAxis domain={[0, domainMax]} width={28} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+          <ComposedChart data={rows} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}
+            barSize={Math.max(3, Math.min(20, 520 / Math.max(rows.length, 1)))}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
+              tickFormatter={(d: string) => format(parseISO(d), 'MMM d')} interval="preserveStartEnd" minTickGap={50} />
+            <YAxis domain={[0, domainMax]} width={44} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip content={<RoFlagTooltip unit={m.unit} />} />
-            <Bar dataKey={m.key} fill={m.color} radius={[1, 1, 0, 0]} />
+            <Bar dataKey={m.key} fill={m.color} radius={[2, 2, 0, 0]} />
             {markers.length > 0 && <Scatter data={markers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" legendType="none" />}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {markers.length > 0 && (
+        <p className="flex items-center gap-1 text-xs text-warn">
+          <AlertTriangle className="h-3 w-3" />
+          {markers.length} flagged reading{markers.length === 1 ? '' : 's'} in this period — excluded from the average above.
+        </p>
+      )}
     </div>
   );
 }
 
-/** The combined Feed / Permeate / Reject flow chart — this is the piece the
- *  old 2×3 grid never had (feed flow wasn't charted anywhere), and the reason
- *  for this enhancement in the first place. */
+/** Combined Feed / Permeate / Reject flow detail — this is the piece the old
+ *  grid never had (feed flow wasn't charted anywhere). Opens when either the
+ *  Permeate Flow or Reject Flow glance tile is clicked. */
 function RoFlowChart({ rows }: { rows: any[] }) {
   const flowKeys = RO_FLOW_METRICS.map(m => m.key);
   const domainMax = Math.max(cleanMax(rows, flowKeys) * 1.15, 1);
   const markerY = domainMax * 0.94;
   const markers = flagMarkerData(rows, markerY);
   return (
-    <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
-      <div className="flex items-center justify-between gap-1 flex-wrap">
-        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">Flow Rate</span>
-        <span className="text-2xs text-muted-foreground shrink-0">m³/h</span>
-      </div>
-      <div className="h-48 w-full">
+    <div className="space-y-3">
+      <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <ComposedChart data={rows} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
-              interval="preserveStartEnd" minTickGap={40} />
-            <YAxis domain={[0, domainMax]} width={36} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
+              tickFormatter={(d: string) => format(parseISO(d), 'MMM d')} interval="preserveStartEnd" minTickGap={50} />
+            <YAxis domain={[0, domainMax]} width={44} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip content={<RoFlagTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" iconSize={10}
-              formatter={(v: string) => RO_FLOW_METRICS.find(m => m.label === v)?.label ?? v} />
+            <Legend wrapperStyle={{ fontSize: 12 }} iconType="line" iconSize={12} />
             {RO_FLOW_METRICS.map(m => (
               <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color}
-                strokeWidth={1.75} dot={false} connectNulls activeDot={{ r: 3 }} />
+                strokeWidth={2} dot={false} connectNulls activeDot={{ r: 4 }} />
             ))}
             {markers.length > 0 && (
               <Scatter data={markers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" name="Flagged" />
@@ -970,12 +1037,19 @@ function RoFlowChart({ rows }: { rows: any[] }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {markers.length > 0 && (
+        <p className="flex items-center gap-1 text-xs text-warn">
+          <AlertTriangle className="h-3 w-3" />
+          {markers.length} flagged reading{markers.length === 1 ? '' : 's'} in this period — excluded from these averages.
+        </p>
+      )}
     </div>
   );
 }
 
 export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
   const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const [openMetric, setOpenMetric] = useState<RoModalKey | null>(null);
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['train-ro-detail', trainId, range],
@@ -1016,6 +1090,7 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
   });
 
   const flaggedCount = rows.filter(r => r.flagged).length;
+  const openedOtherMetric = openMetric && openMetric !== 'flow' ? RO_OTHER_METRICS.find(m => m.key === openMetric) : null;
 
   const exportCSV = () => {
     if (!rows.length) { toast.error('No data'); return; }
@@ -1041,7 +1116,7 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
           {flaggedCount > 0 && (
             <span className="flex items-center gap-1 text-2xs text-warn">
               <AlertTriangle className="h-3 w-3" />
-              {flaggedCount} flagged reading{flaggedCount === 1 ? '' : 's'} excluded — see ◇ markers
+              {flaggedCount} flagged — click a chart for detail
             </span>
           )}
         </div>
@@ -1067,13 +1142,25 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
         onRetry={refetch}
         className="h-36"
       >
-        <div className="space-y-2">
-          <RoFlowChart rows={rows} />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            {RO_OTHER_METRICS.map(m => <RoMiniMetricChart key={m.key} m={m} rows={rows} />)}
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {RO_GLANCE_METRICS.map(m => (
+            <RoGlanceTile key={m.key} m={m} rows={rows} flaggedCount={flaggedCount} onOpen={() => setOpenMetric(m.modalKey)} />
+          ))}
         </div>
       </DataState>
+
+      <Dialog open={!!openMetric} onOpenChange={(o) => !o && setOpenMetric(null)}>
+        <DialogContent className="max-w-3xl w-[95vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>{openMetric ? RO_MODAL_META[openMetric].title : ''} · {trainLabel}</span>
+              {openMetric && <span className="text-xs font-normal text-muted-foreground">{RO_MODAL_META[openMetric].unit}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          {openMetric === 'flow' && <RoFlowChart rows={rows} />}
+          {openedOtherMetric && <RoDetailMetricChart m={openedOtherMetric} rows={rows} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
