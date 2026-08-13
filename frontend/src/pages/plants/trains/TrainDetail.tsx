@@ -572,23 +572,98 @@ export function EditTrainDialog({
   );
 }
 
+// ─── useRangeFilter / RangeControls ──────────────────────────────────────────
+// Shared date-range control for every Train Detail chart (Production History,
+// RO Performance, Pretreatment AFM/Booster/HPP/CF). Adds a "Custom" option
+// next to the existing rolling 30d/90d/180d/All presets so a user can pin an
+// exact from/to window — e.g. to look at one specific week or the date span
+// of a maintenance incident — instead of only ever scrolling back N days from
+// today. All seven chart components below previously duplicated the same
+// preset-only button row; this factors it out so "adjustable dates" is one
+// change instead of seven.
+type RangePreset = '30' | '90' | '180' | 'all' | 'custom';
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function useRangeFilter(initial: RangePreset = '30') {
+  const [range, setRange]           = useState<RangePreset>(initial);
+  const [customFrom, setCustomFrom] = useState<string>(() => isoDate(new Date(Date.now() - 30 * 86_400_000)));
+  const [customTo, setCustomTo]     = useState<string>(() => isoDate(new Date()));
+
+  // Lower bound sent to Supabase .gte('reading_datetime', since).
+  const since = useMemo(() => {
+    if (range === 'custom') return customFrom ? `${customFrom}T00:00:00.000Z` : new Date(0).toISOString();
+    const days = range === 'all' ? 9999 : parseInt(range, 10);
+    return new Date(Date.now() - days * 86_400_000).toISOString();
+  }, [range, customFrom, customTo]);
+
+  // Upper bound — only Custom needs one; the rolling presets always run
+  // through "now", so callers should skip the .lte(...) clause when this
+  // is null rather than pass a synthetic "today" bound.
+  const until = range === 'custom' && customTo ? `${customTo}T23:59:59.999Z` : null;
+
+  // Stable, serializable React Query key fragment — changes whenever the
+  // *effective* window changes, not just when the preset label does, so a
+  // from/to edit while already on Custom correctly triggers a refetch.
+  const cacheKey = range === 'custom' ? `custom:${customFrom}:${customTo}` : range;
+
+  return { range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, since, until, cacheKey };
+}
+type RangeFilter = ReturnType<typeof useRangeFilter>;
+
+/** Preset pills + "Custom" toggle with from/to date inputs — drop-in
+ *  replacement for the plain 30/90/180/All button row every Train Detail
+ *  chart used to hardcode inline. */
+function RangeControls({ rf }: { rf: RangeFilter }) {
+  const today = useMemo(() => isoDate(new Date()), []);
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+        {(['30', '90', '180', 'all'] as const).map(r => (
+          <button key={r} onClick={() => rf.setRange(r)}
+            className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${rf.range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+            {r === 'all' ? 'All' : `${r}d`}
+          </button>
+        ))}
+        <button onClick={() => rf.setRange('custom')}
+          data-testid="range-custom"
+          className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${rf.range === 'custom' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
+          Custom
+        </button>
+      </div>
+      {rf.range === 'custom' && (
+        <div className="flex items-center gap-1">
+          <Input type="date" value={rf.customFrom} max={rf.customTo || today}
+            onChange={(e) => rf.setCustomFrom(e.target.value)}
+            className="h-6 w-[124px] text-2xs px-1.5" data-testid="range-custom-from" />
+          <span className="text-2xs text-muted-foreground">→</span>
+          <Input type="date" value={rf.customTo} min={rf.customFrom} max={today}
+            onChange={(e) => rf.setCustomTo(e.target.value)}
+            className="h-6 w-[124px] text-2xs px-1.5" data-testid="range-custom-to" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Train History Chart ─────────────────────────────────────────────────────
 // Queries ro_train_readings for daily production volume and renders a bar chart.
 
 export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<{ date: string; volume: number }[]>({
-    queryKey: ['train-history', trainId, range],
+    queryKey: ['train-history', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86400_000).toISOString();
-      const { data } = await supabase
+      let query = supabase
         .from('ro_train_readings')
         .select('reading_datetime, permeate_flow, product_flow, net_production')
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
 
       // Aggregate per day — use permeate_flow or product_flow or net_production
       const byDate = new Map<string, number>();
@@ -622,14 +697,7 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
           <span className="text-sm font-semibold">Production History</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            {(['30','90','180','all'] as const).map(r => (
-              <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-                {r === 'all' ? 'All' : `${r}d`}
-              </button>
-            ))}
-          </div>
+          <RangeControls rf={rf} />
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV} title="Export CSV">
             <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
           </Button>
@@ -693,19 +761,18 @@ export function TrainMetricChart({
   title: string;
   metrics: TrainMetricDef[];
 }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
   const cols = ['reading_datetime', ...metrics.map(m => m.key)].join(',');
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['train-metric', trainId, metrics.map(m => m.key).join('-'), range],
+    queryKey: ['train-metric', trainId, metrics.map(m => m.key).join('-'), rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86400_000).toISOString();
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+      let query = (supabase.from('ro_train_readings' as any) as any)
         .select(cols)
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
       // Aggregate per day — average readings for that day
       const byDate = new Map<string, any>();
@@ -773,14 +840,7 @@ export function TrainMetricChart({
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            {(['30', '90', '180', 'all'] as const).map(r => (
-              <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-                {r === 'all' ? 'All' : `${r}d`}
-              </button>
-            ))}
-          </div>
+          <RangeControls rf={rf} />
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
             <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
           </Button>
@@ -1010,12 +1070,33 @@ function RoDetailMetricChart({ m, rows }: { m: typeof RO_OTHER_METRICS[number]; 
 
 /** Combined Feed / Permeate / Reject flow detail — this is the piece the old
  *  grid never had (feed flow wasn't charted anywhere). Opens when either the
- *  Permeate Flow or Reject Flow glance tile is clicked. */
+ *  Permeate Flow or Reject Flow glance tile is clicked.
+ *
+ *  Interactive: clicking a legend entry (Feed / Permeate / Reject / Flagged)
+ *  toggles that line on/off, so a user can isolate one or two series instead
+ *  of always looking at all three overlaid — the Y axis rescales to whatever
+ *  is still visible rather than staying pinned to the full-set peak. */
 function RoFlowChart({ rows }: { rows: any[] }) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggleSeries = (key: string) =>
+    setHidden(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
   const flowKeys = RO_FLOW_METRICS.map(m => m.key);
-  const domainMax = Math.max(cleanMax(rows, flowKeys) * 1.15, 1);
+  const visibleFlowKeys = flowKeys.filter(k => !hidden.has(k));
+  // If the user has hidden every line, fall back to the full-set peak so the
+  // axis doesn't collapse to a meaningless [0,1] domain.
+  const domainMax = Math.max(cleanMax(rows, visibleFlowKeys.length ? visibleFlowKeys : flowKeys) * 1.15, 1);
   const markerY = domainMax * 0.94;
+  // Hiding the "Flagged" legend entry only hides the ◇ markers themselves —
+  // the footnote below still reflects the real exclusion, since averages
+  // are computed excluding flagged rows regardless of what's on screen.
   const markers = flagMarkerData(rows, markerY);
+  const shownMarkers = hidden.has('flagged') ? [] : markers;
+
   return (
     <div className="space-y-3">
       <div className="h-72 w-full">
@@ -1026,17 +1107,29 @@ function RoFlowChart({ rows }: { rows: any[] }) {
               tickFormatter={(d: string) => format(parseISO(d), 'MMM d')} interval="preserveStartEnd" minTickGap={50} />
             <YAxis domain={[0, domainMax]} width={44} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip content={<RoFlagTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 12 }} iconType="line" iconSize={12} />
+            <Legend
+              wrapperStyle={{ fontSize: 12, cursor: 'pointer' }}
+              iconType="line"
+              iconSize={12}
+              onClick={(entry: any) => { if (entry?.dataKey) toggleSeries(entry.dataKey); }}
+              formatter={(value: string, entry: any) => {
+                const isHidden = entry?.dataKey && hidden.has(entry.dataKey as string);
+                return (
+                  <span style={{ opacity: isHidden ? 0.4 : 1, textDecoration: isHidden ? 'line-through' : 'none' }}>
+                    {value}
+                  </span>
+                );
+              }}
+            />
             {RO_FLOW_METRICS.map(m => (
               <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color}
-                strokeWidth={2} dot={false} connectNulls activeDot={{ r: 4 }} />
+                strokeWidth={2} dot={false} connectNulls activeDot={{ r: 4 }} hide={hidden.has(m.key)} />
             ))}
-            {markers.length > 0 && (
-              <Scatter data={markers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" name="Flagged" />
-            )}
+            <Scatter data={shownMarkers} dataKey="y" fill={RO_FLAG_COLOR} shape="diamond" name="Flagged" hide={hidden.has('flagged')} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      <p className="text-2xs text-muted-foreground">Click Feed, Permeate, or Reject in the legend to show or hide that line.</p>
       {markers.length > 0 && (
         <p className="flex items-center gap-1 text-xs text-warn">
           <AlertTriangle className="h-3 w-3" />
@@ -1048,19 +1141,18 @@ function RoFlowChart({ rows }: { rows: any[] }) {
 }
 
 export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; trainLabel: string }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
   const [openMetric, setOpenMetric] = useState<RoModalKey | null>(null);
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['train-ro-detail', trainId, range],
+    queryKey: ['train-ro-detail', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86400_000).toISOString();
-      const { data } = await (supabase.from('ro_train_readings' as any) as any)
+      let query = (supabase.from('ro_train_readings' as any) as any)
         .select('reading_datetime,permeate_flow,feed_flow,reject_flow,feed_pressure_psi,reject_pressure_psi,permeate_tds,feed_tds,reject_tds,recovery_pct,permeate_meter_delta,temperature_c,norm_status')
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
       const avgCols = ['permeate_flow','feed_flow','reject_flow','feed_pressure_psi','reject_pressure_psi','permeate_tds','feed_tds','reject_tds','recovery_pct','temperature_c'];
       const byDate = new Map<string, any>();
@@ -1121,14 +1213,7 @@ export function TrainRODetailCharts({ trainId, trainLabel }: { trainId: string; 
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-            {(['30', '90', '180', 'all'] as const).map(r => (
-              <button key={r} onClick={() => setRange(r)}
-                className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-                {r === 'all' ? 'All' : `${r}d`}
-              </button>
-            ))}
-          </div>
+          <RangeControls rf={rf} />
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportCSV}>
             <Download className="h-3 w-3" /><span className="hidden sm:inline">Export</span>
           </Button>
@@ -1176,19 +1261,18 @@ export function PretreatAFMChart({
   trainId: string;
   mediaType?: string;
 }) {
-  const [range, setRange]       = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
   const [view, setView]         = useState<'pressure' | 'backwash'>('pressure');
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['pretreat-afm', trainId, range],
+    queryKey: ['pretreat-afm', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86_400_000).toISOString();
-      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      let query = (supabase.from('ro_pretreatment_readings' as any) as any)
         .select('reading_datetime,afm_units,mmf_readings,backwash_start,backwash_end')
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
 
       const byDate = new Map<string, any>();
@@ -1271,18 +1355,6 @@ export function PretreatAFMChart({
     );
   };
 
-  const RangeBar = () => (
-    <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-      {(['30', '90', '180', 'all'] as const).map(r => (
-        <button key={r} onClick={() => setRange(r)}
-          className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
-            ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-          {r === 'all' ? 'All' : `${r}d`}
-        </button>
-      ))}
-    </div>
-  );
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1301,7 +1373,7 @@ export function PretreatAFMChart({
               </button>
             ))}
           </div>
-          <RangeBar />
+          <RangeControls rf={rf} />
         </div>
       </div>
 
@@ -1415,18 +1487,17 @@ export function PretreatAFMChart({
 // Queries ro_pretreatment_readings → booster_pumps JSONB.
 // Shows target_pressure_psi (psi mode) and/or target_hz (Hz mode).
 export function PretreatBoosterChart({ trainId }: { trainId: string }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['pretreat-booster', trainId, range],
+    queryKey: ['pretreat-booster', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86_400_000).toISOString();
-      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      let query = (supabase.from('ro_pretreatment_readings' as any) as any)
         .select('reading_datetime,booster_pumps')
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
 
       const byDate = new Map<string, any>();
@@ -1481,15 +1552,7 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
           <span className="text-sm font-semibold">Booster Pump — Target Setting</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
-        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-          {(['30', '90', '180', 'all'] as const).map(r => (
-            <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
-                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-              {r === 'all' ? 'All' : `${r}d`}
-            </button>
-          ))}
-        </div>
+        <RangeControls rf={rf} />
       </div>
 
       {rows.length > 0 && (
@@ -1560,23 +1623,22 @@ export function PretreatBoosterChart({ trainId }: { trainId: string }) {
 // Dual-source: hpp_target_pressure_psi from ro_pretreatment_readings (target)
 // overlaid with feed_pressure_psi from ro_train_readings (achieved).
 export function PretreatHPPChart({ trainId }: { trainId: string }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['pretreat-hpp', trainId, range],
+    queryKey: ['pretreat-hpp', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      let ptQuery = (supabase.from('ro_pretreatment_readings' as any) as any)
+        .select('reading_datetime,hpp_target_pressure_psi')
+        .eq('train_id', trainId).gte('reading_datetime', rf.since);
+      let roQuery = (supabase.from('ro_train_readings' as any) as any)
+        .select('reading_datetime,feed_pressure_psi,reject_pressure_psi')
+        .eq('train_id', trainId).gte('reading_datetime', rf.since);
+      if (rf.until) { ptQuery = ptQuery.lte('reading_datetime', rf.until); roQuery = roQuery.lte('reading_datetime', rf.until); }
 
       const [ptRes, roRes] = await Promise.all([
-        (supabase.from('ro_pretreatment_readings' as any) as any)
-          .select('reading_datetime,hpp_target_pressure_psi')
-          .eq('train_id', trainId).gte('reading_datetime', since)
-          .order('reading_datetime', { ascending: true }),
-        (supabase.from('ro_train_readings' as any) as any)
-          .select('reading_datetime,feed_pressure_psi,reject_pressure_psi')
-          .eq('train_id', trainId).gte('reading_datetime', since)
-          .order('reading_datetime', { ascending: true }),
+        ptQuery.order('reading_datetime', { ascending: true }),
+        roQuery.order('reading_datetime', { ascending: true }),
       ]);
 
       const byDate = new Map<string, any>();
@@ -1633,15 +1695,7 @@ export function PretreatHPPChart({ trainId }: { trainId: string }) {
           <span className="text-sm font-semibold">HPP — Target vs Actual Pressure</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
-        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-          {(['30', '90', '180', 'all'] as const).map(r => (
-            <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
-                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-              {r === 'all' ? 'All' : `${r}d`}
-            </button>
-          ))}
-        </div>
+        <RangeControls rf={rf} />
       </div>
 
       {rows.length > 0 && (
@@ -1723,18 +1777,17 @@ export function PretreatCFChart({
   trainId: string;
   filterType?: string;
 }) {
-  const [range, setRange] = useState<'30' | '90' | '180' | 'all'>('30');
+  const rf = useRangeFilter();
 
   const { data: rows = [], isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['pretreat-cf', trainId, range],
+    queryKey: ['pretreat-cf', trainId, rf.cacheKey],
     queryFn: async () => {
-      const days  = range === 'all' ? 9999 : parseInt(range);
-      const since = new Date(Date.now() - days * 86_400_000).toISOString();
-      const { data } = await (supabase.from('ro_pretreatment_readings' as any) as any)
+      let query = (supabase.from('ro_pretreatment_readings' as any) as any)
         .select('reading_datetime,cartridge_filter_housings')
         .eq('train_id', trainId)
-        .gte('reading_datetime', since)
-        .order('reading_datetime', { ascending: true });
+        .gte('reading_datetime', rf.since);
+      if (rf.until) query = query.lte('reading_datetime', rf.until);
+      const { data } = await query.order('reading_datetime', { ascending: true });
       if (!data?.length) return [];
 
       const byDate = new Map<string, any>();
@@ -1789,15 +1842,7 @@ export function PretreatCFChart({
           <span className="text-sm font-semibold">{label} — In / Out / ΔP</span>
           <span className="text-xs text-muted-foreground">(daily avg)</span>
         </div>
-        <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
-          {(['30', '90', '180', 'all'] as const).map(r => (
-            <button key={r} onClick={() => setRange(r)}
-              className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors
-                ${range === r ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}>
-              {r === 'all' ? 'All' : `${r}d`}
-            </button>
-          ))}
-        </div>
+        <RangeControls rf={rf} />
       </div>
 
       {rows.length > 0 && (
