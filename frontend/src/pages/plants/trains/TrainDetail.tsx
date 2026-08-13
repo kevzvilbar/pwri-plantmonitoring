@@ -2538,7 +2538,7 @@ export function TrainOperatorLogModal({
                           : <span className="text-muted-foreground/30">—</span>}
                       </td>
                       {/* Permeate meter */}
-                      <td className="px-2 py-2 text-right font-mono text-xs">{fmtVal(r.permeate_meter, 'm³')}</td>
+                      <td className="px-2 py-2 text-right font-mono text-xs">{fmtVal(r.permeate_meter)}</td>
                       {/* Δ m³ — prefer in-memory delta (computed from corrected permeate_meter)
                            over the stored permeate_meter_delta, which may have been written
                            before DataAnalysis corrected the underlying meter reading. */}

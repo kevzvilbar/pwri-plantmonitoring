@@ -532,10 +532,10 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         <td className="px-2 py-2 text-right">{fmtVal(r.chlorine_residual_mg_l, 'mg/L')}</td>
                         <td className="px-2 py-2 text-right">{fmtVal(r.recovery_pct, '%')}</td>
                         <td className="px-2 py-2 text-right font-mono text-xs">
-                          {r.feed_meter != null ? <span>{Number(r.feed_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                          {r.feed_meter != null ? Number(r.feed_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-xs">
-                          {r.permeate_meter != null ? <span>{Number(r.permeate_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                          {r.permeate_meter != null ? Number(r.permeate_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className={cn('px-2 py-2 text-right font-mono text-xs', isRepl && 'text-kpi-solar')}>
                           {isRepl ? <span className="text-kpi-solar font-semibold">★ 0</span>
@@ -543,7 +543,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                             : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-xs">
-                          {r.reject_meter != null ? <span>{Number(r.reject_meter).toLocaleString()}<span className="text-muted-foreground/60 ml-0.5 text-3xs">m³</span></span> : <span className="text-muted-foreground/30">—</span>}
+                          {r.reject_meter != null ? Number(r.reject_meter).toLocaleString() : <span className="text-muted-foreground/30">—</span>}
                         </td>
                         <td className={cn('px-2 py-2 text-right font-mono text-xs', r.is_reject_meter_replacement && 'text-kpi-solar')}>
                           {(() => {
