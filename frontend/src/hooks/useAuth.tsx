@@ -63,6 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Stable ref so effects never re-run just because Zustand recreated the setter
   const setActiveOperatorIdRef = useRef(useAppStore.getState().setActiveOperatorId);
 
+  // Tracks the currently signed-in user id so onAuthStateChange can tell a
+  // genuine sign-in apart from a same-user event (TOKEN_REFRESHED, etc.).
+  const userIdRef = useRef<string | null>(null);
+
   const loadProfileAndRoles = async (uid: string) => {
     const [{ data: prof }, { data: roleRows }] = await Promise.all([
       supabase.from('user_profiles').select('*').eq('id', uid).maybeSingle(),
@@ -96,12 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSession(sess);
       setUser(sess?.user ?? null);
+
       if (sess?.user) {
+        // Supabase's autoRefreshToken fires TOKEN_REFRESHED (and can re-fire
+        // SIGNED_IN) whenever the tab/window regains focus or visibility —
+        // not just on a genuine login. Previously every one of those events
+        // set loading=true and re-fetched profile/roles, which made
+        // ProtectedRoute's full-screen "Loading…" flash over the whole app
+        // any time the user switched browser tabs, apps, or window focus.
+        // Skip that work when it's the same user we already have loaded.
+        const isSameUser = sess.user.id === userIdRef.current;
+        userIdRef.current = sess.user.id;
+        if (isSameUser) return;
+
         setLoading(true);
         setTimeout(() => {
           loadProfileAndRoles(sess.user.id).finally(() => setLoading(false));
         }, 0);
       } else {
+        userIdRef.current = null;
         setProfile(null);
         setOperatorProfile(null);
         setActiveOperatorIdRef.current(null); // use ref, not reactive setter
@@ -114,8 +131,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
       setSession(sess);
       setUser(sess?.user ?? null);
-      if (sess?.user) loadProfileAndRoles(sess.user.id).finally(() => setLoading(false));
-      else setLoading(false);
+      if (sess?.user) {
+        userIdRef.current = sess.user.id;
+        loadProfileAndRoles(sess.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
     });
 
     return () => subscription.subscription.unsubscribe();
