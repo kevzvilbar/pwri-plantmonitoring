@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
@@ -6,11 +6,21 @@ import { useAppStore } from '@/store/appStore';
 export function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
-  // Keep the same behaviour as before: auto-select global plant when component mounts
-  // but intentionally exclude onChange from deps to avoid infinite loops when parents
-  // pass inline callbacks.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value]);
+  // Mirror the "universal" TopBar plant selection into this page's local
+  // value whenever it CHANGES — not just once on mount. The old `!value`
+  // guard only auto-selected the first time, so switching the TopBar
+  // dropdown after a page already had a local value did nothing until the
+  // page/tab remounted (e.g. navigating away and back) — the TopBar looked
+  // unresponsive. lastSyncedRef lets a manual local pick still stick
+  // between TopBar changes; onChange stays out of the deps array (as
+  // before) so parents passing an inline/unstable callback don't loop.
+  const lastSyncedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedPlantId || selectedPlantId === lastSyncedRef.current) return;
+    lastSyncedRef.current = selectedPlantId;
+    onChange(selectedPlantId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlantId]);
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
