@@ -1147,9 +1147,25 @@ function RegressionDetail({
                 onClick={async () => {
                   setDeleting(true);
                   try {
-                    await supabase.from('regression_results').delete().eq('id', result.result_id);
+                    // .select('id') so a silently-blocked delete (e.g. missing
+                    // RLS permission) can be told apart from a real success —
+                    // Supabase resolves a 0-row RLS block without throwing.
+                    const { data, error } = await supabase
+                      .from('regression_results')
+                      .delete()
+                      .eq('id', result.result_id)
+                      .select('id');
+                    if (error) throw error;
+                    if (!data || data.length === 0) {
+                      throw new Error('Delete was blocked — you may not have permission to delete this result.');
+                    }
                     onRefresh();
-                  } catch {
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Failed to delete regression result.');
+                  } finally {
+                    // Always reset, success or failure, so the button never
+                    // gets stuck on "Deleting…" — previously this only ran
+                    // in the catch branch.
                     setDeleting(false);
                     setConfirmDelete(false);
                   }
