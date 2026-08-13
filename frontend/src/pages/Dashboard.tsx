@@ -411,10 +411,16 @@ export default function Dashboard() {
       if (!permeateProductionPlantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
       const { data, error } = await supabase
         .from('ro_trains')
-        .select('id, plant_id')
+        .select('id, plant_id, unit_type' as any)
         .in('plant_id', permeateProductionPlantIds);
       if (error) throw error;
-      const rows = data ?? [];
+      // Secondary (2nd-pass) units — e.g. Potable-RO, Refilling-RO — draw
+      // their feed from an upstream PRIMARY train's permeate, which is
+      // already counted in this same sum via that upstream train's own
+      // reading. Counting a secondary unit's permeate here too would double
+      // count that volume — it's the same water, metered twice. See
+      // 20260813_secondary_ro_train_wiring.sql / ro_trains.unit_type.
+      const rows = ((data ?? []) as any[]).filter((t: any) => t.unit_type !== 'secondary');
       const trainPlantMap = new Map<string, string>();
       rows.forEach((t: any) => trainPlantMap.set(t.id as string, t.plant_id as string));
       return { ids: rows.map((t: any) => t.id as string), trainPlantMap };
@@ -646,18 +652,19 @@ export default function Dashboard() {
   const { data: _qualityTrainMeta } = useQuery({
     queryKey: ['dash-quality-train-meta', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>() };
+      if (!plantIds.length) return { ids: [] as string[], metaMap: new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>() };
       const { data, error } = await (supabase.from('ro_trains' as any) as any)
-        .select('id, plant_id, train_number, name, well_id')
+        .select('id, plant_id, train_number, name, well_id, unit_type')
         .in('plant_id', plantIds);
       if (error) throw error;
       const rows = (data ?? []) as any[];
-      const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>();
+      const metaMap = new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
       rows.forEach((t: any) => metaMap.set(t.id as string, {
         plant_id:     t.plant_id,
         train_number: t.train_number ?? null,
         train_name:   t.name ?? null,
         well_id:      t.well_id ?? null,
+        unit_type:    t.unit_type ?? 'primary',
       }));
       return { ids: rows.map((t: any) => t.id as string), metaMap };
     },
@@ -665,7 +672,7 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
   const _qualityTrainIds   = _qualityTrainMeta?.ids    ?? [];
-  const _qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null }>();
+  const _qualityTrainMeta2 = _qualityTrainMeta?.metaMap ?? new Map<string, { plant_id: string; train_number: number | null; train_name: string | null; well_id: string | null; unit_type: string | null }>();
 
   // ── Well-name lookup for "PER WELL SOURCE" labels ────────────────────────────
   // Fetched once per plant selection. When an ro_trains row has well_id set,
@@ -1094,11 +1101,14 @@ export default function Dashboard() {
     if (combined > 0) return combined;
 
     // Fallback path: use permeate_meter_delta for trains NOT already counted via
-    // the permeate_is_production path (to avoid double-counting).
+    // the permeate_is_production path (to avoid double-counting), and never for
+    // secondary (2nd-pass) units — their permeate is a re-metering of water an
+    // upstream primary train already counted (ro_trains.unit_type).
     const fallbackTotal = (todayAllPermeate ?? []).reduce((s: number, r: any) => {
-      const trainPlantId = _qualityTrainMeta2.get(r.train_id)?.plant_id;
+      const trainMeta = _qualityTrainMeta2.get(r.train_id);
+      if (trainMeta?.unit_type === 'secondary') return s;
       // Skip trains already included in roPermeateProduction
-      if (trainPlantId && permeateProductionPlantIds.includes(trainPlantId)) return s;
+      if (trainMeta?.plant_id && permeateProductionPlantIds.includes(trainMeta.plant_id)) return s;
       return s + (+(r.permeate_meter_delta ?? 0));
     }, 0);
     return fallbackTotal;

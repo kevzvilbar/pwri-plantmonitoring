@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1651,
-  "lastUpdated": "2026-08-12",
+  "maxWarnings": 1673,
+  "lastUpdated": "2026-08-13",
   "history": [
     {
       "date": "2026-08-09",
@@ -42,6 +42,12 @@
       "maxWarnings": 1651,
       "previous": 1657,
       "reason": "Fixing a regression, not adding one -- net -6. trendchart-weekly-granularity-1.patch (4e3c952) was applied from what looks like a branch that forked before the 1641 entry above landed: it overwrote TrendChartDrill.tsx back to its pre-split, monolithic form (byte-identical to the commit before that split), silently orphaning TrendChartDrillKit.ts (0 importers afterward) and bringing back the 7 react-refresh/only-export-components warnings that split had removed -- the 1657 entry above inherited this without diagnosing it. Re-split TrendChartDrill.tsx (GranularityControl/StackToggle/DrillBreadcrumb only) from TrendChartDrillKit.ts (everything else) again, -7. Also restored Plant Health's Day-to-Hour click-drill (phDayFocus/phFocusedHourlyData/handlePhDayDotActivate), which the same stale-branch overwrite had dropped entirely -- +1 no-explicit-any from phFocusedHourlyData's row-shaped filter callback, same convention as everywhere else in this file. Also fixed a real bug introduced in the same reorganization (zero warning impact): TDS/Recovery's by-train Legend onClick was wired to handleLegendIsolate, which only updates selectedLocatorIds -- irrelevant to by-train, whose visibility depends on selectedTrainIds -- so clicking a train's legend entry silently did nothing. Added handleTrainLegendIsolate (mirrors handleWellLegendIsolate) and pointed both by-train Legends at it."
+    },
+    {
+      "date": "2026-08-13",
+      "maxWarnings": 1673,
+      "previous": 1651,
+      "reason": "Guizo train-permeate wiring (20260813_secondary_ro_train_wiring.sql: ro_trains.unit_type/feed_source_train_id/reject_routing, for Potable-RO/Refilling-RO as secondary 2nd-pass units whose reject recirculates into Train 1's permeate). PlantTopology.tsx/PretreatmentAndROLog.tsx (secondary_ro_train_wiring.patch, fca157c) added the new columns to existing supabase selects and an isSecondaryTrain/(train as any) check -- same any-row convention already used throughout both files, +9. This pass's own change, the double-count guard for the two headline production numbers: a secondary unit's permeate is the same water its upstream primary train already counted once, so it must never be summed again into Production/NRW%. Dashboard.tsx: _permeateTrainMeta's ro_trains select and _qualityTrainMeta's metaMap now carry unit_type, threaded into the permeate-production sum and its no-product-meter fallback (+8). TrendChart.tsx: _roTrainMeta now also builds a trainUnitTypeMap (kept separate from the existing trainPlantMap, which several unrelated call sites still expect as Map<string,string>), consumed by the primary and fallback permeate-accumulation loops and by the by-train drill-down pivot/legend so a secondary unit can't appear as a second stacked production source next to its own upstream train (+5). Deliberately did not touch _roTrainIdsForReadings/_qualityTrainIds themselves in either file -- those still include secondary units, because their own RO readings/TDS/recovery/Plant Health are legitimate and should keep showing up elsewhere on both pages; only the specific volume-summing sites were guarded."
     }
   ]
 }

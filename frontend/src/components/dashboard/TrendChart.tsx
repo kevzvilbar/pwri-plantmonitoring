@@ -649,19 +649,29 @@ export function TrendChart({
   const { data: _roTrainMeta } = useQuery({
     queryKey: ['trend-ro-train-ids', plantIds],
     queryFn: async () => {
-      if (!plantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>() };
+      if (!plantIds.length) return { ids: [] as string[], trainPlantMap: new Map<string, string>(), trainUnitTypeMap: new Map<string, string>() };
       const { data } = await (supabase.from('ro_trains' as never) as any)
-        .select('id, plant_id')
+        .select('id, plant_id, unit_type')
         .in('plant_id', plantIds);
       const rows = data ?? [];
       const trainPlantMap = new Map<string, string>();
-      rows.forEach((t: any) => trainPlantMap.set(t.id, t.plant_id));
-      return { ids: rows.map((t: any) => t.id as string), trainPlantMap };
+      const trainUnitTypeMap = new Map<string, string>();
+      rows.forEach((t: any) => {
+        trainPlantMap.set(t.id, t.plant_id);
+        trainUnitTypeMap.set(t.id, t.unit_type ?? 'primary');
+      });
+      return { ids: rows.map((t: any) => t.id as string), trainPlantMap, trainUnitTypeMap };
     },
     enabled: plantIds.length > 0,
   });
   const _roTrainIdsForReadings = _roTrainMeta?.ids;
   const _trainPlantMap = _roTrainMeta?.trainPlantMap ?? new Map<string, string>();
+  // Secondary (2nd-pass) units — e.g. Potable-RO, Refilling-RO — draw their
+  // feed from an upstream PRIMARY train's permeate, already counted via that
+  // train's own reading. Included in _roTrainIdsForReadings/_trainPlantMap
+  // (still shown in RO readings/Plant Health elsewhere in this chart) but
+  // excluded from the production accumulation below.
+  const _trainUnitTypeMap = _roTrainMeta?.trainUnitTypeMap ?? new Map<string, string>();
 
   const { data: roReadings, isFetching: fetchingRo, error: errRo, refetch: refetchRo } = useQuery({
     queryKey: ['trend-ro', metric, startKey, endKey, plantIds, _roTrainIdsForReadings],
@@ -1224,6 +1234,7 @@ export function TrendChart({
         (roReadings ?? []).forEach((r: any) => {
           const plantId = _trainPlantMap.get(r.train_id);
           if (!plantId || !permeateIsProductionPlants.has(plantId)) return;
+          if (_trainUnitTypeMap.get(r.train_id) === 'secondary') return;
 
           // Skip replacement rows first — their saved delta is the old-meter→new-meter
           // jump (e.g. 72,691 → 227,368) which is not real production. The same-day
@@ -1268,6 +1279,7 @@ export function TrendChart({
           .filter((r: any) => {
             const plantId = _trainPlantMap.get(r.train_id);
             return plantId && permeateIsProductionPlants.has(plantId)
+              && _trainUnitTypeMap.get(r.train_id) !== 'secondary'
               && r.permeate_meter != null;
             // NOTE: is_meter_replacement rows are intentionally kept here
           })
@@ -1619,8 +1631,14 @@ export function TrendChart({
   const sourceDrillEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (metric !== 'production') return [];
     if (usePermeateForSource) {
-      // RO train permeate source
-      const ids = Array.from(new Set((roReadings ?? []).map((r: any) => r.train_id).filter(Boolean)));
+      // RO train permeate source. Secondary (2nd-pass) units excluded — see
+      // _trainUnitTypeMap above; they're not an independent production
+      // source, their volume is already inside their upstream train's line.
+      const ids = Array.from(new Set(
+        (roReadings ?? [])
+          .map((r: any) => r.train_id)
+          .filter((id: any) => id && _trainUnitTypeMap.get(id) !== 'secondary'),
+      ));
       return ids
         .map((id, i) => ({
           id,
@@ -1750,6 +1768,7 @@ export function TrendChart({
       const p = new Map<string, Map<string, number>>();
       roSorted.forEach((r: any) => {
         if (r.is_meter_replacement) return;
+        if (_trainUnitTypeMap.get(r.train_id) === 'secondary') return;
         const delta = r.permeate_meter_delta != null
           ? Math.max(0, +r.permeate_meter_delta)
           : r.permeate_meter != null && r.permeate_meter_prev != null
