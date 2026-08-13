@@ -94,18 +94,18 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
       try {
         const ALL_COLS = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l',
+          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l',
           'feed_meter','feed_meter_prev','feed_meter_delta',
           'permeate_meter','permeate_meter_prev','permeate_meter_delta',
           'reject_meter','reject_meter_prev','reject_meter_delta',
           'is_meter_replacement','is_permeate_meter_replacement','is_reject_meter_replacement','remarks'];
         const TIER2 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l','remarks',
+          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l','remarks',
           'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement','is_reject_meter_replacement'];
         const TIER3 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'feed_ph','permeate_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter'];
+          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter'];
         const TIER4 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
           'temperature_c','recovery_pct','permeate_meter'];

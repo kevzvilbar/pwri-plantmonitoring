@@ -36,7 +36,9 @@ const RO_EDIT_NUMERIC_FIELDS: { key: string; label: string; unit?: string; step?
   { key: 'turbidity_ntu',        label: 'Turbidity',          unit: 'NTU' },
   { key: 'temperature_c',        label: 'Temperature',        unit: '°C'  },
   { key: 'chlorine_residual_mg_l', label: 'Chlorine Residual', unit: 'mg/L' },
-  { key: 'permeate_meter',       label: 'Permeate Meter',     unit: 'm³' },
+  { key: 'feed_meter',           label: 'Feed Meter' },
+  { key: 'permeate_meter',       label: 'Permeate Meter' },
+  { key: 'reject_meter',         label: 'Reject Meter' },
 ];
 
 interface Props {

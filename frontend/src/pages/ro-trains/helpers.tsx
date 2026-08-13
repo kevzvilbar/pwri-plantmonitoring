@@ -177,29 +177,48 @@ export async function logReadingEdit(entry: {
 }
 
 // ─── recalculateTrainDeltas ──────────────────────────────────────────────────
-// Re-walks all permeate and reject meter readings for a train in chronological
-// order and corrects permeate_meter_delta / reject_meter_delta so the
-// Dashboard's production totals remain accurate after any edit, delete, or
-// meter-replacement toggle.
+// Re-walks all feed, permeate, and reject meter readings for a train in
+// chronological order and corrects feed_meter_delta / permeate_meter_delta /
+// reject_meter_delta so the Dashboard's production totals remain accurate
+// after any edit, delete, or meter-replacement toggle.
 //
-// Both meters are fixed in a single ascending pass so one Supabase query
-// covers both columns and the two "prev" baselines stay in sync.
+// All three meters are fixed in a single ascending pass so one Supabase query
+// covers every column and the three "prev" baselines stay in sync.
 
 export async function recalculateTrainDeltas(trainId: string): Promise<void> {
   try {
     const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
       .select(
-        'id, permeate_meter, permeate_meter_delta, reject_meter, reject_meter_delta, ' +
-        'is_meter_replacement, is_permeate_meter_replacement, is_reject_meter_replacement',
+        'id, feed_meter, feed_meter_delta, permeate_meter, permeate_meter_delta, reject_meter, reject_meter_delta, ' +
+        'is_meter_replacement, is_feed_meter_replacement, is_permeate_meter_replacement, is_reject_meter_replacement',
       )
       .eq('train_id', trainId)
       .order('reading_datetime', { ascending: true });
     if (!rows?.length) return;
 
-    let prevMeter:    number | null = null;
-    let prevRejMeter: number | null = null;
+    let prevFeedMeter: number | null = null;
+    let prevMeter:      number | null = null;
+    let prevRejMeter:   number | null = null;
 
     for (const row of rows as any[]) {
+      // ── Feed delta ────────────────────────────────────────────────────────
+      // Only the granular is_feed_meter_replacement flag zeros the feed delta —
+      // same rationale as the reject branch below (is_meter_replacement alone,
+      // pre-migration, meant a permeate-only swap).
+      const isFeedRepl   = !!(row.is_feed_meter_replacement);
+      const curFeedMeter = row.feed_meter != null ? +row.feed_meter : null;
+      const storedFeed   = row.feed_meter_delta != null ? +row.feed_meter_delta : null;
+      let newFeedDelta: number | null;
+      if (isFeedRepl)                                        { newFeedDelta = 0; }
+      else if (prevFeedMeter != null && curFeedMeter != null) { newFeedDelta = Math.max(0, curFeedMeter - prevFeedMeter); }
+      else                                                   { newFeedDelta = null; }
+      if (curFeedMeter != null) prevFeedMeter = curFeedMeter;
+      if (newFeedDelta !== storedFeed) {
+        await (supabase.from('ro_train_readings' as any) as any)
+          .update({ feed_meter_delta: newFeedDelta })
+          .eq('id', row.id);
+      }
+
       // ── Permeate delta ────────────────────────────────────────────────────
       // is_permeate_meter_replacement is the granular source of truth as of the
       // 2026-07-27 migration; is_meter_replacement is kept in sync by a DB
