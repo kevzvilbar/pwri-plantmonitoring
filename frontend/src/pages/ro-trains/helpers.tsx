@@ -79,13 +79,21 @@ export function deriveTrainStatus(
 export const EDIT_WINDOW_HOURS = 8;
 
 export function canEditEntry(
-  row: { recorded_by?: string | null; created_at?: string | null } | null | undefined,
+  row: { recorded_by?: string | null; created_at?: string | null; norm_status?: string | null } | null | undefined,
   hasFullAccess: boolean,
   activeOperatorId: string | null | undefined,
 ): boolean {
   if (hasFullAccess) return true;
   if (!row || !activeOperatorId || !row.recorded_by) return false;
   if (row.recorded_by !== activeOperatorId) return false;
+  // A reading currently flagged and sitting in Data Corrections' Pending
+  // queue is actively awaiting a reviewer's Approve/Reject — a self-edit
+  // here would let the operator quietly change the value AND overwrite the
+  // "edit reason" the reviewer is looking at, mid-review. Full-access roles
+  // (who own that review) are unaffected by this check above. Tables
+  // without a norm_status column (e.g. power_readings) leave this field
+  // undefined, so the check is simply a no-op there.
+  if (row.norm_status === 'pending_review') return false;
   if (!row.created_at) return false;
   const ageHours = (Date.now() - new Date(row.created_at).getTime()) / 3_600_000;
   return ageHours <= EDIT_WINDOW_HOURS;

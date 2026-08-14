@@ -46,7 +46,7 @@ import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason } from '@/lib/correctionReasons';
-import { logReadingEdit, diffFields } from '@/pages/ro-trains/helpers';
+import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
 import {
   GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
   formatCooldown, invalidateLocatorDash, invalidateWellDash, invalidateDashboard,
@@ -892,7 +892,14 @@ function ProductMeterRow({
 
 function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; plantId: string; onClose: () => void }) {
   const qc = useQueryClient();
-  const { user, activeOperator } = useAuth();
+  const { user, activeOperator, isAdmin, isManager, isDataAnalyst, activeOperatorId } = useAuth();
+  // This dialog previously had NO ownership/time/pending-review restriction
+  // at all on Edit/Delete — any signed-in user could edit or delete any
+  // other operator's product-meter reading, any time, even mid-review.
+  // Every other reading module (well/locator/power/blending/RO) already
+  // gates this the same way; product_meter_readings was the one table that
+  // never got wired up (see the 2026-08-11 audit-log comment above).
+  const hasFullAccess = isAdmin || isManager || isDataAnalyst;
   const [days, setDays] = useState<7 | 14 | 30 | 60 | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd'));
   const [customTo, setCustomTo]     = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -940,7 +947,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       }
       const { data, error } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, is_meter_replacement, recorded_by, created_at, norm_status')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -950,7 +957,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       // to the base columns so the dialog still loads.
       const { data: fallback, error: fallbackErr } = await supabase
         .from('product_meter_readings' as any)
-        .select('id, current_reading, previous_reading, daily_volume, reading_datetime')
+        .select('id, current_reading, previous_reading, daily_volume, reading_datetime, recorded_by, created_at, norm_status')
         .eq('meter_id', meter.id)
         .gte('reading_datetime', sinceIso)
         .lte('reading_datetime', untilIso)
@@ -1023,10 +1030,20 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
 
   const saveEdit = async () => {
     if (!editRow) return;
+    const beforeRowCheck = rows?.find((r: any) => r.id === editRow.id);
+    if (!beforeRowCheck || !canEditEntry(beforeRowCheck, hasFullAccess, activeOperatorId)) {
+      toast.error(
+        beforeRowCheck?.norm_status === 'pending_review'
+          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be edited until a reviewer approves or rejects it.'
+          : 'You can only edit your own entries, within 8 hours of submitting them.',
+      );
+      setEditRow(null);
+      return;
+    }
     if (!reason) { toast.error('Select a reason for this edit'); return; }
     setSaving(true);
     const newCur = +editRow.value;
-    const beforeRow = rows?.find((r: any) => r.id === editRow.id) ?? null;
+    const beforeRow = beforeRowCheck ?? null;
     let updatePayload: Record<string, any>;
     if (meter.is_derived) {
       // Derived/mirrored meters store each day's own volume directly in
@@ -1116,6 +1133,16 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const deleteRow = async (id: string) => {
+    const row = rows?.find((r: any) => r.id === id);
+    if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) {
+      toast.error(
+        row?.norm_status === 'pending_review'
+          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be deleted until a reviewer approves or rejects it.'
+          : 'You can only delete your own entries, within 8 hours of submitting them.',
+      );
+      setPendingDeleteId(null);
+      return;
+    }
     setPendingDeleteId(null);
     setDeletingId(id);
     const { error } = await supabase.from('product_meter_readings' as any).delete().eq('id', id);
@@ -1269,6 +1296,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                   const isDeleting = deletingId === r.id;
                   const isToggling = togglingId === r.id;
                   const isMeterReplacement = !!r.is_meter_replacement;
+                  const rowEditable = canEditEntry(r, hasFullAccess, activeOperatorId);
                   return (
                     <tr key={r.id ?? i} className={[
                       'border-t',
@@ -1322,22 +1350,24 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
                         </button>
                       </td>
                       <td className="px-2 py-1 text-center">
-                        <div className="flex items-center justify-center gap-0.5">
-                          <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
-                            onClick={() => {
-                              setPendingDeleteId(null);
-                              setReason(''); setCustomReason('');
-                              setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) });
-                            }}
-                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button title="Delete" aria-label="Delete" disabled={!!editRow || isDeleting}
-                            onClick={() => setPendingDeleteId(r.id)}
-                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
-                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                          </button>
-                        </div>
+                        {rowEditable && (
+                          <div className="flex items-center justify-center gap-0.5">
+                            <button title="Edit" aria-label="Edit" disabled={!!editRow || isDeleting}
+                              onClick={() => {
+                                setPendingDeleteId(null);
+                                setReason(''); setCustomReason('');
+                                setEditRow({ id: r.id, datetime: format(new Date(r.reading_datetime), "yyyy-MM-dd'T'HH:mm"), value: String(r.current_reading) });
+                              }}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40">
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button title="Delete" aria-label="Delete" disabled={!!editRow || isDeleting}
+                              onClick={() => setPendingDeleteId(r.id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40">
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

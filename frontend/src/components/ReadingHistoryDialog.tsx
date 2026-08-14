@@ -183,7 +183,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'locator') {
         const { data, error } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at, norm_status')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -195,7 +195,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         // branches above).
         const { data: fallback } = await supabase
           .from('locator_readings')
-          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, reading_datetime, off_location_flag, recorded_by, created_at, norm_status')
           .eq('locator_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -205,7 +205,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       if (module === 'well') {
         const { data, error } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, power_meter_reading, tds_ppm, turbidity_ntu, pressure_psi, reading_datetime, is_meter_replacement, is_meter_rollover, meter_rollover_max, recorded_by, created_at, norm_status')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -216,7 +216,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
         // PostgREST schema-cache error)
         const { data: fallback } = await supabase
           .from('well_readings')
-          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, recorded_by, created_at')
+          .select('id, current_reading, previous_reading, power_meter_reading, reading_datetime, recorded_by, created_at, norm_status')
           .eq('well_id', entityId)
           .gte('reading_datetime', sinceDate)
           .lt('reading_datetime', untilNextDay)
@@ -555,7 +555,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
   const deleteRow = async (id: string) => {
     const row = rows?.find((r: any) => r.id === id);
     if (!row || !canEditEntry(row, hasFullAccess, activeOperatorId)) {
-      toast.error('You can only delete your own entries, within 8 hours of submitting them.');
+      toast.error(
+        row?.norm_status === 'pending_review'
+          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be deleted until a reviewer approves or rejects it.'
+          : 'You can only delete your own entries, within 8 hours of submitting them.',
+      );
       setPendingDeleteId(null);
       return;
     }
@@ -597,7 +601,11 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     if (!editRow) return;
     const originalRow = rows?.find((r: any) => r.id === editRow.id);
     if (!originalRow || !canEditEntry(originalRow, hasFullAccess, activeOperatorId)) {
-      toast.error('You can only edit your own entries, within 8 hours of submitting them.');
+      toast.error(
+        originalRow?.norm_status === 'pending_review'
+          ? 'This reading is flagged and awaiting review in Data Corrections — it can’t be edited until a reviewer approves or rejects it.'
+          : 'You can only edit your own entries, within 8 hours of submitting them.',
+      );
       setEditRow(null);
       return;
     }
