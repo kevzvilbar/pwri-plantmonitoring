@@ -481,7 +481,6 @@ export function BlendingForm() {
                       qc.invalidateQueries({ queryKey: ['blending-latest-raw', plantId] });
                       qc.invalidateQueries({ queryKey: ['blending-volume'] });
                     }}
-                    isManagerOrAdmin={isAdmin || isManager || isDataAnalyst}
                   />
                 )}
               />
@@ -537,14 +536,13 @@ function persistRaw(wellId: string, reading: number, date: string) {
 }
 
 function BlendingRow({
-  well, plantId, plantName, todayVolume, previousVolume, previousDate, avgVol, dbLatestRaw, onSaved, isManagerOrAdmin,
+  well, plantId, plantName, todayVolume, previousVolume, previousDate, avgVol, dbLatestRaw, onSaved,
 }: {
   well: any; plantId: string; plantName?: string;
   todayVolume: number; previousVolume: number | null; previousDate: string | null;
   avgVol?: number | null;
   dbLatestRaw?: { reading: number; date: string } | null;
   onSaved: () => void;
-  isManagerOrAdmin: boolean;
 }) {
   const isMobile = useIsMobile();
   const qc = useQueryClient();
@@ -747,12 +745,19 @@ function BlendingRow({
         </div>
         {/* History + date always in top-right, never behind name */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {isManagerOrAdmin && (
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-muted-foreground"
-              onClick={() => setShowHistory(true)} title="View blending history">
-              <History className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          {/* Previously gated behind isManagerOrAdmin, which contradicted
+              this row's own "always visible" comment above and hid blending
+              history from Operator/Technician roles entirely — including
+              the exact moment they most need it, right when a "possible
+              meter rollback" warning is asking them to verify a reading.
+              Safe to open to everyone: ReadingHistoryDialog already
+              restricts edit/delete per-row via canEditEntry/hasFullAccess
+              (own entries within 8h for non-full-access roles), so this
+              button only ever controlled read-only visibility. */}
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-muted-foreground"
+            onClick={() => setShowHistory(true)} title="View blending history">
+            <History className="h-3.5 w-3.5" />
+          </Button>
           <label className="cursor-pointer relative">
             <span
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors"
