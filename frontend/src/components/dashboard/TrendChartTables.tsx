@@ -42,79 +42,73 @@ export function PivotTable({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Fixed header — never scrolls */}
-      <div className="overflow-x-auto shrink-0 border-b border-border">
-        <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
-          <colgroup>
-            <col style={{ width: '72px', minWidth: '72px' }} />
-            {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
-            <col style={{ width: '80px', minWidth: '80px' }} />
-          </colgroup>
-          <thead>
-            <tr className="bg-muted/95">
-              <th className={TH_DATE}>Date</th>
-              {entities.map((e) => (
-                <th key={e.id} className={TH} title={e.label}>
-                  <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
-                  <div className="text-3xs font-normal opacity-60 mt-0.5">{unit}</div>
-                </th>
-              ))}
-              <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-3xs font-normal opacity-80">{unit}</span></th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-      {/* Scrollable body */}
-      <div className="overflow-auto flex-1">
-        <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
-          <colgroup>
-            <col style={{ width: '72px', minWidth: '72px' }} />
-            {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
-            <col style={{ width: '80px', minWidth: '80px' }} />
-          </colgroup>
-          <tbody>
-            {[...dates].reverse().map((date, di) => {
-              const isEven = di % 2 === 0;
-              const rowIdx = dates.length - 1 - di;
-              const rowTotal = rowTotals[rowIdx];
-              return (
-                <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
-                  <td className={[
-                    'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 border-r border-border',
-                    isEven ? 'bg-background' : 'bg-muted/10',
-                  ].join(' ')}>
-                    {fmtDateKey(date)}
-                  </td>
-                  {entities.map((e) => {
-                    const val = pivot.get(date)?.get(e.id) ?? null;
-                    const reason = val == null ? getReason(e.id, date) : null;
-                    return (
-                      <td key={e.id} className={TD}>
-                        {reason ? (
-                          <span
-                            title={`${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`}
-                            className="inline-flex items-center justify-center text-warn cursor-help"
-                          >
-                            <MessageCircleOff className="h-3 w-3" />
-                          </span>
-                        ) : fmtV(val)}
-                      </td>
-                    );
-                  })}
-                  <td className={[
-                    TD_TOTAL_COL,
-                    colorClass,
-                    isEven ? 'bg-background' : 'bg-muted/10',
-                  ].join(' ')}>
-                    {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    // Single scroll container for header + body together (was two separate
+    // overflow-x-auto/overflow-auto divs, each with its own scrollbar and no
+    // link between them — scrolling one didn't move the other, so header and
+    // data columns fell out of alignment). One <table> now shares one
+    // <colgroup>, so column widths can't drift between header and body
+    // either. The header row stays pinned via `sticky top-0` on its cells
+    // (see TH/TH_DATE/TH_TOTAL) instead of living in a non-scrolling div.
+    <div className="h-full overflow-auto">
+      <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: `${72 + entities.length * 72 + 80}px` }}>
+        <colgroup>
+          <col style={{ width: '72px', minWidth: '72px' }} />
+          {entities.map((e) => <col key={e.id} style={{ minWidth: '72px' }} />)}
+          <col style={{ width: '80px', minWidth: '80px' }} />
+        </colgroup>
+        <thead>
+          <tr className="bg-muted/95">
+            <th className={TH_DATE}>Date</th>
+            {entities.map((e) => (
+              <th key={e.id} className={TH} title={e.label}>
+                <div className="text-center leading-tight break-words hyphens-auto" style={{ wordBreak: 'break-word' }}>{e.label}</div>
+                <div className="text-3xs font-normal opacity-60 mt-0.5">{unit}</div>
+              </th>
+            ))}
+            <th className={TH_TOTAL}>{totalLabel}<br /><span className="text-3xs font-normal opacity-80">{unit}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...dates].reverse().map((date, di) => {
+            const isEven = di % 2 === 0;
+            const rowIdx = dates.length - 1 - di;
+            const rowTotal = rowTotals[rowIdx];
+            return (
+              <tr key={date} className={isEven ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+                <td className={[
+                  'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10 border-r border-border',
+                  isEven ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>
+                  {fmtDateKey(date)}
+                </td>
+                {entities.map((e) => {
+                  const val = pivot.get(date)?.get(e.id) ?? null;
+                  const reason = val == null ? getReason(e.id, date) : null;
+                  return (
+                    <td key={e.id} className={TD}>
+                      {reason ? (
+                        <span
+                          title={`${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`}
+                          className="inline-flex items-center justify-center text-warn cursor-help"
+                        >
+                          <MessageCircleOff className="h-3 w-3" />
+                        </span>
+                      ) : fmtV(val)}
+                    </td>
+                  );
+                })}
+                <td className={[
+                  TD_TOTAL_COL,
+                  colorClass,
+                  isEven ? 'bg-background' : 'bg-muted/10',
+                ].join(' ')}>
+                  {rowTotal > 0 ? rowTotal.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -227,34 +221,28 @@ export function OverviewTable({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Fixed header */}
-      <div className="overflow-x-auto shrink-0 border-b border-border">
-        <table className="w-full border-collapse text-xs">
-          <thead className="bg-muted/95">
-            <tr>
-              <th className={TH_DATE}>Date</th>
-              {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
+    // Same fix as PivotTable above: one table, one scroll container, sticky
+    // header instead of a second independently-scrolling header div.
+    <div className="h-full overflow-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead className="bg-muted/95">
+          <tr>
+            <th className={TH_DATE}>Date</th>
+            {cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {[...chartData].reverse().map((d, i) => (
+            <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
+              <td className={[
+                'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0 z-10',
+                i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
+              ].join(' ')}>{d.date}</td>
+              {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
             </tr>
-          </thead>
-        </table>
-      </div>
-      {/* Scrollable body */}
-      <div className="overflow-auto flex-1">
-        <table className="w-full border-collapse text-xs">
-          <tbody>
-            {[...chartData].reverse().map((d, i) => (
-              <tr key={d.date} className={i % 2 === 0 ? 'bg-background hover:bg-muted/15' : 'bg-muted/10 hover:bg-muted/25'}>
-                <td className={[
-                  'px-3 py-1.5 whitespace-nowrap font-medium text-xs text-muted-foreground sticky left-0',
-                  i % 2 === 0 ? 'bg-background' : 'bg-muted/10',
-                ].join(' ')}>{d.date}</td>
-                {cols.map((c) => <td key={c.key} className={TD}>{c.fmt(d)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
