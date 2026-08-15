@@ -175,12 +175,39 @@ export function fmtMonthYear(d: string | Date | null | undefined): string {
   });
 }
 
-/** "2026-07-14" — ISO date string in PHT (for DB date queries) */
+/**
+ * "2026-07-14" — ISO date string in PHT (for DB date queries / chart
+ * date-bucketing).
+ *
+ * Was previously implemented as:
+ *   const pht = new Date(dt.toLocaleString('en-US', { timeZone: PH_TZ }));
+ *   return pht.toISOString().slice(0, 10);
+ * That round-trips through a locale string with NO timezone marker, so
+ * `new Date(...)` re-parses it using the *runtime's own local timezone* —
+ * it only produced the correct Manila date when the code happened to be
+ * executing with a local timezone of UTC+0. For any other local timezone —
+ * including Asia/Manila itself, the one this app is built for — it silently
+ * shifted the bucketed date by up to a day. A reading logged at 04:46 AM
+ * Manila time (~20:46 UTC the previous day) bucketed onto the wrong day
+ * again for anyone whose device timezone is Asia/Manila, which is most of
+ * this app's actual users — the exact "day early" bug this function was
+ * originally written to fix, reappearing for the one timezone it exists for.
+ * Confirmed via TZ=Asia/Manila node repro: old impl returned one day early;
+ * this Intl.DateTimeFormat version doesn't depend on the runtime's local
+ * timezone at all, so it's stable across every device regardless of where
+ * the browser/server happens to think "local" is.
+ */
 export function fmtIsoDate(d: string | Date | null | undefined): string {
   if (!d) return '';
   const dt = new Date(d);
-  const pht = new Date(dt.toLocaleString('en-US', { timeZone: PH_TZ }));
-  return pht.toISOString().slice(0, 10);
+  if (isNaN(dt.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PH_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(dt);
+  const y = parts.find(p => p.type === 'year')?.value ?? '';
+  const m = parts.find(p => p.type === 'month')?.value ?? '';
+  const day = parts.find(p => p.type === 'day')?.value ?? '';
+  return y && m && day ? `${y}-${m}-${day}` : '';
 }
 
 /** "2 hours ago", "just now", etc. */
