@@ -74,7 +74,7 @@ export interface HistoryEditState {
 }
 
 export function ReadingHistoryDialog({ entityName, module, entityId, plantId, assetMeterSerial, multiplier = 1,
-  gridMeterCount: gridMeterCountProp = 1, gridMeterNames = [], gridMultipliers = [], meterFilter, defaultInputMode = 'raw', onClose }: {
+  gridMeterCount: gridMeterCountProp = 1, gridMeterNames = [], gridMultipliers = [], meterFilter, defaultInputMode = 'raw', solarInputMode = 'raw', onClose }: {
   entityName: string;
   module: HistoryModule;
   entityId: string;
