@@ -24,7 +24,9 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format, subDays } from 'date-fns';
-import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock } from 'lucide-react';
+import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, MessageCircleOff } from 'lucide-react';
+import { ReasonDialog } from '@/components/ReasonDialog';
+import { reasonCategoryLabel } from '@/lib/reasonCodes';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -396,6 +398,32 @@ export function BlendingForm() {
     return m;
   }, [latestRawData]);
 
+  // "No reading — why?" gap reasons logged for today, keyed by well ID.
+  // Mirrors WellSection.tsx / LocatorSection.tsx — entity_type here is
+  // 'blending', not 'well', because a well's regular well_readings gap and
+  // its blending_events gap are two separate things (see the migration
+  // adding 'blending' to reading_gap_reasons' entity_type check).
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: gapReasons } = useQuery({
+    queryKey: ['blending-gap-reasons', plantId, todayDateStr],
+    enabled: !!plantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reading_gap_reasons' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .eq('entity_type', 'blending')
+        .eq('gap_date', todayDateStr);
+      if (error) return [];
+      return (data ?? []) as any[];
+    },
+  });
+  const gapReasonsByWell = useMemo(() => {
+    const m: Record<string, any> = {};
+    (gapReasons ?? []).forEach((g: any) => { m[g.entity_id] = g; });
+    return m;
+  }, [gapReasons]);
+
   // ── Summary strip — supervisors scanning several wells need at-a-glance
   // totals more than the per-well detail; the old "N tagged" pill only gave
   // one of the three numbers they'd actually want.
@@ -476,6 +504,9 @@ export function BlendingForm() {
                     previousDate={prevByWell[w.id]?.date ?? null}
                     avgVol={avgRateByWell[w.id] ?? null}
                     dbLatestRaw={latestRawByWell[w.id] ?? null}
+                    userId={user?.id ?? null}
+                    gapReason={gapReasonsByWell[w.id] ?? null}
+                    onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['blending-gap-reasons', plantId, todayDateStr] })}
                     onSaved={() => {
                       qc.invalidateQueries({ queryKey: ['blending-today', plantId] });
                       qc.invalidateQueries({ queryKey: ['blending-latest-raw', plantId] });
@@ -536,12 +567,15 @@ function persistRaw(wellId: string, reading: number, date: string) {
 }
 
 function BlendingRow({
-  well, plantId, plantName, todayVolume, previousVolume, previousDate, avgVol, dbLatestRaw, onSaved,
+  well, plantId, plantName, todayVolume, previousVolume, previousDate, avgVol, dbLatestRaw, userId, gapReason, onGapReasonSaved, onSaved,
 }: {
   well: any; plantId: string; plantName?: string;
   todayVolume: number; previousVolume: number | null; previousDate: string | null;
   avgVol?: number | null;
   dbLatestRaw?: { reading: number; date: string } | null;
+  userId?: string | null;
+  gapReason?: any | null;
+  onGapReasonSaved?: () => void;
   onSaved: () => void;
 }) {
   const isMobile = useIsMobile();
@@ -550,6 +584,8 @@ function BlendingRow({
   const lastPrefilledBlend = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [gapDialogOpen, setGapDialogOpen] = useState(false);
+  const [gapSaving, setGapSaving] = useState(false);
   const [customDt, setCustomDt] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const dtInputRef = useRef<HTMLInputElement>(null);
 
@@ -730,6 +766,27 @@ function BlendingRow({
     } finally { setSaving(false); }
   };
 
+  // "No reading — why?" — same (entity_type, entity_id, gap_date) upsert
+  // pattern as WellRow / LocatorRow, just entity_type: 'blending' instead of
+  // 'well' (see 20260815000000_reading_gap_reasons_add_blending.sql).
+  const saveGapReason = async (category: string, detail: string) => {
+    setGapSaving(true);
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+    const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+      [{
+        entity_type: 'blending', entity_id: well.id, plant_id: plantId,
+        gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
+        logged_by: userId ?? null,
+      }] as any,
+      { onConflict: 'entity_type,entity_id,gap_date' },
+    );
+    setGapSaving(false);
+    if (error) { toast.error(friendlyError(error)); return; }
+    toast.success(`${well.name}: reason logged`);
+    setGapDialogOpen(false);
+    onGapReasonSaved?.();
+  };
+
   return (
     <div
       className="p-3.5 space-y-2.5 border border-border rounded-xl hover:border-muted-foreground/40 transition-colors bg-card"
@@ -754,6 +811,31 @@ function BlendingRow({
               restricts edit/delete per-row via canEditEntry/hasFullAccess
               (own entries within 8h for non-full-access roles), so this
               button only ever controlled read-only visibility. */}
+          {todayVolume === 0 && !justSaved && (
+            gapReason ? (
+              <button
+                type="button"
+                onClick={() => setGapDialogOpen(true)}
+                title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
+                className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
+                data-testid={`blending-gap-reason-badge-${well.id}`}
+              >
+                <MessageCircleOff className="h-2.5 w-2.5" />
+                {reasonCategoryLabel(gapReason.reason_category)}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setGapDialogOpen(true)}
+                title="No reading today — log why"
+                aria-label="No reading today — log why"
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                data-testid={`blending-gap-reason-btn-${well.id}`}
+              >
+                <MessageCircleOff className="h-3.5 w-3.5" />
+              </button>
+            )
+          )}
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full text-muted-foreground"
             onClick={() => setShowHistory(true)} title="View blending history">
             <History className="h-3.5 w-3.5" />
@@ -894,6 +976,16 @@ function BlendingRow({
           onClose={() => setShowHistory(false)}
         />
       )}
+
+      <ReasonDialog
+        open={gapDialogOpen}
+        onOpenChange={setGapDialogOpen}
+        title={`No blending reading today for "${well.name}" — why?`}
+        description="This explains the gap for today. If a reading comes in later today, it takes priority over this note."
+        confirmLabel="Log reason"
+        busy={gapSaving}
+        onConfirm={(category, detail) => saveGapReason(category, detail)}
+      />
     </div>
   );
 }
