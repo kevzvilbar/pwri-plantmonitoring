@@ -33,6 +33,7 @@ import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2
 import { DataState } from '@/components/DataState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum, calc, nrwColor, ALERTS } from '@/lib/calculations';
+import { fmtIsoDate } from '@/lib/format';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -186,7 +187,15 @@ export function EntityHistoryChart({
       // since this query is always scoped to one entity.
       let last: number | null = null;
       return raw.map((r: any) => {
-        const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
+        // Bucket by Asia/Manila calendar day, not the raw UTC date string —
+        // reading_datetime comes back from Supabase as a UTC ISO timestamp,
+        // so a reading logged at e.g. 04:46 AM Manila time is stored as
+        // ~20:46 UTC the *previous* day. Slicing that raw string put the
+        // reading a day early and made same-day entries (common for SRP,
+        // whose readings often land just after Manila midnight) silently
+        // vanish from this chart while still showing correctly in the
+        // History dialog (which already went through fmtDateTime/PH_TZ).
+        const dateStr = fmtIsoDate(r.reading_datetime);
         let consumption = 0;
         if (isDirectMode) {
           // current_reading already IS the period's volume — no diff, no
@@ -255,7 +264,10 @@ export function EntityHistoryChart({
         .order('reading_datetime', { ascending: true });
 
       return (data ?? []).map((r: any) => {
-        const dateStr = r.reading_datetime?.slice(0, 10) ?? '';
+        // Same Asia/Manila bucketing fix as the primary series above — keeps
+        // sibling-locator bars aligned with the mother meter's own dates
+        // instead of drifting a day apart near the UTC/Manila day boundary.
+        const dateStr = fmtIsoDate(r.reading_datetime);
         const isDirect = siblingModeById.get(r.locator_id) === 'direct';
         let consumption = 0;
         if (isDirect) {

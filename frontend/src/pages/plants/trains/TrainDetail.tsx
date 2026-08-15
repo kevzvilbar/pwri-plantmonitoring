@@ -37,6 +37,7 @@ import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet, AlertTriangle, Maximize2, CalendarIcon } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area, Scatter, Legend } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
+import { fmtIsoDate } from '@/lib/format';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format, parseISO, subDays, isValid } from 'date-fns';
@@ -594,9 +595,12 @@ export function TrainHistoryChart({ trainId, trainLabel }: { trainId: string; tr
         .order('reading_datetime', { ascending: true });
 
       // Aggregate per day — use permeate_flow or product_flow or net_production
+      // Bucket by Asia/Manila calendar day (see EntityHistoryChart.tsx for the
+      // same fix and full rationale) — raw UTC slicing put early-morning
+      // Manila readings under the previous day's bar.
       const byDate = new Map<string, number>();
       for (const r of data ?? []) {
-        const date = (r as any).reading_datetime?.slice(0, 10) ?? '';
+        const date = fmtIsoDate((r as any).reading_datetime);
         if (!date) continue;
         const vol = +((r as any).net_production ?? (r as any).permeate_flow ?? (r as any).product_flow ?? 0);
         byDate.set(date, (byDate.get(date) ?? 0) + vol);

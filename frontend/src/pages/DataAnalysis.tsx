@@ -59,6 +59,7 @@ import {
 } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { fmtIsoDate, fmtTime } from '@/lib/format';
 import { format, parseISO } from 'date-fns';
 import {
   FlaskConical, Play, CheckCircle2, Undo2, Pencil, ShieldAlert,
@@ -83,11 +84,16 @@ const TABLES_WITHOUT_NORM_STATUS = new Set(['power_readings']);
 /** All tables show full datetime (YYYY-MM-DD HH:mm). */
 const TABLES_WITH_TIME = new Set(Object.keys(SOURCE_TABLES));
 
-/** Format a reading_datetime string based on whether the table uses time. */
+/** Format a reading_datetime string based on whether the table uses time.
+ *  Converts to Asia/Manila first — reading_datetime comes back from Supabase
+ *  as a UTC ISO timestamp, and displaying it raw (old behavior: strip 'T'/'Z'
+ *  and slice) showed the wrong calendar date/time for any reading logged in
+ *  the UTC-16:00–23:59 window (Manila 00:00–07:59) — see EntityHistoryChart.tsx
+ *  for the same root cause. */
 function fmtDatetime(raw: string, showTime: boolean): { date: string; time?: string } {
-  const s = raw.replace('T', ' ').replace('Z', '');
-  if (!showTime) return { date: s.slice(0, 10) };
-  return { date: s.slice(0, 10), time: s.slice(11, 16) };
+  const date = fmtIsoDate(raw);
+  if (!showTime) return { date };
+  return { date, time: fmtTime(raw) };
 }
 
 const TABLE_LABELS: Record<string, string> = {
@@ -227,8 +233,12 @@ function detectGaps(readings: RawReading[], column: string, sourceTable: string)
       const valB = rowB[column] != null ? Number(rowB[column]) : null;
       if (valA == null || valB == null) continue;
 
-      const dateStrA = String(rowA.reading_datetime).slice(0, 10);
-      const dateStrB = String(rowB.reading_datetime).slice(0, 10);
+      // Asia/Manila calendar day, not raw UTC — otherwise a reading logged
+      // just after Manila midnight gets misread as the previous day here
+      // too, which can both mis-detect gaps and place gap-fill rows on the
+      // wrong date. Same root cause as EntityHistoryChart.tsx.
+      const dateStrA = fmtIsoDate(rowA.reading_datetime);
+      const dateStrB = fmtIsoDate(rowB.reading_datetime);
       const msA      = new Date(dateStrA).getTime();
       const msB      = new Date(dateStrB).getTime();
       const daysDiff = Math.round((msB - msA) / 86_400_000);
@@ -511,7 +521,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
               <>Column: <span className="font-mono font-semibold">{column}</span></>
             )}
             <br />
-            Reading: <span className="font-mono">{reading?.reading_datetime?.slice(0, 10)}</span>
+            Reading: <span className="font-mono">{fmtIsoDate(reading?.reading_datetime)}</span>
           </div>
 
           {/* Primary column */}
@@ -1257,7 +1267,7 @@ function RegressionDetail({
                 const isApplying = applyingOne === c.reading_id;
                 return (
                   <TableRow key={c.reading_id} className={cn('text-xs', isReset && 'bg-kpi-solar/60')}>
-                    <TableCell className="font-mono">{c.reading_datetime?.slice(0, 16).replace('T', ' ')}</TableCell>
+                    <TableCell className="font-mono">{fmtIsoDate(c.reading_datetime)} {fmtTime(c.reading_datetime)}</TableCell>
                     <TableCell className="text-right font-mono text-danger">
                       {c.original_value?.toFixed(2) ?? '—'}
                     </TableCell>

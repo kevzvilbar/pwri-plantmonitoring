@@ -23,6 +23,7 @@ import { DataState } from '@/components/DataState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
+import { fmtIsoDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -961,13 +962,18 @@ function scoreStatus(s: DayScore2, isToday = false): keyof typeof KPI_STATUS {
 function scoreColor(s: DayScore2, isToday = false) { return KPI_STATUS[scoreStatus(s, isToday)].color; }
 
 function generateDays2(range: KpiRange2): string[] {
+  // Manila calendar days, not UTC — toISOString() always reports the UTC
+  // date, which runs up to 8h behind Asia/Manila. For the first ~8 hours of
+  // every Manila day (00:00–07:59), that made "today" resolve to yesterday
+  // and pushed the whole rolling window back a day. Same root cause as the
+  // reading_datetime bucketing below — see EntityHistoryChart.tsx.
   if (range === 'today') {
-    return [new Date().toISOString().slice(0, 10)];
+    return [fmtIsoDate(new Date())];
   }
   const days: string[] = [];
   for (let i = range - 1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(fmtIsoDate(d));
   }
   return days;
 }
@@ -1066,18 +1072,23 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
   const [refreshKey, setRefreshKey] = useState(0);
 
   const days = useMemo(() => generateDays2(range), [range, refreshKey]);
-  const since = useMemo(() => days[0] + 'T00:00:00Z', [days]);
-  // Every reading is bucketed into a UTC calendar day elsewhere in this file
-  // (`.slice(0, 10)` on an ISO timestamp), so "today" and the elapsed-hours
-  // proration below stay in UTC to match those buckets. If plants need a
-  // local-timezone cutover instead, that has to change together with the
-  // bucketing logic below — not just here.
+  // days[0] is a Manila calendar date (e.g. "2026-08-15"); Manila midnight of
+  // that date is 16:00 UTC the *previous* UTC day (Asia/Manila = UTC+8), so
+  // anchor the query with an explicit +08:00 offset rather than 'Z' — using
+  // 'Z' here would silently drop the first 8 hours of that Manila day.
+  const since = useMemo(() => days[0] + 'T00:00:00+08:00', [days]);
+  // Every reading is now bucketed into an Asia/Manila calendar day (see
+  // fmtIsoDate usage below and in EntityHistoryChart.tsx), so "today" and
+  // the elapsed-hours proration here use Manila time too, to match those
+  // buckets. These have to stay in sync with the bucketing logic below —
+  // not just here.
   // Cheap to compute, so no useMemo — they naturally refresh on every
   // render (including a manual "Refresh" click) without needing a
   // refreshKey-only dependency array.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = fmtIsoDate(new Date());
   const now = new Date();
-  const elapsedFraction = Math.min(1, Math.max(0, (now.getUTCHours() + now.getUTCMinutes() / 60) / 24));
+  const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  const elapsedFraction = Math.min(1, Math.max(0, (nowManila.getHours() + nowManila.getMinutes() / 60) / 24));
 
   // ── Operators only ─────────────────────────────────────────────────────────
   const operators = useMemo(() => {
@@ -1251,7 +1262,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     const tchemMap:  Record<string, number>       = {};
 
     wellReadings.forEach((r) => {
-      const day = r.reading_datetime.slice(0, 10);
+      const day = fmtIsoDate(r.reading_datetime); // Asia/Manila bucketing, matches generateDays2/todayStr above
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (twellMap[tk] = twellMap[tk] ?? new Set()).add(r.well_id);
@@ -1261,7 +1272,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     });
 
     locReadings.forEach((r) => {
-      const day = r.reading_datetime.slice(0, 10);
+      const day = fmtIsoDate(r.reading_datetime); // Asia/Manila bucketing, matches generateDays2/todayStr above
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (tlocMap[tk] = tlocMap[tk] ?? new Set()).add(r.locator_id);
@@ -1271,7 +1282,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     });
 
     roReadings.forEach((r) => {
-      const day = r.reading_datetime.slice(0, 10);
+      const day = fmtIsoDate(r.reading_datetime); // Asia/Manila bucketing, matches generateDays2/todayStr above
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}:${r.train_id}`;
       troMap[tk] = (troMap[tk] ?? 0) + 1;
@@ -1281,7 +1292,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     });
 
     meterReadings.forEach((r) => {
-      const day = r.reading_datetime.slice(0, 10);
+      const day = fmtIsoDate(r.reading_datetime); // Asia/Manila bucketing, matches generateDays2/todayStr above
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       (tmeterMap[tk] = tmeterMap[tk] ?? new Set()).add(r.meter_id);
@@ -1291,7 +1302,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
     });
 
     powerReadings.forEach((r) => {
-      const day = r.reading_datetime.slice(0, 10);
+      const day = fmtIsoDate(r.reading_datetime); // Asia/Manila bucketing, matches generateDays2/todayStr above
       if (!daySet.has(day)) return;
       const tk = `${r.plant_id}:${day}`;
       if (r.daily_solar_kwh !== null) tsolarMap[tk] = (tsolarMap[tk] ?? 0) + 1;
