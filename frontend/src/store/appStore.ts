@@ -7,6 +7,24 @@ import { DEFAULT_THEME_ID } from '@/lib/themes';
 // imports RangeKey from types.ts as before — this is just for typing.
 type RangeKey = '7D' | '14D' | '30D' | '60D' | '90D' | 'CUSTOM';
 
+// ── chartFrom/chartTo validation ──────────────────────────────────────────
+// TrendChart's custom-range <input type="date"> can be cleared by the user,
+// which fires onChange with e.target.value === ''. Every dashboard card that
+// reads chartFrom/chartTo (TrendChart, ComplianceRadarCard, CostSunburst,
+// DataCompletenessRadarCard, WaterBalanceBridgeCard, BlendingVolumeCard)
+// assumes they're always valid 'yyyy-MM-dd' strings whenever chartRange is
+// 'CUSTOM', and feeds them straight into `new Date(...).toISOString()` or
+// date-fns `format()` — both throw RangeError('Invalid time value') on an
+// Invalid Date, which crashes the whole dashboard to the ErrorBoundary.
+// isValidDateStr + the merge/setter below are the single point that keeps
+// that assumption true, instead of every reader re-validating on its own.
+function isValidDateStr(v: unknown): v is string {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    && !isNaN(new Date(`${v}T00:00:00`).getTime());
+}
+const defaultChartFrom = () => format(subDays(new Date(), 7), 'yyyy-MM-dd');
+const defaultChartTo = () => format(new Date(), 'yyyy-MM-dd');
+
 // ── Plant Alert types ─────────────────────────────────────────────────────────
 export type PlantAlertSeverity = 'critical' | 'warning' | 'info';
 
@@ -100,7 +118,11 @@ export const useAppStore = create<AppState>()(
       chartFrom: format(subDays(new Date(), 7), 'yyyy-MM-dd'),
       chartTo: format(new Date(), 'yyyy-MM-dd'),
       setChartRange: (range) => set({ chartRange: range }),
-      setChartCustomDates: (from, to) => set({ chartFrom: from, chartTo: to }),
+      setChartCustomDates: (from, to) =>
+        set((state) => ({
+          chartFrom: isValidDateStr(from) ? from : state.chartFrom,
+          chartTo: isValidDateStr(to) ? to : state.chartTo,
+        })),
 
       // ── Plant alerts ──────────────────────────────────────────────
       plantAlerts: [],
@@ -168,6 +190,19 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'pwri-app-state',
+      // Default merge is a shallow `{ ...currentState, ...persistedState }`,
+      // which is preserved here — this only adds a post-merge sanity check
+      // so a chartFrom/chartTo already corrupted in someone's localStorage
+      // (saved before setChartCustomDates validated its input) can't keep
+      // crashing the dashboard on every load. Everything else merges as before.
+      merge: (persistedState, currentState) => {
+        const merged = { ...currentState, ...(persistedState as Partial<AppState>) };
+        return {
+          ...merged,
+          chartFrom: isValidDateStr(merged.chartFrom) ? merged.chartFrom : defaultChartFrom(),
+          chartTo: isValidDateStr(merged.chartTo) ? merged.chartTo : defaultChartTo(),
+        };
+      },
       partialize: (s) => ({
         selectedPlantId: s.selectedPlantId,
         activeOperatorId: s.activeOperatorId,
