@@ -242,11 +242,19 @@ export function ImportReadingsDialog({
         } else {
           // normalizeDatetime pads single-digit hours (T8: → T08:) and replaces
           // space separators with T so Excel-style datetimes parse correctly.
+          //
+          // BUG FIX (timezone day-rollback): previously ran the normalized string
+          // through `new Date(...).toISOString()` before slicing, which converts
+          // to UTC first. For Manila (UTC+8) that shifts any reading between
+          // 12:00–7:59 AM local onto the *previous* calendar day/minute, so two
+          // genuinely different rows could collide (or a real dup could be missed).
+          // normalizeDatetime() already returns a clean "YYYY-MM-DDTHH:mm" string —
+          // slice the key straight from it, no UTC conversion involved.
           const dtNorm = normalizeDatetime(dtRaw);
           if (isPowerModule) {
-            dtKey = new Date(dtNorm).toISOString().slice(0, 10); // YYYY-MM-DD
+            dtKey = dtNorm.slice(0, 10); // YYYY-MM-DD, as entered
           } else {
-            dtKey = new Date(dtNorm).toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+            dtKey = dtNorm.slice(0, 16); // YYYY-MM-DDTHH:mm, as entered
           }
         }
         // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.

@@ -148,7 +148,7 @@ async function insertPowerReadings(
   type DayGroup = {
     pid: string;
     dt: string;       // ISO UTC string for the DB
-    dtDate: string;   // YYYY-MM-DD UTC (dup-check window key)
+    dtDate: string;   // YYYY-MM-DD as entered (Manila calendar date, dup-check window key)
     meters: Map<number, number>;
     solar?: number;
     dailySolar?: number;
@@ -157,8 +157,17 @@ async function insertPowerReadings(
   };
   const groups = new Map<string, DayGroup>();
   for (const { r, pid, mi } of resolvedRows) {
-    const dt = new Date(normalizeDatetime(r.reading_datetime)).toISOString();
-    const dtDate = dt.slice(0, 10);
+    // BUG FIX (timezone day-rollback): previously derived dtDate by round-tripping
+    // through `new Date(...).toISOString().slice(0, 10)`, which converts to UTC
+    // first. For Manila (UTC+8) that silently shifts any reading between
+    // 12:00–7:59 AM local onto the *previous* calendar day (e.g. "2026-08-08T00:25"
+    // → "2026-08-07"), causing early-morning rows to false-positive as duplicates
+    // of the prior day and merge into the wrong power_readings row. normalizeDatetime()
+    // already guarantees a clean "YYYY-MM-DDTHH:mm" string, so slice the date
+    // straight from that — no UTC conversion, no dependency on runtime timezone.
+    const normalized = normalizeDatetime(r.reading_datetime);
+    const dt = new Date(normalized).toISOString();
+    const dtDate = normalized.slice(0, 10);
     const key = `${pid}|${dtDate}`;
     if (!groups.has(key)) groups.set(key, { pid, dt, dtDate, meters: new Map() });
     const g = groups.get(key)!;
@@ -221,8 +230,12 @@ async function insertPowerReadings(
 
   for (const g of groupList) {
     const { key, pid: gPid, dt, dtDate, meters } = g;
-    const dayStart = `${dtDate}T00:00:00.000Z`;
-    const dayEnd   = `${dtDate}T23:59:59.999Z`;
+    // BUG FIX: dtDate is now the Manila calendar date (see above), so the window
+    // must bound the Manila day, not a UTC day of the same label. Philippines has
+    // no DST, so a fixed +08:00 offset is always correct — this avoids depending
+    // on the runtime's local timezone (unlike appending "Z").
+    const dayStart = `${dtDate}T00:00:00.000+08:00`;
+    const dayEnd   = `${dtDate}T23:59:59.999+08:00`;
     const dayStartMs = new Date(dayStart).getTime();
     const dayEndMs   = new Date(dayEnd).getTime();
 
