@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/dialog';
 import { PlantHealthStrip }    from '@/components/dashboard/PlantHealthStrip';
 import { NRWGaugeCard }        from '@/components/dashboard/NRWGaugeCard';
+import { WaterBalanceBridgeCard } from '@/components/dashboard/WaterBalanceBridgeCard';
 import { ReadingCoverageCard } from '@/components/dashboard/ReadingCoverageCard';
 import { PMDueSoonCard }       from '@/components/dashboard/PMDueSoonCard';
 import { PendingReviewCard }   from '@/components/dashboard/PendingReviewCard';
@@ -2043,6 +2044,10 @@ export default function Dashboard() {
           value={fmtNum(blending)} unit="m³" />
       </div>
       <ClusterCharts metrics={OVERVIEW_CHART_METRICS} viewMode={viewMode} expandedMetric={expandedMetric} plantIds={plantIds} clusterId="overview" />
+      {/* Bridges the five Overview tiles above (Raw Water, Production, Consumption,
+          Blending, NRW) into one connected waterfall instead of five separate
+          numbers — same shared date range, same underlying reading computation. */}
+      <WaterBalanceBridgeCard plantIds={plantIds} />
 
       {/* ─── Cluster 2: Quality ─── */}
       {/* Spec order: Feed TDS · Product TDS · Raw TDS (per well source) ·
