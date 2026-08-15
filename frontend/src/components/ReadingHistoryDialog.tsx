@@ -99,9 +99,33 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
    *  meaningful for module 'locator' | 'well'. Defaults to 'raw' (the
    *  existing cumulative-meter behavior) so every other caller is unaffected. */
   defaultInputMode?: 'raw' | 'direct';
+  /** From plant.default_solar_input_mode (Plants → Energy Sources → Solar
+   *  reading input mode). 'direct' -> the value entered for solar already IS
+   *  that period's kWh (e.g. read off an inverter's daily-yield display), not
+   *  a cumulative odometer-style reading — so it must never be diffed against
+   *  the previous day's value. Only meaningful for module 'power'. Defaults to
+   *  'raw' (existing cumulative-meter behavior) so grid-only callers and
+   *  plants without solar are unaffected. */
+  solarInputMode?: 'raw' | 'direct';
   onClose: () => void;
 }) {
   const isDirectMode = (module === 'locator' || module === 'well') && defaultInputMode === 'direct';
+  // Plant-level solar mode (Plants → Energy Sources). See prop doc above —
+  // this must never be inferred from which column happens to be populated on
+  // a given row (that's what let the bug through originally: solar_meter_reading
+  // and daily_solar_kwh could both be non-null at once, e.g. after a row was
+  // edited through this dialog before this fix), it has to come from the
+  // plant's actual configured setting.
+  const isSolarDirectMode = module === 'power' && solarInputMode === 'direct';
+  // Resolves a row's solar value under Direct kWh mode: prefer daily_solar_kwh
+  // (the column direct-mode entries are meant to live in) but fall back to
+  // solar_meter_reading for rows that still have the value there (entered
+  // before the plant switched to Direct kWh, or edited through this dialog
+  // before this fix).
+  const solarDirectVal = (row: any): number | null => {
+    const v = row?.daily_solar_kwh ?? row?.solar_meter_reading;
+    return v != null ? +v : null;
+  };
   const qc = useQueryClient();
   // Permission model: same canEditEntry primitive already used by every other
   // reading-entry surface (RO logs, CIP, Dosing, Locator inline edit) — was
@@ -330,7 +354,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       const isSolarEdit = meterFilter?.type === 'solar';
       const gridIdxForEdit = meterFilter && !isSolarEdit ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
       const gridValueForEdit = gmrForEdit?.[String(gridIdxForEdit)] ?? (gridIdxForEdit === 0 ? r.meter_reading_kwh : null);
-      setEditRow({ id: r.id, datetime: dtStr, value: String(gridValueForEdit ?? ''), value2: r.solar_meter_reading != null ? String(r.solar_meter_reading) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', gridIdx: gridIdxForEdit, isMeterReplacement: !!r.is_meter_replacement });
+      const solarValueForEdit = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
+      setEditRow({ id: r.id, datetime: dtStr, value: String(gridValueForEdit ?? ''), value2: solarValueForEdit != null ? String(solarValueForEdit) : '', value3: r.daily_grid_kwh != null ? String(r.daily_grid_kwh) : '', gridIdx: gridIdxForEdit, isMeterReplacement: !!r.is_meter_replacement });
     } else if (module === 'blending') {
       const eventDt = r.event_date ?? r.noted_at ?? '';
       const blendDtStr = eventDt ? format(new Date(eventDt), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm");
@@ -686,11 +711,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           }
         } catch { /* non-critical: proceed without updating daily_consumption_kwh */ }
       }
-      const powerUpdatePayload: Record<string, any> = {
-        solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
-        reading_datetime: dtIso,
-        is_meter_replacement: !!editRow.isMeterReplacement,
-      };
+      const powerUpdatePayload: Record<string, any> = isSolarDirectMode
+        ? {
+            // Direct daily kWh: store only daily_solar_kwh, do NOT leave a
+            // value behind in solar_meter_reading — mirrors PowerSection.tsx's
+            // main entry form so edits made through this dialog don't revert
+            // the row to "raw meter" storage, which is what produced the
+            // negative/erratic Δ values in the Solar history table.
+            daily_solar_kwh: editRow.value2 ? +editRow.value2 : null,
+            solar_meter_reading: null,
+            reading_datetime: dtIso,
+            is_meter_replacement: !!editRow.isMeterReplacement,
+          }
+        : {
+            solar_meter_reading: editRow.value2 ? +editRow.value2 : null,
+            reading_datetime: dtIso,
+            is_meter_replacement: !!editRow.isMeterReplacement,
+          };
       if (gridIdx === 0) {
         powerUpdatePayload.meter_reading_kwh = +editRow.value;
       }
@@ -889,7 +926,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               )}
               {module === 'power' && (
                 <div>
-                  <Label className="text-2xs">Solar Power Reading (kWh)</Label>
+                  <Label className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
                     className="h-8 text-xs" placeholder="optional" />
@@ -964,6 +1001,13 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
           <div className="flex items-center gap-1.5 rounded-md bg-primary-soft border border-primary/30 px-2.5 py-1.5 text-xs text-primary">
             <Droplet className="h-3 w-3 shrink-0" />
             This entity's input is already a period volume, so there's no Δ to compute — the value below is the volume itself.
+          </div>
+        )}
+
+        {meterFilter?.type === 'solar' && isSolarDirectMode && (
+          <div className="flex items-center gap-1.5 rounded-md bg-warn-soft border border-warn/30 px-2.5 py-1.5 text-xs text-warn">
+            <Zap className="h-3 w-3 shrink-0" />
+            This plant's solar input is Direct kWh, so there's no Δ to compute — each reading is already that day's power, not a cumulative meter value.
           </div>
         )}
 
@@ -1113,6 +1157,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                     const gmr     = r.grid_meter_readings     as Record<string, number> | null | undefined;
                     const prevGmr = predecessor?.grid_meter_readings as Record<string, number> | null | undefined;
                     const hasSolar = r.solar_meter_reading != null || (r.daily_solar_kwh != null && +r.daily_solar_kwh > 0);
+                    // The value to show for this row's solar reading, honoring the
+                    // plant's configured mode rather than inferring it from which
+                    // column happens to be populated (see solarDirectVal doc above).
+                    const solarDisplayVal = isSolarDirectMode ? solarDirectVal(r) : r.solar_meter_reading;
                     // colspan for the date cell: Date + all 6 data columns
                     const dateCols = 7;
                     const actionsCell = anyEditable ? (
@@ -1144,18 +1192,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
 
                     // ── meterFilter: flat single-row-per-record rendering ────────────────
                     if (meterFilter) {
-                      const isSolar = meterFilter.type === 'solar';
+                      const isSolar     = meterFilter.type === 'solar';
+                      const solarDirect = isSolar && isSolarDirectMode;
                       const gridIdx = !isSolar ? (meterFilter as { type: 'grid'; idx: number }).idx : 0;
                       const mMult   = isSolar ? 1 : getHistGridMult(gridIdx);
                       const curr    = isSolar
-                        ? r.solar_meter_reading
+                        ? (solarDirect ? solarDirectVal(r) : r.solar_meter_reading)
                         : (gmr?.[String(gridIdx)] ?? (gridIdx === 0 ? r.meter_reading_kwh : null));
                       const prevVal = isSolar
                         ? predecessor?.solar_meter_reading
                         : (prevGmr?.[String(gridIdx)] ?? (gridIdx === 0 ? predecessor?.meter_reading_kwh : null));
-                      const rawDelta   = curr != null && prevVal != null ? curr - prevVal : null;
+                      // Direct kWh: never diff two readings — each one already IS
+                      // that period's kWh, not a cumulative odometer value. Diffing
+                      // two independent days' totals is what produced negative/
+                      // erratic "Δ" values before this fix.
+                      const rawDelta   = solarDirect ? null : (curr != null && prevVal != null ? curr - prevVal : null);
                       const isRepl     = isSolar ? isSolarRepl : isGridRepl;
-                      const effective  = isRepl ? 0 : rawDelta != null ? rawDelta * mMult : null;
+                      const effective  = isRepl ? 0 : solarDirect ? curr : (rawDelta != null ? rawDelta * mMult : null);
                       return (
                         <tr key={r.id ?? i}
                           className={[
@@ -1195,7 +1248,9 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                           <td className="px-3 py-1.5 text-right font-mono-num text-2xs">
                             {isRepl
                               ? <span className={isSolar ? 'text-kpi-solar font-medium' : 'text-kpi-grid font-medium'}>0</span>
-                              : rawDelta != null ? fmtNum(rawDelta) : '—'
+                              : solarDirect
+                                ? <span className="text-muted-foreground" title="Direct kWh input — no delta to compute">n/a</span>
+                                : rawDelta != null ? fmtNum(rawDelta) : '—'
                             }
                           </td>
                           {/* × multiplier */}
@@ -1368,17 +1423,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
                             </td>
                             {/* Reading */}
                             <td className="px-3 py-1 text-right font-mono-num text-kpi-solar text-2xs">
-                              {r.solar_meter_reading != null ? fmtNum(r.solar_meter_reading) : '—'}
+                              {solarDisplayVal != null ? fmtNum(solarDisplayVal) : '—'}
                             </td>
                             {/* Δ Solar */}
                             <td className="px-3 py-1 text-right font-mono-num text-2xs">
                               {isSolarRepl
                                 ? <span className="text-kpi-solar font-medium">0</span>
-                                : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
-                                  ? <span className="text-kpi-solar">{fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)}</span>
-                                  : r.daily_solar_kwh != null && +r.daily_solar_kwh > 0
-                                    ? <span className="text-kpi-solar">{fmtNum(+r.daily_solar_kwh)}</span>
-                                    : '—'
+                                : isSolarDirectMode
+                                  // Direct kWh: never diff two readings — this IS the
+                                  // day's kWh already, not a cumulative meter value.
+                                  ? (solarDisplayVal != null
+                                      ? <span className="text-kpi-solar">{fmtNum(solarDisplayVal)}</span>
+                                      : '—')
+                                  : (predecessor?.solar_meter_reading != null && r.solar_meter_reading != null)
+                                    ? <span className="text-kpi-solar">{fmtNum(r.solar_meter_reading - predecessor.solar_meter_reading)}</span>
+                                    : r.daily_solar_kwh != null && +r.daily_solar_kwh > 0
+                                      ? <span className="text-kpi-solar">{fmtNum(+r.daily_solar_kwh)}</span>
+                                      : '—'
                               }
                             </td>
                             {/* × — n/a for solar */}

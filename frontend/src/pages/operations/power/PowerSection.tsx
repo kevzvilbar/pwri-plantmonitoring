@@ -1582,6 +1582,7 @@ export function PowerForm() {
           gridMeterNames={gridMeterNames}
           gridMultipliers={Array.isArray(configMultiplierArr) ? (configMultiplierArr as any[]).map(Number) : []}
           meterFilter={powerHistoryOpen}
+          solarInputMode={solarInputMode}
           onClose={() => setPowerHistoryOpen(null)}
         />
       )}
