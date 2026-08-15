@@ -524,7 +524,20 @@ export function WaterBalanceBridgeCard({
                   tickLine={false}
                 />
                 <Tooltip content={<BridgeTooltip />} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} />
-                <Bar dataKey="base" stackId="bridge" fill="transparent" isAnimationActive={false} />
+                <Bar dataKey="base" stackId="bridge" isAnimationActive={false}>
+                  {/* Recharts (2.15.4) ignores a `fill` prop set directly on a
+                      stacked <Bar> that has no <Cell> children — it falls
+                      back to the same color the sibling stacked Bar's Cells
+                      use for that row, instead of actually painting
+                      transparent. The math was always correct (this segment
+                      really was floating at the right offset) but with both
+                      segments rendered in the same solid color, every bar
+                      LOOKED like one solid block from 0 — indistinguishable
+                      from a non-floating bar. Giving this Bar its own
+                      transparent Cells (matched 1:1 with `rows`, same as the
+                      Bar below) is what actually makes it invisible. */}
+                  {rows.map((r) => <Cell key={r.name} fill="transparent" />)}
+                </Bar>
                 <Bar dataKey="height" stackId="bridge" radius={[3, 3, 3, 3]} isAnimationActive={false}>
                   {rows.map((r) => <Cell key={r.name} fill={r.fill} />)}
                   <LabelList
