@@ -27,6 +27,7 @@ import { format, subDays } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, Loader2, History, Gauge, FlaskConical, Keyboard, CalendarClock, MessageCircleOff } from 'lucide-react';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
+import { resolveBlendingDateContext } from '@/lib/blendingBackdate';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -624,10 +625,72 @@ function BlendingRow({
   // raw_meter_reading (for cross-device consistency), finally falling back to
   // the API-supplied previousVolume (daily m³ — less accurate for cumulative
   // meters, but better than showing nothing).
-  const prevCumulative: number | null =
-    prevRawReading?.reading ?? dbLatestRaw?.reading ?? previousVolume ?? null;
-
   const eventDate = customDt.slice(0, 10);
+  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+  const isBackdated = eventDate !== todayDateStr;
+
+  // When the operator backdates (picks a date other than today), the
+  // sources above are the well's GLOBALLY latest reading — not the reading
+  // that was actually current as of the selected date. Comparing a
+  // backfilled Aug 13 entry against an already-logged Aug 15 reading
+  // produces a nonsensical negative delta and permanently blocks Save
+  // (volumeChanged below requires deltaRaw > 0), even though the entry may
+  // be perfectly valid. This mirrors trg_blending_set_reading's own
+  // resolution (latest event_date strictly before the selected one) so the
+  // preview/warning/Save-gating here agree with what the server would
+  // derive — and reports whether a reading already exists ON the selected
+  // date, so the "No reading — why?" affordance below can key off the date
+  // actually being edited instead of assuming "today".
+  // limit(2) + lte (rather than two separate queries) gets both answers —
+  // "does this exact date already have a reading" and "what's the true
+  // predecessor" — in one round trip: sorted desc, an exact match for
+  // eventDate (the largest date <= eventDate) always sorts first, so the
+  // next row that doesn't match eventDate is necessarily the predecessor.
+  const { data: backdatedContext, isLoading: backdatedContextLoading } = useQuery({
+    queryKey: ['blending-backdated-context', well.id, eventDate],
+    enabled: isBackdated,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('blending_events' as any) as any)
+        .select('raw_meter_reading, event_date')
+        .eq('well_id', well.id)
+        .lte('event_date', eventDate)
+        .not('raw_meter_reading', 'is', null)
+        .order('event_date', { ascending: false })
+        .limit(2);
+      if (error) return { existingForDate: null, predecessor: null };
+      return resolveBlendingDateContext((data ?? []) as { raw_meter_reading: number; event_date: string }[], eventDate);
+    },
+    staleTime: 15_000,
+  });
+
+  // "No reading — why?" for the currently selected date. Today keeps using
+  // the form-level batched query (gapReason prop, keyed to todayDateStr —
+  // cheap because it's fetched once for all wells together). Backdating
+  // needs its own per-row lookup since eventDate varies per-row/per-
+  // interaction and can't be usefully batched at the form level.
+  const { data: backdatedGapReason } = useQuery({
+    queryKey: ['blending-gap-reason-for-date', well.id, eventDate],
+    enabled: isBackdated,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reading_gap_reasons' as any)
+        .select('*')
+        .eq('plant_id', plantId)
+        .eq('entity_type', 'blending')
+        .eq('entity_id', well.id)
+        .eq('gap_date', eventDate)
+        .maybeSingle();
+      if (error) return null;
+      return data;
+    },
+    staleTime: 15_000,
+  });
+  const effectiveGapReason = isBackdated ? backdatedGapReason : gapReason;
+  const hasReadingForSelectedDate = isBackdated ? !!backdatedContext?.existingForDate : todayVolume > 0;
+
+  const prevCumulative: number | null = isBackdated
+    ? (backdatedContext?.predecessor?.reading ?? null)
+    : (prevRawReading?.reading ?? dbLatestRaw?.reading ?? previousVolume ?? null);
 
   const deltaRaw = volume !== ''
     ? prevCumulative != null ? +volume - prevCumulative : null
@@ -646,7 +709,9 @@ function BlendingRow({
   // average — see the query above), not the single previous day's volume it
   // used to be, so a gap of several days between blending events no longer
   // makes every entry after it look like a huge, false spike.
-  const prevDateStr = prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate ?? null;
+  const prevDateStr = isBackdated
+    ? (backdatedContext?.predecessor?.date ?? null)
+    : (prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate ?? null);
   const daysElapsedBlend = prevDateStr
     ? (new Date(`${eventDate}T00:00:00`).getTime() - new Date(`${prevDateStr}T00:00:00`).getTime()) / 86_400_000
     : null;
@@ -714,11 +779,22 @@ function BlendingRow({
       // as the old manual UPDATE branch. volume_m3 is never sent; the
       // trigger recomputes it from raw_meter_reading / previous_reading on
       // every write.
+      // p_previous_reading: null when backdating — this may be a brand new
+      // INSERT (no row yet for well_id + eventDate), and prevCumulative here
+      // is already the correct chronological predecessor for display, but
+      // trusting it as a literal value risks drift if another entry landed
+      // between the query above and this write. Passing null instead lets
+      // trg_blending_set_reading resolve it itself, from the same
+      // (event_date < eventDate) lookup, at the actual moment of insert —
+      // and trg_blending_readings_chain (AFTER trigger) independently
+      // re-derives and confirms it either way, so this can't drift from
+      // what ends up stored. Today's entry is unchanged — still sends its
+      // own prevCumulative as before.
       const { data: savedId, error } = await supabase.rpc('fn_blending_upsert_reading' as any, {
         p_well_id: well.id, p_plant_id: plantId, p_well_name: well.name, p_plant_name: plantName,
         p_event_date: eventDate, p_reading_datetime: new Date(customDt).toISOString(),
         p_raw_meter_reading: +volume,
-        p_previous_reading: prevCumulative,
+        p_previous_reading: isBackdated ? null : prevCumulative,
         p_update_previous_reading: false,
       });
       if (error) throw error;
@@ -748,18 +824,31 @@ function BlendingRow({
       // Persist the cumulative meter reading locally so the next save can
       // compute the correct Δ. Purely a same-device UX cache now — the
       // trigger is the actual source of truth for what gets stored.
-      persistRaw(well.id, +volume, eventDate);
-      setPrevRawReading({ reading: +volume, date: eventDate });
-      // Reset the pre-fill guard so the drum auto-fills with the new "prev"
-      // value after setVolume('') clears the input.
-      lastPrefilledBlend.current = null;
+      // Guarded by date: a backdated fill-in for an earlier gap (eventDate
+      // older than what's already cached) must never regress this cache
+      // backward — that cache also seeds the prefill + Δ baseline for
+      // today's entry, and overwriting it with an older reading would
+      // corrupt that baseline the next time this well is opened.
+      const cachedDate = prevRawReading?.date ?? dbLatestRaw?.date ?? null;
+      if (!cachedDate || eventDate >= cachedDate) {
+        persistRaw(well.id, +volume, eventDate);
+        setPrevRawReading({ reading: +volume, date: eventDate });
+        // Reset the pre-fill guard so the drum auto-fills with the new "prev"
+        // value after setVolume('') clears the input.
+        lastPrefilledBlend.current = null;
+      }
 
       toast.success(`${well.name}: meter reading saved${deltaRaw != null ? ` (Δ ${fmtNum(deltaRaw)} m³)` : ''}`);
       setVolume('');
       setJustSaved(true);
 
-      // Invalidate dashboard so stat cards refresh immediately.
+      // Invalidate dashboard so stat cards refresh immediately, plus the
+      // date-aware queries above — a partial key matches every eventDate
+      // cached for this well, so this covers whichever date(s) the operator
+      // looks at next without needing to know which one just changed.
       invalidateWellDash(qc, [well.id]);
+      qc.invalidateQueries({ queryKey: ['blending-backdated-context', well.id] });
+      qc.invalidateQueries({ queryKey: ['blending-gap-reason-for-date', well.id] });
       onSaved();
     } catch (e) {
       toast.error(friendlyError(e));
@@ -767,15 +856,18 @@ function BlendingRow({
   };
 
   // "No reading — why?" — same (entity_type, entity_id, gap_date) upsert
-  // pattern as WellRow / LocatorRow, just entity_type: 'blending' instead of
+  // pattern as WellRow / LocatorRow, entity_type: 'blending' instead of
   // 'well' (see 20260815000000_reading_gap_reasons_add_blending.sql).
+  // Keyed to eventDate (the currently selected date), not hardcoded to
+  // today, so this also covers logging a reason for a backdated gap —
+  // eventDate already equals todayDateStr in the default case, so this is
+  // a strict generalization, not a behavior change for that path.
   const saveGapReason = async (category: string, detail: string) => {
     setGapSaving(true);
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
     const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
       [{
         entity_type: 'blending', entity_id: well.id, plant_id: plantId,
-        gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
+        gap_date: eventDate, reason_category: category, reason_detail: detail || null,
         logged_by: userId ?? null,
       }] as any,
       { onConflict: 'entity_type,entity_id,gap_date' },
@@ -784,6 +876,7 @@ function BlendingRow({
     if (error) { toast.error(friendlyError(error)); return; }
     toast.success(`${well.name}: reason logged`);
     setGapDialogOpen(false);
+    qc.invalidateQueries({ queryKey: ['blending-gap-reason-for-date', well.id, eventDate] });
     onGapReasonSaved?.();
   };
 
@@ -811,24 +904,24 @@ function BlendingRow({
               restricts edit/delete per-row via canEditEntry/hasFullAccess
               (own entries within 8h for non-full-access roles), so this
               button only ever controlled read-only visibility. */}
-          {todayVolume === 0 && !justSaved && (
-            gapReason ? (
+          {hasReadingForSelectedDate === false && !justSaved && !(isBackdated && backdatedContextLoading) && (
+            effectiveGapReason ? (
               <button
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
-                title={`No reading — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
+                title={`No reading — ${reasonCategoryLabel(effectiveGapReason.reason_category)}${effectiveGapReason.reason_detail ? ': ' + effectiveGapReason.reason_detail : ''} (click to edit)`}
                 className="shrink-0 inline-flex items-center gap-0.5 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors"
                 data-testid={`blending-gap-reason-badge-${well.id}`}
               >
                 <MessageCircleOff className="h-2.5 w-2.5" />
-                {reasonCategoryLabel(gapReason.reason_category)}
+                {reasonCategoryLabel(effectiveGapReason.reason_category)}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setGapDialogOpen(true)}
-                title="No reading today — log why"
-                aria-label="No reading today — log why"
+                title={isBackdated ? `No reading on ${eventDate} — log why` : 'No reading today — log why'}
+                aria-label={isBackdated ? `No reading on ${eventDate} — log why` : 'No reading today — log why'}
                 className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 data-testid={`blending-gap-reason-btn-${well.id}`}
               >
@@ -868,18 +961,27 @@ function BlendingRow({
           color reads at a glance, the text alongside it keeps the real numbers. */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xs text-muted-foreground">
-          {/* Priority: localStorage → DB raw_meter_reading → daily vol fallback */}
+          {/* Priority when on today: localStorage → DB raw_meter_reading →
+              daily vol fallback. When backdated: the true chronological
+              predecessor resolved above, so this never shows a "previous"
+              reading dated AFTER the entry being made. */}
           prev meter: <span className="font-mono-num" title={
-            prevRawReading
-              ? `Last cumulative reading on ${prevRawReading.date}`
-              : dbLatestRaw
-                ? `Last cumulative reading on ${dbLatestRaw.date} (from DB)`
-                : previousDate ? `Last entry on ${previousDate} (daily vol)` : 'No prior reading'
+            isBackdated
+              ? (backdatedContextLoading
+                  ? 'Looking up the reading before this date…'
+                  : backdatedContext?.predecessor
+                    ? `Last cumulative reading before ${eventDate}, on ${backdatedContext.predecessor.date}`
+                    : `No reading before ${eventDate} — this would be the well's earliest known reading`)
+              : prevRawReading
+                ? `Last cumulative reading on ${prevRawReading.date}`
+                : dbLatestRaw
+                  ? `Last cumulative reading on ${dbLatestRaw.date} (from DB)`
+                  : previousDate ? `Last entry on ${previousDate} (daily vol)` : 'No prior reading'
           }>
-            {prevCumulative != null ? fmtNum(prevCumulative) : '—'}
+            {isBackdated && backdatedContextLoading ? '…' : prevCumulative != null ? fmtNum(prevCumulative) : '—'}
           </span>
-          {(prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate) && (
-            <span className="text-muted-foreground/60 ml-1">({prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate})</span>
+          {prevDateStr && (
+            <span className="text-muted-foreground/60 ml-1">({prevDateStr})</span>
           )}
           <span className="mx-1">·</span>
           today: <span className="font-mono-num">{fmtNum(todayVolume)} m³</span>
@@ -937,9 +1039,9 @@ function BlendingRow({
       )}
 
       {/* Row 5: Save button — full-width on mobile */}
-      <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired}
+      <Button onClick={save} disabled={saving || !volumeChanged || anomalyRemarkRequired || (isBackdated && backdatedContextLoading)}
         className={isMobile ? 'w-full h-11 text-sm bg-primary text-white hover:bg-primary/90 active:bg-primary shadow-sm' : 'h-9 px-4 text-xs w-full bg-primary text-white hover:bg-primary/90'}>
-        {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : 'Save'}
+        {saving ? <Loader2 className={isMobile ? 'h-4 w-4 animate-spin' : 'h-3 w-3 animate-spin'} /> : (isBackdated && backdatedContextLoading) ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
       </Button>
 
       {/* Warning banner */}
@@ -980,8 +1082,12 @@ function BlendingRow({
       <ReasonDialog
         open={gapDialogOpen}
         onOpenChange={setGapDialogOpen}
-        title={`No blending reading today for "${well.name}" — why?`}
-        description="This explains the gap for today. If a reading comes in later today, it takes priority over this note."
+        title={isBackdated
+          ? `No blending reading for "${well.name}" on ${eventDate} — why?`
+          : `No blending reading today for "${well.name}" — why?`}
+        description={isBackdated
+          ? `This explains the gap on ${eventDate}. If you have the real meter reading for that day instead, enter it above and Save — that takes priority over this note.`
+          : 'This explains the gap for today. If a reading comes in later today, it takes priority over this note.'}
         confirmLabel="Log reason"
         busy={gapSaving}
         onConfirm={(category, detail) => saveGapReason(category, detail)}
