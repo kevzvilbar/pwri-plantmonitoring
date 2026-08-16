@@ -798,7 +798,16 @@ export function PretreatmentAndROLog() {
       // blank (broken meter, sensor down, etc.) — see completeness guard above.
       // Conditionally included (same pattern as chlorine_residual_mg_l) so
       // un-migrated DBs don't get a null write for an unknown column.
-      ...(roIncompleteReason.trim() ? { incomplete_reason: roIncompleteReason.trim() } : {}),
+      //
+      // Offline submissions fall through to the same field: every RO input is
+      // locked while isOfflineBlocked (above), so roValues is all empty
+      // strings and this row's metrics all save as null. Previously that
+      // reason was written *only* to ro_trains.status (and, transiently, to
+      // sessionStorage) — nothing on the row itself said why it was blank, so
+      // it looked identical to a lost/failed save in TrainLogModal's history.
+      ...(roIncompleteReason.trim() ? { incomplete_reason: roIncompleteReason.trim() }
+        : !trainOnline ? { incomplete_reason: `Offline${offlineReasonFinal ? `: ${offlineReasonFinal}` : ''}` }
+        : {}),
       // Flag for review when a feed/permeate/reject meter delta looks like a
       // mis-keyed spike (see anyMeterSpike above). The operator can still
       // save — this doesn't block them, since the meter really might be
@@ -961,7 +970,9 @@ export function PretreatmentAndROLog() {
       remarks: remarks || null,
       // Conditionally included (same un-migrated-DB safety pattern as other
       // optional columns in this file) — omitted entirely when nothing was flagged.
-      ...(pretreatReasonParts.length ? { incomplete_reason: pretreatReasonParts.join(' | ') } : {}),
+      ...(pretreatReasonParts.length ? { incomplete_reason: pretreatReasonParts.join(' | ') }
+        : !trainOnline ? { incomplete_reason: `Offline${offlineReasonFinal ? `: ${offlineReasonFinal}` : ''}` }
+        : {}),
       recorded_by: activeOperator?.id,
     } as any);
     if (pretreatError) { toast.error(friendlyError(pretreatError)); return; }

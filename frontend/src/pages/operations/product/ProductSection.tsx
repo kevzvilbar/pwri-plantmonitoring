@@ -562,6 +562,10 @@ function ProductMeterRow({
   }, [previous, reading]);
 
   const save = async () => {
+    // Re-entrancy guard: ignore a second call while the first is still
+    // in-flight (double-tap, slow network + impatient re-tap, etc.) — same
+    // guard PretreatmentAndROLog.tsx's submit() uses.
+    if (saving) return;
     if (!reading) { toast.error(`${meter.name}: enter a reading`); return; }
     if (anomalyRemarkRequired) {
       toast.error(`${meter.name}: this reading is outside the normal range — add a remark before saving.`);
@@ -588,7 +592,23 @@ function ProductMeterRow({
       // a cosmetic warning with no follow-up.
       ...(deviationProduct.tier === 'critical' ? { norm_status: 'pending_review' } : {}),
     } as any).select('id').single();
-    if (error) { toast.error(friendlyError(error)); setSaving(false); return; }
+    if (error) {
+      // 23505 = unique_violation: a reading already exists for this meter at
+      // this exact timestamp — see well_readings/locator_readings' identical
+      // handling and 20260816000000_meter_readings_dedupe_and_unique_
+      // constraints.sql. Most commonly hit by tapping Save again after the
+      // input re-filled with the just-saved value.
+      if ((error as any).code === '23505') {
+        toast.error(
+          `${meter.name}: a reading was already submitted for this time. Check the log before resubmitting.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(friendlyError(error));
+      }
+      setSaving(false);
+      return;
+    }
 
     // Link the replacement record (old final / new initial / date) back to the
     // reading it produced — best-effort, mirrors WellRow/LocatorRow's save().

@@ -98,17 +98,17 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
           'feed_meter','feed_meter_prev','feed_meter_delta',
           'permeate_meter','permeate_meter_prev','permeate_meter_delta',
           'reject_meter','reject_meter_prev','reject_meter_delta',
-          'is_meter_replacement','is_permeate_meter_replacement','is_reject_meter_replacement','remarks'];
+          'is_meter_replacement','is_permeate_meter_replacement','is_reject_meter_replacement','remarks','incomplete_reason'];
         const TIER2 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
           'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l','remarks',
-          'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement','is_reject_meter_replacement'];
+          'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement','is_reject_meter_replacement','incomplete_reason'];
         const TIER3 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter'];
+          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter','incomplete_reason'];
         const TIER4 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'temperature_c','recovery_pct','permeate_meter'];
+          'temperature_c','recovery_pct','permeate_meter','incomplete_reason'];
 
         const buildQ = (cols: string[]) => {
           let q = (supabase.from('ro_train_readings' as any) as any)
@@ -182,7 +182,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     queryFn: async () => {
       try {
         let q = (supabase.from('ro_pretreatment_readings' as any) as any)
-          .select('id,reading_datetime,recorded_by,created_at,plant_id,hpp_target_pressure_psi,bag_filters_changed,afm_units,mmf_readings,booster_pumps,filter_housings,cartridge_filter_housings,remarks')
+          .select('id,reading_datetime,recorded_by,created_at,plant_id,hpp_target_pressure_psi,bag_filters_changed,afm_units,mmf_readings,booster_pumps,filter_housings,cartridge_filter_housings,remarks,incomplete_reason')
           .eq('train_id', trainId).order('reading_datetime', { ascending: false }).limit(2000);
         if (dateFrom)     q = q.gte('reading_datetime', `${dateFrom}T00:00:00`);
         if (untilNextDay) q = q.lt('reading_datetime',  `${untilNextDay}T00:00:00`);
@@ -507,7 +507,19 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-1.5">
                             <span className="h-5 w-5 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
-                            <span className="text-xs font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium leading-tight truncate max-w-[90px] block">{opName}</span>
+                              {/* A row with no readings isn't necessarily a bug — it may be an
+                                  offline check-in, which locks all RO inputs by design (see
+                                  isOfflineBlocked in PretreatmentAndROLog.tsx). Surface the
+                                  stored reason here instead of leaving a wall of dashes with
+                                  no explanation. */}
+                              {r.incomplete_reason && (
+                                <span className="text-3xs text-kpi-solar leading-tight truncate max-w-[110px] block" title={r.incomplete_reason}>
+                                  {r.incomplete_reason}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-2 py-2 text-right border-r border-border/20">{fmtVal(r.permeate_flow, 'm³/h')}</td>
@@ -668,7 +680,14 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                           <td className="px-2 py-2">
                             <div className="flex items-center gap-1.5">
                               <span className="h-5 w-5 rounded-full bg-primary-soft text-primary text-3xs font-bold inline-flex items-center justify-center shrink-0">{initials}</span>
-                              <span className="text-xs font-medium leading-tight truncate max-w-[80px]">{opName}</span>
+                              <div className="min-w-0">
+                                <span className="text-xs font-medium leading-tight truncate max-w-[90px] block">{opName}</span>
+                                {r.incomplete_reason && (
+                                  <span className="text-3xs text-warn leading-tight truncate max-w-[110px] block" title={r.incomplete_reason}>
+                                    {r.incomplete_reason}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-2 py-2 text-right font-mono text-xs">

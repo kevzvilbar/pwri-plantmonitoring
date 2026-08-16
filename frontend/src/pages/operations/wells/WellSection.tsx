@@ -678,6 +678,9 @@ function WellRow({
   const [wellLastSavePending, setWellLastSavePending] = useState(false);
 
   const save = async () => {
+    // Re-entrancy guard: ignore a second call while the first is still
+    // in-flight (double-tap, slow network + impatient re-tap, etc.).
+    if (saving) return;
     if (!reading) { toast.error(`${well.name}: enter a meter reading`); return; }
     if (atLimit) { toast.error(`${well.name}: max ${WELL_MAX_READINGS_PER_DAY} readings/day reached`); return; }
     if (anomalyRemarkRequired) {
@@ -746,7 +749,7 @@ function WellRow({
     if (error) {
       if (error.code === '23505') {
         toast.error(
-          `${well.name}: a reading was already submitted within the last hour. Check the log before resubmitting.`,
+          `${well.name}: a reading was already submitted for this time. Check the log before resubmitting.`,
           { duration: 8000 },
         );
       } else {

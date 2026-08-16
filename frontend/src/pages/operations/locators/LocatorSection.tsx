@@ -867,6 +867,9 @@ function LocatorRow({
   const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
 
   const save = async () => {
+    // Re-entrancy guard: ignore a second call while the first is still
+    // in-flight (double-tap, slow network + impatient re-tap, etc.).
+    if (saving) return;
     if (!reading) { toast.error(`${locator.name}: enter a reading`); return; }
     if (atLimit) { toast.error(`${locator.name}: max ${maxReadingsPerDay} readings/day reached`); return; }
     if (locInputMode === 'direct' && +reading <= 0) { toast.error(`${locator.name}: enter a positive volume`); return; }
@@ -953,10 +956,13 @@ function LocatorRow({
     setSaving(false);
 
     if (error) {
-      // 23505 = unique_violation: same user already submitted within this clock hour (SRP double-entry)
+      // 23505 = unique_violation: a reading already exists for this locator at
+      // this exact timestamp — see 20260816000000_meter_readings_dedupe_and_
+      // unique_constraints.sql (well_readings/product_meter_readings have the
+      // identical constraint + handling).
       if (error.code === '23505') {
         toast.error(
-          `${locator.name}: a reading was already submitted within the last hour. Check the log before resubmitting.`,
+          `${locator.name}: a reading was already submitted for this time. Check the log before resubmitting.`,
           { duration: 8000 },
         );
       } else {
