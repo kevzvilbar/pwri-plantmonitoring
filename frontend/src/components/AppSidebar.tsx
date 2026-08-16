@@ -7,6 +7,7 @@ import {
 // Icon-audit fix: RO Trains now uses the purpose-built ROTrainIcon instead
 // of the generic gear/Cog glyph, matching TrainsList and the mobile nav.
 import { ROTrainIcon, PesoSignIcon } from '@/components/icons/water-icons';
+import { Logomark } from '@/components/icons/Logomark';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -143,11 +144,7 @@ export function AppSidebar() {
       {/* ── Brand header ──────────────────────────────────────────── */}
       {!collapsed && (
         <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-sidebar-border/40 shrink-0">
-          <img
-            src={`${import.meta.env.BASE_URL}og-image.png`}
-            alt="PWRI Logo"
-            className="h-7 w-7 rounded-lg object-cover shrink-0"
-          />
+          <Logomark size={28} className="rounded-lg shrink-0" />
           <div className="flex flex-col leading-none">
             <span className="text-xs font-semibold text-sidebar-foreground tracking-tight">PWRI</span>
             <span className="text-3xs text-sidebar-foreground/35 tracking-[0.1em] uppercase">

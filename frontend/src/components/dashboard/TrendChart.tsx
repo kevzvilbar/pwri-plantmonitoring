@@ -33,6 +33,7 @@ import {
 import { DRILL_COLORS, ModernChartLegend } from './TrendChartLegend';
 import { buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
 import { DataSummaryPopup } from './TrendChartDataSummaryPopup';
+import { TrendChartToolbar } from './TrendChartToolbar';
 // Foundation (Weekly-granularity improvement plan) — the shared
 // bucketing/aggregation engine. See TrendChartAggregate.ts's header comment
 // for why this buckets already-computed daily rows rather than raw readings.
@@ -2292,69 +2293,19 @@ export function TrendChart({
 
   return (
     <>
-      {/* Title, range buttons, and Data Summary tab on one compact row */}
-      <div className="flex flex-wrap items-center gap-1 mb-2">
-        {title && (
-          <span className="text-xs font-bold tracking-[-0.01em] w-full sm:w-auto sm:mr-1 shrink-0 text-foreground">{title}</span>
-        )}
-        {/* Range pills — compact size */}
-        <div className="flex flex-nowrap items-center gap-0.5 shrink-0 sm:flex-wrap">
-          {(['7D', '14D', '30D', '60D', '90D'] as RangeKey[]).map((r) => (
-            <button key={r}
-              onClick={() => setRange(r)}
-              data-testid={`trend-range-${metric}-${r}`}
-              className={[
-                'px-2 text-2xs font-semibold transition-colors leading-none sm:h-5 sm:rounded-full',
-                range === r
-                  ? 'text-primary font-bold sm:bg-primary sm:text-white'
-                  : 'text-muted-foreground hover:text-foreground sm:bg-muted/70 sm:border sm:border-border',
-              ].join(' ')}
-            >{r}</button>
-          ))}
-          <button
-            onClick={() => setRange('CUSTOM')}
-            data-testid={`trend-range-${metric}-CUSTOM`}
-            className={[
-              'px-2 text-2xs font-semibold transition-colors leading-none sm:h-5 sm:rounded-full',
-              range === 'CUSTOM'
-                ? 'text-primary font-bold sm:bg-primary sm:text-white'
-                : 'text-muted-foreground hover:text-foreground sm:bg-muted/70 sm:border sm:border-border',
-            ].join(' ')}
-          >Custom</button>
-          {range === 'CUSTOM' && (
-            <div className="flex items-center gap-1 mt-1 w-full sm:w-auto sm:mt-0">
-              <Input
-                type="date"
-                value={from}
-                onChange={(e) => handleFromChange(e.target.value)}
-                className="h-6 w-[110px] text-2xs px-1.5"
-                data-testid={`trend-from-${metric}`}
-              />
-              <span className="text-2xs text-muted-foreground shrink-0">→</span>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => handleToChange(e.target.value)}
-                className="h-6 w-[110px] text-2xs px-1.5"
-                data-testid={`trend-to-${metric}`}
-              />
-            </div>
-          )}
-          {isFetching && (
-            <span className="text-2xs text-muted-foreground ml-1">Loading…</span>
-          )}
-        </div>
-
-        {/* Data Summary — opens a popup dialog (non-retractable) */}
-        <button
-          onClick={() => setShowSummary(true)}
-          className="ml-auto shrink-0 px-1 text-2xs font-medium transition-colors leading-none text-muted-foreground hover:text-foreground sm:h-5 sm:px-2 sm:rounded sm:border sm:bg-muted sm:hover:bg-muted/80 sm:border-border"
-          title="Open data summary table"
-        >
-          Data Summary
-        </button>
-
-        {/* ── Mobile ⋮ overflow — secondary controls ───────────────────────── */}
+      <TrendChartToolbar
+        metric={metric}
+        title={title}
+        range={range}
+        from={from}
+        to={to}
+        isFetching={isFetching}
+        onRangeChange={setRange}
+        onFromChange={handleFromChange}
+        onToChange={handleToChange}
+        onOpenSummary={() => setShowSummary(true)}
+        trailingControls={
+        <>
         <Popover>
           <PopoverTrigger asChild>
             <button
@@ -3130,7 +3081,14 @@ export function TrendChart({
         </div>
       )}
 
-        </div>{/* end hidden sm:contents */}
+        {/* trailingControls ends here: this used to be the outer row's own
+            closing </div>, mislabeled in a comment as "end hidden
+            sm:contents" (that div actually closes ~150 lines earlier) — a
+            small live example of why this file is hard to review by eye.
+            TrendChartToolbar's own wrapping div now plays that role. */}
+        </>
+        }
+      />
 
       {/* ── Data Summary Popup Dialog — 3-tab pivot table ───────────────── */}
       {showSummary && (

@@ -20,6 +20,7 @@ compliance reporting.
 ```
 frontend/                        React/Vite SPA (the entire app)
 supabase/migrations/              SQL migrations, applied in filename order
+supabase/runbooks/                 Manual DBA SQL (diagnostics, one-off fixes) — never auto-applied, see its README
 supabase/functions/                Supabase Edge Functions (e.g. data-analysis)
 memory/PRD.md                      Product requirements / design notes
 docs/archive/                      Retired code/docs kept for historical reference

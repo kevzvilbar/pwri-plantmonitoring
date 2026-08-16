@@ -18,6 +18,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { OperatorSwitcher } from '@/components/OperatorSwitcher';
 import { cn } from '@/lib/utils';
 import { SyncIndicator } from '@/components/SyncIndicator';
+import { Logomark } from '@/components/icons/Logomark';
 import { ThemeSelector } from '@/components/ThemeSelector';
 
 interface Notification {
@@ -172,22 +173,7 @@ export function TopBar() {
         {/* ── Brand mark — only shown when sidebar is collapsed ──── */}
         {showBrand && (
           <div className="flex items-center gap-2 shrink-0">
-            <img
-              src={`${import.meta.env.BASE_URL}og-image.png`}
-              alt="PWRI Logo"
-              className="h-7 w-7 rounded-lg object-cover shrink-0"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fb) fb.style.display = 'flex';
-              }}
-            />
-            <div
-              style={{ display: 'none' }}
-              className="h-7 w-7 rounded-lg bg-primary items-center justify-center shrink-0"
-            >
-              <span className="text-white font-bold text-xs select-none">PW</span>
-            </div>
+            <Logomark size={28} className="rounded-lg shrink-0" />
             <div className="flex flex-col leading-none">
               <span className="text-xs font-semibold tracking-tight text-topbar-foreground">PWRI</span>
               <span className="text-3xs text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
