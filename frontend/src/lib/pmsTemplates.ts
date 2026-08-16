@@ -9,6 +9,18 @@ export type PmsTemplate = {
   steps: string[];
 };
 
+/** Single source of truth for schedule frequency, shared by the "Add Equipment"
+ *  form and the calendar's edit-schedule dialog. */
+export const PMS_FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'] as const;
+
+/** Single source of truth for equipment categories, shared by the "Add Equipment"
+ *  form and the calendar's edit-schedule dialog. */
+export const PMS_CATEGORIES = [
+  'Controllers', 'Pumps & Motors', 'Genset', 'RO Membranes', 'Dosing Pump',
+  'pH Meter', 'TDS Meter', 'Colorimeter', 'Nephelometer',
+  'Filter Media', 'Safety Equipment', 'Other',
+] as const;
+
 export const PMS_TEMPLATES: PmsTemplate[] = [
   // ============== GENSET ==============
   {

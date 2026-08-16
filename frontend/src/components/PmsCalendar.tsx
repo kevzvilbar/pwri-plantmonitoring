@@ -8,10 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
+import { PMS_CATEGORIES, PMS_FREQUENCIES } from '@/lib/pmsTemplates';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, format, isSameDay, isSameMonth, isAfter, isBefore, startOfDay,
@@ -64,10 +71,13 @@ const STATUS_COLORS: Record<DueItem['status'], string> = {
 };
 
 export function PmsCalendar() {
+  const { isManager } = useAuth();
   const { selectedPlantId } = useAppStore();
   const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
   const [openItem, setOpenItem] = useState<DueItem | null>(null);
   const [selected, setSelected] = useState<Date | null>(new Date());
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<Template | null>(null);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -166,13 +176,16 @@ export function PmsCalendar() {
               : counts.pending ? 'bg-warn/10 border-warn/30'
               : counts.done && !counts.upcoming ? 'bg-accent/10 border-accent/30'
               : 'border-border';
+            const MAX_VISIBLE = 3;
+            const visible = items.slice(0, MAX_VISIBLE);
+            const overflow = items.length - visible.length;
             return (
               <button
                 key={key}
                 onClick={() => setSelected(day)}
                 data-testid={`cell-day-${key}`}
                 className={[
-                  'aspect-square min-h-[44px] rounded border text-left p-1 flex flex-col',
+                  'min-h-[64px] sm:min-h-[88px] rounded border text-left p-1 flex flex-col items-stretch',
                   'transition-colors hover:bg-accent/30',
                   inMonth ? 'opacity-100' : 'opacity-40',
                   cellTone,
@@ -180,13 +193,30 @@ export function PmsCalendar() {
                   isToday ? 'font-bold' : '',
                 ].join(' ')}
               >
-                <div className="text-xs leading-none">{format(day, 'd')}</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs leading-none">{format(day, 'd')}</span>
+                  {items.length > 0 && (
+                    <span className="text-[9px] leading-none text-muted-foreground sm:hidden">{items.length}</span>
+                  )}
+                </div>
                 {items.length > 0 && (
-                  <div className="mt-auto flex flex-wrap gap-0.5">
-                    {(['backlog', 'pending', 'done', 'upcoming'] as const).map(s =>
-                      counts[s] > 0 ? (
-                        <span key={s} className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_COLORS[s]}`} />
-                      ) : null
+                  <div className="mt-1 space-y-0.5 min-w-0 overflow-hidden">
+                    {visible.map((it, i) => (
+                      <div
+                        key={`${it.template.id}-${i}`}
+                        className="flex items-center gap-1 min-w-0"
+                        title={`${it.template.equipment_name} · ${it.template.category} · ${it.status}`}
+                      >
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[it.status]}`} />
+                        <span className="truncate text-[9px] sm:text-2xs leading-tight font-normal text-foreground/80">
+                          {it.template.equipment_name}
+                        </span>
+                      </div>
+                    ))}
+                    {overflow > 0 && (
+                      <div className="text-[9px] sm:text-2xs leading-tight text-muted-foreground pl-2.5">
+                        +{overflow} more
+                      </div>
                     )}
                   </div>
                 )}
@@ -213,19 +243,43 @@ export function PmsCalendar() {
           ) : (
             <div className="space-y-1.5">
               {selectedItems.map((it, i) => (
-                <button
+                <div
                   key={`${it.template.id}-${i}`}
-                  onClick={() => setOpenItem(it)}
-                  className="w-full flex items-center gap-2 text-xs p-2 rounded-md border hover:bg-secondary transition-colors text-left"
+                  className="w-full flex items-center gap-1 text-xs rounded-md border hover:bg-secondary transition-colors"
                   data-testid={`row-due-${it.template.id}`}
                 >
-                  <span className={`inline-block w-2 h-2 rounded-full ${STATUS_COLORS[it.status]}`} />
-                  <span className="font-medium">{it.template.equipment_name}</span>
-                  <span className="text-muted-foreground">· {it.template.category}</span>
-                  <span className="ml-auto text-2xs uppercase tracking-wide text-muted-foreground">
-                    {it.template.frequency} · {it.status}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => setOpenItem(it)}
+                    className="flex-1 min-w-0 flex items-center gap-2 p-2 text-left"
+                  >
+                    <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${STATUS_COLORS[it.status]}`} />
+                    <span className="font-medium truncate">{it.template.equipment_name}</span>
+                    <span className="text-muted-foreground truncate hidden sm:inline">· {it.template.category}</span>
+                    <span className="ml-auto text-2xs uppercase tracking-wide text-muted-foreground shrink-0">
+                      {it.template.frequency} · {it.status}
+                    </span>
+                  </button>
+                  {isManager && (
+                    <div className="flex items-center gap-0.5 pr-1 shrink-0">
+                      <Button
+                        type="button" size="icon" variant="ghost" className="h-6 w-6"
+                        aria-label={`Edit ${it.template.equipment_name}`}
+                        data-testid={`button-edit-${it.template.id}`}
+                        onClick={(e) => { e.stopPropagation(); setEditingTemplate(it.template); }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button" size="icon" variant="ghost" className="h-6 w-6 text-danger hover:text-danger"
+                        aria-label={`Delete ${it.template.equipment_name}`}
+                        data-testid={`button-delete-${it.template.id}`}
+                        onClick={(e) => { e.stopPropagation(); setDeletingTemplate(it.template); }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -233,7 +287,28 @@ export function PmsCalendar() {
       )}
 
       {openItem && (
-        <ChecklistDialog item={openItem} onClose={() => setOpenItem(null)} />
+        <ChecklistDialog
+          item={openItem}
+          isManager={isManager}
+          onClose={() => setOpenItem(null)}
+          onEdit={(t) => { setOpenItem(null); setEditingTemplate(t); }}
+          onDelete={(t) => { setOpenItem(null); setDeletingTemplate(t); }}
+        />
+      )}
+
+      {editingTemplate && (
+        <EditTemplateDialog
+          template={editingTemplate}
+          onClose={() => setEditingTemplate(null)}
+        />
+      )}
+
+      {deletingTemplate && (
+        <DeleteTemplateAlert
+          template={deletingTemplate}
+          onClose={() => setDeletingTemplate(null)}
+          onDeleted={() => setDeletingTemplate(null)}
+        />
       )}
     </div>
   );
@@ -250,7 +325,13 @@ function Legend({ dot, label }: { dot: string; label: string }) {
 
 // ---------------- Checklist popup with per-step ticks ----------------
 
-function ChecklistDialog({ item, onClose }: { item: DueItem; onClose: () => void }) {
+function ChecklistDialog({ item, isManager, onClose, onEdit, onDelete }: {
+  item: DueItem;
+  isManager: boolean;
+  onClose: () => void;
+  onEdit: (t: Template) => void;
+  onDelete: (t: Template) => void;
+}) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const steps = item.template.checklist_steps ?? [];
@@ -373,12 +454,36 @@ function ChecklistDialog({ item, onClose }: { item: DueItem; onClose: () => void
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-base">
-            {item.template.equipment_name}
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            {item.template.category} · {item.template.frequency} · {format(item.date, 'EEE, MMM d, yyyy')}
-          </p>
+          <div className="flex items-start justify-between gap-2 pr-6">
+            <div className="min-w-0">
+              <DialogTitle className="text-base truncate">
+                {item.template.equipment_name}
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground">
+                {item.template.category} · {item.template.frequency} · {format(item.date, 'EEE, MMM d, yyyy')}
+              </p>
+            </div>
+            {isManager && (
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  type="button" size="icon" variant="ghost" className="h-7 w-7"
+                  aria-label="Edit this PMS schedule"
+                  data-testid="button-edit-open-item"
+                  onClick={() => onEdit(item.template)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button" size="icon" variant="ghost" className="h-7 w-7 text-danger hover:text-danger"
+                  aria-label="Delete this PMS schedule"
+                  data-testid="button-delete-open-item"
+                  onClick={() => onDelete(item.template)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         {steps.length === 0 ? (
@@ -422,5 +527,167 @@ function ChecklistDialog({ item, onClose }: { item: DueItem; onClose: () => void
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------- Edit / delete PMS schedule (Manager + Admin only) ----------------
+// The DB (checklist_templates_write RLS policy) already restricts UPDATE/DELETE to
+// Manager/Admin via is_manager_or_admin(); these dialogs are gated the same way on
+// the client so non-managers never see the controls in the first place.
+
+function EditTemplateDialog({ template, onClose }: { template: Template; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [v, setV] = useState({
+    category: template.category,
+    equipment_name: template.equipment_name,
+    frequency: template.frequency,
+    schedule_start_date: template.schedule_start_date ?? format(new Date(), 'yyyy-MM-dd'),
+    checklist_steps: (template.checklist_steps ?? []).join('\n'),
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!v.equipment_name.trim()) { toast.error('Equipment name is required'); return; }
+    setSaving(true);
+    try {
+      const steps = v.checklist_steps.split('\n').map(s => s.trim()).filter(Boolean);
+      const { error } = await supabase.from('checklist_templates').update({
+        category: v.category,
+        equipment_name: v.equipment_name.trim(),
+        frequency: v.frequency,
+        schedule_start_date: v.schedule_start_date || null,
+        checklist_steps: steps.length ? steps : null,
+      }).eq('id', template.id);
+      if (error) throw error;
+      toast.success('PMS schedule updated');
+      qc.invalidateQueries({ queryKey: ['pms-templates'] });
+      qc.invalidateQueries({ queryKey: ['pms-exec-for'] });
+      onClose();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base">Edit PMS Schedule</DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Changes apply going forward. Already-completed checklist history is kept.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <Label>Category</Label>
+              <Select value={v.category} onValueChange={(x) => setV({ ...v, category: x })}>
+                <SelectTrigger data-testid="select-edit-category"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PMS_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Frequency</Label>
+              <Select value={v.frequency} onValueChange={(x) => setV({ ...v, frequency: x as Template['frequency'] })}>
+                <SelectTrigger data-testid="select-edit-frequency"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PMS_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label>Equipment Name</Label>
+            <Input
+              value={v.equipment_name}
+              data-testid="input-edit-equipment-name"
+              onChange={(e) => setV({ ...v, equipment_name: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Schedule Start Date</Label>
+            <Input
+              type="date"
+              value={v.schedule_start_date}
+              data-testid="input-edit-start-date"
+              onChange={(e) => setV({ ...v, schedule_start_date: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Checklist Steps (One Per Line)</Label>
+            <Textarea
+              value={v.checklist_steps}
+              rows={6}
+              data-testid="textarea-edit-steps"
+              onChange={(e) => setV({ ...v, checklist_steps: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={save} disabled={saving} data-testid="button-save-edit-template">
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteTemplateAlert({ template, onClose, onDeleted }: {
+  template: Template;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const qc = useQueryClient();
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('checklist_templates').delete().eq('id', template.id);
+      if (error) throw error;
+      toast.success(`Deleted "${template.equipment_name}" schedule`);
+      qc.invalidateQueries({ queryKey: ['pms-templates'] });
+      qc.invalidateQueries({ queryKey: ['pms-executions'] });
+      onDeleted();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <AlertDialog open onOpenChange={(o) => !o && !deleting && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-danger">Delete PMS schedule?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently removes <strong>{template.equipment_name}</strong> ({template.category} · {template.frequency}),
+            including its checklist history. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting} data-testid="button-cancel-delete-template">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmDelete}
+            disabled={deleting}
+            className="bg-danger text-danger-foreground hover:bg-danger/90"
+            data-testid="button-confirm-delete-template"
+          >
+            {deleting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            {deleting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

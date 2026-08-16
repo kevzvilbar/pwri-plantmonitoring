@@ -19,16 +19,12 @@ import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 import { Sparkles } from 'lucide-react';
-import { PMS_TEMPLATES } from '@/lib/pmsTemplates';
+import { PMS_TEMPLATES, PMS_CATEGORIES, PMS_FREQUENCIES } from '@/lib/pmsTemplates';
 import { PmsCalendar } from '@/components/PmsCalendar';
 
-const FREQUENCIES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'] as const;
+const FREQUENCIES = PMS_FREQUENCIES;
 type Frequency = typeof FREQUENCIES[number];
-const CATEGORIES = [
-  'Controllers', 'Pumps & Motors', 'Genset', 'RO Membranes', 'Dosing Pump',
-  'pH Meter', 'TDS Meter', 'Colorimeter', 'Nephelometer',
-  'Filter Media', 'Safety Equipment', 'Other',
-];
+const CATEGORIES = PMS_CATEGORIES;
 
 export default function Maintenance() {
   const [tab, setTab] = useTabPersist<'calendar' | 'add' | 'records'>('tab:maintenance', 'calendar');
