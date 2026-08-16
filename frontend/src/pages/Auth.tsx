@@ -914,6 +914,16 @@ export default function Auth() {
           className="pointer-events-none absolute inset-0 opacity-40"
           style={{ background: 'radial-gradient(ellipse 70% 55% at 15% 8%, hsl(var(--sidebar-primary) / 0.25), transparent)' }}
         />
+<<<<<<< ours
+=======
+        {/* Contrast floor for the feature list below, not just texture: at
+            this gradient's lighter (teal) end, topbar-muted text measures
+            3.16:1 against the raw background — under the 4.5:1 AA minimum
+            for normal-size text. This scrim brings the worst case to
+            ~5:1 regardless of viewport height / where the list lands on
+            the gradient. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/40 to-transparent" />
+>>>>>>> theirs
         <div className="relative">
           <Logomark size={40} className="rounded-xl shadow-elev" />
           <h1 className="mt-6 text-3xl font-extrabold text-topbar-foreground tracking-tight leading-tight">
