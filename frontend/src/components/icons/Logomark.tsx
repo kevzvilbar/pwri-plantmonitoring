@@ -1,5 +1,5 @@
 import * as React from 'react';
-const logomarkSrc = '/favicon.png';
+const logomarkSrc = `${import.meta.env.BASE_URL}favicon.png`;
 
 export interface LogomarkProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   /** Pixel size for both width and height. Defaults to 32. */
