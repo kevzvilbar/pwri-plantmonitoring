@@ -51,10 +51,41 @@ export default defineConfig(({ mode }) => ({
         // needs re-fetching after a typical commit.
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("@supabase")) return "vendor-supabase";
-          if (id.includes("react-dom") || id.match(/node_modules\/react\//) || id.includes("react-router") || id.includes("@remix-run")) return "vendor-react";
-          if (id.includes("@radix-ui")) return "vendor-radix";
-          if (id.includes("date-fns")) return "vendor-date-fns";
+          // Match on the actual npm package name (the path segment right after
+          // node_modules/), not a loose substring of the whole id — the
+          // original id.includes("react-dom") check also matched
+          // "@floating-ui/react-dom" (a dependency @radix-ui/react-popper
+          // pulls in for Popover/Tooltip/Select/DropdownMenu positioning).
+          const pkg = id.match(/\/node_modules\/(@[^/]+\/[^/]+|[^/]+)\//)?.[1];
+          if (!pkg) return;
+          if (pkg === "@supabase" || pkg.startsWith("@supabase/")) return "vendor-supabase";
+          if (pkg === "date-fns") return "vendor-date-fns";
+          // React and Radix are one bucket, not two. Radix is built entirely
+          // on top of React (every @radix-ui/react-* package imports
+          // React.forwardRef/createContext/etc. at module top level) and
+          // pulls in @floating-ui for positioning, so a "vendor-react" and a
+          // "vendor-radix" chunk can never truly be independent — Rollup
+          // also has to place shared CJS-interop runtime helpers in
+          // whichever chunk it emits first. Splitting them produced a real
+          // circular import (vendor-react.js <-> vendor-radix.js, each
+          // statically importing the other), which crashed on load with
+          // "Cannot read properties of undefined (reading 'forwardRef')"
+          // because vendor-radix's top-level code ran before vendor-react
+          // had finished initializing. Verified fixed by evaluating the
+          // built module graph directly in Node (same ESM linking/
+          // evaluation semantics as a browser) before and after this change.
+          if (
+            pkg === "react" ||
+            pkg === "react-dom" ||
+            pkg === "scheduler" ||
+            pkg === "react-router" ||
+            pkg === "react-router-dom" ||
+            pkg.startsWith("@remix-run/") ||
+            pkg.startsWith("@radix-ui/") ||
+            pkg.startsWith("@floating-ui/")
+          ) {
+            return "vendor-react";
+          }
         },
       },
     },
