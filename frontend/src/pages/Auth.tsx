@@ -207,13 +207,14 @@ function SignInForm() {
   return (
     <form onSubmit={handleSignIn} className="space-y-3">
       <div>
-        <Label>Email</Label>
-        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+        <Label htmlFor="signin-email">Email</Label>
+        <Input id="signin-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
       </div>
       <div>
-        <Label>Password</Label>
+        <Label htmlFor="signin-password">Password</Label>
         <div className="relative">
           <Input
+            id="signin-password"
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -411,8 +412,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
       </div>
       <StepDots />
       <div>
-        <Label>Email address</Label>
+        <Label htmlFor="forgot-email">Email address</Label>
         <Input
+          id="forgot-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -479,8 +481,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
       </div>
       <StepDots />
       <div>
-        <Label>New password</Label>
+        <Label htmlFor="otp-new-password">New password</Label>
         <Input
+          id="otp-new-password"
           type="password"
           value={password}
           onChange={(e) => setPass(e.target.value)}
@@ -489,8 +492,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
         />
       </div>
       <div>
-        <Label>Confirm new password</Label>
+        <Label htmlFor="otp-confirm-password">Confirm new password</Label>
         <Input
+          id="otp-confirm-password"
           type="password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
@@ -535,8 +539,9 @@ function ResetPasswordForm() {
         <p className="text-xs text-muted-foreground mt-0.5">Choose a strong password for your account.</p>
       </div>
       <div>
-        <Label>New password</Label>
+        <Label htmlFor="recovery-new-password">New password</Label>
         <Input
+          id="recovery-new-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -544,8 +549,9 @@ function ResetPasswordForm() {
         />
       </div>
       <div>
-        <Label>Confirm new password</Label>
+        <Label htmlFor="recovery-confirm-password">Confirm new password</Label>
         <Input
+          id="recovery-confirm-password"
           type="password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
@@ -732,11 +738,11 @@ function SignUpForm() {
       {/* Step: Designation */}
       {step === 'designation' && (
         <div className="space-y-3">
-          <div><Label>Email *</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" /></div>
-          <div><Label>Password *</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" minLength={8} /></div>
+          <div><Label htmlFor="signup-email">Email *</Label><Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" /></div>
+          <div><Label htmlFor="signup-password">Password *</Label><Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" minLength={8} /></div>
           <div>
-            <Label>Designation *</Label>
-            <DesignationCombobox value={designation} onChange={setDesignation} placeholder="Select designation…" data-testid="signup-designation" />
+            <Label htmlFor="signup-designation">Designation *</Label>
+            <DesignationCombobox id="signup-designation" value={designation} onChange={setDesignation} placeholder="Select designation…" data-testid="signup-designation" />
           </div>
           {designation && (
             <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${
@@ -758,8 +764,8 @@ function SignUpForm() {
             All operators share email <strong>{email}</strong> and pick their username at sign-in.
           </div>
           <div>
-            <Label>How many Operators will use this email? *</Label>
-            <Input type="number" min={1} max={20} value={operatorCount}
+            <Label htmlFor="operator-count">How many Operators will use this email? *</Label>
+            <Input id="operator-count" type="number" min={1} max={20} value={operatorCount}
               onChange={(e) => setOperatorCount(Math.max(1, Math.min(20, +e.target.value)))} />
             <p className="text-xs text-muted-foreground mt-1">Maximum 20 per shared email</p>
           </div>
@@ -775,13 +781,13 @@ function SignUpForm() {
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Operator {i + 1}</span>
                 <Badge variant="outline" className="text-2xs">Shared: {email}</Badge>
               </div>
-              <div><Label className="text-xs">Username *</Label>
-                <Input value={operators[i]?.username ?? ''} onChange={(e) => updateOp(i, 'username', e.target.value)} placeholder="e.g. jdelacruz" /></div>
+              <div><Label className="text-xs" htmlFor={`op-${i}-username`}>Username *</Label>
+                <Input id={`op-${i}-username`} value={operators[i]?.username ?? ''} onChange={(e) => updateOp(i, 'username', e.target.value)} placeholder="e.g. jdelacruz" /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-xs">First name *</Label><Input value={operators[i]?.first_name ?? ''} onChange={(e) => updateOp(i, 'first_name', e.target.value)} /></div>
-                <div><Label className="text-xs">Last name *</Label><Input value={operators[i]?.last_name ?? ''} onChange={(e) => updateOp(i, 'last_name', e.target.value)} /></div>
-                <div><Label className="text-xs">Middle name</Label><Input value={operators[i]?.middle_name ?? ''} onChange={(e) => updateOp(i, 'middle_name', e.target.value)} /></div>
-                <div><Label className="text-xs">Suffix</Label><Input value={operators[i]?.suffix ?? ''} onChange={(e) => updateOp(i, 'suffix', e.target.value)} placeholder="Jr., Sr.…" /></div>
+                <div><Label className="text-xs" htmlFor={`op-${i}-first`}>First name *</Label><Input id={`op-${i}-first`} value={operators[i]?.first_name ?? ''} onChange={(e) => updateOp(i, 'first_name', e.target.value)} /></div>
+                <div><Label className="text-xs" htmlFor={`op-${i}-last`}>Last name *</Label><Input id={`op-${i}-last`} value={operators[i]?.last_name ?? ''} onChange={(e) => updateOp(i, 'last_name', e.target.value)} /></div>
+                <div><Label className="text-xs" htmlFor={`op-${i}-middle`}>Middle name</Label><Input id={`op-${i}-middle`} value={operators[i]?.middle_name ?? ''} onChange={(e) => updateOp(i, 'middle_name', e.target.value)} /></div>
+                <div><Label className="text-xs" htmlFor={`op-${i}-suffix`}>Suffix</Label><Input id={`op-${i}-suffix`} value={operators[i]?.suffix ?? ''} onChange={(e) => updateOp(i, 'suffix', e.target.value)} placeholder="Jr., Sr.…" /></div>
               </div>
             </div>
           ))}
@@ -791,12 +797,12 @@ function SignUpForm() {
       {/* Step: Non-operator single details */}
       {step === 'details' && (
         <div className="space-y-2">
-          <div><Label>Username *</Label><Input value={single.username} onChange={(e) => setSingle((s) => ({ ...s, username: e.target.value }))} placeholder="e.g. jdelacruz" /></div>
+          <div><Label htmlFor="single-username">Username *</Label><Input id="single-username" value={single.username} onChange={(e) => setSingle((s) => ({ ...s, username: e.target.value }))} placeholder="e.g. jdelacruz" /></div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>First name *</Label><Input value={single.first_name} onChange={(e) => setSingle((s) => ({ ...s, first_name: e.target.value }))} /></div>
-            <div><Label>Last name *</Label><Input value={single.last_name} onChange={(e) => setSingle((s) => ({ ...s, last_name: e.target.value }))} /></div>
-            <div><Label>Middle name</Label><Input value={single.middle_name} onChange={(e) => setSingle((s) => ({ ...s, middle_name: e.target.value }))} /></div>
-            <div><Label>Suffix</Label><Input value={single.suffix} onChange={(e) => setSingle((s) => ({ ...s, suffix: e.target.value }))} placeholder="Jr., Sr.…" /></div>
+            <div><Label htmlFor="single-first">First name *</Label><Input id="single-first" value={single.first_name} onChange={(e) => setSingle((s) => ({ ...s, first_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-last">Last name *</Label><Input id="single-last" value={single.last_name} onChange={(e) => setSingle((s) => ({ ...s, last_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-middle">Middle name</Label><Input id="single-middle" value={single.middle_name} onChange={(e) => setSingle((s) => ({ ...s, middle_name: e.target.value }))} /></div>
+            <div><Label htmlFor="single-suffix">Suffix</Label><Input id="single-suffix" value={single.suffix} onChange={(e) => setSingle((s) => ({ ...s, suffix: e.target.value }))} placeholder="Jr., Sr.…" /></div>
           </div>
         </div>
       )}

@@ -37,6 +37,8 @@ interface Props {
   'data-testid'?: string;
   /** Extra suggestions merged with defaults (e.g. already-used custom values). */
   extraOptions?: string[];
+  /** Forwarded to the trigger button so a <Label htmlFor> can target it. */
+  id?: string;
 }
 
 /**
@@ -48,7 +50,7 @@ interface Props {
  *    a sticky "Use custom value" row if the search term doesn't match.
  */
 export function DesignationCombobox({
-  value, onChange, placeholder = 'Select designation…', disabled, extraOptions,
+  value, onChange, placeholder = 'Select designation…', disabled, extraOptions, id,
   ...rest
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -102,9 +104,11 @@ export function DesignationCombobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={!id ? placeholder : undefined}
           disabled={disabled}
           className="w-full justify-between font-normal"
           data-testid={rest['data-testid'] ?? 'designation-trigger'}
