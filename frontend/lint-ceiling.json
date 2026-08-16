@@ -1,6 +1,6 @@
 {
-  "maxWarnings": 1673,
-  "lastUpdated": "2026-08-13",
+  "maxWarnings": 1723,
+  "lastUpdated": "2026-08-16",
   "history": [
     {
       "date": "2026-08-09",
@@ -48,6 +48,12 @@
       "maxWarnings": 1673,
       "previous": 1651,
       "reason": "Guizo train-permeate wiring (20260813_secondary_ro_train_wiring.sql: ro_trains.unit_type/feed_source_train_id/reject_routing, for Potable-RO/Refilling-RO as secondary 2nd-pass units whose reject recirculates into Train 1's permeate). PlantTopology.tsx/PretreatmentAndROLog.tsx (secondary_ro_train_wiring.patch, fca157c) added the new columns to existing supabase selects and an isSecondaryTrain/(train as any) check -- same any-row convention already used throughout both files, +9. This pass's own change, the double-count guard for the two headline production numbers: a secondary unit's permeate is the same water its upstream primary train already counted once, so it must never be summed again into Production/NRW%. Dashboard.tsx: _permeateTrainMeta's ro_trains select and _qualityTrainMeta's metaMap now carry unit_type, threaded into the permeate-production sum and its no-product-meter fallback (+8). TrendChart.tsx: _roTrainMeta now also builds a trainUnitTypeMap (kept separate from the existing trainPlantMap, which several unrelated call sites still expect as Map<string,string>), consumed by the primary and fallback permeate-accumulation loops and by the by-train drill-down pivot/legend so a secondary unit can't appear as a second stacked production source next to its own upstream train (+5). Deliberately did not touch _roTrainIdsForReadings/_qualityTrainIds themselves in either file -- those still include secondary units, because their own RO readings/TDS/recovery/Plant Health are legitimate and should keep showing up elsewhere on both pages; only the specific volume-summing sites were guarded."
+    },
+    {
+      "date": "2026-08-16",
+      "maxWarnings": 1723,
+      "previous": 1673,
+      "reason": "Reconciling a stale ceiling, not a regression from recent work. 1673 (2026-08-13) vs. actual 1722 as of 42eabe0 -- the commit immediately before this range -- a 49-warning gap that predates every commit in this diff and was never caught; the ceiling had gone silently stale on main for at least one prior cycle, cause not bisected further back. The four commits since 42eabe0 (aff4ae6 meter-reading-duplicate-fix; 899e4e2/eb5107e/59b7928 pwri-continuation-changes.patch -- Logomark.tsx, the Auth.tsx two-pane redesign, the TrendChart.tsx/TrendChartToolbar.tsx split, and the runbooks/ migration relocation) net +1 of their own (ProductSection.tsx 63->64, a `(train as any)` check for the new secondary-RO-train wiring). Verified via a clean two-commit worktree diff under identical tooling -- package.json/eslint.config.js/package-lock.json unchanged across the range -- not inferred from this file's own history."
     }
   ]
 }

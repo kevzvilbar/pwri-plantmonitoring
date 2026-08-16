@@ -59,10 +59,22 @@ jobs:
   sweep:
     runs-on: ubuntu-latest
     steps:
+      # 2026-08-17: switched from VITE_SUPABASE_PUBLISHABLE_KEY (the anon
+      # key) to SUPABASE_SERVICE_ROLE_KEY. The anon key ships inside the
+      # public frontend bundle by design, so granting this SECURITY DEFINER
+      # function to `anon` so this job could call it meant anyone who ever
+      # loaded the app could call it too, at any frequency, with any
+      # p_date/p_lookback_days. See 20260817000000_sweep_function_revoke_anon.sql,
+      # which revokes anon's EXECUTE grant to match.
+      #
+      # Requires a new repo secret, SUPABASE_SERVICE_ROLE_KEY (Supabase
+      # dashboard -> Project Settings -> API -> service_role secret key).
+      # Unlike the anon key this must never be exposed to the frontend --
+      # it bypasses RLS -- so keep it only here, in GitHub Actions secrets.
       - name: Call fn_sweep_derived_meters via Supabase REST
         env:
           SUPABASE_URL:  ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TARGET_DATE:   ${{ inputs.date }}
           LOOKBACK_DAYS: ${{ inputs.lookback_days }}
           # The exact cron string that fired this run (unset for
@@ -94,8 +106,8 @@ jobs:
           RESPONSE=$(curl -sf \
             -X POST \
             "${SUPABASE_URL}/rest/v1/rpc/fn_sweep_derived_meters" \
-            -H "apikey: ${SUPABASE_ANON}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON}" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE}" \
             -H "Content-Type: application/json" \
             -d "{\"p_date\": \"${TARGET_DATE}\", \"p_lookback_days\": ${LOOKBACK_DAYS}}")
 
