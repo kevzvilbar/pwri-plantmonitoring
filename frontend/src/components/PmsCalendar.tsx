@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
+import { useTabPersist } from '@/hooks/useTabPersist';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,12 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Loader2, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { PMS_CATEGORIES, PMS_FREQUENCIES } from '@/lib/pmsTemplates';
@@ -36,6 +38,15 @@ type Template = {
 };
 
 type DueItem = { template: Template; date: Date; status: 'done' | 'pending' | 'backlog' | 'upcoming' };
+type CalendarView = 'day' | 'week' | 'month';
+
+function formatWeekRange(start: Date, end: Date): string {
+  const sameMonth = isSameMonth(start, end);
+  const sameYear = start.getFullYear() === end.getFullYear();
+  if (sameMonth) return `${format(start, 'MMM d')} \u2013 ${format(end, 'd, yyyy')}`;
+  if (sameYear) return `${format(start, 'MMM d')} \u2013 ${format(end, 'MMM d, yyyy')}`;
+  return `${format(start, 'MMM d, yyyy')} \u2013 ${format(end, 'MMM d, yyyy')}`;
+}
 
 function dueDatesInRange(t: Template, from: Date, to: Date): Date[] {
   if (!t.schedule_start_date) return [];
@@ -73,17 +84,68 @@ const STATUS_COLORS: Record<DueItem['status'], string> = {
 export function PmsCalendar() {
   const { isManager } = useAuth();
   const { selectedPlantId } = useAppStore();
-  const [cursor, setCursor] = useState<Date>(startOfMonth(new Date()));
+  const [view, setView] = useTabPersist<CalendarView>('tab:maintenance-calendar-view', 'month');
+  const [cursor, setCursor] = useState<Date>(new Date());
   const [openItem, setOpenItem] = useState<DueItem | null>(null);
   const [selected, setSelected] = useState<Date | null>(new Date());
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [deletingTemplate, setDeletingTemplate] = useState<Template | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+
+  // Visible date range depends on which view is active. Month keeps the
+  // existing full 6-week grid; Week narrows to a single Sun–Sat row; Day
+  // narrows to the single day the grid/detail panel below is built around.
+  let gridStart: Date;
+  let gridEnd: Date;
+  if (view === 'month') {
+    gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  } else if (view === 'week') {
+    gridStart = startOfWeek(cursor, { weekStartsOn: 0 });
+    gridEnd = endOfWeek(cursor, { weekStartsOn: 0 });
+  } else {
+    gridStart = startOfDay(cursor);
+    gridEnd = startOfDay(cursor);
+  }
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+
+  const navUnit = view === 'month' ? 'month' : view === 'week' ? 'week' : 'day';
+  const headerTitle =
+    view === 'month' ? format(cursor, 'MMMM yyyy')
+    : view === 'week' ? formatWeekRange(gridStart, gridEnd)
+    : format(cursor, 'EEEE, MMM d, yyyy');
+
+  const goToday = () => {
+    const today = new Date();
+    setCursor(today);
+    setSelected(startOfDay(today));
+  };
+  const goPrev = () => {
+    if (view === 'month') { setCursor(addMonths(cursor, -1)); return; }
+    if (view === 'week') { setCursor(addWeeks(cursor, -1)); return; }
+    const d = addDays(cursor, -1);
+    setCursor(d);
+    setSelected(d);
+  };
+  const goNext = () => {
+    if (view === 'month') { setCursor(addMonths(cursor, 1)); return; }
+    if (view === 'week') { setCursor(addWeeks(cursor, 1)); return; }
+    const d = addDays(cursor, 1);
+    setCursor(d);
+    setSelected(d);
+  };
+  const changeView = (v: CalendarView) => {
+    if (v === view) return;
+    // Keep whichever day was selected in view — switching views re-centers
+    // the grid around it rather than jumping back to today.
+    const anchor = selected ?? cursor;
+    setCursor(anchor);
+    if (v === 'day') setSelected(anchor);
+    setView(v);
+  };
 
   const { data: templates } = useQuery<Template[]>({
     queryKey: ['pms-templates', selectedPlantId],
@@ -144,86 +206,116 @@ export function PmsCalendar() {
   return (
     <div className="space-y-3">
       <Card className="p-3">
-        <div className="flex items-center justify-between mb-3">
-          <Button size="icon" variant="ghost" aria-label="Previous month" onClick={() => setCursor(addMonths(cursor, -1))} data-testid="button-cal-prev">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="font-semibold text-sm">{format(cursor, 'MMMM yyyy')}</div>
-          <Button size="icon" variant="ghost" aria-label="Next month" onClick={() => setCursor(addMonths(cursor, 1))} data-testid="button-cal-next">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-1 min-w-0">
+            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs shrink-0"
+              onClick={goToday} data-testid="button-cal-today">
+              Today
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={`Previous ${navUnit}`}
+              onClick={goPrev} data-testid="button-cal-prev">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={`Next ${navUnit}`}
+              onClick={goNext} data-testid="button-cal-next">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <div className="font-semibold text-sm truncate ml-1" data-testid="text-cal-header">{headerTitle}</div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Tabs value={view} onValueChange={(v) => changeView(v as CalendarView)}>
+              <TabsList className="h-8 p-0.5">
+                <TabsTrigger value="day" className="h-7 px-2.5 text-xs" data-testid="button-view-day">Day</TabsTrigger>
+                <TabsTrigger value="week" className="h-7 px-2.5 text-xs" data-testid="button-view-week">Week</TabsTrigger>
+                <TabsTrigger value="month" className="h-7 px-2.5 text-xs" data-testid="button-view-month">Month</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {isManager && (
+              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-danger hover:text-danger"
+                aria-label="Manage PMS schedules" title="Manage / delete schedules"
+                onClick={() => setManageOpen(true)} data-testid="button-open-manage-schedules">
+                <ListChecks className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-7 text-2xs text-center text-muted-foreground mb-1">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-        </div>
+        {view !== 'day' && (
+          <>
+            <div className="grid grid-cols-7 text-2xs text-center text-muted-foreground mb-1">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
+            </div>
 
-        <div className="grid grid-cols-7 gap-0.5">
-          {days.map(day => {
-            const key = format(day, 'yyyy-MM-dd');
-            const items = dueByDay.get(key) ?? [];
-            const inMonth = isSameMonth(day, cursor);
-            const isToday = isSameDay(day, new Date());
-            const isSelected = selected && isSameDay(day, selected);
-            const counts = {
-              done: items.filter(i => i.status === 'done').length,
-              pending: items.filter(i => i.status === 'pending').length,
-              backlog: items.filter(i => i.status === 'backlog').length,
-              upcoming: items.filter(i => i.status === 'upcoming').length,
-            };
-            const cellTone =
-              counts.backlog ? 'bg-danger/10 border-danger/30'
-              : counts.pending ? 'bg-warn/10 border-warn/30'
-              : counts.done && !counts.upcoming ? 'bg-accent/10 border-accent/30'
-              : 'border-border';
-            const MAX_VISIBLE = 3;
-            const visible = items.slice(0, MAX_VISIBLE);
-            const overflow = items.length - visible.length;
-            return (
-              <button
-                key={key}
-                onClick={() => setSelected(day)}
-                data-testid={`cell-day-${key}`}
-                className={[
-                  'min-h-[64px] sm:min-h-[88px] rounded border text-left p-1 flex flex-col items-stretch',
-                  'transition-colors hover:bg-accent/30',
-                  inMonth ? 'opacity-100' : 'opacity-40',
-                  cellTone,
-                  isSelected ? 'ring-2 ring-primary' : '',
-                  isToday ? 'font-bold' : '',
-                ].join(' ')}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs leading-none">{format(day, 'd')}</span>
-                  {items.length > 0 && (
-                    <span className="text-[9px] leading-none text-muted-foreground sm:hidden">{items.length}</span>
-                  )}
-                </div>
-                {items.length > 0 && (
-                  <div className="mt-1 space-y-0.5 min-w-0 overflow-hidden">
-                    {visible.map((it, i) => (
-                      <div
-                        key={`${it.template.id}-${i}`}
-                        className="flex items-center gap-1 min-w-0"
-                        title={`${it.template.equipment_name} · ${it.template.category} · ${it.status}`}
-                      >
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[it.status]}`} />
-                        <span className="truncate text-[9px] sm:text-2xs leading-tight font-normal text-foreground/80">
-                          {it.template.equipment_name}
-                        </span>
-                      </div>
-                    ))}
-                    {overflow > 0 && (
-                      <div className="text-[9px] sm:text-2xs leading-tight text-muted-foreground pl-2.5">
-                        +{overflow} more
+            <div className="grid grid-cols-7 gap-0.5">
+              {days.map(day => {
+                const key = format(day, 'yyyy-MM-dd');
+                const items = dueByDay.get(key) ?? [];
+                const inMonth = view === 'week' ? true : isSameMonth(day, cursor);
+                const isToday = isSameDay(day, new Date());
+                const isSelected = selected && isSameDay(day, selected);
+                const counts = {
+                  done: items.filter(i => i.status === 'done').length,
+                  pending: items.filter(i => i.status === 'pending').length,
+                  backlog: items.filter(i => i.status === 'backlog').length,
+                  upcoming: items.filter(i => i.status === 'upcoming').length,
+                };
+                const cellTone =
+                  counts.backlog ? 'bg-danger/10 border-danger/30'
+                  : counts.pending ? 'bg-warn/10 border-warn/30'
+                  : counts.done && !counts.upcoming ? 'bg-accent/10 border-accent/30'
+                  : 'border-border';
+                const MAX_VISIBLE = view === 'week' ? 6 : 3;
+                const cellMinH = view === 'week' ? 'min-h-[110px] sm:min-h-[160px]' : 'min-h-[64px] sm:min-h-[88px]';
+                const visible = items.slice(0, MAX_VISIBLE);
+                const overflow = items.length - visible.length;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSelected(day)}
+                    data-testid={`cell-day-${key}`}
+                    className={[
+                      cellMinH, 'rounded border text-left p-1 flex flex-col items-stretch',
+                      'transition-colors hover:bg-accent/30',
+                      inMonth ? 'opacity-100' : 'opacity-40',
+                      cellTone,
+                      isSelected ? 'ring-2 ring-primary' : '',
+                      isToday ? 'font-bold' : '',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs leading-none">{format(day, 'd')}</span>
+                      {items.length > 0 && (
+                        <span className="text-[9px] leading-none text-muted-foreground sm:hidden">{items.length}</span>
+                      )}
+                    </div>
+                    {items.length > 0 && (
+                      <div className="mt-1 space-y-0.5 min-w-0 overflow-hidden">
+                        {visible.map((it, i) => (
+                          <div
+                            key={`${it.template.id}-${i}`}
+                            className="flex items-center gap-1 min-w-0"
+                            title={`${it.template.equipment_name} · ${it.template.category} · ${it.status}`}
+                          >
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[it.status]}`} />
+                            <span className="truncate text-[9px] sm:text-2xs leading-tight font-normal text-foreground/80">
+                              {it.template.equipment_name}
+                            </span>
+                          </div>
+                        ))}
+                        {overflow > 0 && (
+                          <div className="text-[9px] sm:text-2xs leading-tight text-muted-foreground pl-2.5">
+                            +{overflow} more
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         <div className="flex flex-wrap gap-3 text-2xs mt-3 pt-2 border-t">
           <Legend dot="bg-accent" label="Done" />
@@ -308,6 +400,13 @@ export function PmsCalendar() {
           template={deletingTemplate}
           onClose={() => setDeletingTemplate(null)}
           onDeleted={() => setDeletingTemplate(null)}
+        />
+      )}
+
+      {manageOpen && (
+        <ManageSchedulesDialog
+          templates={templates ?? []}
+          onClose={() => setManageOpen(false)}
         />
       )}
     </div>
@@ -689,5 +788,227 @@ function DeleteTemplateAlert({ template, onClose, onDeleted }: {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+// ---------------- Manage schedules: multi-select bulk delete (Manager + Admin only) ----------------
+// Google-Calendar-style bulk removal: pick any number of PMS schedules — or an
+// equipment's whole set of frequencies in one tap — and delete them together.
+// Deleting a template removes every past/future occurrence computed from it
+// (occurrences aren't stored rows) plus its checklist_executions history via
+// ON DELETE CASCADE, same as the single-item delete above, just batched.
+
+function ManageSchedulesDialog({ templates, onClose }: {
+  templates: Template[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const sorted = useMemo(
+    () => [...templates].sort((a, b) =>
+      a.equipment_name.localeCompare(b.equipment_name) || a.frequency.localeCompare(b.frequency)),
+    [templates],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter(t =>
+      t.equipment_name.toLowerCase().includes(q) || t.category.toLowerCase().includes(q));
+  }, [sorted, query]);
+
+  // Group by equipment so a whole equipment's schedule array (every
+  // frequency variant) can be selected — and deleted — in one motion.
+  const groups = useMemo(() => {
+    const map = new Map<string, Template[]>();
+    filtered.forEach(t => {
+      const arr = map.get(t.equipment_name) ?? [];
+      arr.push(t);
+      map.set(t.equipment_name, arr);
+    });
+    return Array.from(map.entries());
+  }, [filtered]);
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleGroup = (ids: string[]) => {
+    setSelectedIds(prev => {
+      const allSelected = ids.every(id => prev.has(id));
+      const next = new Set(prev);
+      ids.forEach(id => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds(prev =>
+      prev.size === filtered.length ? new Set() : new Set(filtered.map(t => t.id)));
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkDeletePending(false);
+    setBulkDeleting(true);
+    try {
+      const { error } = await supabase.from('checklist_templates').delete().in('id', ids);
+      if (error) throw error;
+      toast.success(`Deleted ${ids.length} PMS schedule${ids.length === 1 ? '' : 's'}`);
+      qc.invalidateQueries({ queryKey: ['pms-templates'] });
+      qc.invalidateQueries({ queryKey: ['pms-executions'] });
+      setSelectedIds(new Set());
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => !o && !bulkDeleting && onClose()}>
+        <DialogContent className="max-w-lg w-[95vw] max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-base">Manage PMS Schedules</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Select one or more schedules — or an equipment's full set of frequencies — to delete.
+              This removes every occurrence and its checklist history and cannot be undone.
+            </p>
+          </DialogHeader>
+
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by equipment or category…"
+            className="h-8 text-xs shrink-0"
+            data-testid="input-manage-filter"
+          />
+
+          <div className="flex items-center justify-between shrink-0">
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={toggleSelectAll}
+                disabled={!filtered.length}
+                data-testid="checkbox-select-all-schedules"
+              />
+              Select all ({filtered.length})
+            </label>
+            {selectedIds.size > 0 && (
+              <button
+                type="button"
+                className="text-2xs text-muted-foreground underline underline-offset-2"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-2">
+            {!filtered.length ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No schedules match.</p>
+            ) : (
+              groups.map(([equipment, rows]) => {
+                const ids = rows.map(r => r.id);
+                const groupSelected = ids.every(id => selectedIds.has(id));
+                const groupPartial = !groupSelected && ids.some(id => selectedIds.has(id));
+                return (
+                  <div key={equipment} className="rounded-md border overflow-hidden">
+                    <div className="flex items-center gap-2 px-2 py-1.5 bg-secondary/60 border-b">
+                      <Checkbox
+                        checked={groupPartial ? 'indeterminate' : groupSelected}
+                        onCheckedChange={() => toggleGroup(ids)}
+                        data-testid={`checkbox-group-${equipment}`}
+                      />
+                      <span className="text-xs font-semibold flex-1 truncate">{equipment}</span>
+                      <span className="text-2xs text-muted-foreground shrink-0">
+                        {rows.length} schedule{rows.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="divide-y">
+                      {rows.map(t => (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer hover:bg-secondary/40"
+                        >
+                          <Checkbox
+                            checked={selectedIds.has(t.id)}
+                            onCheckedChange={() => toggleOne(t.id)}
+                            data-testid={`checkbox-schedule-${t.id}`}
+                          />
+                          <span className="flex-1 min-w-0 truncate text-muted-foreground">{t.category}</span>
+                          <span className="shrink-0 text-2xs uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                            {t.frequency}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 shrink-0">
+              <span className="text-xs font-medium text-danger flex-1">
+                {selectedIds.size} schedule{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs gap-1.5 bg-danger text-danger-foreground hover:bg-danger/90"
+                onClick={() => setBulkDeletePending(true)}
+                disabled={bulkDeleting}
+                data-testid="button-bulk-delete-schedules"
+              >
+                {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Delete selected
+              </Button>
+            </div>
+          )}
+
+          <DialogFooter className="shrink-0">
+            <Button variant="outline" onClick={onClose} disabled={bulkDeleting}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={bulkDeletePending} onOpenChange={(o) => !o && setBulkDeletePending(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-danger">
+              Delete {selectedIds.size} PMS schedule{selectedIds.size === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected schedules — every past and future occurrence and
+              their checklist history. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting} data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={bulkDelete}
+              disabled={bulkDeleting}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkDeleting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {bulkDeleting ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
