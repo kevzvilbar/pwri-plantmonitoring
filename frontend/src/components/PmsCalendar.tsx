@@ -614,8 +614,8 @@ function ChecklistDialog({ item, isManager, onClose, onEdit, onDelete }: {
         )}
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">Findings / Notes (Optional)</label>
-          <Textarea value={findings} onChange={(e) => setFindings(e.target.value)} rows={2} />
+          <label htmlFor="pms-findings" className="text-xs font-medium">Findings / Notes (Optional)</label>
+          <Textarea id="pms-findings" value={findings} onChange={(e) => setFindings(e.target.value)} rows={2} />
         </div>
 
         <DialogFooter className="gap-2">

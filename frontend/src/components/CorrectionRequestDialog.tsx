@@ -157,8 +157,9 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
 
         {/* Proposed value */}
         <div className="space-y-1">
-          <label className="text-xs font-medium">Proposed correct reading *</label>
+          <label htmlFor="correction-proposed-value" className="text-xs font-medium">Proposed correct reading *</label>
           <Input
+            id="correction-proposed-value"
             type="number"
             placeholder={`e.g. ${fmtNum(target.currentReading)}`}
             value={proposedValue}
@@ -178,9 +179,9 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
 
         {/* Reason */}
         <div className="space-y-1">
-          <label className="text-xs font-medium">Reason *</label>
+          <label htmlFor="correction-reason" className="text-xs font-medium">Reason *</label>
           <Select value={reason} onValueChange={setReason}>
-            <SelectTrigger className="h-9 text-xs">
+            <SelectTrigger id="correction-reason" className="h-9 text-xs">
               <SelectValue placeholder="Select reason…" />
             </SelectTrigger>
             <SelectContent>
@@ -201,8 +202,9 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
 
         {/* Optional note */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Additional note (optional)</label>
+          <label htmlFor="correction-note" className="text-xs font-medium text-muted-foreground">Additional note (optional)</label>
           <Input
+            id="correction-note"
             placeholder="e.g. meter display was foggy, read right digit as 6 not 0"
             className="h-8 text-xs"
             value={note}

@@ -305,8 +305,9 @@ function EditValueModal({
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">Correct current reading</label>
+          <label htmlFor="datacorrections-new-value" className="text-xs font-medium">Correct current reading</label>
           <Input
+            id="datacorrections-new-value"
             type="number"
             value={newVal}
             onChange={e => setNewVal(e.target.value)}
@@ -322,9 +323,9 @@ function EditValueModal({
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">Correction reason *</label>
+          <label htmlFor="datacorrections-reason" className="text-xs font-medium">Correction reason *</label>
           <Select value={reason} onValueChange={setReason}>
-            <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select reason…" /></SelectTrigger>
+            <SelectTrigger id="datacorrections-reason" className="h-9 text-xs"><SelectValue placeholder="Select reason…" /></SelectTrigger>
             <SelectContent>
               {CORRECTION_REASONS.map(r => (
                 <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
@@ -477,8 +478,9 @@ function MarkRolloverModal({
         </p>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">Meter wrap point (register max)</label>
+          <label htmlFor="datacorrections-wrap-point" className="text-xs font-medium">Meter wrap point (register max)</label>
           <Input
+            id="datacorrections-wrap-point"
             type="number"
             value={maxVal}
             onChange={e => { setMaxVal(e.target.value); setMaxTouched(true); }}
