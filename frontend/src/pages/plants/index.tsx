@@ -37,6 +37,7 @@ import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader
 import { ROTrainIcon } from '@/components/icons/water-icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 import { fmtNum } from '@/lib/calculations';
+import { STALE_READING_HOURS } from '@/lib/format';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -68,36 +69,73 @@ export default function Plants() {
     : visiblePlants;
   const navigate = useNavigate();
 
-  // Summary counts: active/total per plant for Wells, Locators, RO Trains
+  // Summary counts: active/total per plant for Wells, Locators, RO Trains.
+  //
+  // "Active" here means "commissioned AND actually reporting data" for all
+  // three metrics — not just "commissioned". Trains already worked this way
+  // (status !== 'Maintenance' AND a reading in the last 2h). Wells and
+  // locators used to count as active purely from their `status` column,
+  // which is a manual, admin-set commissioning flag (see toggleWellStatus /
+  // logStatusChange in WellsList.tsx) that has nothing to do with whether
+  // the meter is still reporting — so a plant whose wells/locators had gone
+  // completely silent for days still showed 100% healthy here, because
+  // nobody had manually flipped anything to Inactive. Fixed by requiring a
+  // reading inside STALE_READING_HOURS too, read from well_readings_latest /
+  // locator_readings_latest — the same views and the same cutoff the
+  // per-row "Last reading" freshness badges in WellsList/LocatorsList use,
+  // so this ring and those badges can never disagree with each other.
   const { data: summaryCounts } = useQuery({
     queryKey: ['plants-summary-counts'],
     queryFn: async () => {
       const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
       const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
+      const staleCutoff = new Date(Date.now() - STALE_READING_HOURS * 60 * 60 * 1000).toISOString();
 
-      const [wellsRes, locatorsRes, trainsRes, recentReadingsRes] = await Promise.all([
-        supabase.from('wells').select('plant_id, status'),
-        supabase.from('locators').select('plant_id, status'),
+      const [
+        wellsRes, locatorsRes, trainsRes, recentReadingsRes,
+        wellLatestRes, locatorLatestRes,
+      ] = await Promise.all([
+        supabase.from('wells').select('id, plant_id, status'),
+        supabase.from('locators').select('id, plant_id, status'),
         supabase.from('ro_trains').select('id, plant_id, status'),
         // Only fetch train_ids that have had a reading in the last 2 hours
         supabase.from('ro_train_readings')
           .select('train_id')
           .gte('reading_datetime', twoHoursAgo),
+        // One row per well/locator (most recent reading only) — cheap
+        // enough to fetch in full and filter client-side against the
+        // staleness cutoff below. Not in the generated Database types (same
+        // as WellsList.tsx/LocatorsList.tsx's use of these same views), so
+        // the cast is confined to these two lines rather than repeated in
+        // every callback below.
+        (supabase.from('well_readings_latest' as any) as any).select('well_id, reading_datetime'),
+        (supabase.from('locator_readings_latest' as any) as any).select('locator_id, reading_datetime'),
       ]);
 
       // Set of train IDs with a recent (<=2h) reading
       const recentSet = new Set((recentReadingsRes.data ?? []).map((r: any) => r.train_id));
 
+      const wellLatest    = (wellLatestRes.data    ?? []) as { well_id: string; reading_datetime: string }[];
+      const locatorLatest = (locatorLatestRes.data ?? []) as { locator_id: string; reading_datetime: string }[];
+
+      // well_id / locator_id -> still-fresh (<=STALE_READING_HOURS) reading?
+      const freshWellSet = new Set(
+        wellLatest.filter((r) => r.reading_datetime >= staleCutoff).map((r) => r.well_id),
+      );
+      const freshLocatorSet = new Set(
+        locatorLatest.filter((r) => r.reading_datetime >= staleCutoff).map((r) => r.locator_id),
+      );
+
       type Summary = Record<string, { active: number; total: number }>;
       const tally = (
-        rows: { plant_id: string; status: string }[],
-        activeFn: (s: string) => boolean,
+        rows: { id: string; plant_id: string; status: string }[],
+        freshSet: Set<string>,
       ): Summary => {
         const out: Summary = {};
         rows.forEach((r) => {
           if (!out[r.plant_id]) out[r.plant_id] = { active: 0, total: 0 };
           out[r.plant_id].total++;
-          if (activeFn(r.status)) out[r.plant_id].active++;
+          if (r.status === 'Active' && freshSet.has(r.id)) out[r.plant_id].active++;
         });
         return out;
       };
@@ -113,12 +151,13 @@ export default function Plants() {
       }
 
       return {
-        wells:    tally(wellsRes.data    ?? [], (s) => s === 'Active'),
-        locators: tally(locatorsRes.data ?? [], (s) => s === 'Active'),
+        wells:    tally(wellsRes.data    ?? [], freshWellSet),
+        locators: tally(locatorsRes.data ?? [], freshLocatorSet),
         trains:   trainTally,
       };
     },
-    // Re-check every minute so the 2-hr window flips automatically
+    // Re-check every minute so the 2-hr / 48-hr windows flip automatically
+    refetchInterval: 60_000,
   });
 
   // ── Search / filter state ─────────────────────────────────────────────────

@@ -206,7 +206,7 @@ export default function Dashboard() {
     yNrw, nrwBreached, roByTrain, wellsByQuality,
     avgPermTds, avgFeedTds, avgRecovery, avgTurb, wellsWithTds, wellsWithNtu, avgRawTds, avgRawTurb,
     plantCodeById, hasCostData, prodCostsChem, chemCostTotal, chemCost, powerCost, productionCost,
-    blending, chemInv, trainGaps, _localROPerTrain, feed, feedAlerts,
+    blending, chemInv, trainGaps, wellGaps, locatorGaps, _localROPerTrain, feed, feedAlerts,
   } = useDashboardAggregates({
     plantIds, today, yesterday, _localDateStr, _yesterdayKey, plants, selectedPlantId,
     _directLocatorIds, _directProductMeterIds,
@@ -225,7 +225,7 @@ export default function Dashboard() {
     selectedPlantId, addAlerts, removeAlerts, plants, plantIds,
     latestRO, roAvgFlowByTrain, recentPretreatment, latestPumpReadings,
     powerAvgByPlant, prevPowerRowByPlant, todayPower, powerIsStale,
-    nrw, nrwBreached, feedAlerts, trainGaps, chemInv, consumption, _qualityTrainMeta2,
+    nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, chemInv, consumption, _qualityTrainMeta2,
   });
 
   return (

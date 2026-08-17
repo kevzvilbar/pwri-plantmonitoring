@@ -1,9 +1,9 @@
 // Split out of Dashboard.tsx (was 2,204 lines) as part of a file-size
 // cleanup pass. This module pushes the dashboard's live alerts into the
-// TopBar notification bell (NRW breach, feed alerts, RO train gaps, low
-// chemical inventory, RO meter spikes, pretreatment issues, pump
-// electrical issues) and computes the RO-meter/pretreatment/pump alert
-// lists themselves.
+// TopBar notification bell (NRW breach, feed alerts, RO train gaps, well
+// and locator reading gaps, low chemical inventory, RO meter spikes,
+// pretreatment issues, pump electrical issues) and computes the
+// RO-meter/pretreatment/pump alert lists themselves.
 //
 // Moved verbatim from Dashboard.tsx — no logic changes.
 import { useMemo, useEffect } from 'react';
@@ -13,13 +13,14 @@ import {
 } from '@/lib/roReadingGuards';
 import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import type { PlantAlert, PlantAlertSeverity } from '@/store/appStore';
+import type { ReadingGap } from '@/hooks/useReadingGaps';
 
 export function useDashboardAlerts(p: Record<string, any>) {
   const {
     selectedPlantId, addAlerts, removeAlerts, plants, plantIds,
     latestRO, roAvgFlowByTrain, recentPretreatment, latestPumpReadings,
     powerAvgByPlant, prevPowerRowByPlant, todayPower, powerIsStale,
-    nrw, nrwBreached, feedAlerts, trainGaps, chemInv, consumption, _qualityTrainMeta2,
+    nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, chemInv, consumption, _qualityTrainMeta2,
   } = p;
   // ── Push all live alerts into the TopBar notification bell ─────────────────
   // Converts trainGap / RO quality / low-stock / feed alerts into PlantAlert
@@ -205,6 +206,38 @@ export function useDashboardAlerts(p: Record<string, any>) {
         plantId:     g.plant_id,
         timestamp:   Date.now(),
         linkPath:    roLink(g.plant_id, g.train_id),
+      });
+    });
+
+    // Well / locator gap warnings — same shape as train gaps above, but
+    // status is never auto-flipped for these (see useReadingGaps.ts), so
+    // this alert is the only signal a stale well/locator produces until an
+    // operator logs a new reading or a manager investigates. Escalates to
+    // critical past 4 days — by then this is very unlikely to be a missed
+    // daily entry and much more likely to be a dead meter or a downed site.
+    const gapDays = (hours: number) => (hours / 24).toFixed(hours >= 24 ? 0 : 1);
+    (wellGaps as ReadingGap[] ?? []).forEach((g) => {
+      storeAlerts.push({
+        id:          `well-gap-${g.entity_id}`,
+        severity:    g.hours_gap >= 96 ? 'critical' : 'warning',
+        title:       `${g.entity_name} — no reading`,
+        description: `No reading in ${gapDays(g.hours_gap)}d — check the meter/connectivity or log a reading`,
+        source:      'Wells',
+        plantId:     g.plant_id,
+        timestamp:   Date.now(),
+        linkPath:    `/operations?tab=well&highlight=${g.entity_id}`,
+      });
+    });
+    (locatorGaps as ReadingGap[] ?? []).forEach((g) => {
+      storeAlerts.push({
+        id:          `locator-gap-${g.entity_id}`,
+        severity:    g.hours_gap >= 96 ? 'critical' : 'warning',
+        title:       `${g.entity_name} — no reading`,
+        description: `No reading in ${gapDays(g.hours_gap)}d — check the meter/connectivity or log a reading`,
+        source:      'Locators',
+        plantId:     g.plant_id,
+        timestamp:   Date.now(),
+        linkPath:    `/operations?tab=locator&highlight=${g.entity_id}`,
       });
     });
 
@@ -441,7 +474,7 @@ export function useDashboardAlerts(p: Record<string, any>) {
       addAlerts(Array.from(dedupedMap.values()));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trainGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
+  }, [trainGaps, wellGaps, locatorGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
       pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById]);
 
   return { plantNameById, roMeterSpikes, pretreatmentAlerts, pumpElectricalAlerts };

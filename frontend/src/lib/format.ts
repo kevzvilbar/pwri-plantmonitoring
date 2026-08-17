@@ -226,6 +226,17 @@ export function fmtRelative(d: string | Date | null | undefined): string {
 }
 
 /**
+ * A well/locator reading beyond this age is considered "stale" — the same
+ * cutoff `lastReadingFreshness` below uses for its 'danger' tone. Exported
+ * so anything else that needs to answer "is this entity actually reporting
+ * data" (e.g. the Plants-list health ring's active/total tallies, or a
+ * gap-detection alert) uses the identical definition instead of hand-rolling
+ * its own threshold that could quietly drift out of sync with the badge the
+ * user is looking at.
+ */
+export const STALE_READING_HOURS = 48;
+
+/**
  * Tone + label for a "last reading" freshness badge: accent within a day,
  * warn 1–2 days, danger beyond that. Deliberately not called a "flag" —
  * that word already means the derived-locator review-flag workflow
@@ -239,7 +250,7 @@ export function lastReadingFreshness(d: string | Date | null | undefined): {
 } {
   if (!d) return { tone: 'muted', label: 'No reading yet' };
   const hours = (Date.now() - new Date(d).getTime()) / 3_600_000;
-  const tone = hours < 24 ? 'accent' : hours < 48 ? 'warn' : 'danger';
+  const tone = hours < 24 ? 'accent' : hours < STALE_READING_HOURS ? 'warn' : 'danger';
   return { tone, label: `Last reading: ${fmtRelative(d)}` };
 }
 

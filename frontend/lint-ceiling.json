@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2097,
+  "maxWarnings": 2104,
   "lastUpdated": "2026-08-17",
   "history": [
     {
@@ -70,6 +70,12 @@
       "date": "2026-08-17",
       "maxWarnings": 2097,
       "previous": 2087
+    },
+    {
+      "date": "2026-08-17",
+      "maxWarnings": 2104,
+      "previous": 2097,
+      "reason": "Wells/locators data-gap detection (Umapad plant showing all-Active despite days of no readings — see PR description). +7 no-explicit-any, all Supabase client calls against well_readings_latest/locator_readings_latest, the same two views WellsList.tsx/LocatorsList.tsx already cast `as any` for the same reason: they're hand-written SQL views, not in the generated Database type. Kept to the minimum: wells/locators/ro_trains table queries and the tally()/fetchReadingGaps() helpers are fully typed with no casts, only the two view .from() calls and one dynamic-key row lookup (idCol varies per entity kind) use any, matching the existing useTrainAutoOffline.ts precedent for the same kind of dynamic Supabase row shape."
     }
   ]
 }

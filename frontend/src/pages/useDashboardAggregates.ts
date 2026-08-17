@@ -16,6 +16,7 @@ import { deltaCache } from '@/lib/deltaCache';
 import { computePivotFromReadingsNoCache, pivotDayTotal } from '@/components/dashboard/DataSummaryModal';
 import { pctDelta } from '@/components/dashboard/types';
 import { useTrainAutoOffline } from '@/hooks/useTrainAutoOffline';
+import { useReadingGaps } from '@/hooks/useReadingGaps';
 
 export function useDashboardAggregates(p: Record<string, any>) {
   const {
@@ -366,6 +367,7 @@ export function useDashboardAggregates(p: Record<string, any>) {
   });
 
   const trainGaps = useTrainAutoOffline(plantIds);
+  const { wellGaps, locatorGaps } = useReadingGaps(plantIds);
 
   // Legacy RO/chem alerts (still useful, live-computed)
   const localAlerts: { tone: 'danger' | 'warn'; text: string }[] = [];
@@ -513,6 +515,6 @@ export function useDashboardAggregates(p: Record<string, any>) {
     yNrw, nrwBreached, roByTrain, wellsByQuality,
     avgPermTds, avgFeedTds, avgRecovery, avgTurb, wellsWithTds, wellsWithNtu, avgRawTds, avgRawTurb,
     plantCodeById, hasCostData, prodCostsChem, chemCostTotal, chemCost, powerCost, productionCost,
-    blending, chemInv, trainGaps, _localROPerTrain, feed, feedAlerts,
+    blending, chemInv, trainGaps, wellGaps, locatorGaps, _localROPerTrain, feed, feedAlerts,
   };
 }
