@@ -1080,7 +1080,7 @@ function KpiTab({ staff, roles, plants }: { staff: StaffMember[]; roles: any[]; 
   // Every reading is now bucketed into an Asia/Manila calendar day (see
   // fmtIsoDate usage below and in EntityHistoryChart.tsx), so "today" and
   // the elapsed-hours proration here use Manila time too, to match those
-  // buckets. These have to stay in sync with the bucketing logic below —
+  // buckets. These have to stay in sync with the bucketing logic below ��
   // not just here.
   // Cheap to compute, so no useMemo — they naturally refresh on every
   // render (including a manual "Refresh" click) without needing a
@@ -1838,6 +1838,28 @@ function AppManual() {
         >
           <BookOpen className="h-3.5 w-3.5" /> Open Manual
         </button>
+      </div>
+
+      <div className="border-t bg-muted/20 px-5 py-4 sm:px-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-foreground">Shift handover quick start</div>
+            <div className="text-2xs text-muted-foreground">A practical path for the next reading round.</div>
+          </div>
+          <button onClick={() => openAt('operations')} className="shrink-0 text-2xs font-medium text-primary hover:underline">Open daily entry</button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            ['Confirm context', 'Check the plant and asset tab before entering a value.', 'dashboard'],
+            ['Log the shift', 'Save Wells & Locators, then complete RO and dosing records.', 'operations'],
+            ['Close the loop', 'Review flags and send corrections through the review workflow.', 'data-corrections'],
+          ].map(([label, detail, chapter]) => (
+            <button key={label} onClick={() => openAt(chapter)} className="flex items-start gap-2 rounded-md border bg-background p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span><span className="block text-xs font-medium text-foreground">{label}</span><span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">{detail}</span></span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="px-5 sm:px-6 pb-5 sm:pb-6">
