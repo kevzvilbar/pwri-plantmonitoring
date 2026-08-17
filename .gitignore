@@ -88,3 +88,9 @@ credentials.json
 *.key
 .credentials
 -e 
+
+# Applied patch files shouldn't stay as tracked artifacts (root-level only —
+# .yarn/patches/ above is intentionally kept). Two of these ended up
+# committed directly (auth-a11y-labeling-fix.patch, uiux-consistency-pass-2.patch)
+# and were removed 2026-08-17; this stops it from recurring silently.
+/*.patch
