@@ -726,7 +726,7 @@ function ProductMeterRow({
           </div>
           <label className="shrink-0 cursor-pointer relative">
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded px-3 py-1 font-mono-num whitespace-nowrap hover:bg-muted/70 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2"
               onClick={(e) => {
                 e.preventDefault();
                 const el = dtInputRef.current;
@@ -743,8 +743,8 @@ function ProductMeterRow({
             </span>
             <Input ref={dtInputRef} type="datetime-local" value={customDt}
               onChange={e => setCustomDt(e.target.value)}
-              className="absolute inset-0 opacity-0 w-full h-full pointer-events-none"
-              title="Reading date & time" tabIndex={-1} />
+              className="peer absolute inset-0 opacity-0 w-full h-full pointer-events-none"
+              title="Reading date & time" />
           </label>
         </div>
         {/* "Last reading" freshness + link to this meter's card in Plant
