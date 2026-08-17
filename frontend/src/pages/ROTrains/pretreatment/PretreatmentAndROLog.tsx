@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { calc, ALERTS } from '@/lib/calculations';
 import { evaluateROMeterSpike, computeROAverageFlowRate } from '@/lib/roReadingGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
@@ -522,9 +522,9 @@ export function PretreatmentAndROLog() {
   const anyNeedsRemark = feedNeedsRemark || permNeedsRemark || rejNeedsRemark;
   // Blocks Save until every flagged meter has its own remark filled in.
   const anomalyRemarksMissing =
-    (feedNeedsRemark && !anomalyRemarkFeed.trim()) ||
-    (permNeedsRemark && !anomalyRemarkPerm.trim()) ||
-    (rejNeedsRemark  && !anomalyRemarkRej.trim());
+    (feedNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkFeed)) ||
+    (permNeedsRemark && !isAnomalyRemarkValid(anomalyRemarkPerm)) ||
+    (rejNeedsRemark  && !isAnomalyRemarkValid(anomalyRemarkRej));
   // True if ANY of the three meters look like a mis-key — gates the
   // pending_review flag + confirmation on save, below.
   const anyMeterSpike = feedHighWarn || permHighWarn || rejHighWarn;

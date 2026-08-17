@@ -19,7 +19,7 @@ import { DataState } from '@/components/DataState';
 import { cn } from '@/lib/utils';
 import { DOSING_KEYS, canEditEntry, diffFields, logReadingEdit } from '../../ro-trains';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 
 // ─── Chemical Dosing Historical Log ──────────────────────────────────────────
 export function DosingHistoryLog() {
@@ -119,6 +119,7 @@ export function DosingHistoryLog() {
       return;
     }
     if (!editReason) { toast.error('Select a reason for this edit'); return; }
+    if (!isReasonComplete(editReason, editCustomReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
     const num = (k: string) => editV[k] !== '' ? +editV[k] : null;
     const costCalc = DOSING_KEYS.reduce((s, c) => {
@@ -379,7 +380,7 @@ export function DosingHistoryLog() {
                           size="sm"
                           className="h-6 px-2 text-2xs bg-primary text-white hover:bg-primary/90"
                           onClick={saveEdit}
-                          disabled={saving || !editReason}
+                          disabled={saving || !isReasonComplete(editReason, editCustomReason)}
                         >
                           {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
                         </Button>

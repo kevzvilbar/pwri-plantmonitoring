@@ -8,7 +8,7 @@ import { useDraft } from '@/hooks/useDraft';
 import { CorrectionRequestDialog } from '@/components/CorrectionRequestDialog';
 import type { CorrectionTarget } from '@/components/CorrectionRequestDialog';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/store/appStore';
 import { usePlants } from '@/hooks/usePlants';
@@ -635,6 +635,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       return;
     }
     if (!editReason) { toast.error('Select a reason for this edit'); return; }
+    if (!isReasonComplete(editReason, editCustomReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
     let error: any = null;
     const dtIso = new Date(editRow.datetime).toISOString();
@@ -961,7 +962,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
             />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !editReason}
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !isReasonComplete(editReason, editCustomReason)}
                 className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>

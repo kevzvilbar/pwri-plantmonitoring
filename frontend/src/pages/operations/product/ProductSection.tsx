@@ -37,7 +37,7 @@ import {
 import { OdometerRollerInput, MobileCarousel } from '@/components/OdometerRollerInput';
 import { computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, type VolumePoint } from '@/lib/flowRateGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
@@ -45,7 +45,7 @@ import {
 import { ReadingHistoryDialog } from '@/components/ReadingHistoryDialog';
 import { ReplaceMeterDialog } from '@/pages/plants/locators/LocatorDialogs';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { logReadingEdit, diffFields, canEditEntry } from '@/pages/ro-trains/helpers';
 import {
   GridPylonIcon, WELL_MAX_READINGS_PER_DAY,
@@ -547,7 +547,7 @@ function ProductMeterRow({
   const productionRate = computeRate(productionVolume, hoursElapsedProduct);
   const deviationProduct = classifyDeviation(productionRate, avgVol ?? null, ALERTS.product_spike_multiplier);
   const highVol = deviationProduct.tier !== 'ok';
-  const anomalyRemarkRequired = highVol && !anomalyRemark.trim();
+  const anomalyRemarkRequired = highVol && !isAnomalyRemarkValid(anomalyRemark);
 
   // Pre-fill the drum with the latest previous reading so the operator
   // starts from the real odometer value and only rolls the changed digits.
@@ -1061,6 +1061,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
       return;
     }
     if (!reason) { toast.error('Select a reason for this edit'); return; }
+    if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
     const newCur = +editRow.value;
     const beforeRow = beforeRowCheck ?? null;
@@ -1243,7 +1244,7 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
               customReason={customReason} onCustomReasonChange={setCustomReason}
             />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !reason}
+              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !isReasonComplete(reason, customReason)}
                 className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>

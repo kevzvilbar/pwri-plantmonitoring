@@ -23,7 +23,7 @@ import { ChangeMeterIcon } from '@/components/icons/water-icons';
 import { fmtNum, getCurrentPosition, isOffLocation, ALERTS } from '@/lib/calculations';
 import { computeRate, computeRollingAverageRateFromDeltas, classifyDeviation, type VolumePoint } from '@/lib/flowRateGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { fmtSaveToast } from '@/lib/format';
 import { findExistingReading } from '@/lib/duplicateCheck';
 import { downloadCSV } from '@/lib/csv';
@@ -799,7 +799,7 @@ export function PowerForm() {
       const hoursElapsed = (new Date(dt).getTime() - new Date(prevRow.reading_datetime).getTime()) / 3_600_000;
       const rate = computeRate(payload.daily_consumption_kwh, hoursElapsed);
       const result = classifyDeviation(rate, avgPowerRate, ALERTS.power_spike_multiplier);
-      if (result.tier !== 'ok' && !anomalyRemark.trim()) {
+      if (result.tier !== 'ok' && !isAnomalyRemarkValid(anomalyRemark)) {
         setPowerAnomaly({ result, kind, idx });
         setSavingMeter(null);
         toast.error(`${kind === 'grid' ? getGridLabel(idx) : getSolarLabel(idx)}: this reading is outside the normal range — add a remark before saving.`);

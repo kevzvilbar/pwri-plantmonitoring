@@ -6,7 +6,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 
 // Used to manually override a derived (is_derived) locator's computed value
 // — e.g. Hamas at SRP — for a Manager / Data Analyst / Admin. A reason is
@@ -36,7 +36,7 @@ export function DerivedMeterOverrideDialog({
 
   const reset = () => { setValue(''); setReason(''); setCustomReason(''); };
   const parsed = value === '' ? null : Number(value);
-  const canConfirm = parsed != null && Number.isFinite(parsed) && !!reason;
+  const canConfirm = parsed != null && Number.isFinite(parsed) && isReasonComplete(reason, customReason);
 
   return (
     <AlertDialog

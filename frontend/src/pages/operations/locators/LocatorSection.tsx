@@ -35,7 +35,7 @@ import { OdometerRollerInput, MobileCarousel, type OdometerAlertState } from '@/
 import { evaluateReadingGuard, SPIKE_MULTIPLIER } from '@/lib/readingGuards';
 import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
@@ -836,7 +836,7 @@ function LocatorRow({
     ? classifyDeviation(currentFlowRateLoc, avgVol, SPIKE_MULTIPLIER)
     : { tier: 'ok' as const, direction: null, rate: null, avgRate: null, deviationPct: null };
   const highVol = deviationLoc.tier !== 'ok';
-  const anomalyRemarkRequired = deviationLoc.tier !== 'ok' && !anomalyRemark.trim();
+  const anomalyRemarkRequired = deviationLoc.tier !== 'ok' && !isAnomalyRemarkValid(anomalyRemark);
   const todayCount = todayReadings.length;
   const lastToday  = todayReadings[0] ?? null;
   const atLimit    = !editingId && todayCount >= maxReadingsPerDay;

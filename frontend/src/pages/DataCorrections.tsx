@@ -31,7 +31,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { CORRECTION_REASONS } from '@/lib/correctionReasons';
+import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
+import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2,
@@ -266,6 +267,7 @@ function EditValueModal({
   const { user } = useAuth();
   const [newVal, setNewVal] = useState(String(row.current_reading));
   const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
   const [busy, setBusy] = useState(false);
 
   const delta = Number(newVal) - (row.previous_reading ?? 0);
@@ -273,7 +275,7 @@ function EditValueModal({
   const handleSave = async () => {
     const parsed = Number(newVal);
     if (isNaN(parsed) || !newVal) { toast.error('Enter a valid number'); return; }
-    if (!reason.trim()) { toast.error('A correction reason is required'); return; }
+    if (!isReasonComplete(reason, customReason)) { toast.error('A correction reason is required'); return; }
     setBusy(true);
     try {
       const { data, error } = await (supabase.rpc('fn_cascade_reading_correction', {
@@ -281,7 +283,7 @@ function EditValueModal({
         p_row_id:      row.id,
         p_new_current: parsed,
         p_admin_id:    user?.id ?? null,
-        p_reason:      reason,
+        p_reason:      resolveReason(reason, customReason),
       }) as any);
       if (error) throw error;
       await supersedeOtherCorrectionRequests(
@@ -322,28 +324,15 @@ function EditValueModal({
           )}
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="datacorrections-reason" className="text-xs font-medium">Correction reason *</label>
-          <Select value={reason} onValueChange={setReason}>
-            <SelectTrigger id="datacorrections-reason" className="h-9 text-xs"><SelectValue placeholder="Select reason…" /></SelectTrigger>
-            <SelectContent>
-              {CORRECTION_REASONS.map(r => (
-                <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {reason === 'Other' && (
-            <Input
-              placeholder="Describe the issue…"
-              className="h-8 text-xs mt-1"
-              onChange={e => setReason(e.target.value)}
-            />
-          )}
-        </div>
+        <CorrectionReasonField
+          reason={reason} onReasonChange={setReason}
+          customReason={customReason} onCustomReasonChange={setCustomReason}
+          label="Correction reason"
+        />
 
         <div className="flex gap-2 justify-end">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button size="sm" onClick={handleSave} disabled={busy || !reason || !newVal}>
+          <Button size="sm" onClick={handleSave} disabled={busy || !isReasonComplete(reason, customReason) || !newVal}>
             {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
             Save &amp; cascade
           </Button>

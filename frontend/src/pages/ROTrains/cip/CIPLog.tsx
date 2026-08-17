@@ -19,7 +19,7 @@ import { Loader2, Pencil, History, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_CIP_CHEMICALS, CIP_BUILTIN_DB_MAP, CIP_CHEM_ACCENTS, CIP_CUSTOM_ACCENT, EDIT_WINDOW_HOURS, canEditEntry, diffFields, logReadingEdit } from '../../ro-trains';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 
 import { CIPSummaryContent } from './CIPSummaryContent';
 import { CIPVolumetric } from './CIPVolumetric';
@@ -233,6 +233,7 @@ export function CIPLog() {
       return;
     }
     if (!editReason) { toast.error('Select a reason for this edit'); return; }
+    if (!isReasonComplete(editReason, editCustomReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
     const payload: Record<string, any> = {
       start_datetime: editStart ? new Date(editStart).toISOString() : null,
@@ -636,7 +637,7 @@ export function CIPLog() {
                   <Button variant="ghost"
                     onClick={() => { setEditId(null); setEditRow(null); setEditReason(''); setEditCustomReason(''); }}
                     disabled={saving}>Cancel</Button>
-                  <Button onClick={saveEdit} disabled={saving || !editReason} className="bg-primary text-white hover:bg-primary/90">
+                  <Button onClick={saveEdit} disabled={saving || !isReasonComplete(editReason, editCustomReason)} className="bg-primary text-white hover:bg-primary/90">
                     {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
                     Save Changes
                   </Button>

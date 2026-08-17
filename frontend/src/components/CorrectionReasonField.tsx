@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { CORRECTION_REASONS } from '@/lib/correctionReasons';
+import { CORRECTION_REASONS, MIN_CUSTOM_REASON_LENGTH } from '@/lib/correctionReasons';
 
 interface Props {
   reason: string;
@@ -45,12 +45,21 @@ export function CorrectionReasonField({
         </SelectContent>
       </Select>
       {reason === 'Other' && (
-        <Input
-          placeholder="Describe the reason…"
-          className="h-8 text-xs mt-1"
-          value={customReason}
-          onChange={(e) => onCustomReasonChange(e.target.value)}
-        />
+        <>
+          <Input
+            placeholder="Describe the reason…"
+            className="h-8 text-xs mt-1"
+            value={customReason}
+            onChange={(e) => onCustomReasonChange(e.target.value)}
+          />
+          {customReason.trim().length < MIN_CUSTOM_REASON_LENGTH && (
+            <p className="text-2xs text-destructive">
+              {customReason.trim()
+                ? `Say a bit more — at least ${MIN_CUSTOM_REASON_LENGTH} characters needed.`
+                : 'Describe the reason — this is required for "Other".'}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

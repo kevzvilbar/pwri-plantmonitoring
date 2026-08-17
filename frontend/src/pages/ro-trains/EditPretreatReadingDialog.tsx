@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
-import { resolveReason } from '@/lib/correctionReasons';
+import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, EDIT_WINDOW_HOURS } from './helpers';
@@ -116,6 +116,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
     if (!reason) { toast.error('Select a reason for this edit'); return; }
+    if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
 
     const payload = {
@@ -348,7 +349,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !canSave || !reason}>
+          <Button onClick={handleSave} disabled={saving || !canSave || !isReasonComplete(reason, customReason)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
           </Button>
         </DialogFooter>

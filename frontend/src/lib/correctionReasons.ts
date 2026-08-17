@@ -37,6 +37,25 @@ export type CorrectionReason = typeof CORRECTION_REASONS[number];
 // same flattening CorrectionRequestDialog.tsx has always done for
 // correction_requests.reason, reused here so reading_edit_audit_log.reason
 // stays in the same shape instead of introducing a second convention.
+// NOTE: this is a fold, not a validator — call isReasonComplete() first and
+// gate Save on it, or resolveReason() will happily fall back to the bare
+// literal 'Other' for an unexplained edit (see isReasonComplete below).
 export function resolveReason(reason: string, customReason: string): string {
   return reason === 'Other' ? (customReason.trim() || 'Other') : reason;
+}
+
+// BUGFIX: every "Reason for this edit" dialog (ReadingHistoryDialog,
+// CorrectionRequestDialog, DataCorrections.tsx's EditValueModal, the RO
+// train / CIP / dosing edit dialogs, DerivedMeterOverrideDialog) gated its
+// Save button on nothing more than "a reason category was picked"
+// (`!reason`). That's true the instant 'Other' is selected, before any
+// explanation is typed — so a reading could be saved as edited "for a
+// reason" while the actual free-text description sat empty, or held a
+// single throwaway character. Save buttons should gate on this instead of
+// re-deriving the same check inline.
+export const MIN_CUSTOM_REASON_LENGTH = 5;
+
+export function isReasonComplete(reason: string, customReason: string): boolean {
+  if (!reason) return false;
+  return reason === 'Other' ? customReason.trim().length >= MIN_CUSTOM_REASON_LENGTH : true;
 }

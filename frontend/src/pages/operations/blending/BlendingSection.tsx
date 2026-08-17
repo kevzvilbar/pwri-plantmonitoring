@@ -37,7 +37,7 @@ import {
   type VolumePoint,
 } from '@/lib/flowRateGuards';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
-import { submitAnomalyRemark } from '@/lib/anomalyRemarks';
+import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import {
   parseCSVText, triggerTemplateDownload, normalizeDatetime,
   clearDupDecisions, clearBulkDupDecision, ImportReadingsDialog, resolveImportDuplicate,
@@ -721,7 +721,7 @@ function BlendingRow({
   // Required whenever the rate falls outside ±50% of the rolling average
   // (see flowRateGuards.ts) — cleared after every successful save.
   const [anomalyRemark, setAnomalyRemark] = useState('');
-  const anomalyRemarkRequired = blendHighVol && !anomalyRemark.trim();
+  const anomalyRemarkRequired = blendHighVol && !isAnomalyRemarkValid(anomalyRemark);
 
   // ── Status chip: "Not logged" → "Ready to save" → "Logged today" ──────────
   // Replaces having to parse "prev: — · today: 0 m³ logged" — the color alone

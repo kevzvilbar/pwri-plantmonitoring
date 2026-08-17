@@ -2,6 +2,7 @@ import { AlertCircle, ShieldAlert } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import type { DeviationResult, RateUnit } from '@/lib/flowRateGuards';
 import { formatDeviationMessage } from '@/lib/flowRateGuards';
+import { MIN_ANOMALY_REMARK_LENGTH, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 
 /**
  * Shared banner + remark input rendered by every odometer input page
@@ -13,9 +14,11 @@ import { formatDeviationMessage } from '@/lib/flowRateGuards';
  *
  * Renders nothing for tier 'ok'. For 'needs_remark' / 'critical', renders
  * the unified message plus a required textarea — callers gate their Save
- * button on `remark.trim().length > 0` (tier !== 'ok' implies a remark is
+ * button on isAnomalyRemarkValid(remark) (tier !== 'ok' implies a remark is
  * required either way; 'critical' additionally still gets auto pending_review
- * exactly as before).
+ * exactly as before). A bare non-empty check used to pass "0" or "-" as a
+ * complete remark; isAnomalyRemarkValid() also enforces a minimum length so
+ * a placeholder keystroke can't stand in for an actual explanation.
  */
 export function AnomalyRemarkBanner({
   result,
@@ -76,9 +79,11 @@ export function AnomalyRemarkBanner({
           }
           data-testid="anomaly-remark-textarea"
         />
-        {!remark.trim() && (
+        {!isAnomalyRemarkValid(remark) && (
           <p className={isCritical ? 'text-destructive/80' : 'text-warn/90'}>
-            A remark is required before this reading can be saved.
+            {remark.trim()
+              ? `Say a bit more — at least ${MIN_ANOMALY_REMARK_LENGTH} characters needed.`
+              : 'A remark is required before this reading can be saved.'}
           </p>
         )}
       </div>

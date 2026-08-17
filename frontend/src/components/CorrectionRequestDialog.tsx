@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
-import { CORRECTION_REASONS } from '@/lib/correctionReasons';
+import { CORRECTION_REASONS, isReasonComplete, resolveReason } from '@/lib/correctionReasons';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -62,8 +62,9 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
   const handleSubmit = async () => {
     if (parsed == null || isNaN(parsed)) { toast.error('Enter a valid proposed value'); return; }
     if (!reason) { toast.error('Select a reason'); return; }
+    if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason — at least a few words'); return; }
 
-    const finalReason = reason === 'Other' ? (customReason.trim() || 'Other') : reason;
+    const finalReason = resolveReason(reason, customReason);
     setBusy(true);
 
     try {
@@ -191,12 +192,19 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
             </SelectContent>
           </Select>
           {reason === 'Other' && (
-            <Input
-              placeholder="Describe the issue…"
-              className="h-8 text-xs mt-1"
-              value={customReason}
-              onChange={e => setCustomReason(e.target.value)}
-            />
+            <>
+              <Input
+                placeholder="Describe the issue…"
+                className="h-8 text-xs mt-1"
+                value={customReason}
+                onChange={e => setCustomReason(e.target.value)}
+              />
+              {!isReasonComplete(reason, customReason) && (
+                <p className="text-2xs text-destructive">
+                  {customReason.trim() ? 'Say a bit more — at least a few words.' : 'Describe the issue — this is required for "Other".'}
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -229,7 +237,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={busy || parsed == null || isNaN(parsed as number) || !reason}
+            disabled={busy || parsed == null || isNaN(parsed as number) || !isReasonComplete(reason, customReason)}
           >
             {busy && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             Submit request

@@ -6,6 +6,18 @@ import type { AnomalyTier, AnomalyDirection, RateUnit } from './flowRateGuards';
 // a failed insert here never blocks or rolls back the reading itself, which
 // has already saved successfully by the time this is called.
 
+// Every caller previously gated its Save button on `!remark.trim()` — any
+// non-empty string, including "0", "-", or a single stray keystroke, counted
+// as a complete remark. That let operators clear the "required" warning
+// without actually explaining the anomaly. Centralized here (rather than
+// re-declared per page) so the bar for "explained" is identical everywhere
+// this banner is used, and only needs tuning in one place.
+export const MIN_ANOMALY_REMARK_LENGTH = 5;
+
+export function isAnomalyRemarkValid(remark: string): boolean {
+  return remark.trim().length >= MIN_ANOMALY_REMARK_LENGTH;
+}
+
 export type AnomalyRemarkTable =
   | 'locator_readings'
   | 'well_readings'
