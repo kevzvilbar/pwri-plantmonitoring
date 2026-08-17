@@ -14,6 +14,7 @@ import {
 import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import type { PlantAlert, PlantAlertSeverity } from '@/store/appStore';
 import type { ReadingGap } from '@/hooks/useReadingGaps';
+import { gapDescription } from '@/hooks/useReadingGaps';
 
 export function useDashboardAlerts(p: Record<string, any>) {
   const {
@@ -215,13 +216,14 @@ export function useDashboardAlerts(p: Record<string, any>) {
     // operator logs a new reading or a manager investigates. Escalates to
     // critical past 4 days — by then this is very unlikely to be a missed
     // daily entry and much more likely to be a dead meter or a downed site.
-    const gapDays = (hours: number) => (hours / 24).toFixed(hours >= 24 ? 0 : 1);
+    // (gapDescription lives in useReadingGaps.ts, next to ReadingGap, so
+    // it's independently unit-tested rather than only exercised here.)
     (wellGaps as ReadingGap[] ?? []).forEach((g) => {
       storeAlerts.push({
         id:          `well-gap-${g.entity_id}`,
         severity:    g.hours_gap >= 96 ? 'critical' : 'warning',
         title:       `${g.entity_name} — no reading`,
-        description: `No reading in ${gapDays(g.hours_gap)}d — check the meter/connectivity or log a reading`,
+        description: gapDescription(g),
         source:      'Wells',
         plantId:     g.plant_id,
         timestamp:   Date.now(),
@@ -233,7 +235,7 @@ export function useDashboardAlerts(p: Record<string, any>) {
         id:          `locator-gap-${g.entity_id}`,
         severity:    g.hours_gap >= 96 ? 'critical' : 'warning',
         title:       `${g.entity_name} — no reading`,
-        description: `No reading in ${gapDays(g.hours_gap)}d — check the meter/connectivity or log a reading`,
+        description: gapDescription(g),
         source:      'Locators',
         plantId:     g.plant_id,
         timestamp:   Date.now(),

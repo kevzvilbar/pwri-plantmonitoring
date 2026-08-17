@@ -26,6 +26,23 @@ export interface ReadingGap {
   hours_gap: number;
 }
 
+/**
+ * Human-readable "no reading in ..." text for a ReadingGap, shared by
+ * useDashboardAlerts.ts's well/locator gap alerts. Pulled out here (rather
+ * than left inline where it's consumed) so it's unit-testable on its own —
+ * it previously rendered the literal string "Infinityd" for an entity with
+ * `last_reading_at === null` (never read even once, so hours_gap comes
+ * through as Infinity above), since `(Infinity / 24).toFixed(0)` stringifies
+ * to "Infinity", not a bounded number.
+ */
+export function gapDescription(g: Pick<ReadingGap, 'last_reading_at' | 'hours_gap'>): string {
+  if (g.last_reading_at == null) {
+    return 'No reading has ever been logged — check the meter/connectivity or log a reading';
+  }
+  const days = (g.hours_gap / 24).toFixed(g.hours_gap >= 24 ? 0 : 1);
+  return `No reading in ${days}d — check the meter/connectivity or log a reading`;
+}
+
 type EntityKind = 'well' | 'locator';
 
 const TABLE: Record<EntityKind, 'wells' | 'locators'> = {
