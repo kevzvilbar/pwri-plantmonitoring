@@ -92,23 +92,34 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
     queryKey,
     queryFn: async () => {
       try {
+        // norm_status is included in every tier (not just ALL_COLS) even
+        // though it's not rendered anywhere in this modal: canEditEntry()
+        // (helpers.tsx) uses it to block self-editing a reading that's
+        // currently flagged and sitting in Data Corrections' pending-review
+        // queue. Without it here, every row this modal ever sees has
+        // norm_status === undefined, so that lockdown silently never
+        // engages for RO Train readings specifically -- an operator could
+        // self-edit a flagged reading mid-review via this modal (or the
+        // EditRoReadingDialog it opens, which trusts this same row object)
+        // even though the exact same guard already works correctly for
+        // well/locator/product readings elsewhere in the app.
         const ALL_COLS = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
           'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l',
           'feed_meter','feed_meter_prev','feed_meter_delta',
           'permeate_meter','permeate_meter_prev','permeate_meter_delta',
           'reject_meter','reject_meter_prev','reject_meter_delta',
-          'is_meter_replacement','is_permeate_meter_replacement','is_reject_meter_replacement','remarks','incomplete_reason'];
+          'is_meter_replacement','is_permeate_meter_replacement','is_reject_meter_replacement','remarks','incomplete_reason','norm_status'];
         const TIER2 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
           'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','chlorine_residual_mg_l','remarks',
-          'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement','is_reject_meter_replacement','incomplete_reason'];
+          'feed_meter','permeate_meter','permeate_meter_delta','reject_meter','is_meter_replacement','is_reject_meter_replacement','incomplete_reason','norm_status'];
         const TIER3 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter','incomplete_reason'];
+          'feed_ph','permeate_ph','reject_ph','temperature_c','turbidity_ntu','recovery_pct','remarks','permeate_meter','incomplete_reason','norm_status'];
         const TIER4 = ['id','reading_datetime','recorded_by','created_at','plant_id','permeate_flow','feed_flow','reject_flow',
           'feed_pressure_psi','reject_pressure_psi','suction_pressure_psi','feed_tds','permeate_tds','reject_tds',
-          'temperature_c','recovery_pct','permeate_meter','incomplete_reason'];
+          'temperature_c','recovery_pct','permeate_meter','incomplete_reason','norm_status'];
 
         const buildQ = (cols: string[]) => {
           let q = (supabase.from('ro_train_readings' as any) as any)
