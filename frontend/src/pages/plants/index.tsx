@@ -521,9 +521,14 @@ export default function Plants() {
           return (
             <div
               key={p.id}
-              className="group relative flex overflow-hidden rounded-xl border border-border/60 bg-card hover:shadow-md transition-all duration-200 cursor-pointer"
+              role="button"
+              tabIndex={0}
+              className="group relative flex overflow-hidden rounded-xl border border-border/60 bg-card hover:shadow-md transition-all duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
               style={{ ['--plant-color' as any]: plantColor }}
               onClick={() => navigate(`/plants/${p.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/plants/${p.id}`); }
+              }}
               data-testid={`plant-card-${p.id}`}
             >
               {/* Left accent stripe — plant identity colour */}

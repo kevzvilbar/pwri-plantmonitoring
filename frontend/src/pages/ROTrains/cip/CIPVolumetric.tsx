@@ -318,8 +318,14 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
                       {/* Expand chevron — hidden when saved */}
                       {!isSaved && (
                         <span
-                          className="text-muted-foreground/50 text-xs cursor-pointer"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={isOpen ? 'Collapse vessel details' : 'Expand vessel details'}
+                          className="text-muted-foreground/50 text-xs cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 rounded"
                           onClick={() => setExpandedVessel(isOpen ? null : row.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedVessel(isOpen ? null : row.id); }
+                          }}
                         >
                           {isOpen ? '▲' : '▼'}
                         </span>

@@ -984,8 +984,13 @@ export function ProductMetersCard({ plant, highlightId }: { plant: any; highligh
           <>
           <div className="flex items-start gap-2">
             <div
-              className="flex-1 min-w-0 cursor-pointer"
+              role="button"
+              tabIndex={0}
+              className="flex-1 min-w-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 rounded"
               onClick={() => setSelectedMeter(selectedMeter === m.id ? null : m.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedMeter(selectedMeter === m.id ? null : m.id); }
+              }}
             >
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0">
