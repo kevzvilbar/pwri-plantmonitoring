@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Lead, P, H3, List, Ref, Note } from './bookPrimitives';
+import { Lead, P, H3, List, Ref, Note, ManualFigure, WorkflowStrip } from './bookPrimitives';
 
 export type BookChapter = {
   id: string;
@@ -278,6 +278,28 @@ export const BOOK_PARTS: BookPart[] = [
               with its own field and its own Save button. You save each reading as you take it, not one giant
               form submitted all at once.
             </Lead>
+            <WorkflowStrip
+              steps={[
+                { label: 'Choose plant', detail: 'Start in Wells & Locators and confirm the plant context before reading assets.' },
+                { label: 'Save per asset', detail: 'Enter the cumulative meter value on its card, then save that reading immediately.' },
+                { label: 'Review flags', detail: 'Pause on cooldowns, duplicate warnings, or pending-review badges before moving on.' },
+              ]}
+            />
+            <ManualFigure
+              title="Daily reading card"
+              caption="The field workflow is intentionally one asset at a time: the current plant stays visible, each card owns its Save button, and unusual readings are surfaced instead of hidden."
+            >
+              <div className="min-w-[520px] rounded-lg border bg-background p-3 font-sans text-xs">
+                <div className="mb-3 flex items-center justify-between gap-3 border-b pb-3">
+                  <div><div className="font-semibold text-foreground">Wells & Locators</div><div className="text-muted-foreground">Plant: North Injection Plant</div></div>
+                  <span className="rounded-md bg-primary/10 px-2 py-1 font-medium text-primary">Locator</span>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="mb-3 flex items-center justify-between"><div><div className="font-medium text-foreground">Raw Water Inlet 01</div><div className="text-[11px] text-muted-foreground">Last reading 12,480 m³</div></div><span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">Ready to save</span></div>
+                  <div className="flex items-center gap-2"><div className="flex-1 rounded-md border bg-muted/20 px-3 py-2 text-muted-foreground">12,520</div><button className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground">Save reading</button></div>
+                </div>
+              </div>
+            </ManualFigure>
             <H3>The guards that run on every save</H3>
             <List
               items={[
@@ -322,6 +344,15 @@ export const BOOK_PARTS: BookPart[] = [
               pre-treatment/RO reading, backwash and CIP records, chemical dosing, and chemical stock, across
               four tabs — Overview, Pre-Treatment &amp; RO, CIP, and Chemical Dosing.
             </Lead>
+            <ManualFigure
+              title="Pre-Treatment & RO shift log"
+              caption="Use the tab bar to move between Overview, Pre-Treatment & RO, CIP, and Chemical Dosing. Calculated deltas and quality percentages appear alongside the values they explain."
+            >
+              <div className="min-w-[520px] rounded-lg border bg-background p-3 font-sans text-xs">
+                <div className="mb-3 flex gap-1 border-b pb-2"><span className="border-b-2 border-primary px-2 py-1 font-semibold text-primary">Pre-Treatment & RO</span><span className="px-2 py-1 text-muted-foreground">CIP</span><span className="px-2 py-1 text-muted-foreground">Chemical Dosing</span></div>
+                <div className="grid grid-cols-3 gap-2"><div className="rounded-md border p-3"><div className="text-muted-foreground">Feed flow</div><div className="mt-1 text-lg font-semibold text-foreground">48.2 <span className="text-xs font-normal">m³/h</span></div></div><div className="rounded-md border p-3"><div className="text-muted-foreground">Salt rejection</div><div className="mt-1 text-lg font-semibold text-primary">98.4%</div></div><div className="rounded-md border border-warn/40 bg-warn-soft p-3"><div className="text-muted-foreground">ΔP check</div><div className="mt-1 font-semibold text-foreground">Review</div></div></div>
+              </div>
+            </ManualFigure>
             <H3>The Pre-Treatment & RO reading</H3>
             <P>
               This is the primary shift log for train performance, organized into sections you fill in as

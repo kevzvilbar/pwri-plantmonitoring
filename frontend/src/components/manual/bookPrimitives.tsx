@@ -91,3 +91,39 @@ export function Note({ children, kind = 'tip' }: { children: ReactNode; kind?: '
     </div>
   );
 }
+
+// A theme-aware, app-style figure used in place of brittle external screenshots.
+// It documents the real controls without requiring a static image asset.
+export function ManualFigure({ title, caption, children }: { title: string; caption: string; children: ReactNode }) {
+  return (
+    <figure className="not-prose my-8 overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/35 px-3 py-2 font-sans">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="size-2 rounded-full bg-primary/70" aria-hidden="true" />
+          <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">App walkthrough</span>
+        </div>
+        <span className="shrink-0 text-[10px] text-muted-foreground">PWRI Plant Monitoring</span>
+      </div>
+      <div className="overflow-x-auto p-3 sm:p-4">{children}</div>
+      <figcaption className="border-t px-3 py-3 font-sans text-xs leading-relaxed text-muted-foreground sm:px-4">
+        <span className="font-semibold text-foreground">{title}.</span> {caption}
+      </figcaption>
+    </figure>
+  );
+}
+
+export function WorkflowStrip({ steps }: { steps: { label: string; detail: string }[] }) {
+  return (
+    <div className="not-prose my-6 grid gap-2 font-sans sm:grid-cols-3">
+      {steps.map((step, index) => (
+        <div key={step.label} className="rounded-lg border bg-muted/20 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{index + 1}</span>
+            <span className="text-xs font-semibold text-foreground">{step.label}</span>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">{step.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
