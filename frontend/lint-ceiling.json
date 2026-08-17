@@ -1,5 +1,5 @@
 {
-  "maxWarnings": 2104,
+  "maxWarnings": 2106,
   "lastUpdated": "2026-08-17",
   "history": [
     {
@@ -76,6 +76,12 @@
       "maxWarnings": 2104,
       "previous": 2097,
       "reason": "Wells/locators data-gap detection (Umapad plant showing all-Active despite days of no readings — see PR description). +7 no-explicit-any, all Supabase client calls against well_readings_latest/locator_readings_latest, the same two views WellsList.tsx/LocatorsList.tsx already cast `as any` for the same reason: they're hand-written SQL views, not in the generated Database type. Kept to the minimum: wells/locators/ro_trains table queries and the tally()/fetchReadingGaps() helpers are fully typed with no casts, only the two view .from() calls and one dynamic-key row lookup (idCol varies per entity kind) use any, matching the existing useTrainAutoOffline.ts precedent for the same kind of dynamic Supabase row shape."
+    },
+    {
+      "date": "2026-08-17",
+      "maxWarnings": 2106,
+      "previous": 2104,
+      "reason": "Same Umapad follow-up, one more spot with the identical bug: ProductMetersStat (pages/plants/config/ProductMeters.tsx), the active/total counter shown on the Plants list page right next to the Wells/Locators/RO Trains stats fixed in the previous entry, had the same status-column-only counting. Now requires a fresh product_meter_readings_latest row too. +2 no-explicit-any for that view's .from() cast, same justification as the previous entry."
     }
   ]
 }

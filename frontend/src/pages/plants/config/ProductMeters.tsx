@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
-import { lastReadingFreshness } from '@/lib/format';
+import { lastReadingFreshness, STALE_READING_HOURS } from '@/lib/format';
 import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
 import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Calendar, Droplet, CalendarClock, ArrowUpRight } from 'lucide-react';
 import { ChangeMeterIcon } from '@/components/icons/water-icons';
@@ -69,8 +69,38 @@ export function ProductMetersStat({ plantId }: { plantId: string }) {
       return (data ?? []) as any[];
     },
   });
+
+  // "Active" here means "commissioned AND actually reporting data", same
+  // fix as the Wells/Locators tally on the Plants list page (see
+  // pages/plants/index.tsx's summaryCounts) — this stat used to count a
+  // meter as active purely from its static `status` column, so a plant
+  // whose product meter had gone silent for days still showed this as
+  // fully healthy. own query key (not shared with ProductMetersCard's
+  // ['product-meters-latest-readings', plant.id] below) for the same
+  // reason `meters` above has its own key — see this file's 2026-07-24
+  // BUGFIX comment on shared-key cache clobbering.
+  const { data: latest } = useQuery({
+    queryKey: ['product-meters-stat-latest', plantId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('product_meter_readings_latest' as any) as any)
+        .select('meter_id, reading_datetime')
+        .eq('plant_id', plantId);
+      if (error) throw error;
+      return (data ?? []) as { meter_id: string; reading_datetime: string }[];
+    },
+    refetchInterval: 60_000,
+  });
+  const freshSet = useMemo(() => {
+    const cutoff = Date.now() - STALE_READING_HOURS * 60 * 60 * 1000;
+    return new Set(
+      (latest ?? [])
+        .filter((r) => new Date(r.reading_datetime).getTime() >= cutoff)
+        .map((r) => r.meter_id),
+    );
+  }, [latest]);
+
   const total = meters?.length ?? 0;
-  const active = (meters ?? []).filter((m: any) => (m.status ?? 'Active') === 'Active').length;
+  const active = (meters ?? []).filter((m: any) => (m.status ?? 'Active') === 'Active' && freshSet.has(m.id)).length;
   return (
     <div>
       <div className="font-mono-num text-lg font-bold">
