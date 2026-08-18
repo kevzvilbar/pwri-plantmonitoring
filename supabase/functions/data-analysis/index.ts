@@ -12,8 +12,8 @@
  *   GET   /api/data-analysis/raw-edit-log
  *   GET   /api/data-analysis/tables
  *
- * Deploy:
- *   supabase functions deploy data-analysis --no-verify-jwt
+ * Deploy with JWT verification enabled (the default):
+ *   supabase functions deploy data-analysis
  *
  * Required Supabase secrets (set via dashboard or CLI):
  *   SUPABASE_URL              (auto-injected by Supabase)
@@ -80,22 +80,14 @@ function bearerToken(req: Request): string | null {
   return h.startsWith('Bearer ') ? h.slice(7) : null;
 }
 
-/** Decode JWT payload (no verification — Supabase already verified it). */
-function jwtPayload(token: string): Record<string, unknown> {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(b64));
-  } catch {
-    return {};
-  }
-}
+/** Verify the bearer token with Supabase; never trust decoded JWT claims. */
+async function callerIdentity(token: string) {
+  const db = userClient(token);
+  const { data, error } = await db.auth.getUser(token);
+  if (error || !data.user) return null;
 
-/** Get user id and role from token. */
-function callerIdentity(token: string) {
-  const p = jwtPayload(token);
-  const uid = p.sub as string | undefined;
-  const role = (p.user_metadata as Record<string, unknown> | undefined)?.role as string ?? 'Staff';
-  return { uid, role };
+  const role = (data.user.app_metadata?.role as string | undefined) ?? 'Staff';
+  return { uid: data.user.id, role };
 }
 
 const ALLOWED_ROLES = new Set(['Admin', 'Data Analyst']);
@@ -212,7 +204,9 @@ function fitAndFlag(
 async function runRegression(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { uid, role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { uid, role } = identity;
   if (!ALLOWED_ROLES.has(role)) return err('Forbidden', 403);
 
   const body = await req.json();
@@ -298,7 +292,9 @@ async function runRegression(req: Request): Promise<Response> {
 async function applyRegression(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { uid, role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { uid, role } = identity;
   if (!ALLOWED_ROLES.has(role)) return err('Forbidden', 403);
 
   const { result_id } = await req.json();
@@ -336,7 +332,9 @@ async function applyRegression(req: Request): Promise<Response> {
 async function retractRegression(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { uid, role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { uid, role } = identity;
   if (!ALLOWED_ROLES.has(role)) return err('Forbidden', 403);
 
   const { result_id } = await req.json();
@@ -373,7 +371,9 @@ async function retractRegression(req: Request): Promise<Response> {
 async function listResults(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { role } = identity;
   if (!READ_ROLES.has(role)) return err('Forbidden', 403);
 
   const url = new URL(req.url);
@@ -399,13 +399,18 @@ async function listResults(req: Request): Promise<Response> {
 async function editRaw(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { uid, role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { uid, role } = identity;
   if (!ALLOWED_ROLES.has(role)) return err('Forbidden', 403);
 
   const body = await req.json();
   const { source_table, source_id, column_name, old_value, new_value, note } = body;
 
   if (!SUPPORTED_TABLES[source_table]) return err(`Table '${source_table}' not supported.`);
+  if (!SUPPORTED_TABLES[source_table].includes(column_name)) {
+    return err(`Column '${column_name}' is not supported for '${source_table}'.`);
+  }
 
   const svc = serviceClient();
   const { error: updateErr } = await svc
@@ -430,7 +435,9 @@ async function editRaw(req: Request): Promise<Response> {
 async function rawEditLog(req: Request): Promise<Response> {
   const token = bearerToken(req);
   if (!token) return err('Unauthorized', 401);
-  const { role } = callerIdentity(token);
+  const identity = await callerIdentity(token);
+  if (!identity) return err('Unauthorized', 401);
+  const { role } = identity;
   if (!READ_ROLES.has(role)) return err('Forbidden', 403);
 
   const url = new URL(req.url);
