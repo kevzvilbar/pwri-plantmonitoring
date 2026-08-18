@@ -48,8 +48,9 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const qc = useQueryClient();
   const { isManager, isDataAnalyst, activeOperator } = useAuth();
   // Managers, Admins, and Data Analysts can edit any reading at any time;
-  // Operators are limited to their own entries within EDIT_WINDOW_HOURS
-  // (see helpers.ts canEditEntry). isManager alone used to gate this, which
+  // Operators are limited to their own entries, no time cutoff (RO Train /
+  // Pretreatment reading edits are the one exception to EDIT_WINDOW_HOURS
+  // — see helpers.ts canEditEntry). isManager alone used to gate this, which
   // excluded Data Analysts — broadened per the pretreatment-edit request.
   const hasFullAccess = isManager || isDataAnalyst;
   const [page, setPage]               = useState(0);
@@ -253,8 +254,8 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
   const doDeleteReading = async () => {
     if (!pendingDelete) return;
     const { type, row } = pendingDelete;
-    if (!canEditEntry(row, hasFullAccess, activeOperator?.id)) {
-      toast.error('You can only delete your own entries, within 8 hours of submitting them.');
+    if (!canEditEntry(row, hasFullAccess, activeOperator?.id, true)) {
+      toast.error('You can only delete your own entries.');
       setPendingDelete(null);
       return;
     }
@@ -591,7 +592,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                         </td>
                         <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                         <td className="px-2 py-2 text-center">
-                          {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
+                          {canEditEntry(r, hasFullAccess, activeOperator?.id, true) ? (
                             <div className="flex items-center justify-center gap-0.5">
                               <button onClick={() => setEditingRoRow(r)} title="Edit reading" aria-label="Edit reading"
                                 disabled={deletingId === r.id}
@@ -715,7 +716,7 @@ export function TrainLogModal({ trainId, trainLabel, plantId, onClose, initialTa
                           </td>
                           <td className="px-2 py-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.remarks || ''}</td>
                           <td className="px-2 py-2 text-center">
-                            {canEditEntry(r, hasFullAccess, activeOperator?.id) ? (
+                            {canEditEntry(r, hasFullAccess, activeOperator?.id, true) ? (
                               <div className="flex items-center justify-center gap-0.5">
                                 <button onClick={() => setEditingPretreatRow(r)} title="Edit reading" aria-label="Edit reading"
                                   disabled={deletingId === r.id}

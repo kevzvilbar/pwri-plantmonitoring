@@ -13,8 +13,12 @@
  *
  * Permission model (see helpers.ts canEditEntry): Managers, Admins, and
  * Data Analysts can edit any reading at any time. Operators can only edit
- * their own entries within EDIT_WINDOW_HOURS of submission; after that,
- * use "Request correction" instead.
+ * their own entries, and only while the reading isn't currently flagged
+ * and awaiting review in Data Corrections — otherwise, use "Request
+ * correction" instead. Unlike every other reading type in the app, there's
+ * no time-window cutoff here: Kevz asked for it removed specifically for
+ * RO Train / Pretreatment readings, offset by the existing audit trail
+ * (logReadingEdit below, plus the required reason on every edit).
  */
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { format } from 'date-fns';
@@ -30,7 +34,7 @@ import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { canEditEntry, diffFields, logReadingEdit, EDIT_WINDOW_HOURS } from './helpers';
+import { canEditEntry, diffFields, logReadingEdit } from './helpers';
 
 interface Props {
   row: any;
@@ -111,7 +115,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
     })),
   );
 
-  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id);
+  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id, true);
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
@@ -344,7 +348,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
           <p className="text-xs text-muted-foreground">
             {hasFullAccess
               ? 'As a Manager, Data Analyst, or Admin, you can edit any reading at any time.'
-              : `You can edit your own entries within ${EDIT_WINDOW_HOURS} hours of submission. After that, use "Request correction" instead. Backwash windows and MMF meter start/end aren't editable here — submit a new entry to correct those.`}
+              : 'You can edit your own entries at any time, as long as the reading isn\'t currently flagged and awaiting review — after that, use "Request correction" instead. Backwash windows and MMF meter start/end aren\'t editable here — submit a new entry to correct those.'}
           </p>
         </div>
         <DialogFooter>

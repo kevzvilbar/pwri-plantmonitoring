@@ -75,6 +75,18 @@ export function deriveTrainStatus(
 // "can bypass the edit window" boolean. Callers compute that from useAuth(),
 // e.g. `const hasFullAccess = isManager || isDataAnalyst;`, so this helper
 // doesn't need to know about the app's specific role names.
+//
+// RO Train / Pretreatment readings are the one exception: Kevz asked for the
+// window removed there entirely (no time limit on self-editing an own
+// entry), offset by the audit trail this same edit path already requires —
+// logReadingEdit() (below) records actor/timestamp/field-level diffs, every
+// update needs a non-empty reason (correctionReasons.ts's isReasonComplete),
+// and a flagged/pending-review reading is still fully locked regardless of
+// this flag (checked before the time window, see below) so an old edit
+// can't be used to quietly rewrite a reading that's actively under review.
+// Every other reading type (well/locator/power/product/blending/CIP/dosing)
+// is unaffected — they don't pass this flag, so they keep the 8h window
+// exactly as before.
 
 export const EDIT_WINDOW_HOURS = 8;
 
@@ -82,6 +94,7 @@ export function canEditEntry(
   row: { recorded_by?: string | null; created_at?: string | null; norm_status?: string | null } | null | undefined,
   hasFullAccess: boolean,
   activeOperatorId: string | null | undefined,
+  noTimeLimit = false,
 ): boolean {
   if (hasFullAccess) return true;
   if (!row || !activeOperatorId || !row.recorded_by) return false;
@@ -92,8 +105,11 @@ export function canEditEntry(
   // "edit reason" the reviewer is looking at, mid-review. Full-access roles
   // (who own that review) are unaffected by this check above. Tables
   // without a norm_status column (e.g. power_readings) leave this field
-  // undefined, so the check is simply a no-op there.
+  // undefined, so the check is simply a no-op there. This check applies
+  // regardless of noTimeLimit — removing the time window doesn't mean
+  // bypassing an active review.
   if (row.norm_status === 'pending_review') return false;
+  if (noTimeLimit) return true;
   if (!row.created_at) return false;
   const ageHours = (Date.now() - new Date(row.created_at).getTime()) / 3_600_000;
   return ageHours <= EDIT_WINDOW_HOURS;
