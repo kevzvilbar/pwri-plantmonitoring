@@ -286,7 +286,7 @@ export function PmsCalendar() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs leading-none">{format(day, 'd')}</span>
                       {items.length > 0 && (
-                        <span className="text-[9px] leading-none text-muted-foreground sm:hidden">{items.length}</span>
+                        <span className="text-3xs leading-none text-muted-foreground sm:hidden">{items.length}</span>
                       )}
                     </div>
                     {items.length > 0 && (
@@ -298,13 +298,13 @@ export function PmsCalendar() {
                             title={`${it.template.equipment_name} · ${it.template.category} · ${it.status}`}
                           >
                             <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[it.status]}`} />
-                            <span className="truncate text-[9px] sm:text-2xs leading-tight font-normal text-foreground/80">
+                            <span className="truncate text-3xs sm:text-2xs leading-tight font-normal text-foreground/80">
                               {it.template.equipment_name}
                             </span>
                           </div>
                         ))}
                         {overflow > 0 && (
-                          <div className="text-[9px] sm:text-2xs leading-tight text-muted-foreground pl-2.5">
+                          <div className="text-3xs sm:text-2xs leading-tight text-muted-foreground pl-2.5">
                             +{overflow} more
                           </div>
                         )}
