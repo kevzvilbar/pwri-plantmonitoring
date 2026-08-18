@@ -295,7 +295,7 @@ export const BOOK_PARTS: BookPart[] = [
                   <span className="rounded-md bg-primary/10 px-2 py-1 font-medium text-primary">Locator</span>
                 </div>
                 <div className="rounded-md border p-3">
-                  <div className="mb-3 flex items-center justify-between"><div><div className="font-medium text-foreground">Raw Water Inlet 01</div><div className="text-[11px] text-muted-foreground">Last reading 12,480 m³</div></div><span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">Ready to save</span></div>
+                  <div className="mb-3 flex items-center justify-between"><div><div className="font-medium text-foreground">Raw Water Inlet 01</div><div className="text-3xs text-muted-foreground">Last reading 12,480 m³</div></div><span className="rounded-full bg-muted px-2 py-1 text-3xs text-muted-foreground">Ready to save</span></div>
                   <div className="flex items-center gap-2"><div className="flex-1 rounded-md border bg-muted/20 px-3 py-2 text-muted-foreground">12,520</div><button className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground">Save reading</button></div>
                 </div>
               </div>
