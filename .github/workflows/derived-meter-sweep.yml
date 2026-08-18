@@ -113,10 +113,8 @@ jobs:
 
           echo "Response: $RESPONSE"
 
-          OK=$(echo "$RESPONSE" | grep -o '"ok":[a-z]*' | grep -o '[a-z]*$' || echo "false")
-
-          if [ "$OK" != "true" ]; then
-            echo "WARNING: sweep did not report ok:true — check the response above."
+          if ! printf '%s' "$RESPONSE" | jq -e '.ok == true' >/dev/null; then
+            echo "ERROR: sweep did not report ok:true — check the response above."
             exit 1
           fi
 
