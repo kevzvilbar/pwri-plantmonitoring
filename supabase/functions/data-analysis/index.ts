@@ -80,7 +80,14 @@ function bearerToken(req: Request): string | null {
   return h.startsWith('Bearer ') ? h.slice(7) : null;
 }
 
-/** Verify the bearer token with Supabase; never trust decoded JWT claims. */
+/**
+ * Verify the bearer token with Supabase; never trust decoded JWT claims.
+ *
+ * app_metadata.role is kept in sync with public.user_roles by a DB trigger
+ * (supabase/migrations/20260818020000_sync_user_roles_to_app_metadata.sql)
+ * -- it is NOT set directly anywhere in this app. If a user's access here
+ * looks wrong, check public.user_roles first, not this function.
+ */
 async function callerIdentity(token: string) {
   const db = userClient(token);
   const { data, error } = await db.auth.getUser(token);
