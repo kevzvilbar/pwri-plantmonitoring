@@ -25,8 +25,21 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ── Constants (mirror regression_service.py) ───────────────────────────────
 
-const Z_THRESHOLD = 2.5;
 const MIN_ROWS = 5;
+
+/**
+ * Z-score threshold for OLS residual outlier detection. Mirrors
+ * frontend/src/lib/regressionCorrection.ts's getZThreshold(n) exactly —
+ * this function is dormant (no frontend caller, not currently deployed;
+ * see the 2026-08-18 review), but if it's ever revived it should agree
+ * with the frontend's math rather than silently diverging again the way
+ * the retired Python backend once did (PRD.md bug D2).
+ */
+function getZThreshold(n: number): number {
+  if (n < 20)  return 2.0;
+  if (n < 100) return 2.5;
+  return 3.0;
+}
 
 const SUPPORTED_TABLES: Record<string, string[]> = {
   well_readings:          ['daily_volume', 'current_reading', 'previous_reading', 'power_meter_reading'],
@@ -188,7 +201,7 @@ function fitAndFlag(
         note:             'Missing value — skipped',
       };
     }
-    const isOutlier = Math.abs(info.z) > Z_THRESHOLD;
+    const isOutlier = Math.abs(info.z) > getZThreshold(n);
     return {
       reading_id:       String(row.id ?? ''),
       reading_datetime: String(row.reading_datetime ?? ''),
