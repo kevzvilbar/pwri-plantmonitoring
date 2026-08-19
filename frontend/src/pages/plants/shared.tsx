@@ -144,16 +144,6 @@ export function CollapsibleSection({
 }
 
 
-/** A single continuous window in which the permeate meter counts as production. */
-export interface PermeateProductionPeriod {
-  /** Client-only stable key for React lists — never persisted. */
-  id: string;
-  /** YYYY-MM-DD inclusive start; null = unbounded past. */
-  start: string | null;
-  /** YYYY-MM-DD inclusive end; null = ongoing / no end yet. */
-  end: string | null;
-}
-
 export interface PlantMeterConfig {
   // RO Train flow meters
   ro_has_feed_meter: boolean;
@@ -209,12 +199,6 @@ export interface PlantMeterConfig {
   // When false, new entries are NOT shifted by the cut-off (natural calendar date used).
   // Historical data still groups using the saved cut-off time for consistency.
   permeate_cutoff_enabled: boolean;
-  // List of non-overlapping date ranges during which permeate meter counts as production.
-  // start/end are YYYY-MM-DD; null start = unbounded past; null end = ongoing.
-  // Readings outside ALL active periods are pushed to the nearest day boundary:
-  //   before the earliest period start → attributed to the day before that start
-  //   after a period's end → attributed to the day after that end
-  permeate_production_periods: PermeateProductionPeriod[];
   // Chemicals enabled for this plant — only these appear in RO Trains → Chemical Dosing.
   // Default: all chemicals enabled (empty array = all shown for backwards compat).
   enabled_chemicals: string[]; // chemical names from KNOWN_CHEMICALS
@@ -255,7 +239,6 @@ export const DEFAULT_METER_CONFIG: PlantMeterConfig = {
   permeate_is_production: false,
   permeate_cutoff_time: '00:20',
   permeate_cutoff_enabled: true,
-  permeate_production_periods: [],
   enabled_chemicals: [], // empty = all chemicals visible (backwards compat)
   locator_readings_per_day: 3,
   cip_chemicals: [
@@ -273,26 +256,6 @@ export const METER_CONFIG_LS = (plantId: string) => `plant_meter_config_${plantI
 // every production/consumption calculation until it actually syncs.
 const UNSYNCED_CONFIG_LS = (plantId: string) => `plant_meter_config_unsynced_${plantId}`;
 
-/**
- * One-time forward migration: if a stored config still has the old scalar
- * `permeate_production_start` / `permeate_production_end` fields but is missing
- * the new `permeate_production_periods` array, lift them into the array shape.
- * Safe to run on already-migrated configs (no-op when periods array already present).
- */
-export function migrateMeterConfig(cfg: Record<string, unknown>): PlantMeterConfig {
-  if (!Array.isArray(cfg.permeate_production_periods)) {
-    const start = (cfg.permeate_production_start as string | null) ?? null;
-    const end   = (cfg.permeate_production_end   as string | null) ?? null;
-    cfg = {
-      ...cfg,
-      permeate_production_periods: (start !== null || end !== null)
-        ? [{ id: crypto.randomUUID(), start, end }]
-        : [],
-    };
-  }
-  return cfg as unknown as PlantMeterConfig;
-}
-
 export function usePlantMeterConfig(plantId: string | null | undefined) {
   const qc = useQueryClient();
 
@@ -308,13 +271,13 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
           .eq('plant_id', plantId)
           .maybeSingle();
         if (!error && data?.config) {
-          return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...data.config }) as PlantMeterConfig;
+          return { ...DEFAULT_METER_CONFIG, ...data.config } as PlantMeterConfig;
         }
       } catch { /* table may not exist yet */ }
       // Fall back to localStorage
       try {
         const raw = localStorage.getItem(METER_CONFIG_LS(plantId!));
-        if (raw) return migrateMeterConfig({ ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) }) as PlantMeterConfig;
+        if (raw) return { ...DEFAULT_METER_CONFIG, ...JSON.parse(raw) } as PlantMeterConfig;
       } catch { /* ignore */ }
       return DEFAULT_METER_CONFIG;
     },
@@ -365,7 +328,7 @@ export function usePlantMeterConfig(plantId: string | null | undefined) {
       try { pendingRaw = localStorage.getItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
       if (!pendingRaw) return;
       try {
-        const pending = migrateMeterConfig(JSON.parse(pendingRaw));
+        const pending = JSON.parse(pendingRaw) as PlantMeterConfig;
         const ok = await pushToDb(pending);
         if (ok && !cancelled) {
           try { localStorage.removeItem(UNSYNCED_CONFIG_LS(plantId)); } catch { /* ignore */ }
