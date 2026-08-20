@@ -122,3 +122,35 @@ jobs:
           # config resolution time.
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
+
+  rls-tests:
+    name: RLS policy tests (pgTAP)
+    runs-on: ubuntu-latest
+
+    # 2026-08-18 review — "the single highest-leverage fix available": a
+    # string of RLS gaps this month (well/locator/product/pump/cip/incidents
+    # SELECT-bypass, blending_events' stray permissive UPDATE/DELETE
+    # policies, reading_edit_audit_log excluding Data Analyst) each shipped
+    # silently and were only caught by manual review, one at a time. This
+    # job runs supabase/tests/database/*.sql (pgTAP) against a disposable
+    # local Supabase instance built from this branch's own migrations —
+    # not the real project, no secrets needed — so the next regression in
+    # this family fails CI instead of waiting for another manual pass.
+    # Every test file creates its own plants/users/rows and ends in
+    # ROLLBACK, so nothing here depends on (or pollutes) seed data.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies every migration from scratch)
+        run: supabase start
+
+      - name: Run pgTAP RLS tests
+        run: supabase test db
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
