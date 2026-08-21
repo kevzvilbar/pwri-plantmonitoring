@@ -239,7 +239,7 @@ function ImportReadingsDialog({
 
           {/* File picker */}
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label htmlFor="costs-select-csv-file" className="text-xs">
               Select CSV file <span className="text-destructive">*</span>
             </Label>
             <div className="flex items-center gap-2">
@@ -260,7 +260,7 @@ function ImportReadingsDialog({
               accept=".csv,text/csv"
               onChange={handleFile}
               className="hidden"
-            />
+            id="costs-select-csv-file"/>
           </div>
 
           {/* Validation feedback */}
@@ -561,8 +561,8 @@ function FiltersTab() {
   return (
     <div className="space-y-3">
       <Card className="p-3">
-        <Label className="text-xs">Plant</Label>
-        <PlantPicker value={plantId} onChange={setPlantId} />
+        <Label htmlFor="costs-plant-1" className="text-xs">Plant</Label>
+        <PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-1" />
       </Card>
       {!plantId && <Card className="p-6 text-center text-sm text-muted-foreground">Select a plant</Card>}
       {plantId && plant && (
@@ -850,9 +850,9 @@ function ChemicalPrices() {
             )}
           </div>
           <div>
-            <Label className="text-xs">{itemCategory === 'power' ? 'Provider (optional)' : 'Unit'}</Label>
+            <Label htmlFor="costs-field" className="text-xs">{itemCategory === 'power' ? 'Provider (optional)' : 'Unit'}</Label>
             {itemCategory === 'power' ? (
-              <Input placeholder="VECO / NGCP" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} />
+              <Input placeholder="VECO / NGCP" value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} id="costs-field"/>
             ) : (
               <>
                 <Select value={v.unit} onValueChange={(x) => setV({ ...v, unit: x })}>
@@ -877,12 +877,12 @@ function ChemicalPrices() {
             )}
           </div>
           <div>
-            <Label className="text-xs">Price ₱ / {itemCategory === 'power' ? 'kWh' : (v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit)}</Label>
-            <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} />
+            <Label htmlFor="costs-price" className="text-xs">Price ₱ / {itemCategory === 'power' ? 'kWh' : (v.unit === '__custom__' ? (v.customUnit || 'unit') : v.unit)}</Label>
+            <Input type="number" step="any" value={v.unit_price} onChange={(e) => setV({ ...v, unit_price: e.target.value })} id="costs-price"/>
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">Effective date</Label>
-            <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} />
+            <Label htmlFor="costs-effective-date" className="text-xs">Effective date</Label>
+            <Input type="date" value={v.effective_date} onChange={(e) => setV({ ...v, effective_date: e.target.value })} id="costs-effective-date"/>
           </div>
         </div>
         <Button onClick={submit} className="w-full bg-primary hover:bg-primary/90 text-white" size="sm">Add price</Button>
@@ -1122,10 +1122,10 @@ function Rollup() {
     <div className="space-y-3">
       <Card className="p-3 space-y-2">
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
-          <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+          <div><Label htmlFor="costs-plant-2" className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-2" /></div>
           <div className="flex gap-2 items-end">
-            <div className="flex-1 min-w-0"><Label className="text-xs">From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-            <div className="flex-1 min-w-0"><Label className="text-xs">To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+            <div className="flex-1 min-w-0"><Label htmlFor="costs-from" className="text-xs">From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} id="costs-from"/></div>
+            <div className="flex-1 min-w-0"><Label htmlFor="costs-to" className="text-xs">To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} id="costs-to"/></div>
           </div>
         </div>
       </Card>
@@ -1390,9 +1390,9 @@ function Power() {
 
       <Card className="p-3 space-y-3">
         <div>
-          <Label className="text-xs">Plant</Label>
+          <Label htmlFor="costs-plant-3" className="text-xs">Plant</Label>
           <div className="flex gap-2 items-center">
-            <div className="flex-1"><PlantPicker value={plantId} onChange={setPlantId} /></div>
+            <div className="flex-1"><PlantPicker value={plantId} onChange={setPlantId} id="costs-plant-3" /></div>
             <Button
               type="button"
               variant="outline"
@@ -1410,9 +1410,9 @@ function Power() {
           <div className="grid grid-cols-2 gap-2">
             {/* Billing Month — dropdown instead of date picker */}
             <div>
-              <Label className="text-xs">Billing month</Label>
+              <Label htmlFor="costs-billing-month" className="text-xs">Billing month</Label>
               <Select value={v.billing_month} onValueChange={(val) => setV({ ...v, billing_month: val })}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-sm" id="costs-billing-month"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {monthOptions.map(o => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -1420,24 +1420,24 @@ function Power() {
                 </SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" /></div>
+            <div><Label htmlFor="costs-provider" className="text-xs">Provider</Label><Input value={v.provider} onChange={(e) => setV({ ...v, provider: e.target.value })} placeholder="VECO / NGCP" id="costs-provider"/></div>
           </div>
           <div className="flex gap-2">
-            <div className="flex-1 min-w-0"><Label className="text-xs">Period from</Label><Input type="date" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} /></div>
-            <div className="flex-1 min-w-0"><Label className="text-xs">Period to</Label><Input type="date" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} /></div>
+            <div className="flex-1 min-w-0"><Label htmlFor="costs-period-from" className="text-xs">Period from</Label><Input type="date" value={v.period_start} onChange={(e) => setV({ ...v, period_start: e.target.value })} id="costs-period-from"/></div>
+            <div className="flex-1 min-w-0"><Label htmlFor="costs-period-to" className="text-xs">Period to</Label><Input type="date" value={v.period_end} onChange={(e) => setV({ ...v, period_end: e.target.value })} id="costs-period-to"/></div>
           </div>
         </div>
 
         <div className="space-y-2">
           <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Meter</div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} /></div>
-            <div><Label className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} /></div>
+            <div><Label htmlFor="costs-previous" className="text-xs">Previous</Label><Input type="number" step="any" value={v.previous_reading} onChange={(e) => setV({ ...v, previous_reading: e.target.value })} id="costs-previous"/></div>
+            <div><Label htmlFor="costs-current" className="text-xs">Current</Label><Input type="number" step="any" value={v.current_reading} onChange={(e) => setV({ ...v, current_reading: e.target.value })} id="costs-current"/></div>
           </div>
           {/* Multiplier + Total kWh on same row */}
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <Label className="text-xs flex items-center gap-1">
+              <Label htmlFor="costs-multiplier" className="text-xs flex items-center gap-1">
                 Multiplier
                 {!canEdit && <span className="text-2xs text-muted-foreground">(read-only)</span>}
               </Label>
@@ -1446,11 +1446,11 @@ function Power() {
                 readOnly={!canEdit}
                 className={!canEdit ? 'bg-muted cursor-not-allowed' : ''}
                 onChange={(e) => handleMultiplierChange(e.target.value)}
-              />
+              id="costs-multiplier"/>
             </div>
             <div className="flex-1">
-              <Label className="text-xs">Total kWh (auto)</Label>
-              <ComputedInput value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} />
+              <Label htmlFor="costs-total-kwh-auto" className="text-xs">Total kWh (auto)</Label>
+              <ComputedInput value={totalKwh != null ? fmtNum(totalKwh, 2) : ''} id="costs-total-kwh-auto"/>
             </div>
           </div>
           {canEdit && (
@@ -1463,10 +1463,10 @@ function Power() {
         <div className="space-y-2">
           <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Charges (₱)</div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-xs">Generation</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} /></div>
-            <div><Label className="text-xs">Distribution</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} /></div>
-            <div><Label className="text-xs">Other</Label><Input type="number" step="any" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} /></div>
-            <div><Label className="text-xs font-semibold">Total</Label><Input type="number" step="any" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} /></div>
+            <div><Label htmlFor="costs-generation" className="text-xs">Generation</Label><Input type="number" step="any" value={v.generation_charge} onChange={(e) => setV({ ...v, generation_charge: e.target.value })} id="costs-generation"/></div>
+            <div><Label htmlFor="costs-distribution" className="text-xs">Distribution</Label><Input type="number" step="any" value={v.distribution_charge} onChange={(e) => setV({ ...v, distribution_charge: e.target.value })} id="costs-distribution"/></div>
+            <div><Label htmlFor="costs-other" className="text-xs">Other</Label><Input type="number" step="any" value={v.other_charges} onChange={(e) => setV({ ...v, other_charges: e.target.value })} id="costs-other"/></div>
+            <div><Label htmlFor="costs-total" className="text-xs font-semibold">Total</Label><Input type="number" step="any" value={v.total_amount} onChange={(e) => setV({ ...v, total_amount: e.target.value })} id="costs-total"/></div>
           </div>
         </div>
 
@@ -1478,7 +1478,7 @@ function Power() {
           </div>
         )}
 
-        <div><Label className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} /></div>
+        <div><Label htmlFor="costs-remarks" className="text-xs">Remarks</Label><Input value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} id="costs-remarks"/></div>
         <Button onClick={submit} className="w-full">Save bill {derivedRate ? '+ tariff' : ''}</Button>
       </Card>
 
@@ -1678,7 +1678,7 @@ function Compare() {
     <div className="space-y-3">
       <Card className="p-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div><Label>Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+          <div><Label htmlFor="costs-plant">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} id="costs-plant" /></div>
           {plantId && (
             <div className="flex items-center gap-1 flex-wrap">
               {rangeBtns.map(({ key, label }) => (
@@ -1689,7 +1689,7 @@ function Compare() {
               ))}
               {viewMode === 'custom' && (
                 <>
-                  <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-6 w-[110px] text-xs px-1.5" />
+                  <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-6 w-[110px] text-xs px-1.5" id="costs-plant"/>
                   <span className="text-xs text-muted-foreground">→</span>
                   <Input type="date" value={customTo}   onChange={(e) => setCustomTo(e.target.value)}   className="h-6 w-[110px] text-xs px-1.5" />
                 </>

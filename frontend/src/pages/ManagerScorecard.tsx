@@ -168,9 +168,9 @@ export default function ManagerScorecard() {
       <Card className="p-3">
         <div className="grid gap-2 grid-cols-[140px_auto] items-end">
           <div>
-            <Label className="text-xs">Window</Label>
+            <Label htmlFor="managerscorecard-window" className="text-xs">Window</Label>
             <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1" id="managerscorecard-window"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {WINDOW_OPTIONS.map((d) => (
                   <SelectItem key={d} value={String(d)}>{d}d</SelectItem>

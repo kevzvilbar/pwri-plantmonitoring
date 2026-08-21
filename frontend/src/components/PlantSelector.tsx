@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { usePlants } from '@/hooks/usePlants';
 import { useAppStore } from '@/store/appStore';
 
-export function PlantSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PlantSelector({ value, onChange, id }: { value: string; onChange: (v: string) => void; id?: string }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
   // Mirror the "universal" TopBar plant selection into this page's local
@@ -23,7 +23,7 @@ export function PlantSelector({ value, onChange }: { value: string; onChange: (v
   }, [selectedPlantId]);
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
+      <SelectTrigger id={id}><SelectValue placeholder="Select plant" /></SelectTrigger>
       <SelectContent>
         {plants?.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
       </SelectContent>

@@ -135,25 +135,25 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label className="text-xs">Date / Time</Label>
-            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" />
+            <Label htmlFor="editroreadingdialog-date-time" className="text-xs">Date / Time</Label>
+            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" id="editroreadingdialog-date-time"/>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {RO_EDIT_NUMERIC_FIELDS.filter((f) => f.key in row).map((f) => (
               <div key={f.key}>
-                <Label className="text-xs">{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
+                <Label htmlFor="editroreadingdialog-field" className="text-xs">{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
                 <Input
                   type="number" step="any"
                   value={vals[f.key]}
                   onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
                   className="h-9"
-                />
+                id="editroreadingdialog-field"/>
               </div>
             ))}
           </div>
           <div>
-            <Label className="text-xs">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
+            <Label htmlFor="editroreadingdialog-remarks" className="text-xs">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" id="editroreadingdialog-remarks"/>
           </div>
           <CorrectionReasonField
             reason={reason} onReasonChange={setReason}

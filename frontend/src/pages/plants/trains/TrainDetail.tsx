@@ -164,25 +164,25 @@ export function EditTrainDialog({
         <div className="space-y-4">
           {/* Train name */}
           <div>
-            <Label className="text-xs">Train label / name (optional)</Label>
+            <Label htmlFor="traindetail-train-label-name-optional" className="text-xs">Train label / name (optional)</Label>
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. North Wing"
               disabled={!isManager}
               data-testid="train-name-input"
-            />
+            id="traindetail-train-label-name-optional"/>
           </div>
 
           {/* Source well link */}
           <div>
-            <Label className="text-xs">Source well <span className="text-muted-foreground font-normal">(used for "Per Well Source" labels on Dashboard)</span></Label>
+            <Label htmlFor="traindetail-source-well-used-for-per-well-source-labels-on-d" className="text-xs">Source well <span className="text-muted-foreground font-normal">(used for "Per Well Source" labels on Dashboard)</span></Label>
             <Select
               value={form.well_id || '__none__'}
               onValueChange={(v) => setForm({ ...form, well_id: v === '__none__' ? '' : v })}
               disabled={!isManager}
             >
-              <SelectTrigger data-testid="train-well-select">
+              <SelectTrigger data-testid="train-well-select" id="traindetail-source-well-used-for-per-well-source-labels-on-d">
                 <SelectValue placeholder="— not linked —" />
               </SelectTrigger>
               <SelectContent>
@@ -200,7 +200,7 @@ export function EditTrainDialog({
 
             {/* Media filters row */}
             <div>
-              <Label className="text-xs">
+              <Label htmlFor="traindetail-units-media-filter" className="text-xs">
                 {mediaType} units{' '}
                 <span className="text-muted-foreground font-normal">(media filter)</span>
               </Label>
@@ -222,7 +222,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_afm: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-afm-input"
-                />
+                id="traindetail-units-media-filter"/>
                 <Button
                   size="icon"
                   variant="outline"
@@ -238,7 +238,7 @@ export function EditTrainDialog({
 
             {/* Pre-filter housing — label & visibility driven by plant-wide filter type */}
             <div>
-              <Label className="text-xs">
+              <Label htmlFor="traindetail-pre-filter" className="text-xs">
                 {/* Bag Filter → "Filter Housing" (single merged field)
                     Cartridge Filter → "Cartridge Housing" (separate field below) */}
                 {filterHousingType === 'Bag Filter' ? 'Filter Housing' : 'Cartridge Housing'}{' '}
@@ -262,7 +262,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_cartridge_filters: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-cf-input"
-                />
+                id="traindetail-pre-filter"/>
                 <Button
                   size="icon"
                   variant="outline"
@@ -278,7 +278,7 @@ export function EditTrainDialog({
 
             {/* Booster pumps */}
             <div>
-              <Label className="text-xs">Booster Pumps</Label>
+              <Label htmlFor="traindetail-booster-pumps" className="text-xs">Booster Pumps</Label>
               <div className="flex items-center gap-2 mt-1">
                 <Button
                   size="icon"
@@ -297,7 +297,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_booster_pumps: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-bp-input"
-                />
+                id="traindetail-booster-pumps"/>
                 <Button
                   size="icon"
                   variant="outline"
@@ -321,7 +321,7 @@ export function EditTrainDialog({
             {num(form.num_booster_pumps) > 0 && (
               <div className="rounded-lg border border-border p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">Booster Pump Targets</Label>
+                  <p className="text-xs font-medium">Booster Pump Targets</p>
                   <div className="flex rounded-full border border-border overflow-hidden text-2xs font-semibold">
                     <button type="button" onClick={() => setBoosterPsiMode(true)}
                       className={cn('px-2.5 py-0.5 transition-colors',
@@ -358,7 +358,7 @@ export function EditTrainDialog({
 
             {/* HP pumps */}
             <div>
-              <Label className="text-xs">High-Pressure Pumps (HPP)</Label>
+              <Label htmlFor="traindetail-high-pressure-pumps-hpp" className="text-xs">High-Pressure Pumps (HPP)</Label>
               <div className="flex items-center gap-2 mt-1">
                 <Button
                   size="icon"
@@ -377,7 +377,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_hp_pumps: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-hpp-input"
-                />
+                id="traindetail-high-pressure-pumps-hpp"/>
                 <Button
                   size="icon"
                   variant="outline"
@@ -395,7 +395,7 @@ export function EditTrainDialog({
                 on every pre-treatment/RO reading, see 20260807_ro_trains_hpp_
                 target_pressure_setpoint.sql for why. */}
             <div>
-              <Label className="text-xs">HPP Target Pressure (psi)</Label>
+              <Label htmlFor="traindetail-hpp-target-pressure-psi" className="text-xs">HPP Target Pressure (psi)</Label>
               <Input
                 type="number"
                 step="any"
@@ -405,7 +405,7 @@ export function EditTrainDialog({
                 onChange={(e) => setForm({ ...form, hpp_target_pressure_psi: e.target.value })}
                 className="mt-1 font-mono-num"
                 data-testid="hpp-target-pressure-input"
-              />
+              id="traindetail-hpp-target-pressure-psi"/>
               <p className="text-2xs text-muted-foreground mt-1">
                 Auto-fills on every reading for this train. Leave blank to keep entering it manually per reading.
               </p>
@@ -413,7 +413,7 @@ export function EditTrainDialog({
 
             {/* Controllers */}
             <div>
-              <Label className="text-xs">Controllers</Label>
+              <Label htmlFor="traindetail-controllers" className="text-xs">Controllers</Label>
               <div className="flex items-center gap-2 mt-1">
                 <Button
                   size="icon"
@@ -432,7 +432,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_controllers: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-ctrl-input"
-                />
+                id="traindetail-controllers"/>
                 <Button
                   size="icon"
                   variant="outline"
@@ -449,7 +449,7 @@ export function EditTrainDialog({
             {/* Filter Housings — hidden for Bag Filter plants (merged into Cartridge Housing above) */}
             {filterHousingType !== 'Bag Filter' && (
             <div>
-              <Label className="text-xs">Filter Housings</Label>
+              <Label htmlFor="traindetail-filter-housings" className="text-xs">Filter Housings</Label>
               <div className="flex items-center gap-2 mt-1">
                 <Button
                   size="icon"
@@ -468,7 +468,7 @@ export function EditTrainDialog({
                   onChange={(e) => setForm({ ...form, num_filter_housings: e.target.value })}
                   className="text-center font-mono-num"
                   data-testid="num-fh-input"
-                />
+                id="traindetail-filter-housings"/>
                 <Button
                   size="icon"
                   variant="outline"

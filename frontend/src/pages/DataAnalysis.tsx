@@ -526,11 +526,11 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
 
           {/* Primary column */}
           <div>
-            <Label className="text-xs font-semibold">{column}</Label>
+            <Label htmlFor="dataanalysis-field" className="text-xs font-semibold">{column}</Label>
             <div className="flex gap-2 mt-1 items-center">
               <div className="w-1/2">
                 <p className="text-2xs text-muted-foreground mb-0.5">Current</p>
-                <Input value={oldValue ?? '—'} disabled className="font-mono text-sm bg-muted/40 h-8" />
+                <Input value={oldValue ?? '—'} disabled className="font-mono text-sm bg-muted/40 h-8" id="dataanalysis-field"/>
               </div>
               <div className="w-1/2">
                 <p className="text-2xs text-muted-foreground mb-0.5">New value <span className="text-danger">*</span></p>
@@ -548,7 +548,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
           {/* Paired column */}
           {isPaired && (
             <div className="border-t pt-3">
-              <Label className="text-xs font-semibold flex items-center gap-1.5">
+              <Label htmlFor="dataanalysis-linked-editable" className="text-xs font-semibold flex items-center gap-1.5">
                 {pairedCol}
                 <span className="text-2xs font-normal text-muted-foreground">(linked — editable)</span>
                 {loadingPaired && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
@@ -556,7 +556,7 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
               <div className="flex gap-2 mt-1 items-center">
                 <div className="w-1/2">
                   <p className="text-2xs text-muted-foreground mb-0.5">Current</p>
-                  <Input value={loadingPaired ? 'Loading…' : (pairedOldValue || '—')} disabled className="font-mono text-sm bg-muted/40 h-8" />
+                  <Input value={loadingPaired ? 'Loading…' : (pairedOldValue || '—')} disabled className="font-mono text-sm bg-muted/40 h-8" id="dataanalysis-linked-editable"/>
                 </div>
                 <div className="w-1/2">
                   <p className="text-2xs text-muted-foreground mb-0.5">New value</p>
@@ -583,8 +583,8 @@ function EditRawDialog({ open, onClose, reading, column, onSuccess }: EditRawDia
           )}
 
           <div>
-            <Label className="text-xs">Reason / note</Label>
-            <Input className="mt-1 text-sm" placeholder="Optional" value={note} onChange={e => setNote(e.target.value)} />
+            <Label htmlFor="dataanalysis-reason-note" className="text-xs">Reason / note</Label>
+            <Input className="mt-1 text-sm" placeholder="Optional" value={note} onChange={e => setNote(e.target.value)} id="dataanalysis-reason-note"/>
           </div>
           <div className="rounded bg-warn-soft border border-warn p-2 text-xs text-warn">
             <Info className="inline h-3 w-3 mr-1" />
@@ -2056,9 +2056,9 @@ export default function DataAnalysis() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
             {/* Source table */}
             <div className="space-y-1">
-              <Label className="text-xs">Source table</Label>
+              <Label htmlFor="dataanalysis-source-table" className="text-xs">Source table</Label>
               <Select value={sourceTable} onValueChange={handleTableChange}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-8 text-xs" id="dataanalysis-source-table">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2071,9 +2071,9 @@ export default function DataAnalysis() {
 
             {/* Column */}
             <div className="space-y-1">
-              <Label className="text-xs">Column</Label>
+              <Label htmlFor="dataanalysis-column" className="text-xs">Column</Label>
               <Select value={column} onValueChange={setColumn}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-8 text-xs" id="dataanalysis-column">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2086,9 +2086,9 @@ export default function DataAnalysis() {
 
             {/* Plant — mirrors the universal plant selection from the top bar */}
             <div className="space-y-1">
-              <Label className="text-xs">Plant</Label>
+              <Label htmlFor="dataanalysis-plant" className="text-xs">Plant</Label>
               <Select value={plantId} onValueChange={handlePlantChange}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-8 text-xs" id="dataanalysis-plant">
                   <SelectValue placeholder="All plants" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2103,7 +2103,7 @@ export default function DataAnalysis() {
             {/* Entity drill-down — for tables with sub-entities (wells, locators, trains, meters) */}
             {entityCfgMain && (
               <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1">
+                <Label htmlFor="dataanalysis-field-2" className="text-xs flex items-center gap-1">
                   {entityCfgMain.filterLabel}
                   {entityOptions.length > 0 && (
                     <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-2xs text-muted-foreground font-normal">
@@ -2116,7 +2116,7 @@ export default function DataAnalysis() {
                   onValueChange={setEntityId}
                   disabled={entityFetching && entityOptions.length === 0}
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-8 text-xs" id="dataanalysis-field-2">
                     <SelectValue
                       placeholder={
                         entityFetching
@@ -2151,7 +2151,7 @@ export default function DataAnalysis() {
             {/* Power Source filter — only for Grid & Solar Readings (plant-level, no sub-entity FK) */}
             {sourceTable === 'power_readings' && (
               <div className="space-y-1">
-                <Label className="text-xs">Source</Label>
+                <Label htmlFor="dataanalysis-source" className="text-xs">Source</Label>
                 <Select value={powerSource} onValueChange={v => {
                   setPowerSource(v);
                   // Auto-select the first matching column when filtering by source
@@ -2162,7 +2162,7 @@ export default function DataAnalysis() {
                     setColumn(SOURCE_TABLES['power_readings'][0]);
                   }
                 }}>
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-8 text-xs" id="dataanalysis-source">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2178,16 +2178,16 @@ export default function DataAnalysis() {
 
             {/* Date from */}
             <div className="space-y-1">
-              <Label className="text-xs">From</Label>
+              <Label htmlFor="dataanalysis-from" className="text-xs">From</Label>
               <Input type="date" className="h-8 text-xs" value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)} />
+                onChange={e => setDateFrom(e.target.value)} id="dataanalysis-from"/>
             </div>
 
             {/* Date to */}
             <div className="space-y-1">
-              <Label className="text-xs">To</Label>
+              <Label htmlFor="dataanalysis-to" className="text-xs">To</Label>
               <Input type="date" className="h-8 text-xs" value={dateTo}
-                onChange={e => setDateTo(e.target.value)} />
+                onChange={e => setDateTo(e.target.value)} id="dataanalysis-to"/>
             </div>
 
             {/* Run button */}

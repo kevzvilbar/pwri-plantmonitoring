@@ -266,8 +266,8 @@ export function ProductForm({ highlightId }: { highlightId?: string | null } = {
       <Card className="p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={setPlantId} />
+            <Label htmlFor="productsection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
+            <PlantSelector value={plantId} onChange={setPlantId} id="productsection-plant" />
           </div>
           {canEdit && plantId && (
             <Button
@@ -478,14 +478,14 @@ function AddProductMeterButton({ plantId, onAdded }: { plantId: string; onAdded:
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Add product meter</DialogTitle></DialogHeader>
           <div className="space-y-2 py-1">
-            <Label>Meter name *</Label>
+            <Label htmlFor="productsection-meter-name">Meter name *</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Main Line, Secondary Line…"
               onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
               autoFocus
-            />
+            id="productsection-meter-name"/>
             <p className="text-xs text-muted-foreground">
               This name appears in Operations → Product and in all audit logs.
             </p>
@@ -1229,14 +1229,14 @@ function ProductMeterHistoryDialog({ meter, plantId, onClose }: { meter: any; pl
             <p className="font-medium">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs">Date &amp; Time</Label>
+                <Label htmlFor="productsection-date-amp-time" className="text-xs">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
-                  onChange={e => setEditRow({ ...editRow, datetime: e.target.value })} className="h-8 text-xs" />
+                  onChange={e => setEditRow({ ...editRow, datetime: e.target.value })} className="h-8 text-xs" id="productsection-date-amp-time"/>
               </div>
               <div>
-                <Label className="text-xs">{meter.is_derived ? 'Volume (m³)' : 'Reading'}</Label>
+                <Label htmlFor="productsection-field" className="text-xs">{meter.is_derived ? 'Volume (m³)' : 'Reading'}</Label>
                 <Input type="number" step="any" value={editRow.value}
-                  onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" />
+                  onChange={e => setEditRow({ ...editRow, value: e.target.value })} className="h-8 text-xs" id="productsection-field"/>
               </div>
             </div>
             <CorrectionReasonField

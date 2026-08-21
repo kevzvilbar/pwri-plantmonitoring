@@ -118,12 +118,12 @@ export function DowntimeEventsModal({
         {/* Controls */}
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[140px]">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Label htmlFor="downtimeeventsmodal-from" className="text-xs">From</Label>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} id="downtimeeventsmodal-from"/>
           </div>
           <div className="flex-1 min-w-[140px]">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Label htmlFor="downtimeeventsmodal-to" className="text-xs">To</Label>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} id="downtimeeventsmodal-to"/>
           </div>
         </div>
 

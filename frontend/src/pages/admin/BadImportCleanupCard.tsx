@@ -149,9 +149,9 @@ export function BadImportCleanupCard() {
           )}
 
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Plants to delete
-            </Label>
+            </p>
             {filteredPlants.length === 0 && (
               <p className="text-xs text-muted-foreground italic" data-testid="cleanup-no-targets">
                 No suggested plants found in the database.

@@ -989,8 +989,8 @@ export function PowerForm() {
       <Card className="p-4 space-y-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={handlePlantChange} />
+            <Label htmlFor="powersection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
+            <PlantSelector value={plantId} onChange={handlePlantChange} id="powersection-plant" />
           </div>
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
@@ -1035,9 +1035,9 @@ export function PowerForm() {
             {/* Date & Time — CT multipliers are now shown per-meter inline with each grid meter label */}
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label>Date &amp; Time</Label>
+                <Label htmlFor="powersection-date-amp-time">Date &amp; Time</Label>
                 <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" />
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time"/>
               </div>
             </div>
 
@@ -1069,7 +1069,7 @@ export function PowerForm() {
                   );
                   return (
                     <div key={`solar-${idx}`}>
-                      <Label className="flex items-center gap-1 text-xs">
+                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore" className="flex items-center gap-1 text-xs">
                         <span className="text-warn text-2xs">☀</span>
                         {meterLabel}
                         {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
@@ -1090,7 +1090,7 @@ export function PowerForm() {
                           onChange={e => handleChange(e.target.value)}
                           placeholder={solarInputMode === 'direct' ? 'Daily kWh' : 'Solar reading'}
                           className="border-warn focus-visible:ring-warn"
-                          data-testid={`power-solar-input-${idx}`} />
+                          data-testid={`power-solar-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore"/>
                         <Button size="sm" disabled={isSavingThis || !solarMeterChanged}
                           onClick={() => submitMeter('solar', idx)}
                           className="shrink-0 h-9 px-3 text-xs bg-primary text-white hover:bg-primary/90"
@@ -1171,7 +1171,7 @@ export function PowerForm() {
                   const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
                   return (
                     <div key={`grid-${idx}`}>
-                      <Label className="flex items-center gap-1 text-xs">
+                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2" className="flex items-center gap-1 text-xs">
                         <GridPylonIcon className="h-2.5 w-2.5 text-info" />
                         {meterLabel}
                         <span
@@ -1209,7 +1209,7 @@ export function PowerForm() {
                           onChange={e => handleChange(e.target.value)}
                           placeholder="Grid reading"
                           className="border-info focus-visible:ring-info"
-                          data-testid={`power-meter-input-${idx}`} />
+                          data-testid={`power-meter-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2"/>
                         <Button
                           size="sm"
                           disabled={isSavingThis || !gridMeterChanged || configLoading}
@@ -1440,9 +1440,9 @@ export function PowerForm() {
             {/* Date & Time */}
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label>Date &amp; Time</Label>
+                <Label htmlFor="powersection-date-amp-time-2">Date &amp; Time</Label>
                 <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" />
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time-2"/>
               </div>
             </div>
 

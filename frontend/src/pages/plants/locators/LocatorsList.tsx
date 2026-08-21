@@ -420,6 +420,7 @@ export function LocatorsList({ plantId, highlightId }: { plantId: string; highli
                         marking a locator Inactive); everyone else sees a
                         read-only badge, and only when it's checked. */}
                     {isManager ? (
+                      // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Checkbox (Radix) renders button[role=checkbox], not a native input; same false positive as ThemeSelector's Switch.
                       <label
                         className={`mt-1 inline-flex items-center gap-1.5 text-2xs font-medium px-1.5 py-0.5 rounded border cursor-pointer ${
                           l.is_locked

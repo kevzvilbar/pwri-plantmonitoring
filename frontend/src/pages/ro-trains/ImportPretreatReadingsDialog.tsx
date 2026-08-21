@@ -228,7 +228,7 @@ export function ImportPretreatReadingsDialog({
 
           {/* File picker */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <Label htmlFor="importpretreatreadingsdialog-select-csv-file" className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
             <div className="flex items-center gap-2">
               <Button
                 size="sm" variant="outline"
@@ -239,7 +239,7 @@ export function ImportPretreatReadingsDialog({
               </Button>
               <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
             </div>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" id="importpretreatreadingsdialog-select-csv-file"/>
           </div>
 
           {/* Validation feedback */}

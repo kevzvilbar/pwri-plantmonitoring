@@ -79,11 +79,11 @@ export function BudgetTab() {
     <div className="space-y-3">
       <Card className="p-3 space-y-2">
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
-          <div><Label className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} /></div>
+          <div><Label htmlFor="budgettab-plant" className="text-xs">Plant</Label><PlantPicker value={plantId} onChange={setPlantId} id="budgettab-plant" /></div>
           <div className="w-24">
-            <Label className="text-xs">Year</Label>
+            <Label htmlFor="budgettab-year" className="text-xs">Year</Label>
             <Select value={String(year)} onValueChange={(v) => setYear(+v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="budgettab-year"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[year - 1, year, year + 1].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
               </SelectContent>
@@ -143,14 +143,14 @@ export function BudgetTab() {
                       <div className="text-xs font-medium">{r.label}</div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-2xs">Power budget ₱</Label>
+                          <Label htmlFor="budgettab-power-budget" className="text-2xs">Power budget ₱</Label>
                           <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
-                            value={editV.power} onChange={(e) => setEditV({ ...editV, power: e.target.value })} />
+                            value={editV.power} onChange={(e) => setEditV({ ...editV, power: e.target.value })} id="budgettab-power-budget"/>
                         </div>
                         <div>
-                          <Label className="text-2xs">Chem budget ₱</Label>
+                          <Label htmlFor="budgettab-chem-budget" className="text-2xs">Chem budget ₱</Label>
                           <Input className="h-7 text-xs font-mono-num" type="number" min="0" step="any"
-                            value={editV.chem} onChange={(e) => setEditV({ ...editV, chem: e.target.value })} />
+                            value={editV.chem} onChange={(e) => setEditV({ ...editV, chem: e.target.value })} id="budgettab-chem-budget"/>
                         </div>
                       </div>
                       <div className="flex gap-1.5 justify-end">

@@ -913,14 +913,14 @@ export function PowerMeterChangeDialog({
           {/* Meter selector — only shown when there are multiple grid meters */}
           {gridMeterCount > 1 && (
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <Label htmlFor="powermeters-grid-meter" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Grid Meter
               </Label>
               <Select
                 value={String(form.meterIndex)}
                 onValueChange={v => setForm(f => ({ ...f, meterIndex: +v }))}
               >
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-9" id="powermeters-grid-meter">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -940,7 +940,7 @@ export function PowerMeterChangeDialog({
           {/* Change date + old final reading — side by side */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <Label htmlFor="powermeters-change-date" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Change Date *
               </Label>
               <Input
@@ -948,10 +948,10 @@ export function PowerMeterChangeDialog({
                 value={form.changeDate}
                 onChange={e => setForm(f => ({ ...f, changeDate: e.target.value }))}
                 className="h-9"
-              />
+              id="powermeters-change-date"/>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <Label htmlFor="powermeters-old-meter-s-final-reading-kwh" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Old Meter's Final Reading * <span className="normal-case font-normal">(kWh)</span>
               </Label>
               <Input
@@ -959,7 +959,7 @@ export function PowerMeterChangeDialog({
                 value={form.oldFinalReading}
                 onChange={e => setForm(f => ({ ...f, oldFinalReading: e.target.value }))}
                 className="h-9"
-              />
+              id="powermeters-old-meter-s-final-reading-kwh"/>
             </div>
           </div>
 
@@ -968,7 +968,7 @@ export function PowerMeterChangeDialog({
               past reading shouldn't silently change the plant's live CT ratio. */}
           <div className={readingId ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <Label htmlFor="powermeters-new-meter-s-initial-reading-kwh" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 New Meter's Initial Reading * <span className="normal-case font-normal">(kWh)</span>
               </Label>
               <Input
@@ -976,11 +976,11 @@ export function PowerMeterChangeDialog({
                 value={form.newInitialReading}
                 onChange={e => setForm(f => ({ ...f, newInitialReading: e.target.value }))}
                 className="h-9"
-              />
+              id="powermeters-new-meter-s-initial-reading-kwh"/>
             </div>
             {!readingId && (
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <Label htmlFor="powermeters-new-multiplier-ct-ratio" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   New Multiplier * <span className="normal-case font-normal">(CT ratio)</span>
                 </Label>
                 <Input
@@ -989,7 +989,7 @@ export function PowerMeterChangeDialog({
                   value={form.newMultiplier}
                   onChange={e => setForm(f => ({ ...f, newMultiplier: e.target.value }))}
                   className="h-9"
-                />
+                id="powermeters-new-multiplier-ct-ratio"/>
                 <p className="text-2xs text-muted-foreground">
                   Current: <span className="font-mono font-semibold">×{oldMultiplier}</span>
                 </p>
@@ -999,7 +999,7 @@ export function PowerMeterChangeDialog({
 
           {/* Notes */}
           <div className="space-y-1">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <Label htmlFor="powermeters-notes-optional" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Notes <span className="normal-case font-normal">(optional)</span>
             </Label>
             <Input
@@ -1007,7 +1007,7 @@ export function PowerMeterChangeDialog({
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               placeholder="e.g. CT meter replaced, new ratio 40:1"
               className="h-9"
-            />
+            id="powermeters-notes-optional"/>
           </div>
 
           {/* Effect summary — shown once the required fields are filled */}

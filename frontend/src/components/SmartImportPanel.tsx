@@ -548,11 +548,12 @@ function SidebarContent({
 }
 
 function DropZone({
-  onFile, file, onClear,
+  onFile, file, onClear, id,
 }: {
   onFile: (f: File) => void;
   file: File | null;
   onClear: () => void;
+  id?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
 
@@ -574,6 +575,7 @@ function DropZone({
     >
       <input
         ref={ref}
+        id={id}
         type="file"
         accept=".csv,.txt"
         className="sr-only"
@@ -1039,11 +1041,11 @@ export default function SmartImportPanel() {
             {/* Plant + skip-invalid row */}
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1 flex-1 min-w-[160px]">
-                <Label className="text-xs">
+                <Label htmlFor="smartimportpanel-target-plant" className="text-xs">
                   Target Plant <span className="text-danger">*</span>
                 </Label>
                 <Select value={plantId} onValueChange={setPlantId}>
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-8 text-xs" id="smartimportpanel-target-plant">
                     <SelectValue placeholder="Pick a plant…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1076,8 +1078,8 @@ export default function SmartImportPanel() {
 
             {/* Drop zone */}
             <div className="space-y-1">
-              <Label className="text-xs">CSV File</Label>
-              <DropZone file={file} onFile={handleFile} onClear={handleClear} />
+              <Label htmlFor="smartimport-csv-file" className="text-xs">CSV File</Label>
+              <DropZone file={file} onFile={handleFile} onClear={handleClear} id="smartimport-csv-file" />
               {status === 'parsing' && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <RefreshCw className="h-3 w-3 animate-spin" /> Parsing…

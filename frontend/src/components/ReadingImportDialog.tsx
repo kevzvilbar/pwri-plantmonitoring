@@ -351,7 +351,7 @@ export function ImportReadingsDialog({
 
           {/* File picker */}
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label htmlFor="readingimportdialog-select-csv-file" className="text-xs">
               Select CSV file <span className="text-destructive">*</span>
             </Label>
             <div className="flex items-center gap-2">
@@ -373,7 +373,7 @@ export function ImportReadingsDialog({
               onChange={handleFile}
               className="hidden"
               data-testid="import-file-input"
-            />
+            id="readingimportdialog-select-csv-file"/>
           </div>
 
           {/* Validation feedback */}

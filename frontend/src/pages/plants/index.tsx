@@ -952,25 +952,25 @@ function PlantDetail({ plantId }: { plantId: string }) {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div>
-                <Label className="text-xs">Plant Name</Label>
+                <Label htmlFor="index-plant-name" className="text-xs">Plant Name</Label>
                 <Input
                   value={infoForm.name}
                   onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
                   placeholder="e.g. SRP"
                   data-testid="edit-plant-name"
-                />
+                id="index-plant-name"/>
               </div>
               <div>
-                <Label className="text-xs">Address</Label>
+                <Label htmlFor="index-address" className="text-xs">Address</Label>
                 <Input
                   value={infoForm.address}
                   onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
                   placeholder="e.g. South Road Properties, Cebu City"
                   data-testid="edit-plant-address"
-                />
+                id="index-address"/>
               </div>
               <div>
-                <Label className="text-xs">Capacity (MLD)</Label>
+                <Label htmlFor="index-capacity-mld" className="text-xs">Capacity (MLD)</Label>
                 <Input
                   type="number"
                   step="any"
@@ -979,7 +979,7 @@ function PlantDetail({ plantId }: { plantId: string }) {
                   onChange={(e) => setInfoForm({ ...infoForm, capacity: e.target.value })}
                   placeholder="e.g. 4200"
                   data-testid="edit-plant-capacity"
-                />
+                id="index-capacity-mld"/>
               </div>
             </div>
             <DialogFooter>
@@ -1073,31 +1073,31 @@ function AddPlantDialog({ open, onOpenChange, onSubmit, loading }: {
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Plant Name</Label>
+            <Label htmlFor="index-plant-name-2">Plant Name</Label>
             <Input placeholder="e.g. Mambaling WTP" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) onSubmit(form); }} />
+              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) onSubmit(form); }} id="index-plant-name-2"/>
           </div>
           <div>
-            <Label>Address <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Label htmlFor="index-address-optional">Address <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input placeholder="e.g. Brgy. San Isidro, Iloilo City" value={form.address}
-              onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))} id="index-address-optional"/>
           </div>
           <div>
-            <Label>Design Capacity <span className="text-muted-foreground text-xs">(optional, MLD)</span></Label>
+            <Label htmlFor="index-design-capacity-optional-mld">Design Capacity <span className="text-muted-foreground text-xs">(optional, MLD)</span></Label>
             <Input type="number" min={0} step="0.1" placeholder="e.g. 5.0"
               value={form.design_capacity_m3}
               onChange={e => setForm(f => ({
                 ...f, design_capacity_m3: e.target.value === '' ? '' : Number(e.target.value),
-              }))} />
+              }))} id="index-design-capacity-optional-mld"/>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Filter Housing</Label>
+              <Label htmlFor="index-filter-housing">Filter Housing</Label>
               <Select value={form.filter_housing_type}
                 onValueChange={(v: 'Cartridge Filter' | 'Bag Filter') =>
                   setForm(f => ({ ...f, filter_housing_type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="index-filter-housing"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Cartridge Filter">Cartridge Filter</SelectItem>
                   <SelectItem value="Bag Filter">Bag Filter</SelectItem>
@@ -1105,10 +1105,10 @@ function AddPlantDialog({ open, onOpenChange, onSubmit, loading }: {
               </Select>
             </div>
             <div>
-              <Label>Filter Media</Label>
+              <Label htmlFor="index-filter-media">Filter Media</Label>
               <Select value={form.filter_media_type}
                 onValueChange={(v: 'AFM' | 'MMF') => setForm(f => ({ ...f, filter_media_type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="index-filter-media"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="AFM">AFM</SelectItem>
                   <SelectItem value="MMF">MMF</SelectItem>

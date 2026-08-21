@@ -127,7 +127,7 @@ export default function Profile() {
       <Card className="p-3" data-testid="profile-plant-selector">
         <div className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-accent" />
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <Label htmlFor="profile-active-plant" className="text-xs uppercase tracking-wide text-muted-foreground">
             Active plant
           </Label>
         </div>
@@ -135,7 +135,7 @@ export default function Profile() {
           value={selectedPlantId ?? 'all'}
           onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
         >
-          <SelectTrigger className="mt-2 w-full" data-testid="profile-plant-select">
+          <SelectTrigger className="mt-2 w-full" data-testid="profile-plant-select" id="profile-active-plant">
             <SelectValue placeholder="Choose a plant…" />
           </SelectTrigger>
           <SelectContent>
@@ -154,9 +154,9 @@ export default function Profile() {
       <Card className="p-3 space-y-2" data-testid="profile-role-card">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-accent" />
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Role & access
-          </Label>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Role &amp; access
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {roles.length === 0 && !myCustomRole && (
@@ -189,53 +189,54 @@ export default function Profile() {
 
       {/* Identity */}
       <Card className="p-3 space-y-3" data-testid="profile-identity-card">
-        <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">
           Identity
-        </Label>
+        </p>
         {editing ? (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label>First name</Label>
+              <Label htmlFor="profile-first-name">First name</Label>
               <Input
                 value={form.first_name}
                 onChange={(e) => setForm({ ...form, first_name: e.target.value })}
                 data-testid="profile-first-name"
-              />
+              id="profile-first-name"/>
             </div>
             <div>
-              <Label>Middle name</Label>
+              <Label htmlFor="profile-middle-name">Middle name</Label>
               <Input
                 value={form.middle_name}
                 onChange={(e) => setForm({ ...form, middle_name: e.target.value })}
-              />
+              id="profile-middle-name"/>
             </div>
             <div>
-              <Label>Last name</Label>
+              <Label htmlFor="profile-last-name">Last name</Label>
               <Input
                 value={form.last_name}
                 onChange={(e) => setForm({ ...form, last_name: e.target.value })}
                 data-testid="profile-last-name"
-              />
+              id="profile-last-name"/>
             </div>
             <div>
-              <Label>Suffix</Label>
+              <Label htmlFor="profile-suffix">Suffix</Label>
               <Input
                 value={form.suffix}
                 onChange={(e) => setForm({ ...form, suffix: e.target.value })}
                 placeholder="Jr., III…"
-              />
+              id="profile-suffix"/>
             </div>
             <div className="col-span-2">
-              <Label>Username</Label>
+              <Label htmlFor="profile-username">Username</Label>
               <Input
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
                 data-testid="profile-username"
-              />
+              id="profile-username"/>
             </div>
             <div className="col-span-2">
-              <Label>Designation</Label>
+              <Label htmlFor="profile-designation">Designation</Label>
               <DesignationCombobox
+                id="profile-designation"
                 value={form.designation}
                 onChange={(v) => setForm({ ...form, designation: v })}
                 extraOptions={existingDesignations}
@@ -267,9 +268,9 @@ export default function Profile() {
       {/* Email — self-service change for non-operators; read-only notice for operators */}
       {!isOverride && (
         <Card className="p-3 space-y-2" data-testid="profile-email-card">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Email address
-          </Label>
+          </p>
           <ProfileEmailChange />
         </Card>
       )}

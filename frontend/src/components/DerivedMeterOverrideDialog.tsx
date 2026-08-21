@@ -56,14 +56,14 @@ export function DerivedMeterOverrideDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="derivedmeteroverridedialog-new-value-m" className="text-xs text-muted-foreground">
               New value (m³) <span className="text-danger">*</span>
             </Label>
             <Input
               type="number" inputMode="decimal" value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={currentValue != null ? `Currently ${currentValue.toFixed(2)}` : 'e.g. 250.00'}
-            />
+            id="derivedmeteroverridedialog-new-value-m"/>
           </div>
           <CorrectionReasonField
             reason={reason} onReasonChange={setReason}

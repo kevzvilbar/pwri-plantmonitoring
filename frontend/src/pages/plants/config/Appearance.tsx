@@ -213,6 +213,9 @@ export function EnergySourceCard({ plant }: { plant: any }) {
 
       {editing && (
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
+              Switch (Radix) renders a button[role=switch], not a native
+              input — same false positive as ThemeSelector's Switch. */}
           <label className="flex items-center gap-2 text-sm">
             <Switch
               checked={hasSolar}
@@ -224,6 +227,9 @@ export function EnergySourceCard({ plant }: { plant: any }) {
               <Sun className="h-3.5 w-3.5 text-warn" /> Has solar
             </span>
           </label>
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
+              Switch (Radix) renders a button[role=switch], not a native
+              input — same false positive as ThemeSelector's Switch. */}
           <label className="flex items-center gap-2 text-sm">
             <Switch
               checked={hasGrid}
@@ -236,14 +242,14 @@ export function EnergySourceCard({ plant }: { plant: any }) {
             </span>
           </label>
           <div>
-            <Label className="text-xs">Solar capacity (kW)</Label>
+            <Label htmlFor="appearance-solar-capacity-kw" className="text-xs">Solar capacity (kW)</Label>
             <Input
               type="number" step="any" value={solarKw}
               onChange={(e) => setSolarKw(e.target.value)}
               disabled={!hasSolar}
               placeholder="e.g. 50"
               data-testid="energy-solar-kw"
-            />
+            id="appearance-solar-capacity-kw"/>
           </div>
           <div className="sm:col-span-3 flex gap-2 justify-end">
             <Button size="sm" variant="ghost" onClick={() => {

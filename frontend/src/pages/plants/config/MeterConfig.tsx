@@ -237,6 +237,7 @@ export function MeterToggleTile({
   }[accentColor];
 
   return (
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch.
     <label className={[
       'flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors',
       checked ? colors.on : 'border-border bg-muted/30',
@@ -1144,18 +1145,18 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             </div>
             {cfg.has_solar && canEdit && (
               <div className="mt-2 space-y-2">
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Label htmlFor="meterconfig-solar-capacity-kw" className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
                 <Input
                   type="number" step="any" value={cfg.solar_capacity_kw ?? ''}
                   onChange={e => update({ solar_capacity_kw: e.target.value ? +e.target.value : null })}
                   placeholder="e.g. 50"
                   className="h-9 text-sm mt-1 max-w-[180px]"
-                />
+                id="meterconfig-solar-capacity-kw"/>
                 <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">
+                  <p className="text-xs text-muted-foreground mb-1 block">
                     Solar reading input mode
                     <span className="ml-1 text-2xs opacity-70">(used in Operations entry form)</span>
-                  </Label>
+                  </p>
                   <div className="flex items-center rounded-md border border-warn overflow-hidden text-xs font-medium w-fit">
                     <button
                       type="button"
@@ -1258,6 +1259,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                 // Empty array = all chemicals enabled (backwards compat)
                 const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
                 return (
+                  // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch.
                   <label
                     key={chem.name}
                     className={[

@@ -1,7 +1,13 @@
 {
-  "maxWarnings": 2106,
-  "lastUpdated": "2026-08-17",
+  "maxWarnings": 1741,
+  "lastUpdated": "2026-08-20",
   "history": [
+    {
+      "date": "2026-08-20",
+      "maxWarnings": 1741,
+      "previous": 2106,
+      "reason": "Closed out the jsx-a11y/label-has-associated-control debt tracked since the 2026-08-17 entry below: all 362 warnings remaining at the time (9 had already been fixed piecemeal since the original 371) are now gone, -365 total (2106 -> 1741; a few of the -365 overlap with unrelated no-explicit-any noise churn from touched files, not all pure a11y). Every Label/control pair across all 55 affected files now has a real htmlFor/id association, generated from the label's own text (deterministic slugs, de-duplicated when a page repeats a label like \"Plant\"). Six shared components (PlantSelector, PlantPicker x2, ChemPlantPick, DesignationCombobox, DropZone in SmartImportPanel.tsx) gained or already had an optional `id` prop threaded through to their real trigger/input element. A double handful of cases were genuine false positives or non-control labels rather than missing associations, and were fixed accordingly rather than forced into htmlFor pairs: (1) Radix Switch/Checkbox render as button[role=switch|checkbox], not a native input, so a label correctly wrapping one (the standard WAI-ARIA pattern, with its own aria-label or visible wrapped text as the accessible name) still trips this rule -- documented with a one-line eslint-disable-next-line at each of the ~10 spots, same justification every time; (2) several Labels were section/group headers sitting above a set of buttons, a list of already-individually-labeled fields, or a whole sub-component (\"Identity\", \"GPS Coordinates\", \"Role & access\", \"Booster Pump Targets\", the AFM/booster-pump/filter-housing grids in EditPretreatReadingDialog.tsx) rather than one control -- swapped to plain <p> text, since a <label> implies a specific associated control that doesn't exist there; (3) a couple were read-only display values with no control at all (EmailChangeDialog.tsx's current-email row, NormalizeButton.tsx's original-value row) -- same treatment. tsc/eslint/194 tests/prod build all clean throughout."
+    },
     {
       "date": "2026-08-17",
       "maxWarnings": 2094,

@@ -656,8 +656,8 @@ export function LocatorReadingForm({ highlightId }: { highlightId?: string | nul
       <Card className="p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={setPlantId} />
+            <Label htmlFor="locatorsection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
+            <PlantSelector value={plantId} onChange={setPlantId} id="locatorsection-plant" />
           </div>
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button

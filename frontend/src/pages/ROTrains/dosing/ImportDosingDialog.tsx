@@ -246,7 +246,7 @@ export function ImportDosingDialog({
 
           {/* File picker */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
+            <Label htmlFor="importdosingdialog-select-csv-file" className="text-xs">Select CSV file <span className="text-destructive">*</span></Label>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline"
                 className="gap-1.5 bg-primary text-white hover:bg-primary/90 border-primary"
@@ -255,7 +255,7 @@ export function ImportDosingDialog({
               </Button>
               <span className="text-xs text-muted-foreground">{file?.name ?? 'No file chosen'}</span>
             </div>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" id="importdosingdialog-select-csv-file"/>
           </div>
 
           {/* Validation feedback */}

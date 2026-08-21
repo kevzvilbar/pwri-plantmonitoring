@@ -237,9 +237,9 @@ export function DosingHistoryLog() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {/* Plant filter */}
           <div>
-            <Label className="text-xs text-muted-foreground">Plant</Label>
+            <Label htmlFor="dosinghistorylog-plant" className="text-xs text-muted-foreground">Plant</Label>
             <Select value={filterPlantId || '__all__'} onValueChange={(v) => setFilterPlantId(v === '__all__' ? '' : v)}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All plants" /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs" id="dosinghistorylog-plant"><SelectValue placeholder="All plants" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">All plants</SelectItem>
                 {plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -248,9 +248,9 @@ export function DosingHistoryLog() {
           </div>
           {/* Period filter */}
           <div>
-            <Label className="text-xs text-muted-foreground">Period</Label>
+            <Label htmlFor="dosinghistorylog-period" className="text-xs text-muted-foreground">Period</Label>
             <Select value={days} onValueChange={(v: any) => setDays(v)}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs" id="dosinghistorylog-period"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="7">Last 7 days</SelectItem>
                 <SelectItem value="30">Last 30 days</SelectItem>
@@ -265,12 +265,12 @@ export function DosingHistoryLog() {
         {days === 'custom' && (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs text-muted-foreground">From</Label>
-              <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-8 text-xs" />
+              <Label htmlFor="dosinghistorylog-from" className="text-xs text-muted-foreground">From</Label>
+              <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-8 text-xs" id="dosinghistorylog-from"/>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">To</Label>
-              <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-8 text-xs" />
+              <Label htmlFor="dosinghistorylog-to" className="text-xs text-muted-foreground">To</Label>
+              <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-8 text-xs" id="dosinghistorylog-to"/>
             </div>
           </div>
         )}
@@ -435,7 +435,7 @@ export function DosingHistoryLog() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/40">
                       {FIELD_LABELS.map(({ key, label, unit }) => (
                         <div key={key}>
-                          <Label className="text-2xs text-muted-foreground">{label}</Label>
+                          <Label htmlFor="dosinghistorylog-field" className="text-2xs text-muted-foreground">{label}</Label>
                           <div className="relative">
                             <Input
                               type="number" step="any"
@@ -443,7 +443,7 @@ export function DosingHistoryLog() {
                               onChange={e => setEditV({ ...editV, [key]: e.target.value })}
                               className="h-7 text-xs pr-7"
                               placeholder="0"
-                            />
+                            id="dosinghistorylog-field"/>
                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-muted-foreground pointer-events-none">{unit}</span>
                           </div>
                         </div>

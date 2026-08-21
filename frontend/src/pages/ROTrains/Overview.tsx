@@ -228,7 +228,7 @@ export function Overview() {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-end">
         <div className="min-w-[160px] flex-1">
-          <Label className="text-xs text-muted-foreground">Plant</Label>
+          <Label htmlFor="overview-plant" className="text-xs text-muted-foreground">Plant</Label>
           <PlantPicker value={plantId} onChange={setPlantId} />
         </div>
         <div className="flex items-center gap-1 flex-wrap">
@@ -245,7 +245,7 @@ export function Overview() {
         <div className="relative min-w-[160px]">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search train…"
-            className="w-full h-9 pl-7 pr-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+            className="w-full h-9 pl-7 pr-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring" id="overview-plant"/>
         </div>
       </div>
 

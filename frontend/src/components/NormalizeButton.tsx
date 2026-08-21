@@ -184,7 +184,7 @@ function NormalizeDialog({
 
         <div className="space-y-3 py-1">
           <div>
-            <Label className="text-xs">Original value</Label>
+            <p className="text-xs text-muted-foreground">Original value</p>
             <p className="text-sm font-mono mt-0.5 text-muted-foreground">{originalValue}</p>
           </div>
           <div>

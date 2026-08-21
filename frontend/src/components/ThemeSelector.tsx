@@ -100,6 +100,14 @@ export function ThemeSelector() {
         </div>
 
         <div className="mt-4 border-t pt-3">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
+              Switch (Radix) renders a button[role=switch], not a native
+              input/select/textarea, so eslint's control-recognition doesn't
+              see it as "associated" even though it's nested inside this
+              label. It already has its own aria-label below; wrapping it in
+              a native <label> is the standard WAI-ARIA switch pattern purely
+              for click-target delegation (clicking "Dark Mode" toggles it),
+              not for the accessible name. */}
           <label className="flex items-center justify-between gap-2 text-sm cursor-pointer">
             <span className="flex items-center gap-2 font-medium text-foreground">
               <Moon className="h-3.5 w-3.5 text-muted-foreground" />

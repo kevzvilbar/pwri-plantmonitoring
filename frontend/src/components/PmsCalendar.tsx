@@ -682,18 +682,18 @@ function EditTemplateDialog({ template, onClose }: { template: Template; onClose
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <Label>Category</Label>
+              <Label htmlFor="pmscalendar-category">Category</Label>
               <Select value={v.category} onValueChange={(x) => setV({ ...v, category: x })}>
-                <SelectTrigger data-testid="select-edit-category"><SelectValue /></SelectTrigger>
+                <SelectTrigger data-testid="select-edit-category" id="pmscalendar-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PMS_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Frequency</Label>
+              <Label htmlFor="pmscalendar-frequency">Frequency</Label>
               <Select value={v.frequency} onValueChange={(x) => setV({ ...v, frequency: x as Template['frequency'] })}>
-                <SelectTrigger data-testid="select-edit-frequency"><SelectValue /></SelectTrigger>
+                <SelectTrigger data-testid="select-edit-frequency" id="pmscalendar-frequency"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PMS_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                 </SelectContent>
@@ -701,30 +701,30 @@ function EditTemplateDialog({ template, onClose }: { template: Template; onClose
             </div>
           </div>
           <div>
-            <Label>Equipment Name</Label>
+            <Label htmlFor="pmscalendar-equipment-name">Equipment Name</Label>
             <Input
               value={v.equipment_name}
               data-testid="input-edit-equipment-name"
               onChange={(e) => setV({ ...v, equipment_name: e.target.value })}
-            />
+            id="pmscalendar-equipment-name"/>
           </div>
           <div>
-            <Label>Schedule Start Date</Label>
+            <Label htmlFor="pmscalendar-schedule-start-date">Schedule Start Date</Label>
             <Input
               type="date"
               value={v.schedule_start_date}
               data-testid="input-edit-start-date"
               onChange={(e) => setV({ ...v, schedule_start_date: e.target.value })}
-            />
+            id="pmscalendar-schedule-start-date"/>
           </div>
           <div>
-            <Label>Checklist Steps (One Per Line)</Label>
+            <Label htmlFor="pmscalendar-checklist-steps-one-per-line">Checklist Steps (One Per Line)</Label>
             <Textarea
               value={v.checklist_steps}
               rows={6}
               data-testid="textarea-edit-steps"
               onChange={(e) => setV({ ...v, checklist_steps: e.target.value })}
-            />
+            id="pmscalendar-checklist-steps-one-per-line"/>
           </div>
         </div>
 

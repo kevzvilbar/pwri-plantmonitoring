@@ -892,9 +892,9 @@ export default function Compliance() {
       <Card className="p-3">
         <div className="grid gap-2 md:grid-cols-[140px_1fr_140px_auto] items-end">
           <div>
-            <Label className="text-xs">Scope</Label>
+            <Label htmlFor="compliance-scope" className="text-xs">Scope</Label>
             <Select value={scope} onValueChange={(v) => setScope(v as 'global' | 'plant')}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1" id="compliance-scope"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="global">Global</SelectItem>
                 <SelectItem value="plant">Specific plant</SelectItem>
@@ -902,9 +902,9 @@ export default function Compliance() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Plant</Label>
+            <Label htmlFor="compliance-plant" className="text-xs">Plant</Label>
             <Select value={plantId} onValueChange={setPlantId} disabled={scope === 'global'}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Pick plant…" /></SelectTrigger>
+              <SelectTrigger className="mt-1" id="compliance-plant"><SelectValue placeholder="Pick plant…" /></SelectTrigger>
               <SelectContent>
                 {(plants ?? []).map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -913,9 +913,9 @@ export default function Compliance() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Window (days)</Label>
+            <Label htmlFor="compliance-window-days" className="text-xs">Window (days)</Label>
             <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1" id="compliance-window-days"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[1, 7, 14, 30].map((d) => (
                   <SelectItem key={d} value={String(d)}>{d}d</SelectItem>
@@ -1179,7 +1179,7 @@ export default function Compliance() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {(local ? Object.entries(local) : []).map(([k, v]) => (
                 <div key={k}>
-                  <Label className="text-xs">{labelize(k)}</Label>
+                  <Label htmlFor="compliance-field" className="text-xs">{labelize(k)}</Label>
                   <Input
                     type="number"
                     value={String(v)}
@@ -1190,7 +1190,7 @@ export default function Compliance() {
                       )
                     }
                     className="mt-1 font-mono text-xs"
-                  />
+                  id="compliance-field"/>
                 </div>
               ))}
             </div>
@@ -1219,7 +1219,7 @@ export default function Compliance() {
                 const fetched = previewMetrics?.[k];
                 return (
                   <div key={k}>
-                    <Label className="text-xs">{labelize(k)}</Label>
+                    <Label htmlFor="compliance-field-2" className="text-xs">{labelize(k)}</Label>
                     {fetched !== undefined && overrideMetrics[k] === undefined && (
                       <div className="text-2xs text-muted-foreground">
                         Fetched: {Math.round((fetched as number) * 100) / 100}
@@ -1233,7 +1233,7 @@ export default function Compliance() {
                       onChange={(e) =>
                         setOverrideMetrics((m) => ({ ...m, [k]: e.target.value }))
                       }
-                    />
+                    id="compliance-field-2"/>
                   </div>
                 );
               })}

@@ -880,57 +880,57 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <p className="font-medium text-foreground">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-2xs">Date &amp; Time</Label>
+                <Label htmlFor="readinghistorydialog-date-amp-time" className="text-2xs">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
-                  className="h-8 text-xs" />
+                  className="h-8 text-xs" id="readinghistorydialog-date-amp-time"/>
               </div>
               <div>
-                <Label className="text-2xs">
+                <Label htmlFor="readinghistorydialog-reading-kwh" className="text-2xs">
                   {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
                 </Label>
                 <Input type="number" step="any" value={editRow.value}
                   onChange={e => setEditRow({ ...editRow, value: e.target.value })}
-                  className="h-8 text-xs" />
+                  className="h-8 text-xs" id="readinghistorydialog-reading-kwh"/>
               </div>
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">Power Meter (kWh)</Label>
+                  <Label htmlFor="readinghistorydialog-power-meter-kwh" className="text-2xs">Power Meter (kWh)</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-power-meter-kwh"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">TDS (ppm)</Label>
+                  <Label htmlFor="readinghistorydialog-tds-ppm" className="text-2xs">TDS (ppm)</Label>
                   <Input type="number" step="any" value={editRow.value4 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value4: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-tds-ppm"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">NTU</Label>
+                  <Label htmlFor="readinghistorydialog-ntu" className="text-2xs">NTU</Label>
                   <Input type="number" step="any" value={editRow.value6 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-ntu"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">Pressure (psi)</Label>
+                  <Label htmlFor="readinghistorydialog-pressure-psi" className="text-2xs">Pressure (psi)</Label>
                   <Input type="number" step="any" value={editRow.value5 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-pressure-psi"/>
                 </div>
               )}
               {module === 'power' && (
                 <div>
-                  <Label className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
+                  <Label htmlFor="readinghistorydialog-field" className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-field"/>
                 </div>
               )}
             </div>

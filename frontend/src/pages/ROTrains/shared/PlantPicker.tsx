@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 // ─── PlantPicker ─────────────────────────────────────────────────────────────
 // Not extracted to the sub-module because it is only used within this file
 // (by Overview below). If a second caller appears, move it to ro-trains/PlantPicker.tsx.
-export function PlantPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PlantPicker({ value, onChange, id }: { value: string; onChange: (v: string) => void; id?: string }) {
   const { data: plants } = usePlants();
   const { selectedPlantId } = useAppStore();
   // onChange excluded from deps — including it causes error #300 when the
@@ -16,7 +16,7 @@ export function PlantPicker({ value, onChange }: { value: string; onChange: (v: 
   useEffect(() => { if (selectedPlantId && !value) onChange(selectedPlantId); }, [selectedPlantId, value]);
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger><SelectValue placeholder="Select plant" /></SelectTrigger>
+      <SelectTrigger id={id}><SelectValue placeholder="Select plant" /></SelectTrigger>
       <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
     </Select>
   );

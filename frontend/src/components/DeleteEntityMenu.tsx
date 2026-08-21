@@ -278,7 +278,7 @@ export function DeleteEntityMenu({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+            <Label htmlFor="deleteentitymenu-reason-optional" className="text-xs text-muted-foreground">Reason (optional)</Label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -286,7 +286,7 @@ export function DeleteEntityMenu({
               maxLength={500}
               rows={2}
               data-testid="soft-delete-reason"
-            />
+            id="deleteentitymenu-reason-optional"/>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy} data-testid="cancel-soft-delete">Cancel</AlertDialogCancel>
@@ -323,7 +323,7 @@ export function DeleteEntityMenu({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="deleteentitymenu-reason-min-5-chars-required-for-audit-log" className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
               <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
             </Label>
@@ -336,7 +336,7 @@ export function DeleteEntityMenu({
               data-testid="hard-delete-reason"
               aria-invalid={reason.length > 0 && !reasonValid}
               className={reason.length > 0 && !reasonValid ? 'border-danger' : ''}
-            />
+            id="deleteentitymenu-reason-min-5-chars-required-for-audit-log"/>
             {reason.length > 0 && !reasonValid && (
               <p className="text-2xs text-danger">
                 Reason must be at least 5 characters ({reason.trim().length}/5).
