@@ -77,8 +77,8 @@ export function parseCSVText(text: string): Record<string, string>[] {
   });
 }
 
-export function triggerTemplateDownload(filename: string, headers: string[], exampleRow: Record<string, string>) {
-  downloadCSV(filename, [exampleRow]);
+export function triggerTemplateDownload(filename: string, headers: string[], exampleRows: Record<string, string> | Record<string, string>[]) {
+  downloadCSV(filename, Array.isArray(exampleRows) ? exampleRows : [exampleRows]);
 }
 
 // ─── Date normaliser ─────────────────────────────────────────────────────────
@@ -153,6 +153,8 @@ interface ImportDialogProps {
   schemaHint: string;           // shown in the dialog
   templateFilename: string;
   templateRow: Record<string, string>;
+  templateRows?: Record<string, string>[]; // optional multi-row example (e.g. one row per meter); falls back to [templateRow]
+  helpText?: React.ReactNode;   // optional extra line shown under the standard column-format note
   validateRow: (r: Record<string, string>, i: number) => string[];
   insertRows: (rows: Record<string, string>[], plantId: string) => Promise<{ count: number; errors: string[] }>;
   onClose: () => void;
@@ -161,7 +163,7 @@ interface ImportDialogProps {
 
 export function ImportReadingsDialog({
   title, module, plantId, userId,
-  schemaHint, templateFilename, templateRow,
+  schemaHint, templateFilename, templateRow, templateRows, helpText,
   validateRow, insertRows,
   onClose, onImported,
 }: ImportDialogProps) {
@@ -328,7 +330,7 @@ export function ImportReadingsDialog({
               size="sm"
               variant="outline"
               className="shrink-0 gap-1.5"
-              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRow)}
+              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRows ?? templateRow)}
             >
               <Download className="h-3.5 w-3.5" />
               Download Template
@@ -347,6 +349,9 @@ export function ImportReadingsDialog({
               ISO 8601 format (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
               Leave blank to default to the import timestamp.
             </p>
+            {helpText && (
+              <p className="text-2xs text-muted-foreground">{helpText}</p>
+            )}
           </div>
 
           {/* File picker */}
