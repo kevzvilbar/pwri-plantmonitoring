@@ -303,15 +303,21 @@ async function insertPowerReadings(
     const gmrObj: Record<string, number> = {};
     for (const [mi, val] of meters) gmrObj[String(mi)] = val;
 
-    const meter0Val = meters.get(0) ?? 0;
-
     const payload: Record<string, any> = {
       plant_id:          gPid,
-      meter_reading_kwh: meter0Val,         // backward compat / meter-0 cumulative
       grid_meter_readings: gmrObj,           // full per-meter JSONB — the key fix
       reading_datetime:  dt,
       recorded_by:       userId,
     };
+    // meter_reading_kwh: legacy meter-0 mirror, kept for dashboards/trend
+    // charts that haven't migrated to grid_meter_readings. Only set it when
+    // this row's data actually includes meter 0 — otherwise:
+    //   - INSERT: column is nullable (see 20260822 migration) — leave it out
+    //     rather than writing a fake 0 that reads like a meter reset.
+    //   - UPDATE: omitting the key from payload leaves whatever real value
+    //     is already saved untouched, instead of clobbering it with 0 just
+    //     because this particular import batch only covered meters 1/2.
+    if (meters.has(0)) payload.meter_reading_kwh = meters.get(0);
 
     // Solar
     const explicitDirect = g.solarMode === 'direct';

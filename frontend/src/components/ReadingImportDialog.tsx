@@ -116,6 +116,59 @@ async function logReadingImport(entry: {
   } catch { /* silently ignore if table missing */ }
 }
 
+// ─── Intra-file duplicate detection ─────────────────────────────────────────
+// Power readings are one-per-day-per-meter: key = plant|meter|YYYY-MM-DD, so
+// two rows on the same date but different times are still caught as dups.
+// All other modules: key = entityName|YYYY-MM-DDTHH:mm so rows with the
+// same datetime but a DIFFERENT well/locator/blending name are NOT deduped.
+//
+// FIX (multi-meter CSV import): the power key used to be just plant|date,
+// with no meter_name component. A multi-meter plant's CSV — one row per
+// meter, same plant_name, same reading_datetime, different meter_name — all
+// collapsed onto that one key, so rows for meter 2 and meter 3 were flagged
+// as "duplicate rows within the file" and silently dropped right here,
+// before insertRows ever saw them. Doesn't matter how correctly meter_name
+// is filled in, or how correct the resolution logic downstream is — the
+// rows never arrive. Including meter_name in the key fixes it: rows only
+// collide now if they'd actually target the same meter.
+//
+// FIX: call normalizeDatetime() before slicing so non-standard formats like
+// "2026-06-25T8:00" (single-digit hour, common in Excel exports) are fixed
+// to "2026-06-25T08:00" first. Without this, two rows meant to be the same
+// moment could fail to collide (or vice versa) purely due to formatting.
+//
+// BUG FIX (timezone day-rollback): slices the key straight from the
+// normalized "YYYY-MM-DDTHH:mm" string, not from `new Date(...).toISOString()`
+// — that conversion to UTC first would shift any Manila (UTC+8) reading
+// between 12:00–7:59 AM local onto the *previous* calendar day, colliding
+// genuinely different rows (or missing a real duplicate).
+export function computeIntraFileDuplicateIndices(rows: Record<string, string>[], module: string): number[] {
+  const isPowerModule = module === 'power';
+  const seenKeys = new Map<string, number>(); // key → first row index
+  const intraDups: number[] = [];
+  rows.forEach((r, i) => {
+    const dtRaw = r.reading_datetime || r.event_date || '';
+    // Entity name: prefer well_name, then locator_name (power uses plant_name — handled separately below)
+    const entityName = (r.well_name || r.locator_name || '').trim().toLowerCase();
+    let dtKey: string;
+    if (!dtRaw) {
+      dtKey = `__nodate__${i}`;
+    } else {
+      const dtNorm = normalizeDatetime(dtRaw);
+      dtKey = isPowerModule ? dtNorm.slice(0, 10) : dtNorm.slice(0, 16);
+    }
+    // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.
+    // Power uses plant_name as its entity name (from the CSV column), PLUS
+    // meter_name, so distinct meters on the same plant+date don't collide.
+    const powerName = isPowerModule ? (r.plant_name || '').trim().toLowerCase() : '';
+    const powerMeter = isPowerModule ? (r.meter_name || '').trim().toLowerCase() : '';
+    const key = isPowerModule ? `${powerName}|${powerMeter}|${dtKey}` : `${entityName}|${dtKey}`;
+    if (seenKeys.has(key)) intraDups.push(i);
+    else seenKeys.set(key, i);
+  });
+  return intraDups;
+}
+
 // ─── Duplicate check helper for CSV imports ──────────────────────────────────
 // Uses a per-import-session cache so we only ask once per unique key.
 // The actual prompt is driven by React state (see ImportReadingsDialog) via a
@@ -221,51 +274,7 @@ export function ImportReadingsDialog({
       const ts = new Date().toISOString();
 
       // ── Duplicate detection ──────────────────────────────────────────────────
-      // Power readings are one-per-day: use date-only key (YYYY-MM-DD) so that
-      // two rows on the same date but different times are still caught as dups.
-      // All other modules: key = entityName|YYYY-MM-DDTHH:mm so rows with the
-      // same datetime but a DIFFERENT well/locator/blending name are NOT deduped.
-      //
-      // FIX: call normalizeDatetime() before new Date() so non-standard formats
-      // like "2026-06-25T8:00" (single-digit hour, common in Excel exports) are
-      // fixed to "2026-06-25T08:00" before parsing. Without this, V8 treats the
-      // raw string as Invalid Date and .toISOString() throws RangeError, crashing
-      // doImport before setBusy(false) is reached — leaving the spinner frozen.
-      const isPowerModule = module === 'power';
-      const seenKeys = new Map<string, number>(); // key → first row index
-      const intraDups: number[] = [];
-      rows.forEach((r, i) => {
-        const dtRaw = r.reading_datetime || r.event_date || '';
-        // Entity name: prefer well_name, then locator_name (power uses plant_name — handled separately below)
-        const entityName = (r.well_name || r.locator_name || '').trim().toLowerCase();
-        let dtKey: string;
-        if (!dtRaw) {
-          dtKey = `__nodate__${i}`;
-        } else {
-          // normalizeDatetime pads single-digit hours (T8: → T08:) and replaces
-          // space separators with T so Excel-style datetimes parse correctly.
-          //
-          // BUG FIX (timezone day-rollback): previously ran the normalized string
-          // through `new Date(...).toISOString()` before slicing, which converts
-          // to UTC first. For Manila (UTC+8) that shifts any reading between
-          // 12:00–7:59 AM local onto the *previous* calendar day/minute, so two
-          // genuinely different rows could collide (or a real dup could be missed).
-          // normalizeDatetime() already returns a clean "YYYY-MM-DDTHH:mm" string —
-          // slice the key straight from it, no UTC conversion involved.
-          const dtNorm = normalizeDatetime(dtRaw);
-          if (isPowerModule) {
-            dtKey = dtNorm.slice(0, 10); // YYYY-MM-DD, as entered
-          } else {
-            dtKey = dtNorm.slice(0, 16); // YYYY-MM-DDTHH:mm, as entered
-          }
-        }
-        // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.
-        // Power uses plant_name as its entity name (from the CSV column).
-        const powerName = isPowerModule ? (r.plant_name || '').trim().toLowerCase() : '';
-        const key = isPowerModule ? `${powerName}|${dtKey}` : `${entityName}|${dtKey}`;
-        if (seenKeys.has(key)) intraDups.push(i);
-        else seenKeys.set(key, i);
-      });
+      const intraDups = computeIntraFileDuplicateIndices(rows, module);
 
       // If intra-file duplicates exist, warn and block
       if (intraDups.length > 0 && !dupResolved) {
