@@ -231,7 +231,10 @@ export function TopBar() {
               size="icon"
               aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
               className={cn(
-                'relative h-8 w-8',
+                // 40px hit area (was 32px) — closer to the 44px touch-target
+                // guideline; kept under 44 so it still fits the 48px-tall
+                // TopBar row alongside the plant selector without crowding.
+                'relative h-10 w-10',
                 'hover:bg-white/10 focus-visible:ring-white/30',
                 // Bell icon colour escalates with severity
                 hasCritical

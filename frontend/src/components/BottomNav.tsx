@@ -190,7 +190,15 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="md:hidden sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]">
+    <nav
+      className={cn(
+        'md:hidden sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]',
+        // Bottom safe-area inset (requires viewport-fit=cover in index.html)
+        // keeps the row clear of the home-indicator/gesture bar on notched
+        // phones instead of sitting flush underneath it.
+        'pb-[env(safe-area-inset-bottom)]',
+      )}
+    >
       <div className="grid grid-cols-5 max-w-3xl mx-auto items-end">
         {leftPriority.map(renderPriority)}
 

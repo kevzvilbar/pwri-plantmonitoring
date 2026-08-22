@@ -32,7 +32,8 @@ export function ThemeSelector() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10"
+          // Matches the 40px hit area used for Bell/SyncIndicator — see TopBar.tsx.
+          className="h-10 w-10 text-topbar-foreground/70 hover:text-topbar-foreground hover:bg-white/10"
           aria-label="Choose color theme"
           title="Color theme"
         >

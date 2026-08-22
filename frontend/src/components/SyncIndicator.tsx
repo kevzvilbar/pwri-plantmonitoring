@@ -77,7 +77,9 @@ export function SyncIndicator() {
           onClick={manualSync}
           aria-label={label}
           className={cn(
-            'relative flex items-center justify-center h-8 w-8 rounded-md transition-colors',
+            // Matches the 40px hit area used for the other TopBar icon
+            // buttons (Bell, ThemeSelector) — see TopBar.tsx.
+            'relative flex items-center justify-center h-10 w-10 rounded-md transition-colors',
             'text-topbar-foreground/60 hover:text-topbar-foreground hover:bg-white/10',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
             isSyncing && 'pointer-events-none',
