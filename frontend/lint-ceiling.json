@@ -1,7 +1,13 @@
 {
-  "maxWarnings": 1729,
+  "maxWarnings": 1730,
   "lastUpdated": "2026-08-22",
   "history": [
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1730,
+      "previous": 1729,
+      "reason": "God-component extraction, part 2 of 4: split DataAnalysis.tsx (2322 lines, one exported page component plus 8 private sub-components: NormBadge, StatusBadge, EditRawDialog, LinearRegressionChart, RegressionDetail, RawDataTable, AuditLogTab, NormalizationAuditTab) into one file per component under pages/dataAnalysis/, plus a shared.ts for the cross-cutting types/constants several of them used (SOURCE_TABLES, ENTITY_CONFIG, TABLE_LABELS, etc.), plus lib/gapDetection.ts for the detectGaps algorithm (a self-contained 70-line function with no page dependency -- same treatment regressionCorrection.ts already got in an earlier pass). Net warning change from the split itself is 0 -- the +1 here is unrelated, picked up from Kevz's own mobile-ux-fixes/mobile-ux-fixes-round2 commits landing on main in between sessions, confirmed by running the checker on a fresh clone before touching this file. Caught a real bug in the extraction itself, not in the app: all 8 sub-components were originally declared as plain `function X(...)` (no `export`) since they only needed to be visible within the same file -- copied verbatim into their own files, they're unusable to any importer without `export` added. tsc --noEmit passed with 0 errors even with the missing exports (worth knowing for next time -- this project's isolatedModules + moduleResolution:bundler combination doesn't appear to hard-fail tsc on an import of a genuinely non-existent named export the way a stricter tsconfig would), only `npm run build` (the real bundler) would have caught it. Fixed before it went anywhere near a patch. tsc/eslint (0 errors)/201 tests/prod build all clean after the fix."
+    },
     {
       "date": "2026-08-22",
       "maxWarnings": 1729,
@@ -99,6 +105,11 @@
       "date": "2026-08-22",
       "maxWarnings": 1729,
       "previous": 1741
+    },
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1730,
+      "previous": 1729
     }
   ]
 }
