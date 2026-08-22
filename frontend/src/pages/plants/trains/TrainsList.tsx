@@ -38,10 +38,13 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
 
-import {
-  EditTrainDialog, TrainOperatorLogModal, TrainRODetailCharts,
-  PretreatAFMChart, PretreatBoosterChart, PretreatCFChart, PretreatHPPChart,
-} from './TrainDetail';
+import { EditTrainDialog } from './EditTrainDialog';
+import { TrainOperatorLogModal } from './TrainOperatorLogModal';
+import { TrainRODetailCharts } from './TrainRODetailCharts';
+import { PretreatAFMChart } from './PretreatAFMChart';
+import { PretreatBoosterChart } from './PretreatBoosterChart';
+import { PretreatCFChart } from './PretreatCFChart';
+import { PretreatHPPChart } from './PretreatHPPChart';
 import { MeterDetailButton } from '../charts/EntityHistoryChart';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 import { parseCsv, downloadTemplate, CsvPreviewTable, CollapsibleSection, logStatusChange } from '../shared';

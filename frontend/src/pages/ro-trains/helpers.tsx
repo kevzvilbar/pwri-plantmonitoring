@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { deltaCache } from '@/lib/deltaCache';
 
 // ─── Sparkline SVG ────────────────────────────────────────────────────────────
 
@@ -208,12 +209,33 @@ export async function logReadingEdit(entry: {
 //
 // All three meters are fixed in a single ascending pass so one Supabase query
 // covers every column and the three "prev" baselines stay in sync.
+//
+// This is the ONE canonical implementation — as of the 2026-08-22
+// god-component extraction, two other private copies of this exact function
+// existed (plants/trains/TrainDetail.tsx -- since split up, this logic lived
+// in its TrainOperatorLogModal piece -- and DataAnalysis.tsx), each
+// independently drifted: the TrainDetail.tsx one never recalculated
+// feed_meter_delta at all (permeate +
+// reject only), and DataAnalysis.tsx's only ever recalculated permeate_meter
+// _delta (feed and reject both silently went stale after every regression
+// correction it applied). Both now import this one instead. If you need to
+// change this function's behavior, this is the only file to touch — grep
+// for `recalculateTrainDeltas` across the repo to confirm before assuming
+// otherwise.
+//
+// ── HYBRID STRATEGY (permeate only) ─────────────────────────────────────────
+// After every successful DB write to permeate_meter_delta this function also
+// calls deltaCache.set() with the freshly-computed value so the Dashboard and
+// TrendChart pick it up immediately (Tier-1 cache shortcut) without waiting
+// for a refetch. Feed and reject deltas are not Dashboard-cached (display-
+// only in the operator log / DataAnalysis) so no equivalent sync is needed
+// for those two.
 
 export async function recalculateTrainDeltas(trainId: string): Promise<void> {
   try {
     const { data: rows } = await (supabase.from('ro_train_readings' as any) as any)
       .select(
-        'id, feed_meter, feed_meter_delta, permeate_meter, permeate_meter_delta, reject_meter, reject_meter_delta, ' +
+        'id, reading_datetime, feed_meter, feed_meter_delta, permeate_meter, permeate_meter_delta, reject_meter, reject_meter_delta, ' +
         'is_meter_replacement, is_feed_meter_replacement, is_permeate_meter_replacement, is_reject_meter_replacement',
       )
       .eq('train_id', trainId)
@@ -225,6 +247,10 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
     let prevRejMeter:   number | null = null;
 
     for (const row of rows as any[]) {
+      const dateKey = row.reading_datetime
+        ? new Date(row.reading_datetime).toLocaleDateString('en-CA') // YYYY-MM-DD
+        : null;
+
       // ── Feed delta ────────────────────────────────────────────────────────
       // Only the granular is_feed_meter_replacement flag zeros the feed delta —
       // same rationale as the reject branch below (is_meter_replacement alone,
@@ -260,6 +286,15 @@ export async function recalculateTrainDeltas(trainId: string): Promise<void> {
         await (supabase.from('ro_train_readings' as any) as any)
           .update({ permeate_meter_delta: newDelta })
           .eq('id', row.id);
+      }
+
+      // ── HYBRID STRATEGY: sync in-memory delta cache (permeate only) ───────
+      if (dateKey) {
+        if (newDelta !== null) {
+          deltaCache.set(trainId, dateKey, newDelta, 'stored');
+        } else {
+          deltaCache.invalidate(trainId);
+        }
       }
 
       // ── Reject delta ──────────────────────────────────────────────────────

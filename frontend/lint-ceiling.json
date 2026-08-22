@@ -1,7 +1,13 @@
 {
-  "maxWarnings": 1741,
-  "lastUpdated": "2026-08-20",
+  "maxWarnings": 1729,
+  "lastUpdated": "2026-08-22",
   "history": [
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1729,
+      "previous": 1741,
+      "reason": "God-component extraction, part 1 of 4 (see external review, 2026-08-18): split plants/trains/TrainDetail.tsx (2626 lines, 9 exported components bundled in one file) into one file per component -- EditTrainDialog.tsx, TrainHistoryChart.tsx, TrainMetricChart.tsx, TrainRODetailCharts.tsx, PretreatAFMChart.tsx, PretreatBoosterChart.tsx, PretreatHPPChart.tsx, PretreatCFChart.tsx, TrainOperatorLogModal.tsx -- each with its own pruned import list instead of the original's 35-import superset shared by everything. TrainsList.tsx (the only consumer) now imports directly from each. -12 net is import-pruning noise, not a real cleanup pass; don't read into it. Found a real bug during the split, not just moved code: recalculateTrainDeltas existed as three independent implementations (TrainDetail.tsx's TrainOperatorLogModal, ro-trains/helpers.tsx, and a third inside DataAnalysis.tsx), each drifted -- the TrainDetail.tsx copy never recalculated feed_meter_delta at all, and DataAnalysis.tsx's only ever touched permeate_meter_delta (feed AND reject both silently went stale after every regression correction it applied). Consolidated to one canonical version in helpers.tsx (feed+permeate+reject, plus the deltaCache hybrid-sync the TrainDetail.tsx copy had that helpers.tsx's didn't) -- see that function's own header comment. TrainHistoryChart.tsx and TrainMetricChart.tsx are extracted faithfully but are dead code (not imported anywhere, confirmed via repo-wide grep before and after the split) -- left in place, flagged to Kevz rather than deleted unprompted. tsc/eslint/194 tests/prod build all clean."
+    },
     {
       "date": "2026-08-20",
       "maxWarnings": 1741,
@@ -88,6 +94,11 @@
       "maxWarnings": 2106,
       "previous": 2104,
       "reason": "Same Umapad follow-up, one more spot with the identical bug: ProductMetersStat (pages/plants/config/ProductMeters.tsx), the active/total counter shown on the Plants list page right next to the Wells/Locators/RO Trains stats fixed in the previous entry, had the same status-column-only counting. Now requires a fresh product_meter_readings_latest row too. +2 no-explicit-any for that view's .from() cast, same justification as the previous entry."
+    },
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1729,
+      "previous": 1741
     }
   ]
 }

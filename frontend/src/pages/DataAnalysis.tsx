@@ -29,6 +29,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { useAppStore } from '@/store/appStore';
+// 2026-08-22: recalculateTrainDeltas used to be defined locally here (a third
+// independent copy alongside one in plants/trains/TrainDetail.tsx, both
+// incomplete -- see helpers.tsx's header comment on this function for the
+// full story). Now imports the one canonical implementation.
+import { recalculateTrainDeltas } from '@/pages/ro-trains/helpers';
 // Phase 1 extraction (pwri-improvement-plan.md) — the reset-anomaly + OLS
 // regression algorithm (and the RawReading/CorrectionRow/NormStatus types it
 // works with) used to be defined inline here. See that module's own header
@@ -284,66 +289,6 @@ function detectGaps(readings: RawReading[], column: string, sourceTable: string)
   return fills;
 }
 
-// ── recalculateTrainDeltas ────────────────────────────────────────────────────
-//
-// Recomputes permeate_meter_delta for EVERY reading of a given RO train in
-// strict chronological order.  Must be called any time the permeate_meter
-// baseline changes:
-//
-//   • DataAnalysis applies a permeate_meter correction (handleApply below)
-//   • is_meter_replacement is toggled on/off  (TrainOperatorLogModal, Plants.tsx)
-//   • A new reading is inserted between existing ones  (ROTrains.tsx submit —
-//     add a call there too; hook point is clearly marked in that file)
-//
-// Rules applied in sequence per row:
-//   is_meter_replacement = true  → delta = 0; baseline STILL advances so the
-//                                   next row computes correctly from the new meter
-//   Normal row, prev available   → delta = max(0, current − prev)
-//   First row / meter is null    → delta = null  (no predecessor yet)
-//
-// Only rows whose computed delta differs from the stored value are written to DB,
-// keeping network traffic minimal.
-async function recalculateTrainDeltas(trainId: string): Promise<void> {
-  try {
-    const { data: rows } = await (supabase.from('ro_train_readings_clean' as any) as any)
-      .select('id, permeate_meter, permeate_meter_delta, is_meter_replacement')
-      .eq('train_id', trainId)
-      .order('reading_datetime', { ascending: true });
-
-    if (!rows?.length) return;
-
-    let prevMeter: number | null = null;
-
-    for (const row of rows as any[]) {
-      const isRepl   = !!row.is_meter_replacement;
-      const curMeter = row.permeate_meter != null ? +row.permeate_meter : null;
-      const stored   = row.permeate_meter_delta != null ? +row.permeate_meter_delta : null;
-
-      let newDelta: number | null;
-      if (isRepl) {
-        newDelta = 0;                                            // replacement: zero contribution
-      } else if (prevMeter != null && curMeter != null) {
-        newDelta = Math.max(0, curMeter - prevMeter);
-      } else {
-        newDelta = null;                                         // no predecessor
-      }
-
-      // Advance baseline regardless of replacement flag so the next normal row
-      // computes its delta correctly from the replacement meter value.
-      if (curMeter != null) prevMeter = curMeter;
-
-      // Skip DB write when value hasn't changed
-      const needsUpdate = newDelta !== stored;
-      if (needsUpdate) {
-        await (supabase.from('ro_train_readings_clean' as any) as any)
-          .update({ permeate_meter_delta: newDelta })
-          .eq('id', row.id);
-      }
-    }
-  } catch {
-    // Non-critical — proceed without full cascade
-  }
-}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
