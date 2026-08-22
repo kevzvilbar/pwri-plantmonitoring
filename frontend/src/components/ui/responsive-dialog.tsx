@@ -4,6 +4,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter,
+} from '@/components/ui/alert-dialog';
+import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter,
 } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
@@ -102,5 +106,96 @@ export function ResponsiveDialog({
         {footer && <DialogFooter className="shrink-0 pt-2">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * ResponsiveAlertDialog
+ * ─────────────────────
+ * Same idea as ResponsiveDialog, but for confirmation-style flows that
+ * shouldn't be dismissible by tapping the backdrop or hitting Escape
+ * (destructive actions, "this needs a reason" overrides, etc.) — the
+ * scenarios AlertDialog exists for as distinct from Dialog.
+ *
+ * Because AlertDialogAction/AlertDialogCancel are tied to the AlertDialog
+ * primitive's own context, they can't be reused inside the mobile Drawer
+ * branch. Pass plain `Button`s in `footer` instead and wire their onClick
+ * handlers explicitly (see DerivedMeterOverrideDialog.tsx) — you lose
+ * nothing: AlertDialogAction never auto-closed here either, since these
+ * dialogs already close by the caller flipping the controlled `open` prop
+ * once `onConfirm` resolves.
+ *
+ * The mobile Drawer is rendered non-dismissible (no swipe-to-dismiss, no
+ * backdrop tap) so it keeps the same "must choose Cancel or Confirm"
+ * guarantee AlertDialog provides on desktop.
+ */
+export function ResponsiveAlertDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  footer,
+  className,
+  preventEscapeClose = false,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  className?: string;
+  /** Block Escape from dismissing — for flows that must be resolved via an explicit footer action. */
+  preventEscapeClose?: boolean;
+}) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} dismissible={false}>
+        <DrawerContent
+          className={cn(
+            'max-h-[92dvh] flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]',
+            className,
+          )}
+        >
+          <DrawerHeader className="text-left shrink-0">
+            <DrawerTitle>{title}</DrawerTitle>
+            {description && <DrawerDescription>{description}</DrawerDescription>}
+          </DrawerHeader>
+
+          <div className="overflow-y-auto px-4 flex-1 min-h-0">
+            {children}
+          </div>
+
+          {footer && (
+            <DrawerFooter className="pt-3 shrink-0 border-t mt-2">
+              {footer}
+            </DrawerFooter>
+          )}
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent
+        className={cn('max-h-[85vh] flex flex-col overflow-hidden', className)}
+        onEscapeKeyDown={preventEscapeClose ? (e) => e.preventDefault() : undefined}
+      >
+        <AlertDialogHeader className="shrink-0">
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
+        </AlertDialogHeader>
+
+        <div className="overflow-y-auto flex-1 min-h-0 -mx-1 px-1">
+          {children}
+        </div>
+
+        {footer && <AlertDialogFooter className="shrink-0 pt-2">{footer}</AlertDialogFooter>}
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

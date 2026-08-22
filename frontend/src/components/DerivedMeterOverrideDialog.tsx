@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { CorrectionReasonField } from '@/components/CorrectionReasonField';
@@ -39,54 +37,53 @@ export function DerivedMeterOverrideDialog({
   const canConfirm = parsed != null && Number.isFinite(parsed) && isReasonComplete(reason, customReason);
 
   return (
-    <AlertDialog
+    <ResponsiveAlertDialog
       open={open}
       onOpenChange={(o) => { if (!o && !busy) { reset(); onOpenChange(false); } }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Override {locatorName}</AlertDialogTitle>
-          <AlertDialogDescription>
-            This sets today's value by hand instead of waiting for the sweep.
-            If a sibling locator or the mother meter changes again for this
-            date, the next sweep may recompute and replace this value — you'll
-            get a notification if that happens.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="derivedmeteroverridedialog-new-value-m" className="text-xs text-muted-foreground">
-              New value (m³) <span className="text-danger">*</span>
-            </Label>
-            <Input
-              type="number" inputMode="decimal" value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={currentValue != null ? `Currently ${currentValue.toFixed(2)}` : 'e.g. 250.00'}
-            id="derivedmeteroverridedialog-new-value-m"/>
-          </div>
-          <CorrectionReasonField
-            reason={reason} onReasonChange={setReason}
-            customReason={customReason} onCustomReasonChange={setCustomReason}
-            label="Reason for this override"
-          />
-        </div>
-
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+      title={`Override ${locatorName}`}
+      description="This sets today's value by hand instead of waiting for the sweep.
+        If a sibling locator or the mother meter changes again for this
+        date, the next sweep may recompute and replace this value — you'll
+        get a notification if that happens."
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => { if (!busy) { reset(); onOpenChange(false); } }}
+          >
+            Cancel
+          </Button>
+          <Button
             disabled={!canConfirm || busy}
-            onClick={async (e) => {
-              e.preventDefault();
+            onClick={async () => {
               if (!canConfirm || parsed == null) return;
               await onConfirm(parsed, resolveReason(reason, customReason));
               reset();
             }}
           >
             {busy ? 'Saving…' : 'Save override'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      )}
+    >
+      <div className="space-y-3 pb-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="derivedmeteroverridedialog-new-value-m" className="text-xs text-muted-foreground">
+            New value (m³) <span className="text-danger">*</span>
+          </Label>
+          <Input
+            type="number" inputMode="decimal" value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={currentValue != null ? `Currently ${currentValue.toFixed(2)}` : 'e.g. 250.00'}
+          id="derivedmeteroverridedialog-new-value-m"/>
+        </div>
+        <CorrectionReasonField
+          reason={reason} onReasonChange={setReason}
+          customReason={customReason} onCustomReasonChange={setCustomReason}
+          label="Reason for this override"
+        />
+      </div>
+    </ResponsiveAlertDialog>
   );
 }

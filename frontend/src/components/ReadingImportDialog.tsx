@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useDraft } from '@/hooks/useDraft';
@@ -23,11 +22,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { ResponsiveDialog, ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -322,16 +317,33 @@ export function ImportReadingsDialog({
   const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            {title}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-1">
+    <>
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o && !busy) onClose(); }}
+      title={(
+        <span className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          {title}
+        </span>
+      )}
+      className="max-w-lg"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-primary text-white hover:bg-primary/90"
+            data-testid="confirm-import-btn"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </div>
+      )}
+    >
+        <div className="space-y-4 pb-4">
 
           {/* Download template */}
           <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
@@ -472,72 +484,69 @@ export function ImportReadingsDialog({
             </div>
           )}
 
-          {/* DB-level duplicate confirmation (replaces window.confirm) */}
-          <AlertDialog open={!!dupConfirm}>
-            <AlertDialogContent
-              onEscapeKeyDown={(e) => e.preventDefault()}
-            >
-              <AlertDialogHeader>
-                <AlertDialogTitle className="flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4 text-warn" /> Duplicate detected
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  A reading for "{dupConfirm?.label}" already exists{' '}
-                  {dupConfirm?.isDateOnly ? 'on this date' : 'at this date & time'}.
-                  Overwrite it, or skip this row?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="gap-2 sm:flex-wrap">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => handleDupDecision('skip', true)}
-                  title="Skip this and all remaining duplicates"
-                >
-                  Skip All
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => handleDupDecision('skip')}
-                >
-                  Skip
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
-                  onClick={() => handleDupDecision('overwrite', true)}
-                  title="Overwrite this and all remaining duplicates"
-                >
-                  Overwrite All
-                </Button>
-                <AlertDialogAction
-                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
-                  onClick={() => handleDupDecision('overwrite')}
-                >
-                  Overwrite
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
+    </ResponsiveDialog>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+    {/* DB-level duplicate confirmation (replaces window.confirm). A second,
+        independent dialog stacked on top of the import dialog above — must
+        stay explicit-choice-only (no Escape, no outside click, no swipe),
+        same guarantee AlertDialog gave it on desktop. */}
+    <ResponsiveAlertDialog
+      open={!!dupConfirm}
+      onOpenChange={() => { /* explicit-choice only — see handleDupDecision */ }}
+      preventEscapeClose
+      title={(
+        <span className="flex items-center gap-1.5">
+          <AlertCircle className="h-4 w-4 text-warn" /> Duplicate detected
+        </span>
+      )}
+      description={(
+        <>
+          A reading for "{dupConfirm?.label}" already exists{' '}
+          {dupConfirm?.isDateOnly ? 'on this date' : 'at this date & time'}.
+          Overwrite it, or skip this row?
+        </>
+      )}
+      footer={(
+        <div className="flex gap-2 flex-wrap justify-end w-full">
           <Button
-            onClick={doImport}
-            disabled={!canSubmit}
-            className="bg-primary text-white hover:bg-primary/90"
-            data-testid="confirm-import-btn"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => handleDupDecision('skip', true)}
+            title="Skip this and all remaining duplicates"
           >
-            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+            Skip All
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => handleDupDecision('skip')}
+          >
+            Skip
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
+            onClick={() => handleDupDecision('overwrite', true)}
+            title="Overwrite this and all remaining duplicates"
+          >
+            Overwrite All
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
+            onClick={() => handleDupDecision('overwrite')}
+          >
+            Overwrite
+          </Button>
+        </div>
+      )}
+    >
+      {null}
+    </ResponsiveAlertDialog>
+    </>
   );
 }
 
