@@ -35,6 +35,15 @@ import { cn } from '@/lib/utils';
  * never lose access to their primary action button, which was the root
  * cause of the correction-request dialog being unreachable on small
  * screens (see CorrectionRequestDialog.tsx).
+ *
+ * Pass `bodyScroll={false}` for content that already manages its own
+ * internal scroll regions — e.g. a fixed filter row above an
+ * independently-scrolling list (see DowntimeEventsModal.tsx). Wrapping
+ * that in another `overflow-y-auto` would nest two scroll containers,
+ * which is exactly the kind of scroll-trapping that's fiddly on touch.
+ * With it false, the body slot is still height-constrained (`flex-1
+ * min-h-0`) so the content's own `flex-1`/`overflow-auto` children size
+ * correctly against it — it just doesn't scroll a second time itself.
  */
 export function ResponsiveDialog({
   open,
@@ -45,6 +54,7 @@ export function ResponsiveDialog({
   footer,
   className,
   dismissible = true,
+  bodyScroll = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +66,8 @@ export function ResponsiveDialog({
   className?: string;
   /** Set false for flows that must be confirmed/cancelled explicitly (mirrors AlertDialog). */
   dismissible?: boolean;
+  /** Set false when children manage their own internal scroll region(s). */
+  bodyScroll?: boolean;
 }) {
   const isMobile = useIsMobile();
 
@@ -77,7 +89,7 @@ export function ResponsiveDialog({
             {description && <DrawerDescription>{description}</DrawerDescription>}
           </DrawerHeader>
 
-          <div className="overflow-y-auto px-4 flex-1 min-h-0">
+          <div className={cn('px-4 flex-1 min-h-0', bodyScroll ? 'overflow-y-auto' : 'overflow-hidden flex flex-col')}>
             {children}
           </div>
 
@@ -99,7 +111,10 @@ export function ResponsiveDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
 
-        <div className="overflow-y-auto flex-1 min-h-0 -mx-1 px-1">
+        <div className={cn(
+          'flex-1 min-h-0',
+          bodyScroll ? 'overflow-y-auto -mx-1 px-1' : 'overflow-hidden flex flex-col',
+        )}>
           {children}
         </div>
 

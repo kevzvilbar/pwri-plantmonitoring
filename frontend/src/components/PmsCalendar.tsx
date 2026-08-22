@@ -12,11 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { ResponsiveDialog, ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Loader2, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
@@ -550,41 +546,50 @@ function ChecklistDialog({ item, isManager, onClose, onEdit, onDelete }: {
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-start justify-between gap-2 pr-6">
-            <div className="min-w-0">
-              <DialogTitle className="text-base truncate">
-                {item.template.equipment_name}
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground">
-                {item.template.category} · {item.template.frequency} · {format(item.date, 'EEE, MMM d, yyyy')}
-              </p>
-            </div>
-            {isManager && (
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  type="button" size="icon" variant="ghost" className="h-7 w-7"
-                  aria-label="Edit this PMS schedule"
-                  data-testid="button-edit-open-item"
-                  onClick={() => onEdit(item.template)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button" size="icon" variant="ghost" className="h-7 w-7 text-danger hover:text-danger"
-                  aria-label="Delete this PMS schedule"
-                  data-testid="button-delete-open-item"
-                  onClick={() => onDelete(item.template)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      title={(
+        <div className="flex items-start justify-between gap-2 pr-6">
+          <div className="min-w-0">
+            <span className="text-base truncate block">{item.template.equipment_name}</span>
+            <p className="text-xs text-muted-foreground font-normal">
+              {item.template.category} · {item.template.frequency} · {format(item.date, 'EEE, MMM d, yyyy')}
+            </p>
           </div>
-        </DialogHeader>
-
+          {isManager && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                type="button" size="icon" variant="ghost" className="h-7 w-7"
+                aria-label="Edit this PMS schedule"
+                data-testid="button-edit-open-item"
+                onClick={() => onEdit(item.template)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button" size="icon" variant="ghost" className="h-7 w-7 text-danger hover:text-danger"
+                aria-label="Delete this PMS schedule"
+                data-testid="button-delete-open-item"
+                onClick={() => onDelete(item.template)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      className="max-w-lg w-[95vw]"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : allDone ? 'Mark Complete' : 'Save Progress'}
+          </Button>
+        </div>
+      )}
+    >
+      <div className="space-y-4 pb-4">
         {steps.length === 0 ? (
           <p className="text-xs text-muted-foreground py-4 text-center">
             This template has no checklist steps. Edit the template to add some.
@@ -617,15 +622,8 @@ function ChecklistDialog({ item, isManager, onClose, onEdit, onDelete }: {
           <label htmlFor="pms-findings" className="text-xs font-medium">Findings / Notes (Optional)</label>
           <Textarea id="pms-findings" value={findings} onChange={(e) => setFindings(e.target.value)} rows={2} />
         </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : allDone ? 'Mark Complete' : 'Save Progress'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </ResponsiveDialog>
   );
 }
 
@@ -670,73 +668,71 @@ function EditTemplateDialog({ template, onClose }: { template: Template; onClose
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base">Edit PMS Schedule</DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            Changes apply going forward. Already-completed checklist history is kept.
-          </p>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <Label htmlFor="pmscalendar-category">Category</Label>
-              <Select value={v.category} onValueChange={(x) => setV({ ...v, category: x })}>
-                <SelectTrigger data-testid="select-edit-category" id="pmscalendar-category"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PMS_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="pmscalendar-frequency">Frequency</Label>
-              <Select value={v.frequency} onValueChange={(x) => setV({ ...v, frequency: x as Template['frequency'] })}>
-                <SelectTrigger data-testid="select-edit-frequency" id="pmscalendar-frequency"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PMS_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="pmscalendar-equipment-name">Equipment Name</Label>
-            <Input
-              value={v.equipment_name}
-              data-testid="input-edit-equipment-name"
-              onChange={(e) => setV({ ...v, equipment_name: e.target.value })}
-            id="pmscalendar-equipment-name"/>
-          </div>
-          <div>
-            <Label htmlFor="pmscalendar-schedule-start-date">Schedule Start Date</Label>
-            <Input
-              type="date"
-              value={v.schedule_start_date}
-              data-testid="input-edit-start-date"
-              onChange={(e) => setV({ ...v, schedule_start_date: e.target.value })}
-            id="pmscalendar-schedule-start-date"/>
-          </div>
-          <div>
-            <Label htmlFor="pmscalendar-checklist-steps-one-per-line">Checklist Steps (One Per Line)</Label>
-            <Textarea
-              value={v.checklist_steps}
-              rows={6}
-              data-testid="textarea-edit-steps"
-              onChange={(e) => setV({ ...v, checklist_steps: e.target.value })}
-            id="pmscalendar-checklist-steps-one-per-line"/>
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2">
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      title="Edit PMS Schedule"
+      description="Changes apply going forward. Already-completed checklist history is kept."
+      className="max-w-lg w-[95vw]"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={save} disabled={saving} data-testid="button-save-edit-template">
             {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    >
+      <div className="space-y-3 pb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <Label htmlFor="pmscalendar-category">Category</Label>
+            <Select value={v.category} onValueChange={(x) => setV({ ...v, category: x })}>
+              <SelectTrigger data-testid="select-edit-category" id="pmscalendar-category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PMS_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="pmscalendar-frequency">Frequency</Label>
+            <Select value={v.frequency} onValueChange={(x) => setV({ ...v, frequency: x as Template['frequency'] })}>
+              <SelectTrigger data-testid="select-edit-frequency" id="pmscalendar-frequency"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PMS_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="pmscalendar-equipment-name">Equipment Name</Label>
+          <Input
+            value={v.equipment_name}
+            data-testid="input-edit-equipment-name"
+            onChange={(e) => setV({ ...v, equipment_name: e.target.value })}
+          id="pmscalendar-equipment-name"/>
+        </div>
+        <div>
+          <Label htmlFor="pmscalendar-schedule-start-date">Schedule Start Date</Label>
+          <Input
+            type="date"
+            value={v.schedule_start_date}
+            data-testid="input-edit-start-date"
+            onChange={(e) => setV({ ...v, schedule_start_date: e.target.value })}
+          id="pmscalendar-schedule-start-date"/>
+        </div>
+        <div>
+          <Label htmlFor="pmscalendar-checklist-steps-one-per-line">Checklist Steps (One Per Line)</Label>
+          <Textarea
+            value={v.checklist_steps}
+            rows={6}
+            data-testid="textarea-edit-steps"
+            onChange={(e) => setV({ ...v, checklist_steps: e.target.value })}
+          id="pmscalendar-checklist-steps-one-per-line"/>
+        </div>
+      </div>
+    </ResponsiveDialog>
   );
 }
 
@@ -765,18 +761,22 @@ function DeleteTemplateAlert({ template, onClose, onDeleted }: {
   };
 
   return (
-    <AlertDialog open onOpenChange={(o) => !o && !deleting && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-danger">Delete PMS schedule?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This permanently removes <strong>{template.equipment_name}</strong> ({template.category} · {template.frequency}),
-            including its checklist history. This cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleting} data-testid="button-cancel-delete-template">Cancel</AlertDialogCancel>
-          <AlertDialogAction
+    <ResponsiveAlertDialog
+      open
+      onOpenChange={(o) => { if (!o && !deleting) onClose(); }}
+      title={<span className="text-danger">Delete PMS schedule?</span>}
+      description={(
+        <>
+          This permanently removes <strong>{template.equipment_name}</strong> ({template.category} · {template.frequency}),
+          including its checklist history. This cannot be undone.
+        </>
+      )}
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" disabled={deleting} data-testid="button-cancel-delete-template" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
             onClick={confirmDelete}
             disabled={deleting}
             className="bg-danger text-danger-foreground hover:bg-danger/90"
@@ -784,10 +784,12 @@ function DeleteTemplateAlert({ template, onClose, onDeleted }: {
           >
             {deleting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             {deleting ? 'Deleting…' : 'Delete'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      )}
+    >
+      {null}
+    </ResponsiveAlertDialog>
   );
 }
 
@@ -876,16 +878,19 @@ function ManageSchedulesDialog({ templates, onClose }: {
 
   return (
     <>
-      <Dialog open onOpenChange={(o) => !o && !bulkDeleting && onClose()}>
-        <DialogContent className="max-w-lg w-[95vw] max-h-[85vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="text-base">Manage PMS Schedules</DialogTitle>
-            <p className="text-xs text-muted-foreground">
-              Select one or more schedules — or an equipment's full set of frequencies — to delete.
-              This removes every occurrence and its checklist history and cannot be undone.
-            </p>
-          </DialogHeader>
-
+      <ResponsiveDialog
+        open
+        onOpenChange={(o) => { if (!o && !bulkDeleting) onClose(); }}
+        title="Manage PMS Schedules"
+        description="Select one or more schedules — or an equipment's full set of frequencies — to delete.
+          This removes every occurrence and its checklist history and cannot be undone."
+        className="max-w-lg w-[95vw]"
+        bodyScroll={false}
+        footer={(
+          <Button variant="outline" onClick={onClose} disabled={bulkDeleting}>Close</Button>
+        )}
+      >
+        <div className="flex flex-col gap-3 h-full min-h-0 pb-1">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -977,27 +982,30 @@ function ManageSchedulesDialog({ templates, onClose }: {
               </Button>
             </div>
           )}
+        </div>
+      </ResponsiveDialog>
 
-          <DialogFooter className="shrink-0">
-            <Button variant="outline" onClick={onClose} disabled={bulkDeleting}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={bulkDeletePending} onOpenChange={(o) => !o && setBulkDeletePending(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-danger">
-              Delete {selectedIds.size} PMS schedule{selectedIds.size === 1 ? '' : 's'}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the selected schedules — every past and future occurrence and
-              their checklist history. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkDeleting} data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction
+      <ResponsiveAlertDialog
+        open={bulkDeletePending}
+        onOpenChange={(o) => { if (!o) setBulkDeletePending(false); }}
+        title={(
+          <span className="text-danger">
+            Delete {selectedIds.size} PMS schedule{selectedIds.size === 1 ? '' : 's'}?
+          </span>
+        )}
+        description="This permanently removes the selected schedules — every past and future occurrence and
+          their checklist history. This cannot be undone."
+        footer={(
+          <div className="flex gap-2 justify-end w-full">
+            <Button
+              variant="outline"
+              disabled={bulkDeleting}
+              data-testid="button-cancel-bulk-delete"
+              onClick={() => setBulkDeletePending(false)}
+            >
+              Cancel
+            </Button>
+            <Button
               onClick={bulkDelete}
               disabled={bulkDeleting}
               className="bg-danger text-danger-foreground hover:bg-danger/90"
@@ -1005,10 +1013,12 @@ function ManageSchedulesDialog({ templates, onClose }: {
             >
               {bulkDeleting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               {bulkDeleting ? 'Deleting…' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        )}
+      >
+        {null}
+      </ResponsiveAlertDialog>
     </>
   );
 }
