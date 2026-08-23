@@ -35,6 +35,7 @@ import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit } from './helpers';
+import { getHourBucket } from '@/lib/hourlyReadingGuard';
 
 interface Props {
   row: any;
@@ -122,6 +123,29 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
     if (!reason) { toast.error('Select a reason for this edit'); return; }
     if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
+
+    // Hourly cadence guard — same one-reading-per-clock-hour rule the create
+    // form enforces (PretreatmentAndROLog.tsx). Excludes this row's own id so
+    // an edit that leaves the reading in the same hour (or only changes other
+    // fields) never collides with itself.
+    const hourBucket = getHourBucket(dt);
+    const { data: existingHour, error: hourError } = await supabase
+      .from('ro_pretreatment_readings')
+      .select('id')
+      .eq('train_id', trainId)
+      .neq('id', row.id)
+      .gte('reading_datetime', hourBucket.startISO)
+      .lt('reading_datetime', hourBucket.endISO)
+      .limit(1);
+    if (hourError) { setSaving(false); toast.error(friendlyError(hourError)); return; }
+    if (existingHour && existingHour.length > 0) {
+      setSaving(false);
+      toast.error(
+        `This train already has another Pre-Treatment reading between ${hourBucket.label}. ` +
+        `Only one reading is allowed per hour — pick a different time.`,
+      );
+      return;
+    }
 
     const payload = {
       reading_datetime:        new Date(dt).toISOString(),
