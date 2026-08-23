@@ -213,69 +213,77 @@ export default function ManagerScorecard() {
           onRetry={refetch}
         >
           <div className="border rounded-lg overflow-hidden text-xs">
-            <table className="w-full">
-              <thead className="bg-muted/40">
-                <tr>
-                  {['Plant', 'Manager(s)', 'Completeness', 'Open exceptions', 'Error rate', 'Status'].map((h) => (
-                    <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => {
-                  const meta = STATUS_META[r.status];
-                  const StatusIcon = meta.icon;
-                  const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
-                  const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
-                  return (
-                    <tr key={r.plant_id} className="border-t">
-                      <td className="px-3 py-2.5 font-medium">{r.plant_name}</td>
-                      <td className="px-3 py-2.5">
-                        {r.manager_names.length
-                          ? <span className="text-foreground/90">{r.manager_names.join(', ')}</span>
-                          : <span className="text-destructive font-medium">Unassigned</span>}
-                      </td>
-                      <td className="px-3 py-2.5 min-w-[120px]">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-muted rounded-full h-1.5">
-                            <div
-                              className={cn('h-1.5 rounded-full', pctColor(r.overall_completeness_pct))}
-                              style={{ width: `${Math.max(2, r.overall_completeness_pct ?? 0)}%` }}
-                            />
+            {/* overflow-x-auto on this inner wrapper, not the outer
+                overflow-hidden (kept purely for the rounded-corner clipping
+                trick) — same fix as DataCorrections.tsx's three tables:
+                without it, this 6-column table doesn't just get cramped on
+                a phone, overflow-hidden silently *hides* the rightmost
+                columns with no way to scroll to them. */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead className="bg-muted/40">
+                  <tr>
+                    {['Plant', 'Manager(s)', 'Completeness', 'Open exceptions', 'Error rate', 'Status'].map((h) => (
+                      <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((r) => {
+                    const meta = STATUS_META[r.status];
+                    const StatusIcon = meta.icon;
+                    const oldestOpenDays = Math.max(r.open_pending_review_oldest_days, r.open_correction_oldest_days);
+                    const openCount = r.unexplained_gaps_in_window + r.open_pending_review_count + r.open_correction_count;
+                    return (
+                      <tr key={r.plant_id} className="border-t">
+                        <td className="px-3 py-2.5 font-medium whitespace-nowrap">{r.plant_name}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {r.manager_names.length
+                            ? <span className="text-foreground/90">{r.manager_names.join(', ')}</span>
+                            : <span className="text-destructive font-medium">Unassigned</span>}
+                        </td>
+                        <td className="px-3 py-2.5 min-w-[120px]">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-muted rounded-full h-1.5">
+                              <div
+                                className={cn('h-1.5 rounded-full', pctColor(r.overall_completeness_pct))}
+                                style={{ width: `${Math.max(2, r.overall_completeness_pct ?? 0)}%` }}
+                              />
+                            </div>
+                            <span className="tabular-nums text-muted-foreground shrink-0">{fmtPct(r.overall_completeness_pct)}</span>
                           </div>
-                          <span className="tabular-nums text-muted-foreground shrink-0">{fmtPct(r.overall_completeness_pct)}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {openCount > 0 ? (
-                          <span title="Unexplained gaps + pending reviews + pending correction requests">
-                            <span className="font-medium">{openCount}</span>
-                            {oldestOpenDays > 0 && (
-                              <span className="text-muted-foreground"> · oldest {oldestOpenDays}d</span>
-                            )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {openCount > 0 ? (
+                            <span title="Unexplained gaps + pending reviews + pending correction requests">
+                              <span className="font-medium">{openCount}</span>
+                              {oldestOpenDays > 0 && (
+                                <span className="text-muted-foreground"> · oldest {oldestOpenDays}d</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={cn('font-mono', (r.error_rate_pct ?? 0) >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground')}>
+                            {r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}
                           </span>
-                        ) : (
-                          <span className="text-muted-foreground">0</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className={cn('font-mono', (r.error_rate_pct ?? 0) >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground')}>
-                          {r.error_rate_pct === null ? '—' : `${r.error_rate_pct.toFixed(1)}%`}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <StatusPill tone={meta.tone}>
-                          <StatusIcon className="h-3 w-3" />
-                          {meta.label}
-                        </StatusPill>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <StatusPill tone={meta.tone}>
+                            <StatusIcon className="h-3 w-3" />
+                            {meta.label}
+                          </StatusPill>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </DataState>
       </Card>

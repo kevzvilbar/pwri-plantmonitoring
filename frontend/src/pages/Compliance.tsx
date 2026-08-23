@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { useTabPersist } from '@/hooks/useTabPersist';
 import { useQuery } from '@tanstack/react-query';
 import { DataState } from '@/components/DataState';
@@ -1065,75 +1065,80 @@ export default function Compliance() {
               {/* NEW: Violations table with drill-down rows */}
               {result.violations.length > 0 && (
                 <Card className="p-0 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-xs text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left w-6"></th>
-                        <th className="px-3 py-2 text-left">Severity</th>
-                        <th className="px-3 py-2 text-left">Metric</th>
-                        <th className="px-3 py-2 text-right">Value</th>
-                        <th className="px-3 py-2 text-right">Limit</th>
-                        <th className="px-3 py-2 text-left">Message</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.violations.map((v) => {
-                        const rowKey = v.code + v.metric;
-                        const isExpanded = expandedViolation === rowKey;
-                        const rowData = dailyRows.filter(
-                          (r) => r[v.metric] !== undefined && r[v.metric] !== null
-                        );
-                        return (
-                          <>
-                            <tr
-                              key={rowKey}
-                              className="border-t hover:bg-muted/30 cursor-pointer transition-colors"
-                              onClick={() => setExpandedViolation(isExpanded ? null : rowKey)}
-                            >
-                              <td className="px-3 py-2 text-muted-foreground">
-                                {isExpanded
-                                  ? <ChevronDown className="h-3.5 w-3.5" />
-                                  : <ChevronRight className="h-3.5 w-3.5" />}
-                              </td>
-                              <td className="px-3 py-2"><SeverityBadge sev={v.severity} /></td>
-                              <td className="px-3 py-2 font-mono text-xs">{v.metric}</td>
-                              <td className="px-3 py-2 text-right font-mono text-xs">{v.value ?? '—'}</td>
-                              <td className="px-3 py-2 text-right font-mono text-xs">
-                                {v.threshold}{' '}
-                                <span className="text-muted-foreground">{v.comparator}</span>
-                              </td>
-                              <td className="px-3 py-2 text-xs">{v.message}</td>
-                            </tr>
-                            {/* NEW: Drill-down sparkline row */}
-                            {isExpanded && (
-                              <tr key={rowKey + '-drill'} className="bg-muted/20 border-t border-dashed">
-                                <td colSpan={6} className="px-5 py-3">
-                                  <div className="text-xs font-medium text-muted-foreground mb-1">
-                                    Daily breakdown — <span className="font-mono">{v.metric}</span>
-                                    <span className="ml-2 text-danger">
-                                      Red dots = threshold breached
-                                    </span>
-                                  </div>
-                                  {rowData.length > 0 ? (
-                                    <Sparkline
-                                      data={rowData}
-                                      metricKey={v.metric}
-                                      threshold={v.threshold}
-                                      comparator={v.comparator}
-                                    />
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground italic">
-                                      No daily data available for this metric.
-                                    </p>
-                                  )}
+                  {/* overflow-x-auto on this inner wrapper, not the Card's
+                      own overflow-hidden (kept for the rounded-corner
+                      clipping trick) — same fix as DataCorrections.tsx and
+                      ManagerScorecard.tsx's tables. */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left w-6"></th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap">Severity</th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap">Metric</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap">Value</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap">Limit</th>
+                          <th className="px-3 py-2 text-left">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.violations.map((v) => {
+                          const rowKey = v.code + v.metric;
+                          const isExpanded = expandedViolation === rowKey;
+                          const rowData = dailyRows.filter(
+                            (r) => r[v.metric] !== undefined && r[v.metric] !== null
+                          );
+                          return (
+                            <Fragment key={rowKey}>
+                              <tr
+                                className="border-t hover:bg-muted/30 cursor-pointer transition-colors"
+                                onClick={() => setExpandedViolation(isExpanded ? null : rowKey)}
+                              >
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {isExpanded
+                                    ? <ChevronDown className="h-3.5 w-3.5" />
+                                    : <ChevronRight className="h-3.5 w-3.5" />}
                                 </td>
+                                <td className="px-3 py-2"><SeverityBadge sev={v.severity} /></td>
+                                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{v.metric}</td>
+                                <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">{v.value ?? '—'}</td>
+                                <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">
+                                  {v.threshold}{' '}
+                                  <span className="text-muted-foreground">{v.comparator}</span>
+                                </td>
+                                <td className="px-3 py-2 text-xs">{v.message}</td>
                               </tr>
-                            )}
-                          </>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              {/* NEW: Drill-down sparkline row */}
+                              {isExpanded && (
+                                <tr className="bg-muted/20 border-t border-dashed">
+                                  <td colSpan={6} className="px-5 py-3">
+                                    <div className="text-xs font-medium text-muted-foreground mb-1">
+                                      Daily breakdown — <span className="font-mono">{v.metric}</span>
+                                      <span className="ml-2 text-danger">
+                                        Red dots = threshold breached
+                                      </span>
+                                    </div>
+                                    {rowData.length > 0 ? (
+                                      <Sparkline
+                                        data={rowData}
+                                        metricKey={v.metric}
+                                        threshold={v.threshold}
+                                        comparator={v.comparator}
+                                      />
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        No daily data available for this metric.
+                                      </p>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </Card>
               )}
             </>
