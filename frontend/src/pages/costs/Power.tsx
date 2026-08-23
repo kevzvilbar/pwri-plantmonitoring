@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { ComputedInput } from '@/components/ComputedInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
 import { AlertTriangle } from 'lucide-react';
 import { ExportButton } from '@/components/ExportButton';
 import { PlantPicker } from '@/components/costs/PlantPicker';
@@ -465,19 +465,21 @@ export function Power() {
       </Card>
 
       {/* Multiplier change confirmation dialog */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change Multiplier?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The multiplier is changing from <strong>×{v.multiplier}</strong> to <strong>×{pendingMultiplier}</strong>.
-              This should only be done if the CT/PT transformer ratio on the meter has physically changed.
-              All future kWh calculations for this plant will use the new value.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingMultiplier(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+      <ResponsiveAlertDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Change Multiplier?"
+        description={(
+          <>
+            The multiplier is changing from <strong>×{v.multiplier}</strong> to <strong>×{pendingMultiplier}</strong>.
+            This should only be done if the CT/PT transformer ratio on the meter has physically changed.
+            All future kWh calculations for this plant will use the new value.
+          </>
+        )}
+        footer={(
+          <div className="flex gap-2 justify-end w-full">
+            <Button variant="outline" onClick={() => setPendingMultiplier(null)}>Cancel</Button>
+            <Button
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (pendingMultiplier !== null) setV(prev => ({ ...prev, multiplier: pendingMultiplier }));
@@ -486,10 +488,12 @@ export function Power() {
               }}
             >
               Yes, change multiplier
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        )}
+      >
+        {null}
+      </ResponsiveAlertDialog>
     </div>
   );
 }

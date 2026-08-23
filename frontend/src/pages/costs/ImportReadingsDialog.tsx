@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -115,16 +115,31 @@ export function ImportReadingsDialog({
   const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            {title}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-1">
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o && !busy) onClose(); }}
+      title={(
+        <span className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          {title}
+        </span>
+      )}
+      className="max-w-lg"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-primary text-white hover:bg-primary/90"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </div>
+      )}
+    >
+        <div className="space-y-4 pb-4">
 
           {/* Download template */}
           <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
@@ -281,19 +296,6 @@ export function ImportReadingsDialog({
             </div>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
-          <Button
-            onClick={doImport}
-            disabled={!canSubmit}
-            className="bg-primary text-white hover:bg-primary/90"
-          >
-            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ResponsiveDialog>
   );
 }
