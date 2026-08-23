@@ -30,6 +30,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { usePlants } from '@/hooks/usePlants';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -959,9 +960,9 @@ function SidePanel({
   return (
     <div
       className={`absolute right-0 top-0 bottom-0 z-30 flex flex-col bg-card border-l border-border shadow-2xl transition-all duration-300 ease-in-out overflow-hidden ${
-        open ? 'w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'
+        open ? 'w-full sm:w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'
       }`}
-      style={{ minWidth: open ? 288 : 0 }}
+      style={{ minWidth: open ? undefined : 0 }}
     >
       {/* Panel header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40 shrink-0">
@@ -1211,6 +1212,7 @@ function SidePanel({
 export default function PlantTopology() {
   const { isAdmin, isManager } = useAuth();
   const canEdit = usePermission('network_topology', 'edit');
+  const isMobile = useIsMobile();
   const { selectedPlantId } = useAppStore();
   const qc = useQueryClient();
 
@@ -1854,7 +1856,9 @@ export default function PlantTopology() {
           </span>
           <span>
             <strong className="text-primary">Navigate:</strong>{' '}
-            Scroll (H+V) · Alt+drag or middle-click to pan · Scroll to zoom
+            {isMobile
+              ? 'Drag to pan · Use the +/− buttons below to zoom'
+              : 'Scroll (H+V) · Alt+drag or middle-click to pan · Ctrl+scroll to zoom'}
           </span>
         </div>
       )}
@@ -1945,7 +1949,9 @@ export default function PlantTopology() {
               {activePlant?.name} — Water Treatment Flow
             </span>
             <span className="ml-auto text-3xs text-muted-foreground font-mono">
-              {dragItem ? '📌 Drop on any column to place node' : 'Scroll to pan · Alt+drag · Ctrl+scroll to zoom'}
+              {dragItem
+                ? '📌 Drop on any column to place node'
+                : isMobile ? 'Drag to pan · +/− to zoom' : 'Scroll to pan · Alt+drag · Ctrl+scroll to zoom'}
             </span>
           </div>
 
