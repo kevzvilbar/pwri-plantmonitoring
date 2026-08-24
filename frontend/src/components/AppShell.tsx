@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
 import { AppSidebar } from './AppSidebar';
+import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
@@ -83,6 +84,7 @@ export function AppShell() {
 
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar />
+          <OfflineBanner />
 
           {/*
             PageAnimationWrapper re-triggers the page-enter animation on route

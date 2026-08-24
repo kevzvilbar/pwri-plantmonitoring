@@ -6,16 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { fmtIsoDate } from '@/lib/format';
 import { Pencil, RefreshCw, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PAIRED_COL_TABLES } from './shared';
-
-// ── Paired-column tables: current_reading ↔ previous_reading ─────────────────
-const PAIRED_COL_TABLES = new Set(['well_readings', 'locator_readings', 'product_meter_readings']);
 
 // ── Edit Raw Value Dialog ──────────────────────────────────────────────────────
 
@@ -139,19 +136,30 @@ export function EditRawDialog({ open, onClose, reading, column, onSuccess }: Edi
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Pencil className="h-4 w-4" /> Edit Raw Value
-            {isPaired && (
-              <Badge variant="outline" className="text-2xs ml-1 border-primary text-primary">
-                Paired Edit
-              </Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      title={(
+        <span className="flex items-center gap-2">
+          <Pencil className="h-4 w-4" /> Edit Raw Value
+          {isPaired && (
+            <Badge variant="outline" className="text-2xs ml-1 border-primary text-primary">
+              Paired Edit
+            </Badge>
+          )}
+        </span>
+      )}
+      className="max-w-sm"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !newValue}>
+            {saving ? 'Saving…' : isPaired ? 'Save pair' : 'Save edit'}
+          </Button>
+        </div>
+      )}
+    >
+        <div className="space-y-3 pb-4">
           <div className="text-xs text-muted-foreground">
             {isPaired ? (
               <>Editing pair: <span className="font-mono font-semibold">{column}</span> &amp; <span className="font-mono font-semibold">{pairedCol}</span></>
@@ -231,14 +239,7 @@ export function EditRawDialog({ open, onClose, reading, column, onSuccess }: Edi
               : 'All edits are logged in the audit trail and cannot be deleted.'}
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !newValue}>
-            {saving ? 'Saving…' : isPaired ? 'Save pair' : 'Save edit'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ResponsiveDialog>
   );
 }
 
