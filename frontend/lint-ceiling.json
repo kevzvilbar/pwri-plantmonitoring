@@ -1,7 +1,25 @@
 {
-  "maxWarnings": 2106,
-  "lastUpdated": "2026-08-17",
+  "maxWarnings": 1730,
+  "lastUpdated": "2026-08-22",
   "history": [
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1730,
+      "previous": 1729,
+      "reason": "God-component extraction, part 2 of 4: split DataAnalysis.tsx (2322 lines, one exported page component plus 8 private sub-components: NormBadge, StatusBadge, EditRawDialog, LinearRegressionChart, RegressionDetail, RawDataTable, AuditLogTab, NormalizationAuditTab) into one file per component under pages/dataAnalysis/, plus a shared.ts for the cross-cutting types/constants several of them used (SOURCE_TABLES, ENTITY_CONFIG, TABLE_LABELS, etc.), plus lib/gapDetection.ts for the detectGaps algorithm (a self-contained 70-line function with no page dependency -- same treatment regressionCorrection.ts already got in an earlier pass). Net warning change from the split itself is 0 -- the +1 here is unrelated, picked up from Kevz's own mobile-ux-fixes/mobile-ux-fixes-round2 commits landing on main in between sessions, confirmed by running the checker on a fresh clone before touching this file. Caught a real bug in the extraction itself, not in the app: all 8 sub-components were originally declared as plain `function X(...)` (no `export`) since they only needed to be visible within the same file -- copied verbatim into their own files, they're unusable to any importer without `export` added. tsc --noEmit passed with 0 errors even with the missing exports (worth knowing for next time -- this project's isolatedModules + moduleResolution:bundler combination doesn't appear to hard-fail tsc on an import of a genuinely non-existent named export the way a stricter tsconfig would), only `npm run build` (the real bundler) would have caught it. Fixed before it went anywhere near a patch. tsc/eslint (0 errors)/201 tests/prod build all clean after the fix."
+    },
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1729,
+      "previous": 1741,
+      "reason": "God-component extraction, part 1 of 4 (see external review, 2026-08-18): split plants/trains/TrainDetail.tsx (2626 lines, 9 exported components bundled in one file) into one file per component -- EditTrainDialog.tsx, TrainHistoryChart.tsx, TrainMetricChart.tsx, TrainRODetailCharts.tsx, PretreatAFMChart.tsx, PretreatBoosterChart.tsx, PretreatHPPChart.tsx, PretreatCFChart.tsx, TrainOperatorLogModal.tsx -- each with its own pruned import list instead of the original's 35-import superset shared by everything. TrainsList.tsx (the only consumer) now imports directly from each. -12 net is import-pruning noise, not a real cleanup pass; don't read into it. Found a real bug during the split, not just moved code: recalculateTrainDeltas existed as three independent implementations (TrainDetail.tsx's TrainOperatorLogModal, ro-trains/helpers.tsx, and a third inside DataAnalysis.tsx), each drifted -- the TrainDetail.tsx copy never recalculated feed_meter_delta at all, and DataAnalysis.tsx's only ever touched permeate_meter_delta (feed AND reject both silently went stale after every regression correction it applied). Consolidated to one canonical version in helpers.tsx (feed+permeate+reject, plus the deltaCache hybrid-sync the TrainDetail.tsx copy had that helpers.tsx's didn't) -- see that function's own header comment. TrainHistoryChart.tsx and TrainMetricChart.tsx are extracted faithfully but are dead code (not imported anywhere, confirmed via repo-wide grep before and after the split) -- left in place, flagged to Kevz rather than deleted unprompted. tsc/eslint/194 tests/prod build all clean."
+    },
+    {
+      "date": "2026-08-20",
+      "maxWarnings": 1741,
+      "previous": 2106,
+      "reason": "Closed out the jsx-a11y/label-has-associated-control debt tracked since the 2026-08-17 entry below: all 362 warnings remaining at the time (9 had already been fixed piecemeal since the original 371) are now gone, -365 total (2106 -> 1741; a few of the -365 overlap with unrelated no-explicit-any noise churn from touched files, not all pure a11y). Every Label/control pair across all 55 affected files now has a real htmlFor/id association, generated from the label's own text (deterministic slugs, de-duplicated when a page repeats a label like \"Plant\"). Six shared components (PlantSelector, PlantPicker x2, ChemPlantPick, DesignationCombobox, DropZone in SmartImportPanel.tsx) gained or already had an optional `id` prop threaded through to their real trigger/input element. A double handful of cases were genuine false positives or non-control labels rather than missing associations, and were fixed accordingly rather than forced into htmlFor pairs: (1) Radix Switch/Checkbox render as button[role=switch|checkbox], not a native input, so a label correctly wrapping one (the standard WAI-ARIA pattern, with its own aria-label or visible wrapped text as the accessible name) still trips this rule -- documented with a one-line eslint-disable-next-line at each of the ~10 spots, same justification every time; (2) several Labels were section/group headers sitting above a set of buttons, a list of already-individually-labeled fields, or a whole sub-component (\"Identity\", \"GPS Coordinates\", \"Role & access\", \"Booster Pump Targets\", the AFM/booster-pump/filter-housing grids in EditPretreatReadingDialog.tsx) rather than one control -- swapped to plain <p> text, since a <label> implies a specific associated control that doesn't exist there; (3) a couple were read-only display values with no control at all (EmailChangeDialog.tsx's current-email row, NormalizeButton.tsx's original-value row) -- same treatment. tsc/eslint/194 tests/prod build all clean throughout."
+    },
     {
       "date": "2026-08-17",
       "maxWarnings": 2094,
@@ -82,6 +100,16 @@
       "maxWarnings": 2106,
       "previous": 2104,
       "reason": "Same Umapad follow-up, one more spot with the identical bug: ProductMetersStat (pages/plants/config/ProductMeters.tsx), the active/total counter shown on the Plants list page right next to the Wells/Locators/RO Trains stats fixed in the previous entry, had the same status-column-only counting. Now requires a fresh product_meter_readings_latest row too. +2 no-explicit-any for that view's .from() cast, same justification as the previous entry."
+    },
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1729,
+      "previous": 1741
+    },
+    {
+      "date": "2026-08-22",
+      "maxWarnings": 1730,
+      "previous": 1729
     }
   ]
 }

@@ -461,7 +461,7 @@ export function AssignLocatorsDialog({
                           </p>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <Label className="text-2xs">Target plant</Label>
+                              <Label htmlFor="productmeters-target-plant" className="text-2xs">Target plant</Label>
                               <Select
                                 value={mirror?.plantId ?? ''}
                                 onValueChange={async (pid) => {
@@ -469,7 +469,7 @@ export function AssignLocatorsDialog({
                                   await loadMirrorMeters(pid);
                                 }}
                               >
-                                <SelectTrigger className="h-7 text-xs">
+                                <SelectTrigger className="h-7 text-xs" id="productmeters-target-plant">
                                   <SelectValue placeholder="Select plant" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -482,7 +482,7 @@ export function AssignLocatorsDialog({
                               </Select>
                             </div>
                             <div>
-                              <Label className="text-2xs">Target meter</Label>
+                              <Label htmlFor="productmeters-target-meter" className="text-2xs">Target meter</Label>
                               <Select
                                 value={mirror?.meterId ?? ''}
                                 disabled={!mirror?.plantId}
@@ -490,7 +490,7 @@ export function AssignLocatorsDialog({
                                   setMirrorMap(prev => ({ ...prev, [l.id]: { ...prev[l.id], meterId: mid } }))
                                 }
                               >
-                                <SelectTrigger className="h-7 text-xs">
+                                <SelectTrigger className="h-7 text-xs" id="productmeters-target-meter">
                                   <SelectValue placeholder="Select meter" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -645,7 +645,7 @@ export function AddProductMeterDialog({
 
           {/* Name */}
           <div>
-            <Label>Name *</Label>
+            <Label htmlFor="productmeters-name">Name *</Label>
             <Input
               value={form.name}
               onChange={field('name')}
@@ -653,7 +653,7 @@ export function AddProductMeterDialog({
               autoFocus
               data-testid="product-meter-name-input"
               onKeyDown={(e) => e.key === 'Enter' && submit()}
-            />
+            id="productmeters-name"/>
           </div>
 
           {/* Meter details */}
@@ -663,35 +663,35 @@ export function AddProductMeterDialog({
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <Label className="text-xs">Brand</Label>
-                <Input value={form.meter_brand} onChange={field('meter_brand')} />
+                <Label htmlFor="productmeters-brand" className="text-xs">Brand</Label>
+                <Input value={form.meter_brand} onChange={field('meter_brand')} id="productmeters-brand"/>
               </div>
               <div>
-                <Label className="text-xs">Size</Label>
+                <Label htmlFor="productmeters-size" className="text-xs">Size</Label>
                 <div className="relative">
                   <Input
                     type="number" min="0" step="0.5"
                     value={form.meter_size} onChange={field('meter_size')}
                     className="pr-8"
-                  />
+                  id="productmeters-size"/>
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
                 </div>
               </div>
               <div>
-                <Label className="text-xs">Serial</Label>
-                <Input value={form.meter_serial} onChange={field('meter_serial')} />
+                <Label htmlFor="productmeters-serial" className="text-xs">Serial</Label>
+                <Input value={form.meter_serial} onChange={field('meter_serial')} id="productmeters-serial"/>
               </div>
             </div>
             <div>
-              <Label className="text-xs">Installed Date</Label>
-              <Input type="date" value={form.meter_installed_date} onChange={field('meter_installed_date')} />
+              <Label htmlFor="productmeters-installed-date" className="text-xs">Installed Date</Label>
+              <Input type="date" value={form.meter_installed_date} onChange={field('meter_installed_date')} id="productmeters-installed-date"/>
             </div>
           </div>
 
           {/* GPS */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label>GPS Coordinates</Label>
+              <p className="text-sm font-medium leading-none">GPS Coordinates</p>
               <div className="flex items-center gap-2">
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
@@ -708,12 +708,12 @@ export function AddProductMeterDialog({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Latitude</Label>
-                <Input placeholder="e.g. 10.295" value={form.gps_lat} onChange={field('gps_lat')} />
+                <Label htmlFor="productmeters-latitude" className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.295" value={form.gps_lat} onChange={field('gps_lat')} id="productmeters-latitude"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Longitude</Label>
-                <Input placeholder="e.g. 123.877" value={form.gps_lng} onChange={field('gps_lng')} />
+                <Label htmlFor="productmeters-longitude" className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.877" value={form.gps_lng} onChange={field('gps_lng')} id="productmeters-longitude"/>
               </div>
             </div>
           </div>
@@ -1395,14 +1395,14 @@ function PMEditTriggerBase({
             <DialogTitle>Rename Product Meter</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5 py-1">
-            <Label className="text-xs">Meter Name</Label>
+            <Label htmlFor="productmeters-meter-name" className="text-xs">Meter Name</Label>
             <Input
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="e.g. Main Line, Secondary Line…"
               onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
               autoFocus
-            />
+            id="productmeters-meter-name"/>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>

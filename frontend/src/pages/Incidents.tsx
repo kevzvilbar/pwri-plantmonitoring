@@ -147,16 +147,16 @@ function IncidentCard({ incident }: { incident: any }) {
           {hasDraft && <DraftBanner onDiscard={discardDraft} />}
 
           <div>
-            <Label className="text-xs">Root cause</Label>
-            <Textarea rows={2} value={v.root_cause} onChange={e => setV({ ...v, root_cause: e.target.value })} />
+            <Label htmlFor="incidents-root-cause" className="text-xs">Root cause</Label>
+            <Textarea rows={2} value={v.root_cause} onChange={e => setV({ ...v, root_cause: e.target.value })} id="incidents-root-cause"/>
           </div>
           <div>
-            <Label className="text-xs">Corrective action</Label>
-            <Textarea rows={2} value={v.corrective_action} onChange={e => setV({ ...v, corrective_action: e.target.value })} />
+            <Label htmlFor="incidents-corrective-action" className="text-xs">Corrective action</Label>
+            <Textarea rows={2} value={v.corrective_action} onChange={e => setV({ ...v, corrective_action: e.target.value })} id="incidents-corrective-action"/>
           </div>
           <div>
-            <Label className="text-xs">Preventive measures</Label>
-            <Textarea rows={2} value={v.preventive_measures} onChange={e => setV({ ...v, preventive_measures: e.target.value })} />
+            <Label htmlFor="incidents-preventive-measures" className="text-xs">Preventive measures</Label>
+            <Textarea rows={2} value={v.preventive_measures} onChange={e => setV({ ...v, preventive_measures: e.target.value })} id="incidents-preventive-measures"/>
           </div>
           <Button size="sm" onClick={close} className="w-full">Close incident</Button>
         </CollapsibleContent>
@@ -222,23 +222,23 @@ function Report() {
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label>Plant *</Label>
+          <Label htmlFor="incidents-plant">Plant *</Label>
           <Select value={v.plant_id} onValueChange={(x) => setV({ ...v, plant_id: x })}>
-            <SelectTrigger><SelectValue placeholder="Plant" /></SelectTrigger>
+            <SelectTrigger id="incidents-plant"><SelectValue placeholder="Plant" /></SelectTrigger>
             <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>Type</Label>
+          <Label htmlFor="incidents-type">Type</Label>
           <Select value={v.incident_type} onValueChange={(x) => setV({ ...v, incident_type: x })}>
-            <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+            <SelectTrigger id="incidents-type"><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
 
       <div>
-        <Label>Severity</Label>
+        <p className="text-sm font-medium">Severity</p>
         <div className="flex gap-1.5 mt-1">
           {SEVERITIES.map(s => (
             <Button key={s} size="sm" variant={v.severity === s ? 'default' : 'outline'} onClick={() => setV({ ...v, severity: s })}>
@@ -249,12 +249,12 @@ function Report() {
       </div>
 
       <section>
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">What</Label>
-        <Textarea value={v.what_description} onChange={e => setV({ ...v, what_description: e.target.value })} rows={3} placeholder="What happened?" />
+        <Label htmlFor="incidents-what" className="text-xs uppercase tracking-wider text-muted-foreground">What</Label>
+        <Textarea value={v.what_description} onChange={e => setV({ ...v, what_description: e.target.value })} rows={3} placeholder="What happened?" id="incidents-what"/>
       </section>
       <section>
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">Where</Label>
-        <Input value={v.where_location} onChange={e => setV({ ...v, where_location: e.target.value })} placeholder="Location/equipment" />
+        <Label htmlFor="incidents-where" className="text-xs uppercase tracking-wider text-muted-foreground">Where</Label>
+        <Input value={v.where_location} onChange={e => setV({ ...v, where_location: e.target.value })} placeholder="Location/equipment" id="incidents-where"/>
         <Button size="sm" variant="outline" className="mt-1" onClick={captureGPS}>
           <MapPin className="h-3 w-3 mr-1" />Capture GPS
         </Button>
@@ -265,29 +265,29 @@ function Report() {
         )}
       </section>
       <section>
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">When</Label>
-        <Input type="datetime-local" value={v.when_datetime} onChange={e => setV({ ...v, when_datetime: e.target.value })} />
+        <Label htmlFor="incidents-when" className="text-xs uppercase tracking-wider text-muted-foreground">When</Label>
+        <Input type="datetime-local" value={v.when_datetime} onChange={e => setV({ ...v, when_datetime: e.target.value })} id="incidents-when"/>
       </section>
       <section>
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">Who</Label>
-        <Input placeholder="Witness" value={v.witness} onChange={e => setV({ ...v, witness: e.target.value })} />
+        <Label htmlFor="incidents-who" className="text-xs uppercase tracking-wider text-muted-foreground">Who</Label>
+        <Input placeholder="Witness" value={v.witness} onChange={e => setV({ ...v, witness: e.target.value })} id="incidents-who"/>
       </section>
       <section className="grid grid-cols-2 gap-2">
         <div>
-          <Label className="text-xs">Weather</Label>
+          <Label htmlFor="incidents-weather" className="text-xs">Weather</Label>
           <Select value={v.weather} onValueChange={(x) => setV({ ...v, weather: x })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="incidents-weather"><SelectValue /></SelectTrigger>
             <SelectContent>{WEATHER.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label className="text-xs">Temp °C</Label>
-          <Input type="number" step="any" value={v.temperature_c} onChange={e => setV({ ...v, temperature_c: e.target.value })} />
+          <Label htmlFor="incidents-temp-c" className="text-xs">Temp °C</Label>
+          <Input type="number" step="any" value={v.temperature_c} onChange={e => setV({ ...v, temperature_c: e.target.value })} id="incidents-temp-c"/>
         </div>
       </section>
       <div>
-        <Label>Immediate action taken</Label>
-        <Textarea rows={2} value={v.immediate_action} onChange={e => setV({ ...v, immediate_action: e.target.value })} />
+        <Label htmlFor="incidents-immediate-action-taken">Immediate action taken</Label>
+        <Textarea rows={2} value={v.immediate_action} onChange={e => setV({ ...v, immediate_action: e.target.value })} id="incidents-immediate-action-taken"/>
       </div>
 
       <div className="flex gap-2 no-print">

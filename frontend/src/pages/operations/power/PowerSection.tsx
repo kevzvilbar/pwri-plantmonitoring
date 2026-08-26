@@ -46,16 +46,30 @@ import {
   invalidateProductMeterDash, invalidatePowerDash, invalidateRODash, invalidateChemDash,
 } from '../shared';
 
-const POWER_SCHEMA = 'plant_name*, meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
+const POWER_SCHEMA = 'plant_name*, meter_reading_kwh*, reading_datetime* (YYYY-MM-DDTHH:mm), meter_name (optional — for plants with more than one grid meter), solar_meter_reading (optional), solar_input_mode (raw|direct, optional), daily_solar_kwh (optional), daily_grid_kwh (optional)';
 const POWER_TEMPLATE_ROW = {
   plant_name: 'Plant A',
   meter_reading_kwh: '12345.6',
   reading_datetime: '2024-06-15T08:30',
+  meter_name: '',
   solar_meter_reading: '',
   solar_input_mode: '',
   daily_solar_kwh: '',
   daily_grid_kwh: '',
 };
+// Multi-row example: "Plant A" has a single grid meter, so meter_name is left
+// blank (defaults to that plant's only meter). "Plant B" stands in for a
+// multi-meter plant like SRP — one row per meter, same plant_name and same
+// reading_datetime, with meter_name set to that meter's exact configured
+// name (see Plants → Power) so all three merge into one reading instead of
+// overwriting each other.
+const POWER_TEMPLATE_ROWS = [
+  POWER_TEMPLATE_ROW,
+  { plant_name: 'Plant B', meter_reading_kwh: '597.18',  reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 1', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
+  { plant_name: 'Plant B', meter_reading_kwh: '3120.00', reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 2', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
+  { plant_name: 'Plant B', meter_reading_kwh: '9110.80', reading_datetime: '2024-06-15T08:30', meter_name: 'Grid Meter 3', solar_meter_reading: '', solar_input_mode: '', daily_solar_kwh: '', daily_grid_kwh: '' },
+];
+const POWER_HELP_TEXT = 'For plants with more than one grid meter: add one row per meter using the same plant_name and reading_datetime, and set meter_name to that meter\u2019s exact name from Plants \u2192 Power (or its position, e.g. "2"). Leave meter_name blank for single-meter plants.';
 
 export function validatePowerRow(r: Record<string, string>, i: number): string[] {
   const e: string[] = [];
@@ -89,19 +103,26 @@ async function insertPowerReadings(
     plantIdToName[p.id] = p.name.trim();
   });
 
-  // ── 2. Pre-load plant_power_config for all plants (grid meter names + multipliers) ──
-  // This allows resolving "SRP Grid Meter 1 STP" → plantId for SRP, meterIndex 0.
-  // Without this, multi-meter CSV rows all fall back to plantId, overwrite each other,
-  // and never write grid_meter_readings, so the history dialog shows no change.
-  type PlantPowerCfg = { names: string[]; multipliers: number[] };
+  // ── 2. Pre-load plant_power_config for all plants (grid meter names, count + multipliers) ──
+  // Lets a CSV row target a specific meter by name (e.g. "Grid Meter 1 STP")
+  // via the meter_name column, resolved against the plant's configured names.
+  // Without this, multi-meter CSV rows all fall back to meter 0, overwrite
+  // each other, and never write grid_meter_readings, so the history dialog
+  // shows no change for meters 2, 3, etc.
+  type PlantPowerCfg = { names: string[]; multipliers: number[]; count: number };
   const powerCfgByPlant: Record<string, PlantPowerCfg> = {};
   try {
     const { data: allCfgs } = await (supabase.from('plant_power_config' as any) as any)
-      .select('plant_id, grid_meter_names, grid_meter_multipliers');
+      .select('plant_id, grid_meter_names, grid_meter_multipliers, grid_meter_count');
     (allCfgs ?? []).forEach((c: any) => {
+      const names = Array.isArray(c.grid_meter_names) ? c.grid_meter_names.map(String) : [];
       powerCfgByPlant[c.plant_id] = {
-        names:       Array.isArray(c.grid_meter_names)        ? c.grid_meter_names.map(String)  : [],
-        multipliers: Array.isArray(c.grid_meter_multipliers)  ? c.grid_meter_multipliers.map(Number) : [],
+        names,
+        multipliers: Array.isArray(c.grid_meter_multipliers) ? c.grid_meter_multipliers.map(Number) : [],
+        // grid_meter_names is padded to a fixed length with unused default
+        // labels ("Grid Meter 4", ...) beyond what a plant actually has —
+        // count keeps meter_name matching scoped to real, configured meters.
+        count: Number(c.grid_meter_count) > 0 ? Number(c.grid_meter_count) : Math.max(1, names.length),
       };
     });
   } catch { /* table may not exist; single-meter path still works */ }
@@ -114,18 +135,47 @@ async function insertPowerReadings(
 
   // ── 3. Resolve each CSV row to { resolvedPlantId, meterIndex } ──────────────
   // Priority:
-  //   a) Exact match against plant name → meter 0  (single-meter / legacy path)
-  //   b) "${plantName} ${meterName}" composite → the matching plant + meter index
-  //   c) Fallback to the UI-selected plantId, meter 0
-  type ResolvedRow = { r: Record<string, string>; pid: string; mi: number };
-  const resolvedRows: ResolvedRow[] = rows.map(r => {
+  //   a) Exact match against plant name, then use the optional meter_name
+  //      column to pick which grid meter this row is for — by the meter's
+  //      exact configured name (case-insensitive) or a plain 1-based
+  //      position like "2". Blank/absent meter_name → meter 1 (index 0),
+  //      so single-meter plants and pre-existing CSVs need no changes.
+  //   b) Legacy "${plantName} ${meterName}" composite in plant_name itself
+  //      (undocumented, kept only for backward compatibility).
+  //   c) Fallback to the UI-selected plantId, same meter_name handling as (a).
+  // A meter_name that doesn't match any configured meter is a row-level
+  // error rather than a silent fall-through to meter 1 — silently applying
+  // it would overwrite the wrong meter's reading with no indication why.
+  type ResolvedRow = { r: Record<string, string>; pid: string; mi: number; meterError?: string };
+  const resolveMeterIndex = (pid: string, rawMeterName: string, rowNum: number): { mi: number; err?: string } => {
+    const trimmed = rawMeterName.trim();
+    if (!trimmed) return { mi: 0 };
+    const cfg = powerCfgByPlant[pid];
+    const count = cfg?.count && cfg.count > 0 ? cfg.count : Math.max(1, cfg?.names?.length ?? 1);
+    const asNum = Number(trimmed);
+    if (Number.isInteger(asNum) && asNum >= 1 && asNum <= count) return { mi: asNum - 1 };
+    const idx = (cfg?.names ?? []).slice(0, count).findIndex(n => n.toLowerCase() === trimmed.toLowerCase());
+    if (idx >= 0) return { mi: idx };
+    const plantLabel = plantIdToName[pid] ?? pid;
+    return {
+      mi: 0,
+      err: `Row ${rowNum}: meter_name "${trimmed}" doesn't match any configured meter for ${plantLabel} (check Plants \u2192 Power for the exact name) \u2014 this row's reading was not imported`,
+    };
+  };
+
+  const resolvedRows: ResolvedRow[] = rows.map((r, i) => {
     const csvName = r.plant_name?.trim() ?? '';
     const csvLower = csvName.toLowerCase();
+    const rowNum = i + 2; // header is row 1
 
-    // (a) Exact plant name match
-    if (plantNameToId[csvLower]) return { r, pid: plantNameToId[csvLower], mi: 0 };
+    // (a) Exact plant name match → resolve meter via meter_name column
+    if (plantNameToId[csvLower]) {
+      const pid = plantNameToId[csvLower];
+      const { mi, err } = resolveMeterIndex(pid, r.meter_name ?? '', rowNum);
+      return { r, pid, mi, meterError: err };
+    }
 
-    // (b) Composite "${plantName} ${meterLabel}" match
+    // (b) Legacy composite "${plantName} ${meterLabel}" match
     for (const [pNameLower, pId] of Object.entries(plantNameToId)) {
       const cfg = powerCfgByPlant[pId];
       if (!cfg?.names?.length) continue;
@@ -136,8 +186,9 @@ async function insertPowerReadings(
       }
     }
 
-    // (c) Fallback
-    return { r, pid: plantId, mi: 0 };
+    // (c) Fallback to the UI-selected plant
+    const { mi, err } = resolveMeterIndex(plantId, r.meter_name ?? '', rowNum);
+    return { r, pid: plantId, mi, meterError: err };
   });
 
   // ── 4. Group rows by plantId + calendar-date ─────────────────────────────
@@ -156,7 +207,8 @@ async function insertPowerReadings(
     solarMode?: string;
   };
   const groups = new Map<string, DayGroup>();
-  for (const { r, pid, mi } of resolvedRows) {
+  const errors: string[] = [];
+  for (const { r, pid, mi, meterError } of resolvedRows) {
     // BUG FIX (timezone day-rollback): previously derived dtDate by round-tripping
     // through `new Date(...).toISOString().slice(0, 10)`, which converts to UTC
     // first. For Manila (UTC+8) that silently shifts any reading between
@@ -171,7 +223,11 @@ async function insertPowerReadings(
     const key = `${pid}|${dtDate}`;
     if (!groups.has(key)) groups.set(key, { pid, dt, dtDate, meters: new Map() });
     const g = groups.get(key)!;
-    g.meters.set(mi, +r.meter_reading_kwh);
+    if (meterError) {
+      errors.push(meterError);
+    } else {
+      g.meters.set(mi, +r.meter_reading_kwh);
+    }
     // Solar / grid totals come from whichever row supplies them (typically meter-0)
     if (g.solar     == null && r.solar_meter_reading?.trim()) g.solar     = +r.solar_meter_reading;
     if (g.dailySolar == null && r.daily_solar_kwh?.trim())    g.dailySolar = +r.daily_solar_kwh;
@@ -194,7 +250,6 @@ async function insertPowerReadings(
   // across multiple new days within the same import (matching the old
   // behavior when CSV rows were in date order).
   let count = 0;
-  const errors: string[] = [];
 
   const groupList = Array.from(groups.entries())
     .map(([key, g]) => ({ key, ...g }))
@@ -230,6 +285,11 @@ async function insertPowerReadings(
 
   for (const g of groupList) {
     const { key, pid: gPid, dt, dtDate, meters } = g;
+    // Every row that would have contributed to this plant+day failed
+    // meter_name resolution (already logged to `errors` above) — nothing
+    // valid to write, and writing anyway would insert/overwrite with a
+    // bogus meter_reading_kwh of 0. Skip the group rather than corrupt data.
+    if (meters.size === 0) continue;
     // BUG FIX: dtDate is now the Manila calendar date (see above), so the window
     // must bound the Manila day, not a UTC day of the same label. Philippines has
     // no DST, so a fixed +08:00 offset is always correct — this avoids depending
@@ -243,15 +303,21 @@ async function insertPowerReadings(
     const gmrObj: Record<string, number> = {};
     for (const [mi, val] of meters) gmrObj[String(mi)] = val;
 
-    const meter0Val = meters.get(0) ?? 0;
-
     const payload: Record<string, any> = {
       plant_id:          gPid,
-      meter_reading_kwh: meter0Val,         // backward compat / meter-0 cumulative
       grid_meter_readings: gmrObj,           // full per-meter JSONB — the key fix
       reading_datetime:  dt,
       recorded_by:       userId,
     };
+    // meter_reading_kwh: legacy meter-0 mirror, kept for dashboards/trend
+    // charts that haven't migrated to grid_meter_readings. Only set it when
+    // this row's data actually includes meter 0 — otherwise:
+    //   - INSERT: column is nullable (see 20260822 migration) — leave it out
+    //     rather than writing a fake 0 that reads like a meter reset.
+    //   - UPDATE: omitting the key from payload leaves whatever real value
+    //     is already saved untouched, instead of clobbering it with 0 just
+    //     because this particular import batch only covered meters 1/2.
+    if (meters.has(0)) payload.meter_reading_kwh = meters.get(0);
 
     // Solar
     const explicitDirect = g.solarMode === 'direct';
@@ -989,8 +1055,8 @@ export function PowerForm() {
       <Card className="p-4 space-y-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={handlePlantChange} />
+            <Label htmlFor="powersection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
+            <PlantSelector value={plantId} onChange={handlePlantChange} id="powersection-plant" />
           </div>
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
@@ -1035,9 +1101,9 @@ export function PowerForm() {
             {/* Date & Time — CT multipliers are now shown per-meter inline with each grid meter label */}
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label>Date &amp; Time</Label>
+                <Label htmlFor="powersection-date-amp-time">Date &amp; Time</Label>
                 <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" />
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time"/>
               </div>
             </div>
 
@@ -1069,7 +1135,7 @@ export function PowerForm() {
                   );
                   return (
                     <div key={`solar-${idx}`}>
-                      <Label className="flex items-center gap-1 text-xs">
+                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore" className="flex items-center gap-1 text-xs">
                         <span className="text-warn text-2xs">☀</span>
                         {meterLabel}
                         {isFirst && editingId && <span className="text-2xs text-warn ml-1">(editing)</span>}
@@ -1090,7 +1156,7 @@ export function PowerForm() {
                           onChange={e => handleChange(e.target.value)}
                           placeholder={solarInputMode === 'direct' ? 'Daily kWh' : 'Solar reading'}
                           className="border-warn focus-visible:ring-warn"
-                          data-testid={`power-solar-input-${idx}`} />
+                          data-testid={`power-solar-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore"/>
                         <Button size="sm" disabled={isSavingThis || !solarMeterChanged}
                           onClick={() => submitMeter('solar', idx)}
                           className="shrink-0 h-9 px-3 text-xs bg-primary text-white hover:bg-primary/90"
@@ -1171,7 +1237,7 @@ export function PowerForm() {
                   const gridMeterChanged = val !== '' && (prevMeterValSL == null || +val !== prevMeterValSL);
                   return (
                     <div key={`grid-${idx}`}>
-                      <Label className="flex items-center gap-1 text-xs">
+                      <Label htmlFor="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2" className="flex items-center gap-1 text-xs">
                         <GridPylonIcon className="h-2.5 w-2.5 text-info" />
                         {meterLabel}
                         <span
@@ -1209,7 +1275,7 @@ export function PowerForm() {
                           onChange={e => handleChange(e.target.value)}
                           placeholder="Grid reading"
                           className="border-info focus-visible:ring-info"
-                          data-testid={`power-meter-input-${idx}`} />
+                          data-testid={`power-meter-input-${idx}`} id="powersection-classname-ml-auto-p-0-5-rounded-text-muted-fore-2"/>
                         <Button
                           size="sm"
                           disabled={isSavingThis || !gridMeterChanged || configLoading}
@@ -1440,9 +1506,9 @@ export function PowerForm() {
             {/* Date & Time */}
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label>Date &amp; Time</Label>
+                <Label htmlFor="powersection-date-amp-time-2">Date &amp; Time</Label>
                 <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
-                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" />
+                  className="h-10 w-full max-w-[260px] min-w-[220px] block text-center sm:text-left bg-muted/30 border-border/70 text-foreground/80" id="powersection-date-amp-time-2"/>
               </div>
             </div>
 
@@ -1579,6 +1645,8 @@ export function PowerForm() {
           schemaHint={POWER_SCHEMA}
           templateFilename="power_readings_template.csv"
           templateRow={POWER_TEMPLATE_ROW}
+          templateRows={POWER_TEMPLATE_ROWS}
+          helpText={POWER_HELP_TEXT}
           validateRow={validatePowerRow}
           insertRows={(rows, pid) => insertPowerReadings(rows, pid, user?.id ?? null)}
           onClose={() => setImportOpen(false)}

@@ -444,9 +444,9 @@ export default function Exports() {
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
           {/* Plant */}
           <div className="space-y-1">
-            <Label className="text-xs">Plant</Label>
+            <Label htmlFor="exports-plant" className="text-xs">Plant</Label>
             <Select value={plantId} onValueChange={setPlantId}>
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className="h-8 text-xs" id="exports-plant">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -458,29 +458,29 @@ export default function Exports() {
 
           {/* From */}
           <div className="space-y-1">
-            <Label className="text-xs">From</Label>
+            <Label htmlFor="exports-from" className="text-xs">From</Label>
             <Input
               type="date"
               value={from}
               onChange={handleDateChange(setFrom)}
               className="h-8 text-xs w-[130px]"
-            />
+            id="exports-from"/>
           </div>
 
           {/* To */}
           <div className="space-y-1">
-            <Label className="text-xs">To</Label>
+            <Label htmlFor="exports-to" className="text-xs">To</Label>
             <Input
               type="date"
               value={to}
               onChange={handleDateChange(setTo)}
               className="h-8 text-xs w-[130px]"
-            />
+            id="exports-to"/>
           </div>
 
           {/* Quick presets */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground/60">Quick range</Label>
+            <p className="text-xs text-muted-foreground/60">Quick range</p>
             <div className="flex gap-1">
               {PRESETS.map(p => (
                 <button

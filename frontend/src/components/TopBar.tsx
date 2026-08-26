@@ -168,23 +168,28 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground border-b border-white/8 shadow-sm">
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
 
-        {/* ── Brand mark — only shown when sidebar is collapsed ──── */}
-        {showBrand && (
-          <div className="flex items-center gap-2 shrink-0">
-            <Logomark size={28} className="rounded-lg shrink-0" />
-            <div className="flex flex-col leading-none">
-              <span className="text-xs font-semibold tracking-tight text-topbar-foreground">PWRI</span>
-              <span className="text-3xs text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
-                Monitoring & Alert
-              </span>
+        {/* ── Left: brand mark — only shown when sidebar is collapsed ──
+            Always occupies the left grid cell (even when empty) so its
+            width mirrors the right-side icon cluster's cell, keeping the
+            center cell (plant selector) truly centered on the bar. */}
+        <div className="flex items-center min-w-0">
+          {showBrand && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Logomark size={28} className="rounded-lg shrink-0" />
+              <div className="flex flex-col leading-none">
+                <span className="text-xs font-semibold tracking-tight text-topbar-foreground">PWRI</span>
+                <span className="text-3xs text-topbar-muted hidden sm:block tracking-[0.1em] uppercase">
+                  Monitoring & Alert
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* ── Plant selector ─────────────────────────────────────── */}
-        <div className="flex-1 flex justify-center">
+        {/* ── Center: plant selector ─────────────────────────────── */}
+        <div className="flex justify-center">
           <Select
             value={selectedPlantId ?? 'all'}
             onValueChange={(v) => setSelectedPlantId(v === 'all' ? null : v)}
@@ -209,11 +214,14 @@ export function TopBar() {
           </Select>
         </div>
 
-        {/* ── Sync indicator ─────────────────────────────────────── */}
-        <SyncIndicator />
+        {/* ── Right: sync / theme / notifications / avatar ────────── */}
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
 
-        {/* ── Color theme picker ─────────────────────────────────── */}
-        <ThemeSelector />
+          {/* ── Sync indicator ───────────────────────────────────── */}
+          <SyncIndicator />
+
+          {/* ── Color theme picker ───────────────────────────────── */}
+          <ThemeSelector />
 
         {/* ── Notifications bell ─────────────────────────────────── */}
         <DropdownMenu>
@@ -223,7 +231,10 @@ export function TopBar() {
               size="icon"
               aria-label={totalBadge > 0 ? `Notifications (${totalBadge} unread)` : 'Notifications'}
               className={cn(
-                'relative h-8 w-8',
+                // 40px hit area (was 32px) — closer to the 44px touch-target
+                // guideline; kept under 44 so it still fits the 48px-tall
+                // TopBar row alongside the plant selector without crowding.
+                'relative h-10 w-10',
                 'hover:bg-white/10 focus-visible:ring-white/30',
                 // Bell icon colour escalates with severity
                 hasCritical
@@ -445,6 +456,7 @@ export function TopBar() {
 
         {/* ── User avatar / switcher ─────────────────────────────── */}
         <OperatorSwitcher />
+        </div>
       </div>
     </header>
   );

@@ -3,6 +3,15 @@
  *
  * Dialog for editing an existing RO Train reading.
  * Extracted from ROTrains.tsx (§4 item 2 decomposition).
+ *
+ * Permission model (see helpers.ts canEditEntry): Managers, Admins, and
+ * Data Analysts can edit any reading at any time. Operators can only edit
+ * their own entries, and only while the reading isn't currently flagged
+ * and awaiting review in Data Corrections — otherwise, use "Request
+ * correction" instead. Unlike every other reading type in the app, there's
+ * no time-window cutoff here: Kevz asked for it removed specifically for
+ * RO Train / Pretreatment readings, offset by the existing audit trail
+ * (logReadingEdit below, plus the required reason on every edit).
  */
 import { useState } from 'react';
 import { format } from 'date-fns';
@@ -19,6 +28,7 @@ import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canEditEntry, diffFields, logReadingEdit, recalculateTrainDeltas } from './helpers';
+import { getHourBucket } from '@/lib/hourlyReadingGuard';
 
 const RO_EDIT_NUMERIC_FIELDS: { key: string; label: string; unit?: string; step?: string }[] = [
   { key: 'feed_pressure_psi',    label: 'Feed Pressure',      unit: 'psi' },
@@ -63,13 +73,37 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
     ),
   );
 
-  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id);
+  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id, true);
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
     if (!reason) { toast.error('Select a reason for this edit'); return; }
     if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
+
+    // Hourly cadence guard — same one-reading-per-clock-hour rule the create
+    // form enforces (PretreatmentAndROLog.tsx). Excludes this row's own id so
+    // an edit that leaves the reading in the same hour (or only changes other
+    // fields) never collides with itself.
+    const hourBucket = getHourBucket(dt);
+    const { data: existingHour, error: hourError } = await supabase
+      .from('ro_train_readings')
+      .select('id')
+      .eq('train_id', trainId)
+      .neq('id', row.id)
+      .gte('reading_datetime', hourBucket.startISO)
+      .lt('reading_datetime', hourBucket.endISO)
+      .limit(1);
+    if (hourError) { setSaving(false); toast.error(friendlyError(hourError)); return; }
+    if (existingHour && existingHour.length > 0) {
+      setSaving(false);
+      toast.error(
+        `This train already has another RO Train reading between ${hourBucket.label}. ` +
+        `Only one reading is allowed per hour — pick a different time.`,
+      );
+      return;
+    }
+
     const num = (k: string) => (vals[k] !== '' && vals[k] !== undefined ? +vals[k] : null);
 
     const payload: Record<string, any> = {
@@ -126,25 +160,25 @@ export function EditRoReadingDialog({ row, trainId, onClose, onSaved }: Props) {
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label className="text-xs">Date / Time</Label>
-            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" />
+            <Label htmlFor="editroreadingdialog-date-time" className="text-xs">Date / Time</Label>
+            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" id="editroreadingdialog-date-time"/>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {RO_EDIT_NUMERIC_FIELDS.filter((f) => f.key in row).map((f) => (
               <div key={f.key}>
-                <Label className="text-xs">{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
+                <Label htmlFor="editroreadingdialog-field" className="text-xs">{f.label}{f.unit ? ` (${f.unit})` : ''}</Label>
                 <Input
                   type="number" step="any"
                   value={vals[f.key]}
                   onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
                   className="h-9"
-                />
+                id="editroreadingdialog-field"/>
               </div>
             ))}
           </div>
           <div>
-            <Label className="text-xs">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
+            <Label htmlFor="editroreadingdialog-remarks" className="text-xs">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" id="editroreadingdialog-remarks"/>
           </div>
           <CorrectionReasonField
             reason={reason} onReasonChange={setReason}

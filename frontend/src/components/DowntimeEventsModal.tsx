@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,33 +101,44 @@ export function DowntimeEventsModal({
   const subs = data?.by_subsystem ?? [];
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl w-[96vw] sm:w-full max-h-[90vh] flex flex-col" data-testid="downtime-events-modal">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Timer className="h-4 w-4" />
-            Downtime events {plantName ? `· ${plantName}` : ''}
-          </DialogTitle>
-          <DialogDescription>
-            Each row is a single shutdown/disruption parsed from the daily remarks.
-          </DialogDescription>
-        </DialogHeader>
-
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      title={(
+        <span className="flex items-center gap-2">
+          <Timer className="h-4 w-4" />
+          Downtime events {plantName ? `· ${plantName}` : ''}
+        </span>
+      )}
+      description="Each row is a single shutdown/disruption parsed from the daily remarks."
+      className="max-w-3xl w-[96vw] sm:w-full"
+      bodyScroll={false}
+      footer={(data?.count ?? 0) > 0 ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground w-full">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {data?.count} event(s) · total <span className="font-mono-num">{data?.total_duration_hrs}h</span>
+          {filtered.length !== data?.count && (
+            <span>· showing {filtered.length} after filter</span>
+          )}
+        </div>
+      ) : undefined}
+    >
+      <div className="flex flex-col gap-3 h-full min-h-0" data-testid="downtime-events-modal">
         {/* Controls */}
-        <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex flex-wrap gap-2 items-end shrink-0">
           <div className="flex-1 min-w-[140px]">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Label htmlFor="downtimeeventsmodal-from" className="text-xs">From</Label>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} id="downtimeeventsmodal-from"/>
           </div>
           <div className="flex-1 min-w-[140px]">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Label htmlFor="downtimeeventsmodal-to" className="text-xs">To</Label>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} id="downtimeeventsmodal-to"/>
           </div>
         </div>
 
         {/* By-subsystem chips */}
         {subs.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 items-center">
+          <div className="flex flex-wrap gap-1.5 items-center shrink-0">
             <Filter className="h-3.5 w-3.5 text-muted-foreground" />
             <Button
               size="sm" variant={subFilter === 'all' ? 'default' : 'outline'}
@@ -205,18 +214,7 @@ export function DowntimeEventsModal({
             </DataState>
           </div>
         </div>
-
-        {/* Footer summary */}
-        {(data?.count ?? 0) > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {data?.count} event(s) · total <span className="font-mono-num">{data?.total_duration_hrs}h</span>
-            {filtered.length !== data?.count && (
-              <span>· showing {filtered.length} after filter</span>
-            )}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </ResponsiveDialog>
   );
 }

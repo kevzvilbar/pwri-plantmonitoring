@@ -58,11 +58,11 @@ export function AddStockDialog() {
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Receive chemical delivery</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          <div><Label>Plant</Label><ChemPlantPick value={plantId} onChange={setPlantId} /></div>
+          <div><Label htmlFor="addstockdialog-plant">Plant</Label><ChemPlantPick value={plantId} onChange={setPlantId} id="addstockdialog-plant" /></div>
           <div>
-            <Label>Chemical</Label>
+            <Label htmlFor="addstockdialog-chemical">Chemical</Label>
             <Select value={name} onValueChange={(v) => { setName(v); const k = KNOWN_CHEMICALS.find((x) => x.name === v); if (k) setUnit(k.defaultUnit); }}>
-              <SelectTrigger><SelectValue placeholder="Pick chemical" /></SelectTrigger>
+              <SelectTrigger id="addstockdialog-chemical"><SelectValue placeholder="Pick chemical" /></SelectTrigger>
               <SelectContent>
                 {KNOWN_CHEMICALS.map((c) => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
                 <SelectItem value="__custom__">+ Custom…</SelectItem>
@@ -74,13 +74,13 @@ export function AddStockDialog() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs">Quantity</Label>
-              <Input type="number" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
+              <Label htmlFor="addstockdialog-quantity" className="text-xs">Quantity</Label>
+              <Input type="number" step="any" value={qty} onChange={(e) => setQty(e.target.value)} id="addstockdialog-quantity"/>
             </div>
             <div>
-              <Label className="text-xs">Unit</Label>
+              <Label htmlFor="addstockdialog-unit" className="text-xs">Unit</Label>
               <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="addstockdialog-unit"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CHEM_UNITS.filter(u => u !== '__custom__').map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                   <SelectItem value="__custom__">+ Custom…</SelectItem>
@@ -92,10 +92,10 @@ export function AddStockDialog() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-xs">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} /></div>
-            <div><Label className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+            <div><Label htmlFor="addstockdialog-supplier" className="text-xs">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} id="addstockdialog-supplier"/></div>
+            <div><Label htmlFor="addstockdialog-delivery-date" className="text-xs">Delivery date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} id="addstockdialog-delivery-date"/></div>
           </div>
-          <div><Label className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
+          <div><Label htmlFor="addstockdialog-remarks" className="text-xs">Remarks</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} id="addstockdialog-remarks"/></div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

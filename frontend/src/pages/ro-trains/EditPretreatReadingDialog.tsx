@@ -13,8 +13,12 @@
  *
  * Permission model (see helpers.ts canEditEntry): Managers, Admins, and
  * Data Analysts can edit any reading at any time. Operators can only edit
- * their own entries within EDIT_WINDOW_HOURS of submission; after that,
- * use "Request correction" instead.
+ * their own entries, and only while the reading isn't currently flagged
+ * and awaiting review in Data Corrections — otherwise, use "Request
+ * correction" instead. Unlike every other reading type in the app, there's
+ * no time-window cutoff here: Kevz asked for it removed specifically for
+ * RO Train / Pretreatment readings, offset by the existing audit trail
+ * (logReadingEdit below, plus the required reason on every edit).
  */
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { format } from 'date-fns';
@@ -30,7 +34,8 @@ import { CorrectionReasonField } from '@/components/CorrectionReasonField';
 import { resolveReason, isReasonComplete } from '@/lib/correctionReasons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { canEditEntry, diffFields, logReadingEdit, EDIT_WINDOW_HOURS } from './helpers';
+import { canEditEntry, diffFields, logReadingEdit } from './helpers';
+import { getHourBucket } from '@/lib/hourlyReadingGuard';
 
 interface Props {
   row: any;
@@ -111,13 +116,36 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
     })),
   );
 
-  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id);
+  const canSave = canEditEntry(row, hasFullAccess, activeOperator?.id, true);
 
   const handleSave = async () => {
     if (!canSave) { toast.error('You no longer have permission to edit this entry.'); return; }
     if (!reason) { toast.error('Select a reason for this edit'); return; }
     if (!isReasonComplete(reason, customReason)) { toast.error('Describe the reason for this edit'); return; }
     setSaving(true);
+
+    // Hourly cadence guard — same one-reading-per-clock-hour rule the create
+    // form enforces (PretreatmentAndROLog.tsx). Excludes this row's own id so
+    // an edit that leaves the reading in the same hour (or only changes other
+    // fields) never collides with itself.
+    const hourBucket = getHourBucket(dt);
+    const { data: existingHour, error: hourError } = await supabase
+      .from('ro_pretreatment_readings')
+      .select('id')
+      .eq('train_id', trainId)
+      .neq('id', row.id)
+      .gte('reading_datetime', hourBucket.startISO)
+      .lt('reading_datetime', hourBucket.endISO)
+      .limit(1);
+    if (hourError) { setSaving(false); toast.error(friendlyError(hourError)); return; }
+    if (existingHour && existingHour.length > 0) {
+      setSaving(false);
+      toast.error(
+        `This train already has another Pre-Treatment reading between ${hourBucket.label}. ` +
+        `Only one reading is allowed per hour — pick a different time.`,
+      );
+      return;
+    }
 
     const payload = {
       reading_datetime:        new Date(dt).toISOString(),
@@ -184,24 +212,24 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
         </DialogHeader>
         <div className="space-y-5">
           <div>
-            <Label className="text-xs">Date / Time</Label>
-            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" />
+            <Label htmlFor="editpretreatreadingdialog-date-time" className="text-xs">Date / Time</Label>
+            <Input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="h-9" id="editpretreatreadingdialog-date-time"/>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">HPP Pressure (psi)</Label>
-              <Input type="number" step="any" value={hpp} onChange={(e) => setHpp(e.target.value)} className="h-9" />
+              <Label htmlFor="editpretreatreadingdialog-hpp-pressure-psi" className="text-xs">HPP Pressure (psi)</Label>
+              <Input type="number" step="any" value={hpp} onChange={(e) => setHpp(e.target.value)} className="h-9" id="editpretreatreadingdialog-hpp-pressure-psi"/>
             </div>
             <div>
-              <Label className="text-xs">Bag/Cartridge Filters Changed (count)</Label>
-              <Input type="number" step="1" value={bagFilters} onChange={(e) => setBagFilters(e.target.value)} className="h-9" />
+              <Label htmlFor="editpretreatreadingdialog-bag-cartridge-filters-changed-coun" className="text-xs">Bag/Cartridge Filters Changed (count)</Label>
+              <Input type="number" step="1" value={bagFilters} onChange={(e) => setBagFilters(e.target.value)} className="h-9" id="editpretreatreadingdialog-bag-cartridge-filters-changed-coun"/>
             </div>
           </div>
 
           {afmUnits.length > 0 && (
             <div>
-              <Label className="text-xs font-semibold">AFM / MMF Units — Pressure In / Out</Label>
+              <p className="text-xs font-semibold">AFM / MMF Units — Pressure In / Out</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                 {afmUnits.map((u, idx) => {
                   const inP  = toNum(u.in_psi);
@@ -216,14 +244,14 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-2xs">In (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-in-psi" className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={u.in_psi} className="h-8"
-                            onChange={(e) => updateAt(setAfmUnits, idx, { in_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setAfmUnits, idx, { in_psi: e.target.value })} id="editpretreatreadingdialog-in-psi"/>
                         </div>
                         <div>
-                          <Label className="text-2xs">Out (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-out-psi" className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={u.out_psi} className="h-8"
-                            onChange={(e) => updateAt(setAfmUnits, idx, { out_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setAfmUnits, idx, { out_psi: e.target.value })} id="editpretreatreadingdialog-out-psi"/>
                         </div>
                       </div>
                     </div>
@@ -235,26 +263,26 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
 
           {boosterPumps.length > 0 && (
             <div>
-              <Label className="text-xs font-semibold">Booster Pumps</Label>
+              <p className="text-xs font-semibold">Booster Pumps</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                 {boosterPumps.map((p, idx) => (
                   <div key={p.unit} className="rounded-md border p-2.5 space-y-2">
                     <span className="text-xs font-semibold text-muted-foreground">Pump P{p.unit}</span>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-2xs">Target (psi)</Label>
+                        <Label htmlFor="editpretreatreadingdialog-target-psi" className="text-2xs">Target (psi)</Label>
                         <Input type="number" step="any" value={p.target_pressure_psi} className="h-8"
-                          onChange={(e) => updateAt(setBoosterPumps, idx, { target_pressure_psi: e.target.value })} />
+                          onChange={(e) => updateAt(setBoosterPumps, idx, { target_pressure_psi: e.target.value })} id="editpretreatreadingdialog-target-psi"/>
                       </div>
                       <div>
-                        <Label className="text-2xs">Target (Hz)</Label>
+                        <Label htmlFor="editpretreatreadingdialog-target-hz" className="text-2xs">Target (Hz)</Label>
                         <Input type="number" step="any" value={p.target_hz} className="h-8"
-                          onChange={(e) => updateAt(setBoosterPumps, idx, { target_hz: e.target.value })} />
+                          onChange={(e) => updateAt(setBoosterPumps, idx, { target_hz: e.target.value })} id="editpretreatreadingdialog-target-hz"/>
                       </div>
                       <div>
-                        <Label className="text-2xs">Amperage (A)</Label>
+                        <Label htmlFor="editpretreatreadingdialog-amperage-a" className="text-2xs">Amperage (A)</Label>
                         <Input type="number" step="any" value={p.amperage} className="h-8"
-                          onChange={(e) => updateAt(setBoosterPumps, idx, { amperage: e.target.value })} />
+                          onChange={(e) => updateAt(setBoosterPumps, idx, { amperage: e.target.value })} id="editpretreatreadingdialog-amperage-a"/>
                       </div>
                     </div>
                   </div>
@@ -265,7 +293,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
 
           {cartHousings.length > 0 && (
             <div>
-              <Label className="text-xs font-semibold">Cartridge / Bag Filter Housings — Pressure In / Out</Label>
+              <p className="text-xs font-semibold">Cartridge / Bag Filter Housings — Pressure In / Out</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                 {cartHousings.map((h, idx) => {
                   const inP  = toNum(h.in_psi);
@@ -280,14 +308,14 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-2xs">In (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-in-psi-2" className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={h.in_psi} className="h-8"
-                            onChange={(e) => updateAt(setCartHousings, idx, { in_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setCartHousings, idx, { in_psi: e.target.value })} id="editpretreatreadingdialog-in-psi-2"/>
                         </div>
                         <div>
-                          <Label className="text-2xs">Out (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-out-psi-2" className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={h.out_psi} className="h-8"
-                            onChange={(e) => updateAt(setCartHousings, idx, { out_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setCartHousings, idx, { out_psi: e.target.value })} id="editpretreatreadingdialog-out-psi-2"/>
                         </div>
                       </div>
                     </div>
@@ -299,7 +327,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
 
           {filterHousings.length > 0 && (
             <div>
-              <Label className="text-xs font-semibold">Filter Housings — Pressure In / Out</Label>
+              <p className="text-xs font-semibold">Filter Housings — Pressure In / Out</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                 {filterHousings.map((h, idx) => {
                   const inP  = toNum(h.in_psi);
@@ -314,14 +342,14 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <Label className="text-2xs">In (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-in-psi-3" className="text-2xs">In (psi)</Label>
                           <Input type="number" step="any" value={h.in_psi} className="h-8"
-                            onChange={(e) => updateAt(setFilterHousings, idx, { in_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setFilterHousings, idx, { in_psi: e.target.value })} id="editpretreatreadingdialog-in-psi-3"/>
                         </div>
                         <div>
-                          <Label className="text-2xs">Out (psi)</Label>
+                          <Label htmlFor="editpretreatreadingdialog-out-psi-3" className="text-2xs">Out (psi)</Label>
                           <Input type="number" step="any" value={h.out_psi} className="h-8"
-                            onChange={(e) => updateAt(setFilterHousings, idx, { out_psi: e.target.value })} />
+                            onChange={(e) => updateAt(setFilterHousings, idx, { out_psi: e.target.value })} id="editpretreatreadingdialog-out-psi-3"/>
                         </div>
                       </div>
                     </div>
@@ -332,8 +360,8 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
           )}
 
           <div>
-            <Label className="text-xs">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" />
+            <Label htmlFor="editpretreatreadingdialog-remarks" className="text-xs">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} className="min-h-[60px]" id="editpretreatreadingdialog-remarks"/>
           </div>
 
           <CorrectionReasonField
@@ -344,7 +372,7 @@ export function EditPretreatReadingDialog({ row, trainId, onClose, onSaved }: Pr
           <p className="text-xs text-muted-foreground">
             {hasFullAccess
               ? 'As a Manager, Data Analyst, or Admin, you can edit any reading at any time.'
-              : `You can edit your own entries within ${EDIT_WINDOW_HOURS} hours of submission. After that, use "Request correction" instead. Backwash windows and MMF meter start/end aren't editable here — submit a new entry to correct those.`}
+              : 'You can edit your own entries at any time, as long as the reading isn\'t currently flagged and awaiting review — after that, use "Request correction" instead. Backwash windows and MMF meter start/end aren\'t editable here — submit a new entry to correct those.'}
           </p>
         </div>
         <DialogFooter>

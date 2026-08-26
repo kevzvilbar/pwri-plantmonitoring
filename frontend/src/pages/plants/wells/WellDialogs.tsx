@@ -78,19 +78,19 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Well</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+          <div><Label htmlFor="welldialogs-name">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} id="welldialogs-name"/></div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} /></div>
-            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+            <div><Label htmlFor="welldialogs-diameter">Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} id="welldialogs-diameter"/></div>
+            <div><Label htmlFor="welldialogs-depth-m">Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} id="welldialogs-depth-m"/></div>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
-            <div><Label>Meter Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
-            <div><Label>Meter Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+            <div><Label htmlFor="welldialogs-meter-brand">Meter Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} id="welldialogs-meter-brand"/></div>
+            <div><Label htmlFor="welldialogs-meter-size">Meter Size</Label><Input value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} id="welldialogs-meter-size"/></div>
+            <div><Label htmlFor="welldialogs-meter-serial">Meter Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} id="welldialogs-meter-serial"/></div>
           </div>
           <div>
-            <Label className="flex items-center gap-1"><Gauge className="h-3 w-3" />Meter rollover wrap point</Label>
-            <Input type="number" placeholder="e.g. 999999.99 for a 6-digit register" value={form.meter_rollover_max} onChange={e => setForm({ ...form, meter_rollover_max: e.target.value })} />
+            <Label htmlFor="welldialogs-meter-rollover-wrap-point" className="flex items-center gap-1"><Gauge className="h-3 w-3" />Meter rollover wrap point</Label>
+            <Input type="number" placeholder="e.g. 999999.99 for a 6-digit register" value={form.meter_rollover_max} onChange={e => setForm({ ...form, meter_rollover_max: e.target.value })} id="welldialogs-meter-rollover-wrap-point"/>
             <p className="text-xs text-muted-foreground mt-0.5">
               Pre-fills the "meter rollover" wrap point at reading entry and defaults
               for this well's rows in Data Corrections. Leave blank if unknown — entry
@@ -98,8 +98,8 @@ export function EditWellDialog({ well, onClose }: { well: any; onClose: () => vo
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} /></div>
-            <div><Label>GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} /></div>
+            <div><Label htmlFor="welldialogs-gps-lat">GPS Lat</Label><Input value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} id="welldialogs-gps-lat"/></div>
+            <div><Label htmlFor="welldialogs-gps-lng">GPS Lng</Label><Input value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} id="welldialogs-gps-lng"/></div>
           </div>
         </div>
         <DialogFooter><Button onClick={submit}>Save changes</Button></DialogFooter>
@@ -182,12 +182,12 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Add Well</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div><Label>Name *</Label>
-            <Input data-testid="add-well-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Well #1" />
+          <div><Label htmlFor="welldialogs-name-2">Name *</Label>
+            <Input data-testid="add-well-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Well #1" id="welldialogs-name-2"/>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} placeholder="8 inch" /></div>
-            <div><Label>Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} /></div>
+            <div><Label htmlFor="welldialogs-diameter-2">Diameter</Label><Input value={form.diameter} onChange={e => setForm({ ...form, diameter: e.target.value })} placeholder="8 inch" id="welldialogs-diameter-2"/></div>
+            <div><Label htmlFor="welldialogs-depth-m-2">Depth (m)</Label><Input type="number" value={form.drilling_depth_m} onChange={e => setForm({ ...form, drilling_depth_m: e.target.value })} id="welldialogs-depth-m-2"/></div>
           </div>
 
           {/* Water meter */}
@@ -196,14 +196,15 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
               <Gauge className="h-3 w-3" /> Water Meter
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div><Label className="text-xs">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
-              <div><Label className="text-xs">Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} /></div>
-              <div><Label className="text-xs">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+              <div><Label htmlFor="welldialogs-brand" className="text-xs">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} id="welldialogs-brand"/></div>
+              <div><Label htmlFor="welldialogs-size" className="text-xs">Size</Label><Input type="number" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} id="welldialogs-size"/></div>
+              <div><Label htmlFor="welldialogs-serial" className="text-xs">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} id="welldialogs-serial"/></div>
             </div>
           </div>
 
           {/* Electric meter (optional) */}
           <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- Checkbox (Radix) renders button[role=checkbox], not a native input; same false positive as ThemeSelector's Switch. */}
             <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
               <Checkbox
                 checked={form.has_power_meter}
@@ -216,23 +217,23 @@ export function AddWellDialog({ plantId, onClose }: { plantId: string; onClose: 
             </label>
             {form.has_power_meter && (
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} data-testid="add-well-em-brand" /></div>
-                <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
-                <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} data-testid="add-well-em-serial" /></div>
+                <div><Label htmlFor="welldialogs-brand-2" className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} data-testid="add-well-em-brand" id="welldialogs-brand-2"/></div>
+                <div><Label htmlFor="welldialogs-size-2" className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" id="welldialogs-size-2"/></div>
+                <div><Label htmlFor="welldialogs-serial-2" className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} data-testid="add-well-em-serial" id="welldialogs-serial-2"/></div>
                 <div className="col-span-3">
-                  <Label className="text-xs">Installed</Label>
-                  <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+                  <Label htmlFor="welldialogs-installed" className="text-xs">Installed</Label>
+                  <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} id="welldialogs-installed"/>
                 </div>
               </div>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>GPS Lat</Label>
-              <Input data-testid="add-well-lat" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} placeholder="10.295" />
+            <div><Label htmlFor="welldialogs-gps-lat-2">GPS Lat</Label>
+              <Input data-testid="add-well-lat" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} placeholder="10.295" id="welldialogs-gps-lat-2"/>
             </div>
-            <div><Label>GPS Lng</Label>
-              <Input data-testid="add-well-lng" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} placeholder="123.877" />
+            <div><Label htmlFor="welldialogs-gps-lng-2">GPS Lng</Label>
+              <Input data-testid="add-well-lng" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} placeholder="123.877" id="welldialogs-gps-lng-2"/>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={useMyLocation} disabled={locating} data-testid="use-my-location-btn">
@@ -280,6 +281,7 @@ export function EditElectricMeterDialog({ well, onClose }: { well: any; onClose:
       <DialogContent>
         <DialogHeader><DialogTitle>Electric Meter — {well.name}</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch. */}
           <label className="flex items-center gap-2 text-sm">
             <Switch
               checked={form.has_power_meter}
@@ -291,12 +293,12 @@ export function EditElectricMeterDialog({ well, onClose }: { well: any; onClose:
           </label>
           {form.has_power_meter && (
             <div className="grid grid-cols-3 gap-2">
-              <div><Label className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} /></div>
-              <div><Label className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" /></div>
-              <div><Label className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} /></div>
+              <div><Label htmlFor="welldialogs-brand-3" className="text-xs">Brand</Label><Input value={form.electric_meter_brand} onChange={e => setForm({ ...form, electric_meter_brand: e.target.value })} id="welldialogs-brand-3"/></div>
+              <div><Label htmlFor="welldialogs-size-3" className="text-xs">Size</Label><Input value={form.electric_meter_size} onChange={e => setForm({ ...form, electric_meter_size: e.target.value })} placeholder="kWh" id="welldialogs-size-3"/></div>
+              <div><Label htmlFor="welldialogs-serial-3" className="text-xs">Serial</Label><Input value={form.electric_meter_serial} onChange={e => setForm({ ...form, electric_meter_serial: e.target.value })} id="welldialogs-serial-3"/></div>
               <div className="col-span-3">
-                <Label className="text-xs">Installed</Label>
-                <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} />
+                <Label htmlFor="welldialogs-installed-2" className="text-xs">Installed</Label>
+                <Input type="date" value={form.electric_meter_installed_date} onChange={e => setForm({ ...form, electric_meter_installed_date: e.target.value })} id="welldialogs-installed-2"/>
               </div>
             </div>
           )}
@@ -352,16 +354,16 @@ export function EditHydraulicDialog({ well, latest, onClose }: { well: any; late
       <DialogContent>
         <DialogHeader><DialogTitle>Edit hydraulic data — {well.name}</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          <div><Label>Date gathered *</Label><Input type="date" value={form.date_gathered} onChange={e => set('date_gathered', e.target.value)} /></div>
+          <div><Label htmlFor="welldialogs-date-gathered">Date gathered *</Label><Input type="date" value={form.date_gathered} onChange={e => set('date_gathered', e.target.value)} id="welldialogs-date-gathered"/></div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Drilling depth (m)</Label><Input type="number" step="any" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} /></div>
-            <div><Label>Pump setting</Label><Input value={form.pump_setting} onChange={e => set('pump_setting', e.target.value)} /></div>
-            <div><Label>SWL (m)</Label><Input type="number" step="any" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} /></div>
-            <div><Label>PWL (m)</Label><Input type="number" step="any" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} /></div>
-            <div><Label>Motor HP</Label><Input type="number" step="any" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} /></div>
-            <div><Label>TDS (ppm)</Label><Input type="number" step="any" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} /></div>
-            <div className="col-span-2"><Label>Turbidity (NTU)</Label><Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} /></div>
-            <div className="col-span-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => set('remarks', e.target.value)} /></div>
+            <div><Label htmlFor="welldialogs-drilling-depth-m">Drilling depth (m)</Label><Input type="number" step="any" value={form.drilling_depth_m} onChange={e => set('drilling_depth_m', e.target.value)} id="welldialogs-drilling-depth-m"/></div>
+            <div><Label htmlFor="welldialogs-pump-setting">Pump setting</Label><Input value={form.pump_setting} onChange={e => set('pump_setting', e.target.value)} id="welldialogs-pump-setting"/></div>
+            <div><Label htmlFor="welldialogs-swl-m">SWL (m)</Label><Input type="number" step="any" value={form.static_water_level_m} onChange={e => set('static_water_level_m', e.target.value)} id="welldialogs-swl-m"/></div>
+            <div><Label htmlFor="welldialogs-pwl-m">PWL (m)</Label><Input type="number" step="any" value={form.pumping_water_level_m} onChange={e => set('pumping_water_level_m', e.target.value)} id="welldialogs-pwl-m"/></div>
+            <div><Label htmlFor="welldialogs-motor-hp">Motor HP</Label><Input type="number" step="any" value={form.motor_hp} onChange={e => set('motor_hp', e.target.value)} id="welldialogs-motor-hp"/></div>
+            <div><Label htmlFor="welldialogs-tds-ppm">TDS (ppm)</Label><Input type="number" step="any" value={form.tds_ppm} onChange={e => set('tds_ppm', e.target.value)} id="welldialogs-tds-ppm"/></div>
+            <div className="col-span-2"><Label htmlFor="welldialogs-turbidity-ntu">Turbidity (NTU)</Label><Input type="number" step="any" value={form.turbidity_ntu} onChange={e => set('turbidity_ntu', e.target.value)} id="welldialogs-turbidity-ntu"/></div>
+            <div className="col-span-2"><Label htmlFor="welldialogs-remarks">Remarks</Label><Input value={form.remarks} onChange={e => set('remarks', e.target.value)} id="welldialogs-remarks"/></div>
           </div>
           <p className="text-2xs text-muted-foreground">Each save creates a new history entry so you can track changes over time.</p>
         </div>
@@ -450,7 +452,7 @@ export function WellCsvImportDialog({ plantId, onClose }: { plantId: string; onC
             <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> required. <strong>has_power_meter</strong>: true/false. Electric meter fields only needed if has_power_meter is true. Numeric: drilling_depth_m, meter_size.</p>
           </div>
           <div>
-            <Label className="text-xs font-medium">Select CSV file</Label>
+            <p className="text-xs font-medium">Select CSV file</p>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">

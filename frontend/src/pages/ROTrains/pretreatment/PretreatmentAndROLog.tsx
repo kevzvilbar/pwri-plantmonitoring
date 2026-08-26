@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { calc, ALERTS } from '@/lib/calculations';
 import { evaluateROMeterSpike, computeROAverageFlowRate } from '@/lib/roReadingGuards';
+import { getHourBucket } from '@/lib/hourlyReadingGuard';
 import { AnomalyRemarkBanner } from '@/components/AnomalyRemarkBanner';
 import { submitAnomalyRemark, isAnomalyRemarkValid } from '@/lib/anomalyRemarks';
 import { toast } from 'sonner';
@@ -707,7 +708,52 @@ export function PretreatmentAndROLog() {
       }
     }
 
-    // (1-hour-per-train duplicate rule removed — operators may log multiple readings per hour)
+    // ── Hourly cadence guard ───────────────────────────────────────────────
+    // Plant policy: exactly one RO Train reading and one Pre-Treatment
+    // reading per train per calendar hour — one entry somewhere in
+    // 6:00–6:59, another in 7:00–7:59, and so on, regardless of the exact
+    // minute it's keyed in at. (A 1-hour-per-train duplicate rule used to
+    // live here and was later removed to let operators log multiple
+    // readings per hour — this restores the stricter one-per-hour cadence.)
+    // Checked against both tables up front, before either insert runs, since
+    // this form always writes both from the same `dt` — if either table
+    // already has an entry for this hour the whole save is rejected, so the
+    // operator edits the existing entry (via the train's History tab)
+    // instead of ending up with a half-saved, mismatched pair.
+    const hourBucket = getHourBucket(dt);
+    const trainLabel = train?.name ?? `Train ${train?.train_number ?? ''}`;
+
+    const { data: existingROHour, error: roHourError } = await supabase
+      .from('ro_train_readings')
+      .select('id')
+      .eq('train_id', trainId)
+      .gte('reading_datetime', hourBucket.startISO)
+      .lt('reading_datetime', hourBucket.endISO)
+      .limit(1);
+    if (roHourError) { toast.error(friendlyError(roHourError)); return; }
+    if (existingROHour && existingROHour.length > 0) {
+      toast.error(
+        `${trainLabel} already has an RO Train reading between ${hourBucket.label}. ` +
+        `Only one reading is allowed per hour — edit the existing entry, or change the reading time.`,
+      );
+      return;
+    }
+
+    const { data: existingPretreatHour, error: pretreatHourError } = await supabase
+      .from('ro_pretreatment_readings')
+      .select('id')
+      .eq('train_id', trainId)
+      .gte('reading_datetime', hourBucket.startISO)
+      .lt('reading_datetime', hourBucket.endISO)
+      .limit(1);
+    if (pretreatHourError) { toast.error(friendlyError(pretreatHourError)); return; }
+    if (existingPretreatHour && existingPretreatHour.length > 0) {
+      toast.error(
+        `${trainLabel} already has a Pre-Treatment reading between ${hourBucket.label}. ` +
+        `Only one reading is allowed per hour — edit the existing entry, or change the reading time.`,
+      );
+      return;
+    }
 
     // Save RO Train reading.
     // Confirmed DB columns in ro_train_readings (from original working code):
@@ -1125,16 +1171,16 @@ export function PretreatmentAndROLog() {
         {/* Plant + Train row — with online/offline toggle */}
         <div className="grid grid-cols-2 gap-2 max-w-md">
           <div>
-            <Label>Plant</Label>
+            <Label htmlFor="pretreat-plant">Plant</Label>
             <Select value={plantId} onValueChange={(v) => { setPlantId(v); setTrainId(''); }}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select Plant" /></SelectTrigger>
+              <SelectTrigger className="h-9" id="pretreat-plant"><SelectValue placeholder="Select Plant" /></SelectTrigger>
               <SelectContent>{plants?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Train</Label>
+            <Label htmlFor="pretreat-train">Train</Label>
             <Select value={trainId} onValueChange={setTrainId} disabled={!plantId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select Train" /></SelectTrigger>
+              <SelectTrigger className="h-9" id="pretreat-train"><SelectValue placeholder="Select Train" /></SelectTrigger>
               <SelectContent>{trains?.map((t: any) => (
                 <SelectItem key={t.id} value={t.id}>{t.name ?? `Train ${t.train_number}`}</SelectItem>
               ))}</SelectContent>
@@ -1203,9 +1249,9 @@ export function PretreatmentAndROLog() {
 
             {/* Reason dropdown */}
             <div>
-              <Label className="text-xs text-muted-foreground">Reason for Offline <span className="text-danger">*</span></Label>
+              <Label htmlFor="pretreat-reason-for-offline" className="text-xs text-muted-foreground">Reason for Offline <span className="text-danger">*</span></Label>
               <Select value={offlineReason} onValueChange={setOfflineReason}>
-                <SelectTrigger className="h-9 mt-0.5 border-danger">
+                <SelectTrigger className="h-9 mt-0.5 border-danger" id="pretreat-reason-for-offline">
                   <SelectValue placeholder="Select reason…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1228,20 +1274,20 @@ export function PretreatmentAndROLog() {
             {/* Free-text for Other */}
             {offlineReason === 'Other' && (
               <div>
-                <Label className="text-xs text-muted-foreground">Specify reason <span className="text-danger">*</span></Label>
+                <Label htmlFor="pretreat-specify-reason" className="text-xs text-muted-foreground">Specify reason <span className="text-danger">*</span></Label>
                 <Input
                   value={offlineReasonOther}
                   onChange={e => setOfflineReasonOther(e.target.value)}
                   placeholder="Describe the reason…"
                   className="mt-0.5 border-danger"
-                />
+                id="pretreat-specify-reason"/>
               </div>
             )}
 
             {/* Offline start / end times */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">
+                <Label htmlFor="pretreat-offline-since" className="text-xs text-muted-foreground">
                   Offline Since <span className="text-danger">*</span>
                 </Label>
                 <Input
@@ -1249,10 +1295,10 @@ export function PretreatmentAndROLog() {
                   value={offlineStart}
                   onChange={e => setOfflineStart(e.target.value)}
                   className="mt-0.5 w-full min-w-[200px] border-danger"
-                />
+                id="pretreat-offline-since"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">
+                <Label htmlFor="pretreat-back-online-at-leave-blank-if-still-offline" className="text-xs text-muted-foreground">
                   Back Online At
                   <span className="ml-1 text-2xs font-normal text-muted-foreground">(leave blank if still offline)</span>
                 </Label>
@@ -1261,7 +1307,7 @@ export function PretreatmentAndROLog() {
                   value={offlineEnd}
                   onChange={e => setOfflineEnd(e.target.value)}
                   className="mt-0.5 w-full min-w-[200px] border-danger"
-                />
+                id="pretreat-back-online-at-leave-blank-if-still-offline"/>
               </div>
             </div>
 
@@ -1282,14 +1328,14 @@ export function PretreatmentAndROLog() {
         )}
 
         <div>
-          <Label>Reading Date &amp; Time</Label>
+          <Label htmlFor="pretreat-reading-date-amp-time">Reading Date &amp; Time</Label>
           <Input type="datetime-local" value={dt}
             onChange={isManager ? (e) => setDt(e.target.value) : undefined}
             readOnly={!isManager}
             className={cn(
               "h-10 w-full sm:max-w-[260px] min-w-[220px]",
               !isManager && "cursor-not-allowed opacity-60 bg-muted pointer-events-none"
-            )} />
+            )} id="pretreat-reading-date-amp-time"/>
         </div>
         {plant && (
           <div className="text-xs text-muted-foreground">
@@ -1328,24 +1374,24 @@ export function PretreatmentAndROLog() {
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Started</Label>
-                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full min-w-[220px]" />
+                      <Label htmlFor="pretreat-started" className="text-xs text-muted-foreground">Started</Label>
+                      <Input type="datetime-local" value={syncBwStart} onChange={(e) => setSyncBwStart(e.target.value)} className="w-full min-w-[220px]" id="pretreat-started"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Ended</Label>
-                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full min-w-[220px]" />
+                      <Label htmlFor="pretreat-ended" className="text-xs text-muted-foreground">Ended</Label>
+                      <Input type="datetime-local" value={syncBwEnd} onChange={(e) => setSyncBwEnd(e.target.value)} className="w-full min-w-[220px]" id="pretreat-ended"/>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Meter Reading Start</Label>
+                      <Label htmlFor="pretreat-meter-reading-start" className="text-xs text-muted-foreground">Meter Reading Start</Label>
                       <Input type="number" step="any" value={syncMeterStart}
                         onChange={(e) => setSyncMeterStart(e.target.value)}
-                        placeholder="From Previous Backwash End" />
+                        placeholder="From Previous Backwash End" id="pretreat-meter-reading-start"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Meter Reading End</Label>
-                      <Input type="number" step="any" value={syncMeterEnd} onChange={(e) => setSyncMeterEnd(e.target.value)} />
+                      <Label htmlFor="pretreat-meter-reading-end" className="text-xs text-muted-foreground">Meter Reading End</Label>
+                      <Input type="number" step="any" value={syncMeterEnd} onChange={(e) => setSyncMeterEnd(e.target.value)} id="pretreat-meter-reading-end"/>
                     </div>
                   </div>
                   <p className="text-2xs text-muted-foreground">All AFM/MMF Units Share These Values During Backwash. Start Value Pre-Filled From Previous Backwash End — Edit If Needed.</p>
@@ -1386,16 +1432,16 @@ export function PretreatmentAndROLog() {
                           {!isSynchronized && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <Label className="text-xs text-muted-foreground">Started</Label>
+                                <Label htmlFor="pretreat-started-2" className="text-xs text-muted-foreground">Started</Label>
                                 <Input type="datetime-local" value={row.bwStart}
                                   onChange={(e) => setAfmmfField(u, { bwStart: e.target.value })}
-                                  className="w-full min-w-[220px]" />
+                                  className="w-full min-w-[220px]" id="pretreat-started-2"/>
                               </div>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Ended</Label>
+                                <Label htmlFor="pretreat-ended-2" className="text-xs text-muted-foreground">Ended</Label>
                                 <Input type="datetime-local" value={row.bwEnd}
                                   onChange={(e) => setAfmmfField(u, { bwEnd: e.target.value })}
-                                  className="w-full min-w-[220px]" />
+                                  className="w-full min-w-[220px]" id="pretreat-ended-2"/>
                               </div>
                             </div>
                           )}
@@ -1406,18 +1452,18 @@ export function PretreatmentAndROLog() {
                           ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <Label className="text-xs text-muted-foreground">Meter Reading Start</Label>
+                                <Label htmlFor="pretreat-meter-reading-start-2" className="text-xs text-muted-foreground">Meter Reading Start</Label>
                                 <Input type="number" step="any" value={meterStartValue}
                                   onChange={(e) => setAfmmfField(u, { meterStart: e.target.value })}
-                                  placeholder={prevEnd != null ? String(prevEnd) : 'From Previous Backwash End'} />
+                                  placeholder={prevEnd != null ? String(prevEnd) : 'From Previous Backwash End'} id="pretreat-meter-reading-start-2"/>
                                 {prevEnd != null && (
                                   <p className="text-2xs text-muted-foreground mt-0.5">Previous End: {prevEnd} (Editable)</p>
                                 )}
                               </div>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Meter Reading End</Label>
+                                <Label htmlFor="pretreat-meter-reading-end-2" className="text-xs text-muted-foreground">Meter Reading End</Label>
                                 <Input type="number" step="any" value={row.meterEnd}
-                                  onChange={(e) => setAfmmfField(u, { meterEnd: e.target.value })} />
+                                  onChange={(e) => setAfmmfField(u, { meterEnd: e.target.value })} id="pretreat-meter-reading-end-2"/>
                               </div>
                             </div>
                           )}
@@ -1426,18 +1472,18 @@ export function PretreatmentAndROLog() {
                         // No backwash → always-visible pressure In/Out (per unit)
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <Label className="text-xs text-muted-foreground">Pressure In (psi)</Label>
+                            <Label htmlFor="pretreat-pressure-in-psi" className="text-xs text-muted-foreground">Pressure In (psi)</Label>
                             <Input type="number" step="any" value={row.pressureIn}
-                              onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} />
+                              onChange={(e) => setAfmmfField(u, { pressureIn: e.target.value })} id="pretreat-pressure-in-psi"/>
                           </div>
                           <div>
-                            <Label className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
+                            <Label htmlFor="pretreat-pressure-out-psi" className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
                             <Input type="number" step="any" value={row.pressureOut}
-                              onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} />
+                              onChange={(e) => setAfmmfField(u, { pressureOut: e.target.value })} id="pretreat-pressure-out-psi"/>
                           </div>
                           <div>
-                            <Label className="text-xs text-muted-foreground">ΔPressure</Label>
-                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
+                            <Label htmlFor="pretreat-pressure" className="text-xs text-muted-foreground">ΔPressure</Label>
+                            <ComputedInput value={afmDp} className={dpWarn ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} id="pretreat-pressure"/>
                           </div>
                         </div>
                       )}
@@ -1482,7 +1528,7 @@ export function PretreatmentAndROLog() {
                   </p>
                   {afmReasonNeeded && (
                     <div className="pt-1.5">
-                      <Label className="text-xs text-warn">
+                      <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed" className="text-xs text-warn">
                         Reason for missing value(s) — required to proceed
                       </Label>
                       <Textarea
@@ -1490,7 +1536,7 @@ export function PretreatmentAndROLog() {
                         onChange={(e) => setAfmIncompleteReason(e.target.value)}
                         placeholder="e.g. Unit 3 pressure gauge out of service, replacement pending"
                         className="text-xs"
-                      />
+                      id="pretreat-reason-for-missing-value-s-required-to-proceed"/>
                     </div>
                   )}
                 </div>
@@ -1635,11 +1681,11 @@ export function PretreatmentAndROLog() {
               <Card className="p-3 space-y-2">
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">High-Pressure Pump</h4>
                 <div>
-                  <Label className="text-xs text-muted-foreground">HPP Target Pressure (psi)</Label>
+                  <Label htmlFor="pretreat-hpp-target-pressure-psi" className="text-xs text-muted-foreground">HPP Target Pressure (psi)</Label>
                   {train?.hpp_target_pressure_psi != null ? (
                     <>
                       <Input type="number" step="any" value={hppTarget} readOnly disabled
-                        className="font-mono-num bg-muted/40" />
+                        className="font-mono-num bg-muted/40" id="pretreat-hpp-target-pressure-psi"/>
                       <p className="text-2xs text-muted-foreground mt-1">
                         Set in Train Settings — applies to every reading until changed there.
                       </p>
@@ -1686,7 +1732,7 @@ export function PretreatmentAndROLog() {
                   </p>
                   {boosterReasonNeeded && (
                     <div className="pt-1.5">
-                      <Label className="text-xs text-warn">
+                      <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed-2" className="text-xs text-warn">
                         Reason for missing value(s) — required to proceed
                       </Label>
                       <Textarea
@@ -1694,7 +1740,7 @@ export function PretreatmentAndROLog() {
                         onChange={(e) => setBoosterIncompleteReason(e.target.value)}
                         placeholder="e.g. Pump 2 ammeter not yet installed"
                         className="text-xs"
-                      />
+                      id="pretreat-reason-for-missing-value-s-required-to-proceed-2"/>
                     </div>
                   )}
                 </Card>
@@ -1727,7 +1773,7 @@ export function PretreatmentAndROLog() {
                   <div key={u} className="grid grid-cols-4 gap-2 items-end">
                     <div className="text-xs font-medium pb-2">Housing {u}</div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Pressure In (psi)</Label>
+                      <Label htmlFor="pretreat-pressure-in-psi-2" className="text-xs text-muted-foreground">Pressure In (psi)</Label>
                       <Input
                         type="number" step="any"
                         value={cartridgeHousings[u]?.inP ?? ''}
@@ -1735,10 +1781,10 @@ export function PretreatmentAndROLog() {
                           ...cartridgeHousings,
                           [u]: { ...(cartridgeHousings[u] || { outP: '' }), inP: e.target.value },
                         })}
-                      />
+                      id="pretreat-pressure-in-psi-2"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
+                      <Label htmlFor="pretreat-pressure-out-psi-2" className="text-xs text-muted-foreground">Pressure Out (psi)</Label>
                       <Input
                         type="number" step="any"
                         value={cartridgeHousings[u]?.outP ?? ''}
@@ -1746,20 +1792,20 @@ export function PretreatmentAndROLog() {
                           ...cartridgeHousings,
                           [u]: { ...(cartridgeHousings[u] || { inP: '' }), outP: e.target.value },
                         })}
-                      />
+                      id="pretreat-pressure-out-psi-2"/>
                     </div>
                     <div>
-                      <Label className={cn('text-xs', cfDpWarn ? 'text-warn' : 'text-muted-foreground')}>
+                      <Label htmlFor="pretreat-pressure-2" className={cn('text-xs', cfDpWarn ? 'text-warn' : 'text-muted-foreground')}>
                         ΔPressure{cfDpWarn ? ' ⚠' : ''}
                       </Label>
-                      <ComputedInput value={cfDp} className={cfDpWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
+                      <ComputedInput value={cfDp} className={cfDpWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id="pretreat-pressure-2"/>
                     </div>
                   </div>
                 );
               })}
               <div className="pt-1">
-                <Label className="text-xs text-muted-foreground">{changedElementLabel}</Label>
-                <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} />
+                <Label htmlFor="pretreat-field" className="text-xs text-muted-foreground">{changedElementLabel}</Label>
+                <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} id="pretreat-field"/>
               </div>
             </Card>
           )}
@@ -1776,18 +1822,18 @@ export function PretreatmentAndROLog() {
                   <div key={u} className="grid grid-cols-4 gap-2 items-center">
                     <div className="text-xs font-medium self-center">Housing {u}</div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">In (psi)</Label>
+                      <Label htmlFor="pretreat-in-psi" className="text-xs text-muted-foreground">In (psi)</Label>
                       <Input type="number" step="any" value={housings[u]?.inP ?? ''}
-                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} />
+                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { outP: '' }), inP: e.target.value } })} id="pretreat-in-psi"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Out (psi)</Label>
+                      <Label htmlFor="pretreat-out-psi" className="text-xs text-muted-foreground">Out (psi)</Label>
                       <Input type="number" step="any" value={housings[u]?.outP ?? ''}
-                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} />
+                        onChange={(e) => setHousings({ ...housings, [u]: { ...(housings[u] || { inP: '' }), outP: e.target.value } })} id="pretreat-out-psi"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">ΔPressure</Label>
-                      <ComputedInput value={housingDp} className="text-foreground font-medium" />
+                      <Label htmlFor="pretreat-pressure-3" className="text-xs text-muted-foreground">ΔPressure</Label>
+                      <ComputedInput value={housingDp} className="text-foreground font-medium" id="pretreat-pressure-3"/>
                     </div>
                   </div>
                 );
@@ -1796,8 +1842,8 @@ export function PretreatmentAndROLog() {
                   (avoids duplicate input when both sections are visible). */}
               {!(train.num_cartridge_filters > 0) && (
                 <div className="pt-2">
-                  <Label className="text-xs text-muted-foreground">{changedElementLabel}</Label>
-                  <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} />
+                  <Label htmlFor="pretreat-field-2" className="text-xs text-muted-foreground">{changedElementLabel}</Label>
+                  <Input type="number" min="0" value={bagsChanged} onChange={(e) => setBagsChanged(e.target.value)} id="pretreat-field-2"/>
                 </div>
               )}
             </Card>
@@ -1841,7 +1887,7 @@ export function PretreatmentAndROLog() {
               </p>
               {housingReasonNeeded && (
                 <div className="pt-1.5">
-                  <Label className="text-xs text-warn">
+                  <Label htmlFor="pretreat-reason-for-missing-value-s-required-to-proceed-3" className="text-xs text-warn">
                     Reason for missing value(s) — required to proceed
                   </Label>
                   <Textarea
@@ -1849,7 +1895,7 @@ export function PretreatmentAndROLog() {
                     onChange={(e) => setHousingIncompleteReason(e.target.value)}
                     placeholder="e.g. Housing 2 gauge unreadable, being replaced"
                     className="text-xs"
-                  />
+                  id="pretreat-reason-for-missing-value-s-required-to-proceed-3"/>
                 </div>
               )}
             </Card>
@@ -1895,11 +1941,11 @@ export function PretreatmentAndROLog() {
               </div>
               {/* Auto-computed duration from datetime diff */}
               <div className="flex items-center gap-2 mb-1">
-                <Label className="text-xs text-muted-foreground shrink-0">Duration (min)</Label>
+                <Label htmlFor="pretreat-duration-min" className="text-xs text-muted-foreground shrink-0">Duration (min)</Label>
                 <ComputedInput
                   value={autoDurationMin != null ? String(autoDurationMin) : ''}
                   className="h-7 text-xs w-28"
-                />
+                id="pretreat-duration-min"/>
                 {autoDurationMin == null && (
                   <span className="text-2xs text-muted-foreground/60 italic">— no prior reading found</span>
                 )}
@@ -1918,22 +1964,22 @@ export function PretreatmentAndROLog() {
                 {showFeedMeter && (
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Previous Feed Meter Reading</Label>
+                    <Label htmlFor="pretreat-previous-feed-meter-reading" className="text-xs text-muted-foreground">Previous Feed Meter Reading</Label>
                     {prevFeedMeter != null
-                      ? <ComputedInput value={String(prevFeedMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      ? <ComputedInput value={String(prevFeedMeter)} className="text-foreground font-semibold bg-muted/40" id="pretreat-previous-feed-meter-reading"/>
                       : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
                           <span className="text-xs text-muted-foreground/50 italic">No prior reading</span>
                         </div>
                     }
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed Meter Reading</Label>
+                    <Label htmlFor="pretreat-feed-meter-reading" className="text-xs text-muted-foreground">Feed Meter Reading</Label>
                     <Input type="number" step="any" {...f('feed_meter_curr')} placeholder="Input current feed reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       feedNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
                       !feedNegWarn && feedSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
                       !feedNegWarn && feedSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
-                    )} />
+                    )} id="pretreat-feed-meter-reading"/>
                     {feedNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
                         <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -1954,14 +2000,14 @@ export function PretreatmentAndROLog() {
                     )}
                   </div>
                   <div>
-                    <Label className={cn('text-xs', feedInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label htmlFor="pretreat-feed-volume-m" className={cn('text-xs', feedInferred ? 'text-info' : 'text-muted-foreground')}>
                       Feed Volume{feedInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={feedVol != null ? String(feedVol) : ''} className={feedInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-feed-volume-m"/>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed Flowrate (m³/hr)</Label>
-                    <ComputedInput value={feedFlowMeter != null ? String(feedFlowMeter) : ''} className="text-foreground font-medium" />
+                    <Label htmlFor="pretreat-feed-flowrate-m-hr" className="text-xs text-muted-foreground">Feed Flowrate (m³/hr)</Label>
+                    <ComputedInput value={feedFlowMeter != null ? String(feedFlowMeter) : ''} className="text-foreground font-medium" id="pretreat-feed-flowrate-m-hr"/>
                   </div>
                 </div>
                 )}
@@ -1969,22 +2015,22 @@ export function PretreatmentAndROLog() {
                 {showPermeateMeter && (
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Previous Permeate Meter Reading</Label>
+                    <Label htmlFor="pretreat-previous-permeate-meter-reading" className="text-xs text-muted-foreground">Previous Permeate Meter Reading</Label>
                     {prevPermMeter != null
-                      ? <ComputedInput value={String(prevPermMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      ? <ComputedInput value={String(prevPermMeter)} className="text-foreground font-semibold bg-muted/40" id="pretreat-previous-permeate-meter-reading"/>
                       : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
                           <span className="text-xs text-muted-foreground/50 italic">No prior reading</span>
                         </div>
                     }
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Permeate Meter Reading</Label>
+                    <Label htmlFor="pretreat-permeate-meter-reading" className="text-xs text-muted-foreground">Permeate Meter Reading</Label>
                     <Input type="number" step="any" {...f('permeate_meter_curr')} placeholder="Input current permeate reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       permNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
                       !permNegWarn && permSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
                       !permNegWarn && permSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
-                    )} />
+                    )} id="pretreat-permeate-meter-reading"/>
                     {permNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
                         <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -2005,14 +2051,14 @@ export function PretreatmentAndROLog() {
                     )}
                   </div>
                   <div>
-                    <Label className={cn('text-xs', permInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label htmlFor="pretreat-m" className={cn('text-xs', permInferred ? 'text-info' : 'text-muted-foreground')}>
                       {meterCfg.ro_production_source === 'permeate' ? 'Production (Permeate)' : 'Permeate Volume'}{permInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={permVol != null ? String(permVol) : ''} className={permInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-m"/>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
-                    <ComputedInput value={permFlowMeter != null ? String(permFlowMeter) : ''} className="text-foreground font-medium" />
+                    <Label htmlFor="pretreat-permeate-flowrate-m-hr" className="text-xs text-muted-foreground">Permeate Flowrate (m³/hr)</Label>
+                    <ComputedInput value={permFlowMeter != null ? String(permFlowMeter) : ''} className="text-foreground font-medium" id="pretreat-permeate-flowrate-m-hr"/>
                   </div>
                 </div>
                 )}
@@ -2020,22 +2066,22 @@ export function PretreatmentAndROLog() {
                 {showRejectMeter && (
                 <div className="space-y-1">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Previous Reject Meter Reading</Label>
+                    <Label htmlFor="pretreat-previous-reject-meter-reading" className="text-xs text-muted-foreground">Previous Reject Meter Reading</Label>
                     {prevRejMeter != null
-                      ? <ComputedInput value={String(prevRejMeter)} className="text-foreground font-semibold bg-muted/40" />
+                      ? <ComputedInput value={String(prevRejMeter)} className="text-foreground font-semibold bg-muted/40" id="pretreat-previous-reject-meter-reading"/>
                       : <div className="h-9 rounded-md border border-dashed border-border/50 px-3 flex items-center">
                           <span className="text-xs text-muted-foreground/50 italic">No prior reading</span>
                         </div>
                     }
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Reject Meter Reading</Label>
+                    <Label htmlFor="pretreat-reject-meter-reading" className="text-xs text-muted-foreground">Reject Meter Reading</Label>
                     <Input type="number" step="any" {...f('reject_meter_curr')} placeholder="Input current reject reading" className={cn(
                       "placeholder:text-2xs placeholder:text-muted-foreground/50",
                       rejNegWarn && "border-danger bg-danger-soft text-danger focus-visible:ring-danger",
                       !rejNegWarn && rejSpike.tier === 'critical' && "border-destructive bg-destructive/10 focus-visible:ring-destructive",
                       !rejNegWarn && rejSpike.tier === 'needs_remark' && "border-warn bg-warn-soft focus-visible:ring-warn"
-                    )} />
+                    )} id="pretreat-reject-meter-reading"/>
                     {rejNegWarn && (
                       <p className="text-xs text-danger flex items-center gap-1 mt-1">
                         <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -2056,14 +2102,14 @@ export function PretreatmentAndROLog() {
                     )}
                   </div>
                   <div>
-                    <Label className={cn('text-xs', rejInferred ? 'text-info' : 'text-muted-foreground')}>
+                    <Label htmlFor="pretreat-reject-volume-m" className={cn('text-xs', rejInferred ? 'text-info' : 'text-muted-foreground')}>
                       Reject Volume{rejInferred ? ' (inferred)' : ''} (m³)
                     </Label>
-                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} />
+                    <ComputedInput value={rejVol != null ? String(rejVol) : ''} className={rejInferred ? 'border-info text-info font-medium' : 'text-foreground font-medium'} id="pretreat-reject-volume-m"/>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Reject Flowrate (m³/hr)</Label>
-                    <ComputedInput value={rejFlowMeter != null ? String(rejFlowMeter) : ''} className="text-foreground font-medium" />
+                    <Label htmlFor="pretreat-reject-flowrate-m-hr" className="text-xs text-muted-foreground">Reject Flowrate (m³/hr)</Label>
+                    <ComputedInput value={rejFlowMeter != null ? String(rejFlowMeter) : ''} className="text-foreground font-medium" id="pretreat-reject-flowrate-m-hr"/>
                   </div>
                 </div>
                 )}
@@ -2076,24 +2122,24 @@ export function PretreatmentAndROLog() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1.5">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Suction</Label>
+                    <Label htmlFor="pretreat-suction" className="text-xs text-muted-foreground">Suction</Label>
                     <Input type="number" step="any" {...f('suction_pressure_psi')}
-                      placeholder="Suction pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                      placeholder="Suction pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-suction"/>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Feed</Label>
+                    <Label htmlFor="pretreat-feed" className="text-xs text-muted-foreground">Feed</Label>
                     <Input type="number" step="any" {...f('feed_pressure_psi')}
-                      placeholder="Feed pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                      placeholder="Feed pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-feed"/>
                   </div>
                 </div>
                 <div className="flex flex-col justify-end">
-                  <Label className="text-xs text-muted-foreground">ΔP (feed − reject)</Label>
-                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} />
+                  <Label htmlFor="pretreat-p-feed-reject" className="text-xs text-muted-foreground">ΔP (feed − reject)</Label>
+                  <ComputedInput value={dp ?? ''} className={dpAlert ? 'border-danger text-danger font-semibold' : 'text-foreground font-medium'} id="pretreat-p-feed-reject"/>
                 </div>
                 <div className="flex flex-col justify-end">
-                  <Label className="text-xs text-muted-foreground">Reject</Label>
+                  <Label htmlFor="pretreat-reject" className="text-xs text-muted-foreground">Reject</Label>
                   <Input type="number" step="any" {...f('reject_pressure_psi')}
-                    placeholder="Reject pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                    placeholder="Reject pressure" className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-reject"/>
                 </div>
               </div>
             </div>
@@ -2115,7 +2161,7 @@ export function PretreatmentAndROLog() {
                 {/* Feed EM */}
                 {showFeedMeter && (
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emFeedInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label htmlFor="pretreat-feed-flowrate" className={cn('text-xs', emFeedInferred ? 'text-info' : 'text-muted-foreground')}>
                     Feed Flowrate{emFeedInferred ? ' (computed)' : ''}
                   </Label>
                   {emFeedInferred ? (
@@ -2126,14 +2172,14 @@ export function PretreatmentAndROLog() {
                   ) : (
                     <Input type="number" step="any" {...f('feed_flow')}
                       placeholder={feedFlowMeter != null ? `≈ ${feedFlowMeter} (meter)` : 'EM reading'}
-                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-feed-flowrate"/>
                   )}
                 </div>
                 )}
                 {/* Permeate EM */}
                 {showPermeateMeter && (
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emPermInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label htmlFor="pretreat-field-3" className={cn('text-xs', emPermInferred ? 'text-info' : 'text-muted-foreground')}>
                     {meterCfg.ro_production_source === 'permeate' ? 'Production Flowrate' : 'Permeate Flowrate'}{emPermInferred ? ' (computed)' : ''}
                   </Label>
                   {emPermInferred ? (
@@ -2144,20 +2190,20 @@ export function PretreatmentAndROLog() {
                   ) : (
                     <Input type="number" step="any" {...f('permeate_flow')}
                       placeholder={permFlowMeter != null ? `≈ ${permFlowMeter} (meter)` : 'EM reading'}
-                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-field-3"/>
                   )}
                   <div className="mt-1">
-                    <Label className={cn('text-xs', recWarn ? 'text-warn' : 'text-muted-foreground')}>
+                    <Label htmlFor="pretreat-recovery" className={cn('text-xs', recWarn ? 'text-warn' : 'text-muted-foreground')}>
                       Recovery %{recWarn ? ' ⚠' : ''}
                     </Label>
-                    <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} />
+                    <ComputedInput value={recovery != null ? String(recovery) : ''} className={recWarn ? 'border-warn text-warn-foreground font-semibold' : 'text-foreground font-medium'} id="pretreat-recovery"/>
                   </div>
                 </div>
                 )}
                 {/* Reject EM */}
                 {showRejectMeter && (
                 <div className="space-y-1">
-                  <Label className={cn('text-xs', emRejInferred ? 'text-info' : 'text-muted-foreground')}>
+                  <Label htmlFor="pretreat-reject-flowrate" className={cn('text-xs', emRejInferred ? 'text-info' : 'text-muted-foreground')}>
                     Reject Flowrate{emRejInferred ? ' (computed)' : ''}
                   </Label>
                   {emRejInferred ? (
@@ -2168,7 +2214,7 @@ export function PretreatmentAndROLog() {
                   ) : (
                     <Input type="number" step="any" {...f('reject_flow')}
                       placeholder={rejFlowMeter != null ? `≈ ${rejFlowMeter} (meter)` : 'EM reading'}
-                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" />
+                      className="placeholder:text-2xs placeholder:text-muted-foreground/50" id="pretreat-reject-flowrate"/>
                   )}
                 </div>
                 )}
@@ -2179,19 +2225,19 @@ export function PretreatmentAndROLog() {
             <div className="space-y-0.5">
               <p className="text-2xs font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">TDS (ppm)</p>
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} /></div>
+                <div><Label htmlFor="pretreat-feed-tds" className="text-xs text-muted-foreground">Feed TDS</Label><Input type="number" step="any" {...f('feed_tds')} id="pretreat-feed-tds"/></div>
+                <div><Label htmlFor="pretreat-permeate-tds" className="text-xs text-muted-foreground">Permeate TDS</Label><Input type="number" step="any" {...f('permeate_tds')} id="pretreat-permeate-tds"/></div>
+                <div><Label htmlFor="pretreat-reject-tds" className="text-xs text-muted-foreground">Reject TDS</Label><Input type="number" step="any" {...f('reject_tds')} id="pretreat-reject-tds"/></div>
               </div>
               {/* Rejection + Salt Passage in their own row below TDS inputs */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Salt Rejection %</Label>
-                  <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" />
+                  <Label htmlFor="pretreat-salt-rejection" className="text-xs text-muted-foreground">Salt Rejection %</Label>
+                  <ComputedInput value={rejection ?? ''} className="text-foreground font-medium" id="pretreat-salt-rejection"/>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Salt Passage %</Label>
-                  <ComputedInput value={saltPassage ?? ''} className="text-foreground font-medium" />
+                  <Label htmlFor="pretreat-salt-passage" className="text-xs text-muted-foreground">Salt Passage %</Label>
+                  <ComputedInput value={saltPassage ?? ''} className="text-foreground font-medium" id="pretreat-salt-passage"/>
                 </div>
               </div>
             </div>
@@ -2200,9 +2246,9 @@ export function PretreatmentAndROLog() {
             <div className="space-y-0.5">
               <p className="text-2xs font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">pH</p>
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} /></div>
-                <div><Label className="text-xs text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} /></div>
+                <div><Label htmlFor="pretreat-feed-ph" className="text-xs text-muted-foreground">Feed pH</Label><Input type="number" step="any" {...f('feed_ph')} id="pretreat-feed-ph"/></div>
+                <div><Label htmlFor="pretreat-permeate-ph" className="text-xs text-muted-foreground">Permeate pH</Label><Input type="number" step="any" {...f('permeate_ph')} className={phWarn ? 'border-warn' : ''} id="pretreat-permeate-ph"/></div>
+                <div><Label htmlFor="pretreat-reject-ph" className="text-xs text-muted-foreground">Reject pH</Label><Input type="number" step="any" {...f('reject_ph')} id="pretreat-reject-ph"/></div>
               </div>
             </div>
 
@@ -2210,9 +2256,9 @@ export function PretreatmentAndROLog() {
             <div className="space-y-0.5">
               <p className="text-2xs font-medium uppercase tracking-wider text-muted-foreground/70 px-0.5">Product Quality</p>
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="text-xs text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} /></div>
-                <div><Label className="text-xs text-muted-foreground">Product Chlorine Residual (mg/L)</Label><Input type="number" step="any" min="0" {...f('chlorine_residual_mg_l')} /></div>
+                <div><Label htmlFor="pretreat-product-turbidity-ntu" className="text-xs text-muted-foreground">Product Turbidity (NTU)</Label><Input type="number" step="any" {...f('turbidity_ntu')} id="pretreat-product-turbidity-ntu"/></div>
+                <div><Label htmlFor="pretreat-product-temperature-c" className="text-xs text-muted-foreground">Product Temperature (°C)</Label><Input type="number" step="any" {...f('temperature_c')} id="pretreat-product-temperature-c"/></div>
+                <div><Label htmlFor="pretreat-product-chlorine-residual-mg-l" className="text-xs text-muted-foreground">Product Chlorine Residual (mg/L)</Label><Input type="number" step="any" min="0" {...f('chlorine_residual_mg_l')} id="pretreat-product-chlorine-residual-mg-l"/></div>
               </div>
             </div>
           </Card>
@@ -2255,33 +2301,33 @@ export function PretreatmentAndROLog() {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">
+                <Label htmlFor="pretreat-prev-reading-kwh" className="text-xs text-muted-foreground">
                   Prev reading (kWh){prevPowerMeter != null ? ' — auto' : ' — enter manually (first reading)'}
                 </Label>
-                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" />
+                <ComputedInput value={prevPowerMeter != null ? String(prevPowerMeter) : ''} className="text-foreground font-medium" id="pretreat-prev-reading-kwh"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Current reading (kWh)</Label>
-                <Input type="number" step="any" {...f('power_meter_curr')} placeholder="e.g. 12456.8" />
+                <Label htmlFor="pretreat-current-reading-kwh" className="text-xs text-muted-foreground">Current reading (kWh)</Label>
+                <Input type="number" step="any" {...f('power_meter_curr')} placeholder="e.g. 12456.8" id="pretreat-current-reading-kwh"/>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Δ Consumption (kWh)</Label>
-                <ComputedInput value={pwrDelta ?? ''} className="text-foreground font-medium" />
+                <Label htmlFor="pretreat-consumption-kwh" className="text-xs text-muted-foreground">Δ Consumption (kWh)</Label>
+                <ComputedInput value={pwrDelta ?? ''} className="text-foreground font-medium" id="pretreat-consumption-kwh"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Avg power (kW)</Label>
-                <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" />
+                <Label htmlFor="pretreat-avg-power-kw" className="text-xs text-muted-foreground">Avg power (kW)</Label>
+                <ComputedInput value={pwrKw ?? ''} className="text-foreground font-medium" id="pretreat-avg-power-kw"/>
               </div>
               <div>
-                <Label className={cn('text-xs', isSharedPowerMeter ? 'text-warn' : 'text-muted-foreground')}>
+                <Label htmlFor="pretreat-specific-energy-kwh-m" className={cn('text-xs', isSharedPowerMeter ? 'text-warn' : 'text-muted-foreground')}>
                   Specific energy (kWh/m³){isSharedPowerMeter ? ' ≈ est.' : ''}
                 </Label>
                 <ComputedInput
                   value={secEnergy ?? ''}
                   className={isSharedPowerMeter ? 'border-warn text-warn font-medium' : 'text-foreground font-medium'}
-                />
+                id="pretreat-specific-energy-kwh-m"/>
               </div>
             </div>
           </Card>
@@ -2293,8 +2339,8 @@ export function PretreatmentAndROLog() {
           )}
 
           <Card className="p-3 space-y-2">
-            <Label className="text-xs text-muted-foreground">Remarks</Label>
-            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any observations..." />
+            <Label htmlFor="pretreat-remarks" className="text-xs text-muted-foreground">Remarks</Label>
+            <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any observations..." id="pretreat-remarks"/>
           </Card>
           </>
           )}
@@ -2312,7 +2358,7 @@ export function PretreatmentAndROLog() {
             is always reachable regardless of which path the operator took. */}
         {roReasonNeeded && trainOnline && (
           <Card className="p-3 border-warn bg-warn-soft/50">
-            <Label className="text-xs text-warn">
+            <Label htmlFor="pretreat-reason-for-missing-ro-vessel-value-s-required-to-sa" className="text-xs text-warn">
               Reason for missing RO Vessel value(s) — required to save
             </Label>
             <Textarea
@@ -2320,7 +2366,7 @@ export function PretreatmentAndROLog() {
               onChange={(e) => setRoIncompleteReason(e.target.value)}
               placeholder="e.g. Turbidity meter offline for recalibration, vendor on-site tomorrow"
               className="text-xs"
-            />
+            id="pretreat-reason-for-missing-ro-vessel-value-s-required-to-sa"/>
           </Card>
         )}
         {train && (!trainOnline || cartridgeSectionStarted) && (

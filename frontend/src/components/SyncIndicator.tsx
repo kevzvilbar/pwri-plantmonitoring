@@ -12,12 +12,13 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { RefreshCw, WifiOff, Clock } from 'lucide-react';
+import { RefreshCw, WifiOff, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { useSyncStore } from '@/store/syncStore';
 import { useQueryClient } from '@tanstack/react-query';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function SyncIndicator() {
@@ -71,13 +72,14 @@ export function SyncIndicator() {
   const isError   = status === 'error';
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover>
+      <PopoverTrigger asChild>
         <button
-          onClick={manualSync}
           aria-label={label}
           className={cn(
-            'relative flex items-center justify-center h-8 w-8 rounded-md transition-colors',
+            // Matches the 40px hit area used for the other TopBar icon
+            // buttons (Bell, ThemeSelector) — see TopBar.tsx.
+            'relative flex items-center justify-center h-10 w-10 rounded-md transition-colors',
             'text-topbar-foreground/60 hover:text-topbar-foreground hover:bg-white/10',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
             isSyncing && 'pointer-events-none',
@@ -93,13 +95,24 @@ export function SyncIndicator() {
             <Clock className="h-[15px] w-[15px]" aria-hidden />
           )}
         </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
-        <span>{label}</span>
-        {!isSyncing && (
-          <span className="block text-muted-foreground/70 mt-0.5">Click to sync now</span>
-        )}
-      </TooltipContent>
-    </Tooltip>
+      </PopoverTrigger>
+      <PopoverContent side="bottom" align="end" className="w-56 p-3 text-xs">
+        <p className={cn('font-medium', isError ? 'text-warn' : 'text-foreground')}>{label}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full mt-2.5 h-7 text-xs"
+          onClick={manualSync}
+          disabled={isSyncing}
+        >
+          {isSyncing ? (
+            <>
+              <Loader2 className="h-3 w-3 mr-1.5 animate-spin" aria-hidden />
+              Syncing…
+            </>
+          ) : 'Sync now'}
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }

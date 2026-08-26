@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { TopBar } from './TopBar';
 import { BottomNav } from './BottomNav';
 import { AppSidebar } from './AppSidebar';
+import { OfflineBanner } from './OfflineBanner';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useScrollRestore } from '@/hooks/useScrollRestore';
 import { useBackgroundSync } from '@/hooks/useBackgroundSync';
@@ -55,7 +56,14 @@ function PageAnimationWrapper({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div ref={divRef} className="page-enter flex-1 max-w-[1280px] w-full mx-auto px-4 sm:px-5 py-5 pb-20 md:pb-8">
+    <div
+      ref={divRef}
+      // Bottom padding must clear BottomNav's own height *plus* its safe-area
+      // inset (added alongside this) or the last bit of scrollable content on
+      // notched phones ends up hidden behind the nav bar. md:pb-8 is untouched
+      // since BottomNav is md:hidden on desktop.
+      className="page-enter flex-1 max-w-[1280px] w-full mx-auto px-4 sm:px-5 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8"
+    >
       {children}
     </div>
   );
@@ -76,6 +84,7 @@ export function AppShell() {
 
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar />
+          <OfflineBanner />
 
           {/*
             PageAnimationWrapper re-triggers the page-enter animation on route

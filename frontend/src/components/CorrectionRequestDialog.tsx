@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { CORRECTION_REASONS, isReasonComplete, resolveReason } from '@/lib/correctionReasons';
@@ -118,24 +119,31 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background border rounded-xl shadow-xl w-full max-w-sm space-y-4 p-5"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div>
-          <h3 className="font-semibold text-sm">Request correction — {target.entityName}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {new Date(target.readingDatetime).toLocaleString('en-PH', {
-              day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-            })}
-          </p>
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      title={`Request correction — ${target.entityName}`}
+      description={new Date(target.readingDatetime).toLocaleString('en-PH', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })}
+      className="max-w-sm"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={busy || parsed == null || isNaN(parsed as number) || !isReasonComplete(reason, customReason)}
+          >
+            {busy && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+            Submit request
+          </Button>
         </div>
-
+      )}
+    >
+      <div className="space-y-4 pb-4">
         {/* Current reading summary */}
         <div className="bg-muted/40 rounded-lg px-3 py-2.5 text-xs space-y-1">
           <div className="flex justify-between">
@@ -228,22 +236,7 @@ export function CorrectionRequestDialog({ target, onClose, onSubmitted }: Props)
             The reading will be excluded from totals until reviewed.
           </span>
         </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={busy || parsed == null || isNaN(parsed as number) || !isReasonComplete(reason, customReason)}
-          >
-            {busy && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-            Submit request
-          </Button>
-        </div>
       </div>
-    </div>
+    </ResponsiveDialog>
   );
 }

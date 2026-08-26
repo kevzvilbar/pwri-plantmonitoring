@@ -115,9 +115,9 @@ export function ReplaceTrainMeterDialog({
         <DialogHeader><DialogTitle>Replace Train Meter</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div>
-            <Label>Which meter was replaced?</Label>
+            <Label htmlFor="replacetrainmeterdialog-which-meter-was-replaced">Which meter was replaced?</Label>
             <Select value={meterType} onValueChange={(v) => setMeterType(v as TrainMeterType)}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-sm" id="replacetrainmeterdialog-which-meter-was-replaced"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="feed">Feed</SelectItem>
                 <SelectItem value="permeate">Permeate</SelectItem>
@@ -126,20 +126,20 @@ export function ReplaceTrainMeterDialog({
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Replacement date</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} /></div>
-            <div><Label>Old final reading</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} /></div>
+            <div><Label htmlFor="replacetrainmeterdialog-replacement-date">Replacement date</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="replacetrainmeterdialog-replacement-date"/></div>
+            <div><Label htmlFor="replacetrainmeterdialog-old-final-reading">Old final reading</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} id="replacetrainmeterdialog-old-final-reading"/></div>
           </div>
           <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{oldSerial ?? '—'}</span></div>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} /></div>
-            <div><Label>New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} /></div>
-            <div><Label>New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} /></div>
+            <div><Label htmlFor="replacetrainmeterdialog-new-brand">New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} id="replacetrainmeterdialog-new-brand"/></div>
+            <div><Label htmlFor="replacetrainmeterdialog-new-size">New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} id="replacetrainmeterdialog-new-size"/></div>
+            <div><Label htmlFor="replacetrainmeterdialog-new-serial">New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} id="replacetrainmeterdialog-new-serial"/></div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Initial reading</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} /></div>
-            <div><Label>Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} /></div>
+            <div><Label htmlFor="replacetrainmeterdialog-initial-reading">Initial reading</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} id="replacetrainmeterdialog-initial-reading"/></div>
+            <div><Label htmlFor="replacetrainmeterdialog-installed-date">Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} id="replacetrainmeterdialog-installed-date"/></div>
           </div>
-          <div><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} /></div>
+          <div><Label htmlFor="replacetrainmeterdialog-remarks">Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} id="replacetrainmeterdialog-remarks"/></div>
         </div>
         <DialogFooter><Button onClick={submit} disabled={busy}>Save replacement</Button></DialogFooter>
       </DialogContent>

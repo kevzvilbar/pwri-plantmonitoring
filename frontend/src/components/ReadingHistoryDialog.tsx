@@ -688,6 +688,14 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       // value, which is exactly the bug being fixed here (editing Grid Meter
       // 3 Main was reflecting onto Grid Meter 1 STP).
       const gridIdx = editRow.gridIdx ?? 0;
+      // meterFilter?.type === 'solar' means this dialog/edit is scoped to the
+      // Solar meter, not a grid meter — gridIdx above is just the 0-fallback
+      // startEdit uses when there's no real grid meter selection (see
+      // gridIdxForEdit above), NOT an actual "editing grid meter STP" signal.
+      // Every grid-meter side effect below must be skipped in that case, or
+      // the blank Grid Reading field gets coerced to 0 and overwrites
+      // meter_reading_kwh / grid_meter_readings['0'] with a fake zero reading.
+      const isSolarEditCtx = meterFilter?.type === 'solar';
 
       // Fix #3 — daily_consumption_kwh was never recalculated on edit, so Dashboard
       // totals would drift after any history correction.  Re-derive it the same way
@@ -697,7 +705,7 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
       const editedDt = new Date(dtIso).toISOString();
       const editedDate = editedDt.slice(0, 10);
       let recomputedConsumption: number | null = null;
-      if (gridIdx === 0) {
+      if (gridIdx === 0 && !isSolarEditCtx) {
         try {
           const { data: pred } = await supabase
             .from('power_readings')
@@ -729,17 +737,23 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             reading_datetime: dtIso,
             is_meter_replacement: !!editRow.isMeterReplacement,
           };
-      if (gridIdx === 0) {
+      if (gridIdx === 0 && !isSolarEditCtx) {
         powerUpdatePayload.meter_reading_kwh = +editRow.value;
       }
       // Keep grid_meter_readings in sync with the meter actually being edited.
       // Fetch the existing JSONB so we don't overwrite the other meters' slots.
-      try {
-        const { data: existingPR } = await (supabase.from('power_readings') as any)
-          .select('grid_meter_readings').eq('id', editRow.id).maybeSingle();
-        const existingGmr = (existingPR?.grid_meter_readings as Record<string, number> | null) ?? {};
-        powerUpdatePayload.grid_meter_readings = { ...existingGmr, [String(gridIdx)]: +editRow.value };
-      } catch { /* non-critical: grid_meter_readings column may not exist yet */ }
+      // Skipped entirely for solar edits — there's no grid meter selection to
+      // sync, and writing gridIdx's 0-fallback here would fabricate a
+      // grid_meter_readings['0'] entry (coercing the blank Grid Reading field
+      // to 0) that doesn't correspond to any meter the user actually edited.
+      if (!isSolarEditCtx) {
+        try {
+          const { data: existingPR } = await (supabase.from('power_readings') as any)
+            .select('grid_meter_readings').eq('id', editRow.id).maybeSingle();
+          const existingGmr = (existingPR?.grid_meter_readings as Record<string, number> | null) ?? {};
+          powerUpdatePayload.grid_meter_readings = { ...existingGmr, [String(gridIdx)]: +editRow.value };
+        } catch { /* non-critical: grid_meter_readings column may not exist yet */ }
+      }
       if (recomputedConsumption != null) {
         powerUpdatePayload.daily_consumption_kwh = recomputedConsumption;
         // BUG C FIX: daily_grid_kwh was never updated on history edits.
@@ -880,57 +894,59 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
             <p className="font-medium text-foreground">Editing reading</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-2xs">Date &amp; Time</Label>
+                <Label htmlFor="readinghistorydialog-date-amp-time" className="text-2xs">Date &amp; Time</Label>
                 <Input type="datetime-local" value={editRow.datetime}
                   onChange={e => setEditRow({ ...editRow, datetime: e.target.value })}
-                  className="h-8 text-xs" />
+                  className="h-8 text-xs" id="readinghistorydialog-date-amp-time"/>
               </div>
-              <div>
-                <Label className="text-2xs">
-                  {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
-                </Label>
-                <Input type="number" step="any" value={editRow.value}
-                  onChange={e => setEditRow({ ...editRow, value: e.target.value })}
-                  className="h-8 text-xs" />
-              </div>
-              {module === 'well' && (
+              {!(module === 'power' && meterFilter?.type === 'solar') && (
                 <div>
-                  <Label className="text-2xs">Power Meter (kWh)</Label>
-                  <Input type="number" step="any" value={editRow.value2 ?? ''}
-                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                  <Label htmlFor="readinghistorydialog-reading-kwh" className="text-2xs">
+                    {module === 'well' ? (isDirectMode ? 'Volume (m³)' : 'Water (unitless)') : module === 'locator' ? (isDirectMode ? 'Volume (m³)' : 'Reading') : module === 'blending' ? 'Reading (cumulative)' : `${meterFilter?.type === 'grid' ? getHistGridLabel(meterFilter.idx) : 'Grid'} Reading (kWh)`}
+                  </Label>
+                  <Input type="number" step="any" value={editRow.value}
+                    onChange={e => setEditRow({ ...editRow, value: e.target.value })}
+                    className="h-8 text-xs" id="readinghistorydialog-reading-kwh"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">TDS (ppm)</Label>
+                  <Label htmlFor="readinghistorydialog-power-meter-kwh" className="text-2xs">Power Meter (kWh)</Label>
+                  <Input type="number" step="any" value={editRow.value2 ?? ''}
+                    onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-power-meter-kwh"/>
+                </div>
+              )}
+              {module === 'well' && (
+                <div>
+                  <Label htmlFor="readinghistorydialog-tds-ppm" className="text-2xs">TDS (ppm)</Label>
                   <Input type="number" step="any" value={editRow.value4 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value4: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-tds-ppm"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">NTU</Label>
+                  <Label htmlFor="readinghistorydialog-ntu" className="text-2xs">NTU</Label>
                   <Input type="number" step="any" value={editRow.value6 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value6: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-ntu"/>
                 </div>
               )}
               {module === 'well' && (
                 <div>
-                  <Label className="text-2xs">Pressure (psi)</Label>
+                  <Label htmlFor="readinghistorydialog-pressure-psi" className="text-2xs">Pressure (psi)</Label>
                   <Input type="number" step="any" value={editRow.value5 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value5: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" placeholder="optional" id="readinghistorydialog-pressure-psi"/>
                 </div>
               )}
-              {module === 'power' && (
+              {module === 'power' && meterFilter?.type === 'solar' && (
                 <div>
-                  <Label className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
+                  <Label htmlFor="readinghistorydialog-field" className="text-2xs">{isSolarDirectMode ? 'Solar Generation (kWh, direct)' : 'Solar Meter Reading (kWh)'}</Label>
                   <Input type="number" step="any" value={editRow.value2 ?? ''}
                     onChange={e => setEditRow({ ...editRow, value2: e.target.value })}
-                    className="h-8 text-xs" placeholder="optional" />
+                    className="h-8 text-xs" id="readinghistorydialog-field"/>
                 </div>
               )}
             </div>
@@ -962,7 +978,8 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
               customReason={editCustomReason} onCustomReasonChange={setEditCustomReason}
             />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveEdit} disabled={saving || !editRow.value || !isReasonComplete(editReason, editCustomReason)}
+              <Button size="sm" onClick={saveEdit}
+                disabled={saving || (module === 'power' && meterFilter?.type === 'solar' ? !editRow.value2 : !editRow.value) || !isReasonComplete(editReason, editCustomReason)}
                 className="bg-primary text-white hover:bg-primary/90 h-7 text-xs px-3">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save changes'}
               </Button>

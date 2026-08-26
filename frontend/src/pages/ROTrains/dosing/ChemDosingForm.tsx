@@ -160,12 +160,12 @@ export function ChemDosingForm() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Plant</Label>
-                <ChemPlantPick value={plantId} onChange={setPlantId} />
+                <Label htmlFor="chemdosingform-plant" className="text-xs text-muted-foreground">Plant</Label>
+                <ChemPlantPick value={plantId} onChange={setPlantId} id="chemdosingform-plant" />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Date & time</Label>
-                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} />
+                <Label htmlFor="chemdosingform-date-time" className="text-xs text-muted-foreground">Date & time</Label>
+                <Input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)} id="chemdosingform-date-time"/>
               </div>
             </div>
             {/* Show a notice when some chemicals are hidden for this plant */}
@@ -239,14 +239,14 @@ export function ChemDosingForm() {
                 <div key={s.id} className="grid grid-cols-[20px_1fr_80px] gap-2 items-end">
                   <div className="text-xs font-mono-num pt-2 text-muted-foreground">#{i + 1}</div>
                   <div>
-                    <Label className="text-xs">Sampling point</Label>
+                    <Label htmlFor="chemdosingform-sampling-point" className="text-xs">Sampling point</Label>
                     <Input value={s.point} placeholder="e.g. Tank outlet"
-                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} />
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, point: e.target.value } : x))} id="chemdosingform-sampling-point"/>
                   </div>
                   <div>
-                    <Label className="text-xs">ppm</Label>
+                    <Label htmlFor="chemdosingform-ppm" className="text-xs">ppm</Label>
                     <Input type="number" step="any" value={s.ppm}
-                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} />
+                      onChange={(e) => setSamples(samples.map((x) => x.id === s.id ? { ...x, ppm: e.target.value } : x))} id="chemdosingform-ppm"/>
                   </div>
                 </div>
               ))}

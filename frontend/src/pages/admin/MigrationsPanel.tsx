@@ -518,6 +518,13 @@ export function MigrationsPanel() {
                   </button>
                 )}
               </div>
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
+                  Checkbox (Radix) renders a button[role=checkbox], not a
+                  native input, so eslint's control-recognition doesn't see
+                  it as "associated" even though it's nested inside this
+                  label — same false positive as ThemeSelector's Switch. The
+                  wrapping label IS the correct pattern here (click-target
+                  delegation for "Show applied"). */}
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={showApplied}

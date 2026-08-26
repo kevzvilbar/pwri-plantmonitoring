@@ -319,13 +319,13 @@ export function CIPLog() {
       <Card className="p-3 space-y-2.5">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="text-xs text-muted-foreground">Plant</Label>
-            <PlantPicker value={plantId} onChange={handleCIPPlantChange} />
+            <Label htmlFor="ciplog-plant" className="text-xs text-muted-foreground">Plant</Label>
+            <PlantPicker value={plantId} onChange={handleCIPPlantChange} id="ciplog-plant" />
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Train</Label>
+            <Label htmlFor="ciplog-train" className="text-xs text-muted-foreground">Train</Label>
             <Select value={trainId} onValueChange={setTrainId}>
-              <SelectTrigger><SelectValue placeholder="Select train" /></SelectTrigger>
+              <SelectTrigger id="ciplog-train"><SelectValue placeholder="Select train" /></SelectTrigger>
               <SelectContent>
                 {trains?.map((t: any) => <SelectItem key={t.id} value={t.id}>Train {t.train_number}</SelectItem>)}
               </SelectContent>
@@ -409,16 +409,16 @@ export function CIPLog() {
             {/* Datetime pickers */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Start D&T</Label>
+                <Label htmlFor="ciplog-start-d-t" className="text-xs text-muted-foreground">Start D&T</Label>
                 <Input type="datetime-local" value={v.start}
                   onChange={e => setV({ ...v, start: e.target.value })}
-                  className="w-full text-xs h-8" />
+                  className="w-full text-xs h-8" id="ciplog-start-d-t"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">End D&T</Label>
+                <Label htmlFor="ciplog-end-d-t" className="text-xs text-muted-foreground">End D&T</Label>
                 <Input type="datetime-local" value={v.end}
                   onChange={e => setV({ ...v, end: e.target.value })}
-                  className="w-full text-xs h-8" />
+                  className="w-full text-xs h-8" id="ciplog-end-d-t"/>
               </div>
             </div>
             {formDuration != null && formDuration > 0 && (
@@ -432,9 +432,9 @@ export function CIPLog() {
           <Card className="p-3 space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Remarks & Prediction</h4>
             <div>
-              <Label className="text-xs text-muted-foreground">Remarks</Label>
+              <Label htmlFor="ciplog-remarks" className="text-xs text-muted-foreground">Remarks</Label>
               <Textarea value={v.remarks} onChange={e => setV({ ...v, remarks: e.target.value })}
-                placeholder="Any observations..." className="text-xs min-h-[60px] resize-none" />
+                placeholder="Any observations..." className="text-xs min-h-[60px] resize-none" id="ciplog-remarks"/>
             </div>
             <div className="rounded-lg border border-accent bg-accent-soft/60 p-2 space-y-0.5">
               <p className="text-2xs font-semibold text-accent uppercase tracking-wide">
@@ -560,14 +560,14 @@ export function CIPLog() {
                   {/* Start / End datetime */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Start D&amp;T</Label>
+                      <Label htmlFor="ciplog-start-d-amp-t" className="text-xs text-muted-foreground">Start D&amp;T</Label>
                       <Input type="datetime-local" value={editStart}
-                        onChange={e => setEditStart(e.target.value)} className="h-8 text-xs" />
+                        onChange={e => setEditStart(e.target.value)} className="h-8 text-xs" id="ciplog-start-d-amp-t"/>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">End D&amp;T</Label>
+                      <Label htmlFor="ciplog-end-d-amp-t" className="text-xs text-muted-foreground">End D&amp;T</Label>
                       <Input type="datetime-local" value={editEnd}
-                        onChange={e => setEditEnd(e.target.value)} className="h-8 text-xs" />
+                        onChange={e => setEditEnd(e.target.value)} className="h-8 text-xs" id="ciplog-end-d-amp-t"/>
                     </div>
                   </div>
                   {/* Duration preview */}
@@ -622,11 +622,11 @@ export function CIPLog() {
                   </div>
                   {/* Remarks */}
                   <div>
-                    <Label className="text-xs text-muted-foreground">Remarks</Label>
+                    <Label htmlFor="ciplog-remarks-2" className="text-xs text-muted-foreground">Remarks</Label>
                     <Textarea value={editRemarks}
                       onChange={e => setEditRemarks(e.target.value)}
                       placeholder="Any observations..."
-                      className="text-xs min-h-[60px] resize-none" />
+                      className="text-xs min-h-[60px] resize-none" id="ciplog-remarks-2"/>
                   </div>
                   <CorrectionReasonField
                     reason={editReason} onReasonChange={setEditReason}

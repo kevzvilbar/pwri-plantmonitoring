@@ -8,14 +8,7 @@
 // ⚠ Adjust the useToast import path if this repo's toast hook lives
 //   somewhere else.
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -177,16 +170,27 @@ export function FilterReplacementDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button data-testid="log-filter-replacement-btn">+ Log Replacement</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Log Filter Replacement</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
+    <>
+      <Button data-testid="log-filter-replacement-btn" onClick={() => setOpen(true)}>
+        + Log Replacement
+      </Button>
+      <ResponsiveDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Log Filter Replacement"
+        className="sm:max-w-md"
+        footer={(
+          <div className="flex gap-2 justify-end w-full">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={submitting} data-testid="filter-replacement-save">
+              {submitting ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-4 pb-4">
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <span className="text-sm text-muted-foreground">
               {trainName ? `${plantName} — ${trainName}` : plantName}
@@ -280,16 +284,7 @@ export function FilterReplacementDialog({
             />
           </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={submitting} data-testid="filter-replacement-save">
-            {submitting ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialog>
+    </>
   );
 }

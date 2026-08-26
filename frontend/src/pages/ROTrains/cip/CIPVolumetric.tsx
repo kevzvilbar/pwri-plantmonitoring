@@ -400,14 +400,14 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Meter Readings (m³)</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Previous reading</Label>
+                <Label htmlFor="cipvolumetric-previous-reading" className="text-xs text-muted-foreground">Previous reading</Label>
                 <Input type="number" step="any" value={qPrevMeter} onChange={e => setQPrevMeter(e.target.value)}
-                  placeholder="e.g. 1024.50" className="h-9 text-sm" />
+                  placeholder="e.g. 1024.50" className="h-9 text-sm" id="cipvolumetric-previous-reading"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Current reading</Label>
+                <Label htmlFor="cipvolumetric-current-reading" className="text-xs text-muted-foreground">Current reading</Label>
                 <Input type="number" step="any" value={qCurrMeter} onChange={e => setQCurrMeter(e.target.value)}
-                  placeholder="e.g. 1087.30" className="h-9 text-sm" />
+                  placeholder="e.g. 1087.30" className="h-9 text-sm" id="cipvolumetric-current-reading"/>
               </div>
             </div>
             {/* ΔV result */}
@@ -426,12 +426,12 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time Interval</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Previous date & time</Label>
-                <Input type="datetime-local" value={qPrevTime} onChange={e => setQPrevTime(e.target.value)} className="h-9 text-xs" />
+                <Label htmlFor="cipvolumetric-previous-date-time" className="text-xs text-muted-foreground">Previous date & time</Label>
+                <Input type="datetime-local" value={qPrevTime} onChange={e => setQPrevTime(e.target.value)} className="h-9 text-xs" id="cipvolumetric-previous-date-time"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Current date & time</Label>
-                <Input type="datetime-local" value={qCurrTime} onChange={e => setQCurrTime(e.target.value)} className="h-9 text-xs" />
+                <Label htmlFor="cipvolumetric-current-date-time" className="text-xs text-muted-foreground">Current date & time</Label>
+                <Input type="datetime-local" value={qCurrTime} onChange={e => setQCurrTime(e.target.value)} className="h-9 text-xs" id="cipvolumetric-current-date-time"/>
               </div>
             </div>
             {/* Δt result */}
@@ -482,14 +482,14 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <p className="text-2xs text-muted-foreground -mt-1">Post‑CIP Volume − Pre‑CIP Volume (m³)</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Pre-CIP Volume (m³)</Label>
+                <Label htmlFor="cipvolumetric-pre-cip-volume-m" className="text-xs text-muted-foreground">Pre-CIP Volume (m³)</Label>
                 <Input type="number" step="any" value={preCipVol} onChange={e => setPreCipVol(e.target.value)}
-                  placeholder="e.g. 180.5" className="h-8 text-sm" />
+                  placeholder="e.g. 180.5" className="h-8 text-sm" id="cipvolumetric-pre-cip-volume-m"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Post-CIP Volume (m³)</Label>
+                <Label htmlFor="cipvolumetric-post-cip-volume-m" className="text-xs text-muted-foreground">Post-CIP Volume (m³)</Label>
                 <Input type="number" step="any" value={postCipVol} onChange={e => setPostCipVol(e.target.value)}
-                  placeholder="e.g. 215.0" className="h-8 text-sm" />
+                  placeholder="e.g. 215.0" className="h-8 text-sm" id="cipvolumetric-post-cip-volume-m"/>
               </div>
             </div>
             <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
@@ -509,14 +509,14 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <p className="text-2xs text-muted-foreground -mt-1">Post‑CIP Product TDS − Pre‑CIP Product TDS (ppm) — lower is better</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Pre-CIP TDS (ppm)</Label>
+                <Label htmlFor="cipvolumetric-pre-cip-tds-ppm" className="text-xs text-muted-foreground">Pre-CIP TDS (ppm)</Label>
                 <Input type="number" step="any" value={preCipTds} onChange={e => setPreCipTds(e.target.value)}
-                  placeholder="e.g. 45" className="h-8 text-sm" />
+                  placeholder="e.g. 45" className="h-8 text-sm" id="cipvolumetric-pre-cip-tds-ppm"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Post-CIP TDS (ppm)</Label>
+                <Label htmlFor="cipvolumetric-post-cip-tds-ppm" className="text-xs text-muted-foreground">Post-CIP TDS (ppm)</Label>
                 <Input type="number" step="any" value={postCipTds} onChange={e => setPostCipTds(e.target.value)}
-                  placeholder="e.g. 28" className="h-8 text-sm" />
+                  placeholder="e.g. 28" className="h-8 text-sm" id="cipvolumetric-post-cip-tds-ppm"/>
               </div>
             </div>
             <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
@@ -536,14 +536,14 @@ export function CIPVolumetric({ numVessels = 4 }: { numVessels?: number }) {
             <p className="text-2xs text-muted-foreground -mt-1">Post‑CIP Efficiency KPI − Pre‑CIP Efficiency KPI (kWh/m³)</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Pre-CIP KPI (kWh/m³)</Label>
+                <Label htmlFor="cipvolumetric-pre-cip-kpi-kwh-m" className="text-xs text-muted-foreground">Pre-CIP KPI (kWh/m³)</Label>
                 <Input type="number" step="any" value={preCipKpi} onChange={e => setPreCipKpi(e.target.value)}
-                  placeholder="e.g. 0.85" className="h-8 text-sm" />
+                  placeholder="e.g. 0.85" className="h-8 text-sm" id="cipvolumetric-pre-cip-kpi-kwh-m"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Post-CIP KPI (kWh/m³)</Label>
+                <Label htmlFor="cipvolumetric-post-cip-kpi-kwh-m" className="text-xs text-muted-foreground">Post-CIP KPI (kWh/m³)</Label>
                 <Input type="number" step="any" value={postCipKpi} onChange={e => setPostCipKpi(e.target.value)}
-                  placeholder="e.g. 0.62" className="h-8 text-sm" />
+                  placeholder="e.g. 0.62" className="h-8 text-sm" id="cipvolumetric-post-cip-kpi-kwh-m"/>
               </div>
             </div>
             <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">

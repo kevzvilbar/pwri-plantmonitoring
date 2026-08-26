@@ -171,7 +171,7 @@ export function EmailChangeDialog({ open, onOpenChange, target, onSuccess }: Pro
         <div className="space-y-4 py-1">
           {/* Current email — read only */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Current email</Label>
+            <p className="text-xs text-muted-foreground">Current email</p>
             <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/40 text-sm">
               <span className="truncate text-muted-foreground">{target.currentEmail}</span>
             </div>

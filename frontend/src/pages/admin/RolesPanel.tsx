@@ -354,13 +354,13 @@ function CreateRoleDialog({ open, onClose, defaultBaseRole, busy, onCreate }: {
         </DialogHeader>
         <div className="space-y-3 py-1">
           <div>
-            <Label>Role name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Plant supervisor" data-testid="role-name-input" />
+            <Label htmlFor="rolespanel-role-name">Role name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Plant supervisor" data-testid="role-name-input" id="rolespanel-role-name"/>
           </div>
           <div>
-            <Label>Based on</Label>
+            <Label htmlFor="rolespanel-based-on">Based on</Label>
             <Select value={base} onValueChange={(v) => setBase(v as Role)}>
-              <SelectTrigger data-testid="role-base-select"><SelectValue /></SelectTrigger>
+              <SelectTrigger data-testid="role-base-select" id="rolespanel-based-on"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SYSTEM_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>

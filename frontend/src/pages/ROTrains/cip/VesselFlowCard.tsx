@@ -66,28 +66,28 @@ export function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-1.5">
             <div>
-              <Label className="text-2xs text-muted-foreground">Prev meter (m³)</Label>
+              <Label htmlFor="vesselflowcard-prev-meter-m" className="text-2xs text-muted-foreground">Prev meter (m³)</Label>
               <Input type="number" step="any" value={row.prevMeter}
                 onChange={e => onChange({ prevMeter: e.target.value })}
-                placeholder="e.g. 102.40" className="h-8 text-xs" />
+                placeholder="e.g. 102.40" className="h-8 text-xs" id="vesselflowcard-prev-meter-m"/>
             </div>
             <div>
-              <Label className="text-2xs text-muted-foreground">Curr meter (m³)</Label>
+              <Label htmlFor="vesselflowcard-curr-meter-m" className="text-2xs text-muted-foreground">Curr meter (m³)</Label>
               <Input type="number" step="any" value={row.currMeter}
                 onChange={e => onChange({ currMeter: e.target.value })}
-                placeholder="e.g. 108.75" className="h-8 text-xs" />
+                placeholder="e.g. 108.75" className="h-8 text-xs" id="vesselflowcard-curr-meter-m"/>
             </div>
             <div>
-              <Label className="text-2xs text-muted-foreground">Prev date & time</Label>
+              <Label htmlFor="vesselflowcard-prev-date-time" className="text-2xs text-muted-foreground">Prev date & time</Label>
               <Input type="datetime-local" value={row.prevTime}
                 onChange={e => onChange({ prevTime: e.target.value })}
-                className="h-8 text-2xs" />
+                className="h-8 text-2xs" id="vesselflowcard-prev-date-time"/>
             </div>
             <div>
-              <Label className="text-2xs text-muted-foreground">Curr date & time</Label>
+              <Label htmlFor="vesselflowcard-curr-date-time" className="text-2xs text-muted-foreground">Curr date & time</Label>
               <Input type="datetime-local" value={row.currTime}
                 onChange={e => onChange({ currTime: e.target.value })}
-                className="h-8 text-2xs" />
+                className="h-8 text-2xs" id="vesselflowcard-curr-date-time"/>
             </div>
           </div>
           {/* ΔV + Δt inline chips */}
@@ -115,16 +115,16 @@ export function VesselFlowCard({ row, onChange }: { row: VesselFlowRow; onChange
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <div>
-              <Label className="text-2xs text-muted-foreground">Container volume (L)</Label>
+              <Label htmlFor="vesselflowcard-container-volume-l" className="text-2xs text-muted-foreground">Container volume (L)</Label>
               <Input type="number" step="any" value={row.bucketVol}
                 onChange={e => onChange({ bucketVol: e.target.value })}
-                placeholder="20" className="h-8 text-xs" />
+                placeholder="20" className="h-8 text-xs" id="vesselflowcard-container-volume-l"/>
             </div>
             <div>
-              <Label className="text-2xs text-muted-foreground">Fill time (seconds)</Label>
+              <Label htmlFor="vesselflowcard-fill-time-seconds" className="text-2xs text-muted-foreground">Fill time (seconds)</Label>
               <Input type="number" step="any" value={row.fillTimeSec}
                 onChange={e => onChange({ fillTimeSec: e.target.value })}
-                placeholder="e.g. 45" className="h-8 text-xs" />
+                placeholder="e.g. 45" className="h-8 text-xs" id="vesselflowcard-fill-time-seconds"/>
             </div>
           </div>
           {/* Intermediate L/min chip */}

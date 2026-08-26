@@ -138,13 +138,14 @@ export default function Onboarding() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2"><Label>Username *</Label><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></div>
-          <div><Label>First name *</Label><Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required /></div>
-          <div><Label>Last name *</Label><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required /></div>
-          <div><Label>Middle name</Label><Input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} /></div>
-          <div><Label>Suffix</Label><Input value={form.suffix} onChange={(e) => setForm({ ...form, suffix: e.target.value })} /></div>
-          <div className="col-span-2"><Label>Designation</Label>
+          <div className="col-span-2"><Label htmlFor="onboarding-username">Username *</Label><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required id="onboarding-username"/></div>
+          <div><Label htmlFor="onboarding-first-name">First name *</Label><Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required id="onboarding-first-name"/></div>
+          <div><Label htmlFor="onboarding-last-name">Last name *</Label><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required id="onboarding-last-name"/></div>
+          <div><Label htmlFor="onboarding-middle-name">Middle name</Label><Input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} id="onboarding-middle-name"/></div>
+          <div><Label htmlFor="onboarding-suffix">Suffix</Label><Input value={form.suffix} onChange={(e) => setForm({ ...form, suffix: e.target.value })} id="onboarding-suffix"/></div>
+          <div className="col-span-2"><Label htmlFor="onboarding-designation">Designation</Label>
             <DesignationCombobox
+              id="onboarding-designation"
               value={form.designation}
               onChange={(v) => setForm({ ...form, designation: v })}
               placeholder="Select or type a designation…"

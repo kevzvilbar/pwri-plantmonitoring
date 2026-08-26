@@ -147,27 +147,27 @@ function AddTemplate() {
         <div className="text-sm font-semibold">Add Equipment + Schedules</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
-            <Label>Plant</Label>
+            <Label htmlFor="maintenance-plant">Plant</Label>
             <Select value={v.plant_id} onValueChange={(x) => setV({ ...v, plant_id: x })}>
-              <SelectTrigger><SelectValue placeholder="Plant" /></SelectTrigger>
+              <SelectTrigger id="maintenance-plant"><SelectValue placeholder="Plant" /></SelectTrigger>
               <SelectContent>{plants?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Category</Label>
+            <Label htmlFor="maintenance-category">Category</Label>
             <Select value={v.category} onValueChange={(x) => setV({ ...v, category: x })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="maintenance-category"><SelectValue /></SelectTrigger>
               <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
         <div>
-          <Label>Equipment Name</Label>
+          <Label htmlFor="maintenance-equipment-name">Equipment Name</Label>
           <Input value={v.equipment_name} placeholder="e.g. Pump & Motor"
-            onChange={e => setV({ ...v, equipment_name: e.target.value })} />
+            onChange={e => setV({ ...v, equipment_name: e.target.value })} id="maintenance-equipment-name"/>
         </div>
         <div>
-          <Label>Frequencies (Multi-Select)</Label>
+          <p className="text-sm font-medium">Frequencies (Multi-Select)</p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-1">
             {FREQUENCIES.map(f => (
               <label key={f}
@@ -184,15 +184,15 @@ function AddTemplate() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
-            <Label>Schedule Start Date</Label>
-            <Input type="date" value={v.schedule_start_date} onChange={e => setV({ ...v, schedule_start_date: e.target.value })} />
+            <Label htmlFor="maintenance-schedule-start-date">Schedule Start Date</Label>
+            <Input type="date" value={v.schedule_start_date} onChange={e => setV({ ...v, schedule_start_date: e.target.value })} id="maintenance-schedule-start-date"/>
           </div>
         </div>
         <div>
-          <Label>Custom Steps (Optional, One Per Line)</Label>
+          <Label htmlFor="maintenance-custom-steps-optional-one-per-line">Custom Steps (Optional, One Per Line)</Label>
           <Textarea value={v.checklist_steps} rows={3}
             placeholder="Leave blank to use the standard template steps for this category + equipment."
-            onChange={e => setV({ ...v, checklist_steps: e.target.value })} />
+            onChange={e => setV({ ...v, checklist_steps: e.target.value })} id="maintenance-custom-steps-optional-one-per-line"/>
         </div>
         <Button onClick={submit} className="w-full">
           Generate {v.frequencies.size} Schedule{v.frequencies.size === 1 ? '' : 's'}

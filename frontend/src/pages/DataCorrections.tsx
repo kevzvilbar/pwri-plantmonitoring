@@ -29,6 +29,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { toast } from 'sonner';
 import { friendlyError } from '@/lib/supabaseErrors';
 import { isReasonComplete, resolveReason } from '@/lib/correctionReasons';
@@ -218,43 +219,53 @@ function ChainContext({ focusedId, sourceTable, entityId, plantId }:
       <div className="bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
         Meter chain context
       </div>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b">
-            <th className="text-left px-3 py-1.5 text-2xs text-muted-foreground font-medium">Date / Time</th>
-            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Previous</th>
-            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Current</th>
-            <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Delta</th>
-            <th className="px-3 py-1.5 text-2xs text-muted-foreground font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {chain.map(row => (
-            <tr key={row.id}
-              className={cn('border-b last:border-0 transition-colors',
-                row.isFocused
-                  ? 'bg-warn-soft font-semibold'
-                  : 'hover:bg-muted/20')}>
-              <td className="px-3 py-2 font-mono">
-                {row.isFocused && <span className="mr-1 text-warn">▶</span>}
-                {format(new Date(row.reading_datetime), 'dd MMM HH:mm')}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmtNum(row.previous_reading)}</td>
-              <td className="px-3 py-2 text-right font-mono">{fmtNum(row.current_reading)}</td>
-              <td className="px-3 py-2 text-right"><DeltaBadge vol={row.daily_volume} /></td>
-              <td className="px-3 py-2">
-                <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium',
-                  row.norm_status === 'retracted' ? 'bg-muted text-muted-foreground' :
-                  row.norm_status === 'pending_review' ? 'bg-warn-soft text-warn' :
-                  row.norm_status === 'normalized' ? 'bg-primary-soft text-primary' :
-                  row.isFocused ? 'bg-warn-soft text-warn' : 'bg-muted/50 text-muted-foreground')}>
-                  {row.norm_status}
-                </span>
-              </td>
+      {/* overflow-x-auto on this inner wrapper (not the outer one, which
+          stays overflow-hidden purely for the rounded-corner clipping trick
+          above) — without it, this 5-column table was silently *clipped*
+          rather than scrollable on a narrow phone: overflow-hidden hides
+          anything past the container edge with no way to reach it, so the
+          rightmost Status column just vanished instead of becoming
+          reachable. min-w forces the columns to keep their natural width
+          and scroll as a unit instead of getting squeezed illegibly thin. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px]">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left px-3 py-1.5 text-2xs text-muted-foreground font-medium">Date / Time</th>
+              <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Previous</th>
+              <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Current</th>
+              <th className="text-right px-3 py-1.5 text-2xs text-muted-foreground font-medium">Delta</th>
+              <th className="px-3 py-1.5 text-2xs text-muted-foreground font-medium">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {chain.map(row => (
+              <tr key={row.id}
+                className={cn('border-b last:border-0 transition-colors',
+                  row.isFocused
+                    ? 'bg-warn-soft font-semibold'
+                    : 'hover:bg-muted/20')}>
+                <td className="px-3 py-2 font-mono whitespace-nowrap">
+                  {row.isFocused && <span className="mr-1 text-warn">▶</span>}
+                  {format(new Date(row.reading_datetime), 'dd MMM HH:mm')}
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmtNum(row.previous_reading)}</td>
+                <td className="px-3 py-2 text-right font-mono">{fmtNum(row.current_reading)}</td>
+                <td className="px-3 py-2 text-right"><DeltaBadge vol={row.daily_volume} /></td>
+                <td className="px-3 py-2">
+                  <span className={cn('text-2xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap',
+                    row.norm_status === 'retracted' ? 'bg-muted text-muted-foreground' :
+                    row.norm_status === 'pending_review' ? 'bg-warn-soft text-warn' :
+                    row.norm_status === 'normalized' ? 'bg-primary-soft text-primary' :
+                    row.isFocused ? 'bg-warn-soft text-warn' : 'bg-muted/50 text-muted-foreground')}>
+                    {row.norm_status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -298,14 +309,29 @@ function EditValueModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-background border rounded-xl shadow-xl p-5 w-full max-w-sm space-y-4 mx-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-semibold text-sm">Edit reading — {row.entity_name}</h3>
-        <div className="text-xs text-muted-foreground space-y-0.5">
-          <div>{row.plant_name} · {fmtDt(row.reading_datetime)}</div>
-          <div>Previous reading: <span className="font-mono">{fmtNum(row.previous_reading)}</span></div>
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o && !busy) onClose(); }}
+      title={`Edit reading — ${row.entity_name}`}
+      description={(
+        <>
+          {row.plant_name} · {fmtDt(row.reading_datetime)}
+          <br />
+          Previous reading: <span className="font-mono">{fmtNum(row.previous_reading)}</span>
+        </>
+      )}
+      className="max-w-sm"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={busy || !isReasonComplete(reason, customReason) || !newVal}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Save &amp; cascade
+          </Button>
         </div>
-
+      )}
+    >
+      <div className="space-y-4 pb-4">
         <div className="space-y-1">
           <label htmlFor="datacorrections-new-value" className="text-xs font-medium">Correct current reading</label>
           <Input
@@ -329,16 +355,8 @@ function EditValueModal({
           customReason={customReason} onCustomReasonChange={setCustomReason}
           label="Correction reason"
         />
-
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button size="sm" onClick={handleSave} disabled={busy || !isReasonComplete(reason, customReason) || !newVal}>
-            {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Save &amp; cascade
-          </Button>
-        </div>
       </div>
-    </div>
+    </ResponsiveDialog>
   );
 }
 
@@ -445,20 +463,35 @@ function MarkRolloverModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-background border rounded-xl shadow-xl p-5 w-full max-w-sm space-y-4 mx-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-semibold text-sm flex items-center gap-1.5">
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o && !busy) onClose(); }}
+      title={(
+        <span className="flex items-center gap-1.5">
           <Gauge className="h-4 w-4 text-primary shrink-0" />
           Mark as meter rollover — {row.entity_name}
-        </h3>
-        <div className="text-xs text-muted-foreground space-y-0.5">
-          <div>{row.plant_name} · {fmtDt(row.reading_datetime)}</div>
-          <div>
-            Previous: <span className="font-mono">{fmtNum(row.previous_reading)}</span>
-            {' → '}Current: <span className="font-mono">{fmtNum(row.current_reading)}</span>
-          </div>
+        </span>
+      )}
+      description={(
+        <>
+          {row.plant_name} · {fmtDt(row.reading_datetime)}
+          <br />
+          Previous: <span className="font-mono">{fmtNum(row.previous_reading)}</span>
+          {' → '}Current: <span className="font-mono">{fmtNum(row.current_reading)}</span>
+        </>
+      )}
+      className="max-w-sm"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={busy || !validMax}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Confirm rollover
+          </Button>
         </div>
-
+      )}
+    >
+      <div className="space-y-4 pb-4">
         <p className="text-xs text-muted-foreground">
           Only confirm this if the meter's register actually wrapped around —
           the current reading should look like an early value for this meter
@@ -487,16 +520,8 @@ function MarkRolloverModal({
             </p>
           )}
         </div>
-
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button size="sm" onClick={handleSave} disabled={busy || !validMax}>
-            {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Confirm rollover
-          </Button>
-        </div>
       </div>
-    </div>
+    </ResponsiveDialog>
   );
 }
 
@@ -1454,28 +1479,32 @@ function EditHistoryTab() {
         onRetry={refetch}
       >
         <div className="border rounded-lg overflow-hidden text-xs">
-          <table className="w-full">
-            <thead className="bg-muted/40">
-              <tr>
-                {['Date', 'Table', 'Action', 'Original', 'Adjusted', 'Note', 'By'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r: any) => (
-                <tr key={r.id} className="border-t hover:bg-muted/20">
-                  <td className="px-3 py-2 font-mono whitespace-nowrap">{format(new Date(r.performed_at), 'dd MMM yy HH:mm')}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{tableLabel[r.source_table as SourceTable] ?? r.source_table}</td>
-                  <td className="px-3 py-2">{actionBadge(r.action)}</td>
-                  <td className="px-3 py-2 font-mono text-right">{fmtNum(r.original_value)}</td>
-                  <td className="px-3 py-2 font-mono text-right">{fmtNum(r.adjusted_value)}</td>
-                  <td className="px-3 py-2 text-muted-foreground max-w-[160px] truncate" title={r.note}>{r.note ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{r.performed_role}</td>
+          {/* See ChainContext for why this is a separate inner wrapper from
+              the outer overflow-hidden, not the same element. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-muted/40">
+                <tr>
+                  {['Date', 'Table', 'Action', 'Original', 'Adjusted', 'Note', 'By'].map(h => (
+                    <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r: any) => (
+                  <tr key={r.id} className="border-t hover:bg-muted/20">
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{format(new Date(r.performed_at), 'dd MMM yy HH:mm')}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{tableLabel[r.source_table as SourceTable] ?? r.source_table}</td>
+                    <td className="px-3 py-2">{actionBadge(r.action)}</td>
+                    <td className="px-3 py-2 font-mono text-right">{fmtNum(r.original_value)}</td>
+                    <td className="px-3 py-2 font-mono text-right">{fmtNum(r.adjusted_value)}</td>
+                    <td className="px-3 py-2 text-muted-foreground max-w-[160px] truncate" title={r.note}>{r.note ?? '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.performed_role}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </DataState>
     </div>
@@ -1517,43 +1546,47 @@ function OperatorStatsTab() {
         onRetry={refetch}
       >
         <div className="border rounded-lg overflow-hidden text-xs">
-          <table className="w-full">
-            <thead className="bg-muted/40">
-              <tr>
-                {['Operator', 'Entries', 'Backward', 'Pending', 'Retracted', 'Error rate', 'Last entry'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {stats.map((s, i) => (
-                <tr key={i} className={cn('border-t', rateBg(s.error_rate_pct))}>
-                  <td className="px-3 py-2.5 font-medium max-w-[180px]">
-                    <div className="truncate" title={s.operator_email}>{s.operator_email ?? '—'}</div>
-                    {s.error_rate_pct >= 10 && (
-                      <div className="text-2xs text-warn mt-0.5">Needs review</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{s.total_entries.toLocaleString()}</td>
-                  <td className="px-3 py-2.5">{s.backward_readings > 0 ? <span className="text-destructive font-medium">{s.backward_readings}</span> : <span className="text-muted-foreground">0</span>}</td>
-                  <td className="px-3 py-2.5">{s.pending_review > 0 ? <span className="text-warn font-medium">{s.pending_review}</span> : <span className="text-muted-foreground">0</span>}</td>
-                  <td className="px-3 py-2.5">{s.retracted > 0 ? <span className="text-muted-foreground">{s.retracted}</span> : <span className="text-muted-foreground">0</span>}</td>
-                  <td className="px-3 py-2.5">
-                    <span className={cn('font-mono', rateColor(s.error_rate_pct))}>
-                      {s.error_rate_pct?.toFixed(1) ?? '0.0'}%
-                    </span>
-                    <div className="w-full bg-muted rounded-full h-1 mt-1">
-                      <div className={cn('h-1 rounded-full', s.error_rate_pct >= 20 ? 'bg-destructive' : s.error_rate_pct >= 10 ? 'bg-warn' : 'bg-accent')}
-                        style={{ width: `${Math.min(100, s.error_rate_pct * 3)}%` }} />
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
-                    {s.last_entry_at ? formatDistanceToNow(new Date(s.last_entry_at), { addSuffix: true }) : '—'}
-                  </td>
+          {/* See ChainContext for why this is a separate inner wrapper from
+              the outer overflow-hidden, not the same element. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-muted/40">
+                <tr>
+                  {['Operator', 'Entries', 'Backward', 'Pending', 'Retracted', 'Error rate', 'Last entry'].map(h => (
+                    <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground text-2xs uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {stats.map((s, i) => (
+                  <tr key={i} className={cn('border-t', rateBg(s.error_rate_pct))}>
+                    <td className="px-3 py-2.5 font-medium max-w-[180px]">
+                      <div className="truncate" title={s.operator_email}>{s.operator_email ?? '—'}</div>
+                      {s.error_rate_pct >= 10 && (
+                        <div className="text-2xs text-warn mt-0.5">Needs review</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{s.total_entries.toLocaleString()}</td>
+                    <td className="px-3 py-2.5">{s.backward_readings > 0 ? <span className="text-destructive font-medium">{s.backward_readings}</span> : <span className="text-muted-foreground">0</span>}</td>
+                    <td className="px-3 py-2.5">{s.pending_review > 0 ? <span className="text-warn font-medium">{s.pending_review}</span> : <span className="text-muted-foreground">0</span>}</td>
+                    <td className="px-3 py-2.5">{s.retracted > 0 ? <span className="text-muted-foreground">{s.retracted}</span> : <span className="text-muted-foreground">0</span>}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={cn('font-mono', rateColor(s.error_rate_pct))}>
+                        {s.error_rate_pct?.toFixed(1) ?? '0.0'}%
+                      </span>
+                      <div className="w-full bg-muted rounded-full h-1 mt-1">
+                        <div className={cn('h-1 rounded-full', s.error_rate_pct >= 20 ? 'bg-destructive' : s.error_rate_pct >= 10 ? 'bg-warn' : 'bg-accent')}
+                          style={{ width: `${Math.min(100, s.error_rate_pct * 3)}%` }} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {s.last_entry_at ? formatDistanceToNow(new Date(s.last_entry_at), { addSuffix: true }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </DataState>
     </div>
@@ -1602,7 +1635,7 @@ export default function DataCorrections() {
       />
 
       <Tabs defaultValue="pending">
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1 h-auto sm:h-10 w-full">
           <TabsTrigger value="pending" className="gap-1.5 text-xs">
             <ClipboardCheck className="h-3.5 w-3.5" />
             Pending

@@ -26,6 +26,11 @@ import {
 type Priority = {
   to: string;
   label: string;
+  // Optional shorter label for the bottom-nav column itself, where a
+  // 5-column phone-width layout leaves little room. The full `label` is
+  // still used as the button's aria-label so screen readers get the
+  // unabbreviated name — only the visible column text is shortened.
+  mobileLabel?: string;
   icon: any;
   match?: string[];
   // Optional precise active check: returns true when the current `tab` query
@@ -39,6 +44,10 @@ const leftPriority: Priority[] = [
   {
     to: '/operations?tab=wells',
     label: 'Wells & Locators',
+    // "Wells & Locators" at text-2xs was the tightest fit in the row by a
+    // wide margin — this frees enough width to raise the whole row from
+    // 10px to 11px (see renderPriority) without any label wrapping.
+    mobileLabel: 'Wells',
     icon: Droplet,
     match: ['/operations'],
     // Accept both plural deep-link values and the singular values that
@@ -171,11 +180,12 @@ export function BottomNav() {
       <button
         key={item.to}
         onClick={() => navigate(item.to)}
+        aria-label={item.label}
         className={cn(
           'flex flex-col items-center justify-center gap-0.5 py-2 px-1 transition-all',
           active
             ? 'text-primary text-xs font-semibold'
-            : 'text-muted-foreground/70 text-2xs font-medium hover:text-foreground',
+            : 'text-muted-foreground/70 text-[11px] font-medium hover:text-foreground',
         )}
       >
         <item.icon
@@ -184,13 +194,21 @@ export function BottomNav() {
             active ? 'h-[22px] w-[22px] drop-shadow-sm' : 'h-[18px] w-[18px]',
           )}
         />
-        <span className="leading-none">{item.label}</span>
+        <span className="leading-none">{item.mobileLabel ?? item.label}</span>
       </button>
     );
   };
 
   return (
-    <nav className="md:hidden sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]">
+    <nav
+      className={cn(
+        'md:hidden sticky bottom-0 z-40 bg-card border-t shadow-[0_-2px_8px_-2px_hsl(210_30%_12%/0.06)]',
+        // Bottom safe-area inset (requires viewport-fit=cover in index.html)
+        // keeps the row clear of the home-indicator/gesture bar on notched
+        // phones instead of sitting flush underneath it.
+        'pb-[env(safe-area-inset-bottom)]',
+      )}
+    >
       <div className="grid grid-cols-5 max-w-3xl mx-auto items-end">
         {leftPriority.map(renderPriority)}
 
@@ -199,7 +217,13 @@ export function BottomNav() {
           to="/"
           end
           className={({ isActive }) => cn(
-            'flex flex-col items-center justify-center gap-0.5 py-1 px-1 text-2xs font-semibold transition-colors -mt-3',
+            // px-0.5 not px-1 (unlike the other 4 columns): "Dashboard" at
+            // 11px/semibold measures 58px in the real Inter font — with
+            // px-1's 8px of padding that's a ~2px overflow of the 56px
+            // budget on the narrowest realistic viewport (320px); px-0.5
+            // clears it with room to spare. Verified against Inter's actual
+            // metrics, not estimated — see BottomNav in the mobile UX audit.
+            'flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-[11px] font-semibold transition-colors -mt-3',
             isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -221,7 +245,7 @@ export function BottomNav() {
         {/* Side sheet: employees, data exports, and other less-frequent items */}
         <Sheet>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-2xs font-medium text-muted-foreground hover:text-foreground">
+            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
               <Menu className="h-[18px] w-[18px]" />
               <span className="leading-none">More</span>
             </button>
@@ -231,7 +255,7 @@ export function BottomNav() {
             <div className="mt-4 space-y-4 overflow-y-auto">
               {visibleGroups.map((group) => (
                 <div key={group.title}>
-                  <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.title}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.title}</div>
                   <div className="flex flex-col gap-1">
                     {group.items.map((r) => (
                       <NavLink

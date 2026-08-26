@@ -415,7 +415,18 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-background border-l shadow-2xl flex flex-col">
+      <div
+        className={cn(
+          'fixed top-0 bottom-0 z-50 bg-background border-l shadow-2xl flex flex-col',
+          // Full-width on mobile — this was a fixed 320px (w-80) drawer
+          // regardless of viewport, which either exactly filled or didn't
+          // quite fit a 320-375px phone with zero margin, and gave content
+          // (multi-line info rows, action buttons) the same cramped width
+          // it'd get on desktop. sm:w-80 restores the original sidebar
+          // width once there's room for it to actually behave like one.
+          'right-0 left-0 sm:left-auto sm:w-80',
+        )}
+      >
         <div className={cn('h-1.5 w-full', avatarColor(member.id))} />
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <span className="text-sm font-semibold">Employee Details</span>
@@ -446,7 +457,9 @@ function DetailDrawer({ member, roles, plants, allStaff, onChat, onClose, isSelf
           </div>
         </div>
 
-        <div className="border-t p-4 flex gap-2">
+        {/* pb includes a safe-area inset so the action row clears the home
+            indicator/gesture bar on notched phones when this is full-width. */}
+        <div className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex gap-2">
           {!isSelf && (
             <Button className="flex-1 gap-1.5" size="sm" onClick={() => { onChat(); onClose(); }}>
               <MessageSquare className="h-3.5 w-3.5" /> Chat

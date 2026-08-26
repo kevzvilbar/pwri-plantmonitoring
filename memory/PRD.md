@@ -13,6 +13,21 @@
 > (it's an accurate record of what iteration 11 did at the time) rather than
 > editing history; treat `DEPLOYMENT.md` as the current source of truth for
 > deployment until this doc gets a fuller pass.
+>
+> **Update (2026-08-18, external code review):** the same staleness extends
+> further than the note above covers. Section 4's `[x]` checkboxes and all
+> of Section 5's endpoint table (`/api/import/*`, `/api/downtime/*`,
+> `/api/alerts/*`, `/api/blending/*`, `/api/ai/*`, `/api/compliance/*`,
+> `/api/cron/*`, `/api/admin/*`) describe the pre-2026-08-03 FastAPI
+> backend and are gone along with it — every one of those routes' actual
+> logic now lives as direct Supabase client calls (RLS-gated) or Supabase
+> Edge Functions, the same migration already documented for the
+> `/api/data-analysis/*` routes in the architecture-decision box below.
+> Section 4's feature checkboxes are still a reasonably accurate record of
+> *what shipped*, just not of *how* — read `[x] /api/foo` as "this
+> capability exists," not as "this HTTP route exists." As with the note
+> above, left as-written rather than rewritten; a proper `ARCHITECTURE.md`
+> capturing the current Supabase-only shape is still on the backlog (§6).
 
 _Last updated: 2026-07-21 (iteration 11 — stack correction: MongoDB removed, Supabase-only; dead-code cleanup Section 9.3)_
 

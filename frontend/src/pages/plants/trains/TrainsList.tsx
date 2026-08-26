@@ -38,10 +38,13 @@ import { friendlyError } from '@/lib/supabaseErrors';
 import { format } from 'date-fns';
 
 
-import {
-  EditTrainDialog, TrainOperatorLogModal, TrainRODetailCharts,
-  PretreatAFMChart, PretreatBoosterChart, PretreatCFChart, PretreatHPPChart,
-} from './TrainDetail';
+import { EditTrainDialog } from './EditTrainDialog';
+import { TrainOperatorLogModal } from './TrainOperatorLogModal';
+import { TrainRODetailCharts } from './TrainRODetailCharts';
+import { PretreatAFMChart } from './PretreatAFMChart';
+import { PretreatBoosterChart } from './PretreatBoosterChart';
+import { PretreatCFChart } from './PretreatCFChart';
+import { PretreatHPPChart } from './PretreatHPPChart';
 import { MeterDetailButton } from '../charts/EntityHistoryChart';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 import { parseCsv, downloadTemplate, CsvPreviewTable, CollapsibleSection, logStatusChange } from '../shared';
@@ -634,20 +637,20 @@ export function AddTrainDialog({ open, onOpenChange, defaultTrainNumber, onSubmi
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Train Number</Label>
-              <Input type="number" min={1} value={form.train_number} onChange={num('train_number')} />
+              <Label htmlFor="trainslist-train-number">Train Number</Label>
+              <Input type="number" min={1} value={form.train_number} onChange={num('train_number')} id="trainslist-train-number"/>
             </div>
             <div>
-              <Label>Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Label htmlFor="trainslist-name-optional">Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Input placeholder="e.g. Train A" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} id="trainslist-name-optional"/>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {fields.filter(f => !f.hide).map(({ key, label }) => (
               <div key={key}>
-                <Label>{label}</Label>
-                <Input type="number" min={0} value={form[key] as number} onChange={num(key)} />
+                <Label htmlFor="trainslist-field">{label}</Label>
+                <Input type="number" min={0} value={form[key] as number} onChange={num(key)} id="trainslist-field"/>
               </div>
             ))}
           </div>
@@ -784,7 +787,7 @@ export function TrainCsvImportDialog({ plantId, onClose,
             </p>
           </div>
           <div>
-            <Label className="text-xs font-medium">Select CSV file</Label>
+            <p className="text-xs font-medium">Select CSV file</p>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">

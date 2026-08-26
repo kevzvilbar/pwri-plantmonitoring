@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useDraft } from '@/hooks/useDraft';
@@ -23,11 +22,7 @@ import { downloadCSV } from '@/lib/csv';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircle, AlertTriangle, Loader2, History, Gauge, FlaskConical, Keyboard } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { ResponsiveDialog, ResponsiveAlertDialog } from '@/components/ui/responsive-dialog';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -77,8 +72,8 @@ export function parseCSVText(text: string): Record<string, string>[] {
   });
 }
 
-export function triggerTemplateDownload(filename: string, headers: string[], exampleRow: Record<string, string>) {
-  downloadCSV(filename, [exampleRow]);
+export function triggerTemplateDownload(filename: string, headers: string[], exampleRows: Record<string, string> | Record<string, string>[]) {
+  downloadCSV(filename, Array.isArray(exampleRows) ? exampleRows : [exampleRows]);
 }
 
 // ─── Date normaliser ─────────────────────────────────────────────────────────
@@ -114,6 +109,59 @@ async function logReadingImport(entry: {
   try {
     await (supabase.from('import_audit_log' as any) as any).insert([entry]);
   } catch { /* silently ignore if table missing */ }
+}
+
+// ─── Intra-file duplicate detection ─────────────────────────────────────────
+// Power readings are one-per-day-per-meter: key = plant|meter|YYYY-MM-DD, so
+// two rows on the same date but different times are still caught as dups.
+// All other modules: key = entityName|YYYY-MM-DDTHH:mm so rows with the
+// same datetime but a DIFFERENT well/locator/blending name are NOT deduped.
+//
+// FIX (multi-meter CSV import): the power key used to be just plant|date,
+// with no meter_name component. A multi-meter plant's CSV — one row per
+// meter, same plant_name, same reading_datetime, different meter_name — all
+// collapsed onto that one key, so rows for meter 2 and meter 3 were flagged
+// as "duplicate rows within the file" and silently dropped right here,
+// before insertRows ever saw them. Doesn't matter how correctly meter_name
+// is filled in, or how correct the resolution logic downstream is — the
+// rows never arrive. Including meter_name in the key fixes it: rows only
+// collide now if they'd actually target the same meter.
+//
+// FIX: call normalizeDatetime() before slicing so non-standard formats like
+// "2026-06-25T8:00" (single-digit hour, common in Excel exports) are fixed
+// to "2026-06-25T08:00" first. Without this, two rows meant to be the same
+// moment could fail to collide (or vice versa) purely due to formatting.
+//
+// BUG FIX (timezone day-rollback): slices the key straight from the
+// normalized "YYYY-MM-DDTHH:mm" string, not from `new Date(...).toISOString()`
+// — that conversion to UTC first would shift any Manila (UTC+8) reading
+// between 12:00–7:59 AM local onto the *previous* calendar day, colliding
+// genuinely different rows (or missing a real duplicate).
+export function computeIntraFileDuplicateIndices(rows: Record<string, string>[], module: string): number[] {
+  const isPowerModule = module === 'power';
+  const seenKeys = new Map<string, number>(); // key → first row index
+  const intraDups: number[] = [];
+  rows.forEach((r, i) => {
+    const dtRaw = r.reading_datetime || r.event_date || '';
+    // Entity name: prefer well_name, then locator_name (power uses plant_name — handled separately below)
+    const entityName = (r.well_name || r.locator_name || '').trim().toLowerCase();
+    let dtKey: string;
+    if (!dtRaw) {
+      dtKey = `__nodate__${i}`;
+    } else {
+      const dtNorm = normalizeDatetime(dtRaw);
+      dtKey = isPowerModule ? dtNorm.slice(0, 10) : dtNorm.slice(0, 16);
+    }
+    // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.
+    // Power uses plant_name as its entity name (from the CSV column), PLUS
+    // meter_name, so distinct meters on the same plant+date don't collide.
+    const powerName = isPowerModule ? (r.plant_name || '').trim().toLowerCase() : '';
+    const powerMeter = isPowerModule ? (r.meter_name || '').trim().toLowerCase() : '';
+    const key = isPowerModule ? `${powerName}|${powerMeter}|${dtKey}` : `${entityName}|${dtKey}`;
+    if (seenKeys.has(key)) intraDups.push(i);
+    else seenKeys.set(key, i);
+  });
+  return intraDups;
 }
 
 // ─── Duplicate check helper for CSV imports ──────────────────────────────────
@@ -153,6 +201,8 @@ interface ImportDialogProps {
   schemaHint: string;           // shown in the dialog
   templateFilename: string;
   templateRow: Record<string, string>;
+  templateRows?: Record<string, string>[]; // optional multi-row example (e.g. one row per meter); falls back to [templateRow]
+  helpText?: React.ReactNode;   // optional extra line shown under the standard column-format note
   validateRow: (r: Record<string, string>, i: number) => string[];
   insertRows: (rows: Record<string, string>[], plantId: string) => Promise<{ count: number; errors: string[] }>;
   onClose: () => void;
@@ -161,7 +211,7 @@ interface ImportDialogProps {
 
 export function ImportReadingsDialog({
   title, module, plantId, userId,
-  schemaHint, templateFilename, templateRow,
+  schemaHint, templateFilename, templateRow, templateRows, helpText,
   validateRow, insertRows,
   onClose, onImported,
 }: ImportDialogProps) {
@@ -219,51 +269,7 @@ export function ImportReadingsDialog({
       const ts = new Date().toISOString();
 
       // ── Duplicate detection ──────────────────────────────────────────────────
-      // Power readings are one-per-day: use date-only key (YYYY-MM-DD) so that
-      // two rows on the same date but different times are still caught as dups.
-      // All other modules: key = entityName|YYYY-MM-DDTHH:mm so rows with the
-      // same datetime but a DIFFERENT well/locator/blending name are NOT deduped.
-      //
-      // FIX: call normalizeDatetime() before new Date() so non-standard formats
-      // like "2026-06-25T8:00" (single-digit hour, common in Excel exports) are
-      // fixed to "2026-06-25T08:00" before parsing. Without this, V8 treats the
-      // raw string as Invalid Date and .toISOString() throws RangeError, crashing
-      // doImport before setBusy(false) is reached — leaving the spinner frozen.
-      const isPowerModule = module === 'power';
-      const seenKeys = new Map<string, number>(); // key → first row index
-      const intraDups: number[] = [];
-      rows.forEach((r, i) => {
-        const dtRaw = r.reading_datetime || r.event_date || '';
-        // Entity name: prefer well_name, then locator_name (power uses plant_name — handled separately below)
-        const entityName = (r.well_name || r.locator_name || '').trim().toLowerCase();
-        let dtKey: string;
-        if (!dtRaw) {
-          dtKey = `__nodate__${i}`;
-        } else {
-          // normalizeDatetime pads single-digit hours (T8: → T08:) and replaces
-          // space separators with T so Excel-style datetimes parse correctly.
-          //
-          // BUG FIX (timezone day-rollback): previously ran the normalized string
-          // through `new Date(...).toISOString()` before slicing, which converts
-          // to UTC first. For Manila (UTC+8) that shifts any reading between
-          // 12:00–7:59 AM local onto the *previous* calendar day/minute, so two
-          // genuinely different rows could collide (or a real dup could be missed).
-          // normalizeDatetime() already returns a clean "YYYY-MM-DDTHH:mm" string —
-          // slice the key straight from it, no UTC conversion involved.
-          const dtNorm = normalizeDatetime(dtRaw);
-          if (isPowerModule) {
-            dtKey = dtNorm.slice(0, 10); // YYYY-MM-DD, as entered
-          } else {
-            dtKey = dtNorm.slice(0, 16); // YYYY-MM-DDTHH:mm, as entered
-          }
-        }
-        // All modules: key = "entityName|dtKey" — different names are allowed at the same datetime.
-        // Power uses plant_name as its entity name (from the CSV column).
-        const powerName = isPowerModule ? (r.plant_name || '').trim().toLowerCase() : '';
-        const key = isPowerModule ? `${powerName}|${dtKey}` : `${entityName}|${dtKey}`;
-        if (seenKeys.has(key)) intraDups.push(i);
-        else seenKeys.set(key, i);
-      });
+      const intraDups = computeIntraFileDuplicateIndices(rows, module);
 
       // If intra-file duplicates exist, warn and block
       if (intraDups.length > 0 && !dupResolved) {
@@ -311,16 +317,33 @@ export function ImportReadingsDialog({
   const canSubmit = !busy && !!file && rows.length > 0 && errors.length === 0;
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            {title}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-1">
+    <>
+    <ResponsiveDialog
+      open
+      onOpenChange={(o) => { if (!o && !busy) onClose(); }}
+      title={(
+        <span className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
+          {title}
+        </span>
+      )}
+      className="max-w-lg"
+      footer={(
+        <div className="flex gap-2 justify-end w-full">
+          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+          <Button
+            onClick={doImport}
+            disabled={!canSubmit}
+            className="bg-primary text-white hover:bg-primary/90"
+            data-testid="confirm-import-btn"
+          >
+            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+          </Button>
+        </div>
+      )}
+    >
+        <div className="space-y-4 pb-4">
 
           {/* Download template */}
           <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
@@ -328,7 +351,7 @@ export function ImportReadingsDialog({
               size="sm"
               variant="outline"
               className="shrink-0 gap-1.5"
-              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRow)}
+              onClick={() => triggerTemplateDownload(templateFilename, Object.keys(templateRow), templateRows ?? templateRow)}
             >
               <Download className="h-3.5 w-3.5" />
               Download Template
@@ -347,11 +370,14 @@ export function ImportReadingsDialog({
               ISO 8601 format (e.g. <code>2024-06-15T08:30</code>) or <code>YYYY-MM-DD HH:mm</code>.
               Leave blank to default to the import timestamp.
             </p>
+            {helpText && (
+              <p className="text-2xs text-muted-foreground">{helpText}</p>
+            )}
           </div>
 
           {/* File picker */}
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label htmlFor="readingimportdialog-select-csv-file" className="text-xs">
               Select CSV file <span className="text-destructive">*</span>
             </Label>
             <div className="flex items-center gap-2">
@@ -373,7 +399,7 @@ export function ImportReadingsDialog({
               onChange={handleFile}
               className="hidden"
               data-testid="import-file-input"
-            />
+            id="readingimportdialog-select-csv-file"/>
           </div>
 
           {/* Validation feedback */}
@@ -458,72 +484,69 @@ export function ImportReadingsDialog({
             </div>
           )}
 
-          {/* DB-level duplicate confirmation (replaces window.confirm) */}
-          <AlertDialog open={!!dupConfirm}>
-            <AlertDialogContent
-              onEscapeKeyDown={(e) => e.preventDefault()}
-            >
-              <AlertDialogHeader>
-                <AlertDialogTitle className="flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4 text-warn" /> Duplicate detected
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  A reading for "{dupConfirm?.label}" already exists{' '}
-                  {dupConfirm?.isDateOnly ? 'on this date' : 'at this date & time'}.
-                  Overwrite it, or skip this row?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="gap-2 sm:flex-wrap">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => handleDupDecision('skip', true)}
-                  title="Skip this and all remaining duplicates"
-                >
-                  Skip All
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => handleDupDecision('skip')}
-                >
-                  Skip
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
-                  onClick={() => handleDupDecision('overwrite', true)}
-                  title="Overwrite this and all remaining duplicates"
-                >
-                  Overwrite All
-                </Button>
-                <AlertDialogAction
-                  className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
-                  onClick={() => handleDupDecision('overwrite')}
-                >
-                  Overwrite
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
+    </ResponsiveDialog>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={!!dupConfirm}>Cancel</Button>
+    {/* DB-level duplicate confirmation (replaces window.confirm). A second,
+        independent dialog stacked on top of the import dialog above — must
+        stay explicit-choice-only (no Escape, no outside click, no swipe),
+        same guarantee AlertDialog gave it on desktop. */}
+    <ResponsiveAlertDialog
+      open={!!dupConfirm}
+      onOpenChange={() => { /* explicit-choice only — see handleDupDecision */ }}
+      preventEscapeClose
+      title={(
+        <span className="flex items-center gap-1.5">
+          <AlertCircle className="h-4 w-4 text-warn" /> Duplicate detected
+        </span>
+      )}
+      description={(
+        <>
+          A reading for "{dupConfirm?.label}" already exists{' '}
+          {dupConfirm?.isDateOnly ? 'on this date' : 'at this date & time'}.
+          Overwrite it, or skip this row?
+        </>
+      )}
+      footer={(
+        <div className="flex gap-2 flex-wrap justify-end w-full">
           <Button
-            onClick={doImport}
-            disabled={!canSubmit}
-            className="bg-primary text-white hover:bg-primary/90"
-            data-testid="confirm-import-btn"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => handleDupDecision('skip', true)}
+            title="Skip this and all remaining duplicates"
           >
-            {busy && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            Import Rows{rows.length > 0 ? ` (${rows.length})` : ''}
+            Skip All
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => handleDupDecision('skip')}
+          >
+            Skip
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
+            onClick={() => handleDupDecision('overwrite', true)}
+            title="Overwrite this and all remaining duplicates"
+          >
+            Overwrite All
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-primary text-white hover:bg-primary/90"
+            onClick={() => handleDupDecision('overwrite')}
+          >
+            Overwrite
+          </Button>
+        </div>
+      )}
+    >
+      {null}
+    </ResponsiveAlertDialog>
+    </>
   );
 }
 

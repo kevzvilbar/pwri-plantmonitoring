@@ -45,7 +45,7 @@ export function ReasonField({
   const tooShort = value.length > 0 && value.trim().length < 5;
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">
+      <Label htmlFor="locatordialogs-reason-min-5-chars-required-for-audit-log" className="text-xs text-muted-foreground">
         Reason <span className="text-danger">*</span>
         <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
       </Label>
@@ -58,7 +58,7 @@ export function ReasonField({
         data-testid={testId}
         aria-invalid={tooShort}
         className={tooShort ? 'border-danger' : ''}
-      />
+      id="locatordialogs-reason-min-5-chars-required-for-audit-log"/>
       {tooShort && (
         <p className="text-2xs text-danger">
           Reason must be at least 5 characters ({value.trim().length}/5).
@@ -183,26 +183,26 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Locator</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
+          <div><Label htmlFor="locatordialogs-name">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} id="locatordialogs-name"/></div>
+          <div><Label htmlFor="locatordialogs-address">Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} id="locatordialogs-address"/></div>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-brand">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} id="locatordialogs-brand"/></div>
             <div>
-              <Label>Size</Label>
+              <Label htmlFor="locatordialogs-size">Size</Label>
               <div className="relative">
-                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" />
+                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" id="locatordialogs-size"/>
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
               </div>
             </div>
-            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-serial">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} id="locatordialogs-serial"/></div>
           </div>
 
           {/* Supplied by product meter */}
           {(productMeters?.length ?? 0) > 0 && (
             <div>
-              <Label>Supplied by (Product Meter)</Label>
+              <Label htmlFor="locatordialogs-supplied-by-product-meter">Supplied by (Product Meter)</Label>
               <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
-                <SelectTrigger className="h-9 text-sm">
+                <SelectTrigger className="h-9 text-sm" id="locatordialogs-supplied-by-product-meter">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
@@ -233,13 +233,13 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
               actually see the mode is Direct rather than wondering where the
               control went. */}
           <div>
-            <Label>Reading entry mode</Label>
+            <Label htmlFor="locatordialogs-reading-entry-mode">Reading entry mode</Label>
             <Select
               value={form.is_derived ? 'direct' : form.default_input_mode}
               disabled={form.is_derived}
               onValueChange={(v: 'raw' | 'direct') => setForm({ ...form, default_input_mode: v })}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-9 text-sm" id="locatordialogs-reading-entry-mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -296,12 +296,12 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
             </p>
             {form.is_derived && (
               <div>
-                <Label>Derived from (mother meter) *</Label>
+                <Label htmlFor="locatordialogs-derived-from-mother-meter">Derived from (mother meter) *</Label>
                 <Select
                   value={form.derived_from_meter_id || '__none__'}
                   onValueChange={(v) => setForm({ ...form, derived_from_meter_id: v === '__none__' ? '' : v })}
                 >
-                  <SelectTrigger className="h-9 text-sm">
+                  <SelectTrigger className="h-9 text-sm" id="locatordialogs-derived-from-mother-meter">
                     <SelectValue placeholder="Select the mother meter…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -327,7 +327,7 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
           {/* GPS row — editable inputs + clickable map link + use-my-location */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label>GPS Coordinates</Label>
+              <p className="text-sm font-medium leading-none">GPS Coordinates</p>
               <div className="flex items-center gap-2">
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
@@ -344,12 +344,12 @@ export function EditLocatorDialog({ locator, onClose }: { locator: any; onClose:
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Latitude</Label>
-                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+                <Label htmlFor="locatordialogs-latitude" className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} id="locatordialogs-latitude"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Longitude</Label>
-                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+                <Label htmlFor="locatordialogs-longitude" className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} id="locatordialogs-longitude"/>
               </div>
             </div>
           </div>
@@ -451,26 +451,26 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
       <DialogContent>
         <DialogHeader><DialogTitle>Add Locator</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-          <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
+          <div><Label htmlFor="locatordialogs-name-2">Name *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} id="locatordialogs-name-2"/></div>
+          <div><Label htmlFor="locatordialogs-address-2">Address</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} id="locatordialogs-address-2"/></div>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-brand-2">Brand</Label><Input value={form.meter_brand} onChange={e => setForm({ ...form, meter_brand: e.target.value })} id="locatordialogs-brand-2"/></div>
             <div>
-              <Label>Size</Label>
+              <Label htmlFor="locatordialogs-size-2">Size</Label>
               <div className="relative">
-                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" />
+                <Input type="number" min="0" step="0.5" value={form.meter_size} onChange={e => setForm({ ...form, meter_size: e.target.value })} className="pr-10" id="locatordialogs-size-2"/>
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">in</span>
               </div>
             </div>
-            <div><Label>Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-serial-2">Serial</Label><Input value={form.meter_serial} onChange={e => setForm({ ...form, meter_serial: e.target.value })} id="locatordialogs-serial-2"/></div>
           </div>
 
           {/* Supplied by product meter */}
           {(productMeters?.length ?? 0) > 0 && (
             <div>
-              <Label>Supplied by (Product Meter)</Label>
+              <Label htmlFor="locatordialogs-supplied-by-product-meter-2">Supplied by (Product Meter)</Label>
               <Select value={form.product_meter_id || '__none__'} onValueChange={v => setForm({ ...form, product_meter_id: v === '__none__' ? '' : v })}>
-                <SelectTrigger className="h-9 text-sm">
+                <SelectTrigger className="h-9 text-sm" id="locatordialogs-supplied-by-product-meter-2">
                   <SelectValue placeholder="None — select a product meter" />
                 </SelectTrigger>
                 <SelectContent>
@@ -505,12 +505,12 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
             </p>
             {form.is_derived && (
               <div>
-                <Label>Derived from (mother meter) *</Label>
+                <Label htmlFor="locatordialogs-derived-from-mother-meter-2">Derived from (mother meter) *</Label>
                 <Select
                   value={form.derived_from_meter_id || '__none__'}
                   onValueChange={(v) => setForm({ ...form, derived_from_meter_id: v === '__none__' ? '' : v })}
                 >
-                  <SelectTrigger className="h-9 text-sm">
+                  <SelectTrigger className="h-9 text-sm" id="locatordialogs-derived-from-mother-meter-2">
                     <SelectValue placeholder="Select the mother meter…" />
                   </SelectTrigger>
                   <SelectContent>
@@ -535,7 +535,7 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
           {/* GPS row */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label>GPS Coordinates</Label>
+              <p className="text-sm font-medium leading-none">GPS Coordinates</p>
               <div className="flex items-center gap-2">
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
@@ -552,12 +552,12 @@ export function AddLocatorDialog({ plantId, onClose }: { plantId: string; onClos
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Latitude</Label>
-                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} />
+                <Label htmlFor="locatordialogs-latitude-2" className="text-xs text-muted-foreground">Latitude</Label>
+                <Input placeholder="e.g. 10.3157" value={form.gps_lat} onChange={e => setForm({ ...form, gps_lat: e.target.value })} id="locatordialogs-latitude-2"/>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Longitude</Label>
-                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} />
+                <Label htmlFor="locatordialogs-longitude-2" className="text-xs text-muted-foreground">Longitude</Label>
+                <Input placeholder="e.g. 123.8854" value={form.gps_lng} onChange={e => setForm({ ...form, gps_lng: e.target.value })} id="locatordialogs-longitude-2"/>
               </div>
             </div>
           </div>
@@ -657,20 +657,20 @@ export function ReplaceMeterDialog({
         <DialogHeader><DialogTitle>Replace meter</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Date changed *</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} /></div>
-            <div><Label>Old meter's final reading *</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-date-changed">Date changed *</Label><Input type="date" value={form.replacement_date} onChange={e => setForm({ ...form, replacement_date: e.target.value })} id="locatordialogs-date-changed"/></div>
+            <div><Label htmlFor="locatordialogs-old-meter-s-final-reading">Old meter's final reading *</Label><Input type="number" value={form.old_final_reading} onChange={e => setForm({ ...form, old_final_reading: e.target.value })} id="locatordialogs-old-meter-s-final-reading"/></div>
           </div>
           <div className="text-xs text-muted-foreground">Old serial: <span className="font-mono-num">{oldSerial ?? '—'}</span></div>
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} /></div>
-            <div><Label>New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} /></div>
-            <div><Label>New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-new-brand">New brand</Label><Input value={form.new_brand} onChange={e => setForm({ ...form, new_brand: e.target.value })} id="locatordialogs-new-brand"/></div>
+            <div><Label htmlFor="locatordialogs-new-size">New size</Label><Input value={form.new_size} onChange={e => setForm({ ...form, new_size: e.target.value })} id="locatordialogs-new-size"/></div>
+            <div><Label htmlFor="locatordialogs-new-serial">New serial *</Label><Input value={form.new_serial} onChange={e => setForm({ ...form, new_serial: e.target.value })} id="locatordialogs-new-serial"/></div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>New meter's initial reading *</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} /></div>
-            <div><Label>Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} /></div>
+            <div><Label htmlFor="locatordialogs-new-meter-s-initial-reading">New meter's initial reading *</Label><Input type="number" value={form.new_initial_reading} onChange={e => setForm({ ...form, new_initial_reading: e.target.value })} id="locatordialogs-new-meter-s-initial-reading"/></div>
+            <div><Label htmlFor="locatordialogs-installed-date">Installed date</Label><Input type="date" value={form.new_installed_date} onChange={e => setForm({ ...form, new_installed_date: e.target.value })} id="locatordialogs-installed-date"/></div>
           </div>
-          <div><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} /></div>
+          <div><Label htmlFor="locatordialogs-remarks">Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} id="locatordialogs-remarks"/></div>
         </div>
         <DialogFooter><Button onClick={submit}>Save replacement</Button></DialogFooter>
       </DialogContent>
@@ -745,7 +745,7 @@ export function LocatorCsvImportDialog({ plantId, onClose }: { plantId: string; 
             <p className="text-xs text-muted-foreground mt-1"><strong>name</strong> is required. All others optional.</p>
           </div>
           <div>
-            <Label className="text-xs font-medium">Select CSV file</Label>
+            <p className="text-xs font-medium">Select CSV file</p>
             <div className="mt-1">
               <label className="inline-flex items-center gap-2 cursor-pointer group">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary group-hover:bg-primary/90 text-white text-xs font-semibold px-4 py-1.5 transition-colors select-none">

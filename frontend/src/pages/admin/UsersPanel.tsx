@@ -223,22 +223,23 @@ function CreateUserDialog({ open, onClose, onCreated }: {
           {/* Credentials */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Login credentials</p>
-            <div><Label>Email *</Label><Input type="email" value={form.email} onChange={field('email')} placeholder="user@example.com" /></div>
-            <div><Label>Password *</Label><Input type="password" value={form.password} onChange={field('password')} placeholder="Min. 6 characters" /></div>
+            <div><Label htmlFor="userspanel-email">Email *</Label><Input type="email" value={form.email} onChange={field('email')} placeholder="user@example.com" id="userspanel-email"/></div>
+            <div><Label htmlFor="userspanel-password">Password *</Label><Input type="password" value={form.password} onChange={field('password')} placeholder="Min. 6 characters" id="userspanel-password"/></div>
           </div>
           {/* Profile */}
           <div className="space-y-2 pt-1 border-t">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profile</p>
-            <div><Label>Username *</Label><Input value={form.username} onChange={field('username')} placeholder="e.g. jdelacruz" /></div>
+            <div><Label htmlFor="userspanel-username">Username *</Label><Input value={form.username} onChange={field('username')} placeholder="e.g. jdelacruz" id="userspanel-username"/></div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>First name *</Label><Input value={form.first_name} onChange={field('first_name')} /></div>
-              <div><Label>Last name *</Label><Input value={form.last_name} onChange={field('last_name')} /></div>
-              <div><Label>Middle name</Label><Input value={form.middle_name} onChange={field('middle_name')} /></div>
-              <div><Label>Suffix</Label><Input value={form.suffix} onChange={field('suffix')} placeholder="Jr., Sr., III…" /></div>
+              <div><Label htmlFor="userspanel-first-name">First name *</Label><Input value={form.first_name} onChange={field('first_name')} id="userspanel-first-name"/></div>
+              <div><Label htmlFor="userspanel-last-name">Last name *</Label><Input value={form.last_name} onChange={field('last_name')} id="userspanel-last-name"/></div>
+              <div><Label htmlFor="userspanel-middle-name">Middle name</Label><Input value={form.middle_name} onChange={field('middle_name')} id="userspanel-middle-name"/></div>
+              <div><Label htmlFor="userspanel-suffix">Suffix</Label><Input value={form.suffix} onChange={field('suffix')} placeholder="Jr., Sr., III…" id="userspanel-suffix"/></div>
             </div>
             <div>
-              <Label>Designation</Label>
+              <Label htmlFor="userspanel-designation">Designation</Label>
               <DesignationCombobox
+                id="userspanel-designation"
                 value={form.designation}
                 onChange={(v) => { setForm((f) => ({ ...f, designation: v })); setPlantId(''); setPlantIds([]); }}
                 placeholder="Select or type a designation…"
@@ -425,7 +426,7 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
             </p>
             <div className="space-y-3">
               <div>
-                <Label>New password</Label>
+                <Label htmlFor="userspanel-new-password">New password</Label>
                 <div className="relative">
                   <Input
                     type={showPass ? 'text' : 'password'}
@@ -434,7 +435,7 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
                     placeholder="Min. 8 characters"
                     className="pr-10"
                     autoFocus
-                  />
+                  id="userspanel-new-password"/>
                   <button
                     type="button"
                     onClick={() => setShowPass((v) => !v)}
@@ -447,14 +448,14 @@ function ChangePasswordDialog({ open, onClose, userId, userName }: {
                 </div>
               </div>
               <div>
-                <Label>Confirm new password</Label>
+                <Label htmlFor="userspanel-confirm-new-password">Confirm new password</Label>
                 <Input
                   type={showPass ? 'text' : 'password'}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   placeholder="Repeat password"
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                />
+                id="userspanel-confirm-new-password"/>
               </div>
             </div>
             <DialogFooter className="pt-2">

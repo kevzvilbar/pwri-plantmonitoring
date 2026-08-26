@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 
 export default defineConfig(({ mode }) => ({
@@ -19,7 +20,45 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      // "autoUpdate" refreshes the cached app shell in the background on
+      // each visit — it does not force-reload a tab that's already open,
+      // so an operator mid-form won't get yanked out from under themselves.
+      registerType: "autoUpdate",
+      includeAssets: ["favicon.ico", "robots.txt"],
+      manifest: {
+        name: "PWRI Plant Monitoring",
+        short_name: "PWRI Monitor",
+        description: "Production, water quality, and compliance monitoring for water treatment plants.",
+        // Relative rather than absolute so both deploy targets work without
+        // a build-time branch here too — Vercel serves from "/", GitHub
+        // Pages from "/pwri-plantmonitoring/" (see `base` above) — "." keeps
+        // both the start URL and the installed scope relative to wherever
+        // the manifest itself was served from.
+        start_url: ".",
+        scope: ".",
+        display: "standalone",
+        background_color: "#0b1e2e",
+        theme_color: "#0b1e2e",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        // Precache the built app shell (JS/CSS/HTML/icons) only. No
+        // runtimeCaching entries are added for the Supabase API — reads and
+        // writes stay network-only and fail exactly as they do today when
+        // offline (DataState's existing error/retry UI handles that). This
+        // makes the *shell* installable and loadable with zero connectivity;
+        // it deliberately does not paper over stale or unavailable data.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
+        navigateFallback: "index.html",
+      },
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

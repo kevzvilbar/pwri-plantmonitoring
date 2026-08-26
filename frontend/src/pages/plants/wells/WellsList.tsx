@@ -665,7 +665,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="wellslist-reason-min-5-chars-required-for-audit-log" className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
               <span className="ml-1 text-2xs">(min 5 chars — required for audit log)</span>
             </Label>
@@ -678,7 +678,7 @@ export function WellsList({ plantId, highlightId }: { plantId: string; highlight
               data-testid="wells-bulk-reason"
               aria-invalid={bulkReason.length > 0 && bulkReason.trim().length < 5}
               className={bulkReason.length > 0 && bulkReason.trim().length < 5 ? 'border-danger' : ''}
-            />
+            id="wellslist-reason-min-5-chars-required-for-audit-log"/>
             {bulkReason.length > 0 && bulkReason.trim().length < 5 && (
               <p className="text-2xs text-danger">
                 Reason must be at least 5 characters ({bulkReason.trim().length}/5).

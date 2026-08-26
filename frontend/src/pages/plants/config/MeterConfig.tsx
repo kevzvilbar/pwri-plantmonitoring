@@ -44,7 +44,7 @@ import { format } from 'date-fns';
 
 import {
   usePlantMeterConfig, PlantMeterConfig, CollapsibleSection, GridPylonIcon,
-  DEFAULT_METER_CONFIG, PLANT_CHEMICALS, type PermeateProductionPeriod,
+  DEFAULT_METER_CONFIG, PLANT_CHEMICALS,
 } from '../shared';
 import { BackwashModeCard } from './Appearance';
 
@@ -237,6 +237,7 @@ export function MeterToggleTile({
   }[accentColor];
 
   return (
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch.
     <label className={[
       'flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors',
       checked ? colors.on : 'border-border bg-muted/30',
@@ -533,7 +534,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                   ? `Product meter + Permeate${cfg.permeate_is_production ? '' : ' (⚠ permeate switch off)'}`
                   : cfg.ro_production_source === 'permeate'
                     ? `Permeate${cfg.permeate_is_production
-                        ? ` (${cfg.permeate_production_periods?.length ?? 0} period${(cfg.permeate_production_periods?.length ?? 0) !== 1 ? 's' : ''}${cfg.permeate_cutoff_enabled ? `, cut-off ${cfg.permeate_cutoff_time || '00:20'}` : ', no cut-off'})`
+                        ? ` (${cfg.permeate_cutoff_enabled ? `cut-off ${cfg.permeate_cutoff_time || '00:20'}` : 'no cut-off'})`
                         : ''}`
                     : 'Product meter'}</span>
                 {cfg.ro_has_per_train_electricity && <span>⚡ Per-train kWh</span>}
@@ -654,65 +655,8 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             )}
           </div>
 
-          {/* ── Permeate = Production: periods + cut-off (manager only) ── */}
+          {/* ── Permeate = Production: cut-off (manager only) ── */}
           {(cfg.ro_production_source === 'permeate' || cfg.ro_production_source === 'both') && (() => {
-            // ── helpers (scoped inside the IIFE so they're co-located with the UI) ──
-
-            const periods: PermeateProductionPeriod[] = cfg.permeate_production_periods ?? [];
-
-            /** Returns true if any two periods overlap (sorted by start, comparing adjacent). */
-            function hasOverlap(ps: PermeateProductionPeriod[]): boolean {
-              const sorted = [...ps].sort((a, b) => {
-                const aStart = a.start ?? '0000-01-01';
-                const bStart = b.start ?? '0000-01-01';
-                return aStart < bStart ? -1 : aStart > bStart ? 1 : 0;
-              });
-              for (let i = 0; i < sorted.length - 1; i++) {
-                const curr = sorted[i];
-                const next = sorted[i + 1];
-                // curr ends after (or at same day as) next starts → overlap
-                const currEnd = curr.end ?? '9999-12-31';
-                const nextStart = next.start ?? '0000-01-01';
-                if (currEnd >= nextStart) return true;
-              }
-              return false;
-            }
-
-            const overlap = hasOverlap(periods);
-
-            function updatePeriod(id: string, patch: Partial<Omit<PermeateProductionPeriod, 'id'>>) {
-              update({
-                permeate_production_periods: periods.map(p =>
-                  p.id === id ? { ...p, ...patch } : p
-                ),
-              });
-            }
-
-            function deletePeriod(id: string) {
-              update({ permeate_production_periods: periods.filter(p => p.id !== id) });
-            }
-
-            function addPeriod() {
-              // Default: start after last period's end if one exists; otherwise today
-              const last = [...periods].sort((a, b) =>
-                (b.end ?? '9999-12-31') > (a.end ?? '9999-12-31') ? 1 : -1
-              )[0];
-              const today = new Date().toISOString().slice(0, 10);
-              const newStart = last?.end
-                ? (() => {
-                    const d = new Date(last.end);
-                    d.setDate(d.getDate() + 1);
-                    return d.toISOString().slice(0, 10);
-                  })()
-                : today;
-              update({
-                permeate_production_periods: [
-                  ...periods,
-                  { id: crypto.randomUUID(), start: newStart, end: null },
-                ],
-              });
-            }
-
             return (
               <div className="rounded-lg border border-primary bg-primary-soft/40 p-3 space-y-2.5">
                 {/* Header row with master toggle */}
@@ -736,121 +680,6 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
 
                 {cfg.permeate_is_production && (
                   <div className="space-y-4 pt-1 border-t border-primary">
-
-                    {/* ── Active periods list ── */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Active periods{periods.length > 0 && ` (${periods.length})`}
-                        </p>
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={addPeriod}
-                            className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/90 transition-colors"
-                          >
-                            <Plus className="h-3.5 w-3.5" /> Add period
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Column headers */}
-                      {periods.length > 0 && (
-                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 px-1">
-                          <Label className="text-2xs text-muted-foreground">From (inclusive)</Label>
-                          <Label className="text-2xs text-muted-foreground">Until (inclusive)</Label>
-                          {canEdit && <span />}
-                        </div>
-                      )}
-
-                      {/* Period rows */}
-                      {periods.length === 0 ? (
-                        <p className="text-xs text-muted-foreground/70 italic px-1">
-                          No periods defined — {canEdit ? 'click "Add period" to define when permeate counts as production.' : 'contact a manager to configure periods.'}
-                        </p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {periods.map((p, idx) => (
-                            <div key={p.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                              {/* Start date */}
-                              {canEdit ? (
-                                <Input
-                                  type="date"
-                                  value={p.start ?? ''}
-                                  onChange={e => updatePeriod(p.id, { start: e.target.value || null })}
-                                  placeholder="Unbounded"
-                                  className="h-8 text-sm"
-                                />
-                              ) : (
-                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
-                                  {p.start ?? '—'}
-                                </span>
-                              )}
-
-                              {/* End date */}
-                              {canEdit ? (
-                                <div className="flex gap-1">
-                                  <Input
-                                    type="date"
-                                    value={p.end ?? ''}
-                                    onChange={e => updatePeriod(p.id, { end: e.target.value || null })}
-                                    placeholder="Ongoing"
-                                    className="h-8 text-sm flex-1"
-                                  />
-                                  {p.end && (
-                                    <button
-                                      type="button"
-                                      className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-muted/70 transition-colors"
-                                      onClick={() => updatePeriod(p.id, { end: null })}
-                                      title="Clear end date (set as ongoing)"
-                                      aria-label="Clear end date (set as ongoing)"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-sm font-mono bg-muted px-2 py-1 rounded border border-border">
-                                  {p.end ?? 'Ongoing'}
-                                </span>
-                              )}
-
-                              {/* Delete */}
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => deletePeriod(p.id)}
-                                  className="h-8 w-8 shrink-0 rounded border border-border bg-muted flex items-center justify-center hover:bg-danger-soft hover:border-danger/90 hover:text-danger/90 transition-colors"
-                                  title={`Remove period ${idx + 1}`}
-                                  aria-label={`Remove period ${idx + 1}`}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Overlap warning */}
-                      {overlap && (
-                        <p className="text-xs text-danger font-medium flex items-center gap-1">
-                          ⚠ Two or more periods overlap — fix date ranges so they don't conflict.
-                        </p>
-                      )}
-
-                      {/* Outside-range behaviour note */}
-                      {periods.length > 0 && !overlap && (
-                        <p className="text-2xs text-muted-foreground leading-relaxed">
-                          Readings outside all defined periods are displaced to the nearest boundary day —
-                          readings before a period start shift to the day <em>before</em> that start;
-                          readings after a period end shift to the day <em>after</em> that end.
-                          {periods.some(p => p.end === null) && (
-                            <> One period has no end date and is treated as ongoing.</>
-                          )}
-                        </p>
-                      )}
-                    </div>
 
                     {/* ── Daily cut-off time ── */}
                     <div className="space-y-1.5">
@@ -1316,18 +1145,18 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
             </div>
             {cfg.has_solar && canEdit && (
               <div className="mt-2 space-y-2">
-                <Label className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
+                <Label htmlFor="meterconfig-solar-capacity-kw" className="text-xs text-muted-foreground">Solar capacity (kW)</Label>
                 <Input
                   type="number" step="any" value={cfg.solar_capacity_kw ?? ''}
                   onChange={e => update({ solar_capacity_kw: e.target.value ? +e.target.value : null })}
                   placeholder="e.g. 50"
                   className="h-9 text-sm mt-1 max-w-[180px]"
-                />
+                id="meterconfig-solar-capacity-kw"/>
                 <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">
+                  <p className="text-xs text-muted-foreground mb-1 block">
                     Solar reading input mode
                     <span className="ml-1 text-2xs opacity-70">(used in Operations entry form)</span>
-                  </Label>
+                  </p>
                   <div className="flex items-center rounded-md border border-warn overflow-hidden text-xs font-medium w-fit">
                     <button
                       type="button"
@@ -1430,6 +1259,7 @@ export function PlantMeterConfigCard({ plant }: { plant: any }) {
                 // Empty array = all chemicals enabled (backwards compat)
                 const isEnabled = cfg.enabled_chemicals.length === 0 || cfg.enabled_chemicals.includes(chem.name);
                 return (
+                  // eslint-disable-next-line jsx-a11y/label-has-associated-control -- Switch (Radix) renders button[role=switch], not a native input; same false positive as ThemeSelector's Switch.
                   <label
                     key={chem.name}
                     className={[

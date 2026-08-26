@@ -49,11 +49,11 @@ export function ReasonDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="reasondialog-reason" className="text-xs text-muted-foreground">
               Reason <span className="text-danger">*</span>
             </Label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger data-testid="reason-category-select">
+              <SelectTrigger data-testid="reason-category-select" id="reasondialog-reason">
                 <SelectValue placeholder="Select a reason" />
               </SelectTrigger>
               <SelectContent>
@@ -64,7 +64,7 @@ export function ReasonDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="reasondialog-details-optional" className="text-xs text-muted-foreground">
               Details <span className="text-2xs">(optional)</span>
             </Label>
             <Textarea
@@ -74,7 +74,7 @@ export function ReasonDialog({
               maxLength={500}
               rows={2}
               data-testid="reason-detail-textarea"
-            />
+            id="reasondialog-details-optional"/>
           </div>
         </div>
 

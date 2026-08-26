@@ -422,8 +422,8 @@ export function WellReadingForm({ highlightId }: { highlightId?: string | null }
       <Card className="p-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
-            <PlantSelector value={plantId} onChange={setPlantId} />
+            <Label htmlFor="wellsection-plant" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Plant</Label>
+            <PlantSelector value={plantId} onChange={setPlantId} id="wellsection-plant" />
           </div>
           {(isAdmin || isManager || isDataAnalyst) && plantId && (
             <Button
@@ -1295,6 +1295,10 @@ function WellRow({
             If the meter was replaced, check "Meter replaced" above instead.
           </span>
           <div className="pl-5 flex flex-wrap items-center gap-2 pt-1">
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control --
+                Checkbox (Radix) renders a button[role=checkbox], not a
+                native input — same false positive as ThemeSelector's
+                Switch / MigrationsPanel's "Show applied" checkbox. */}
             <label className="flex items-center gap-1.5 text-warn cursor-pointer">
               <Checkbox checked={isRollover} onCheckedChange={(v) => setIsRollover(v === true)} />
               This is a meter rollover (odometer wrapped around), not an error
