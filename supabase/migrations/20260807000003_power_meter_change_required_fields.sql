@@ -21,6 +21,26 @@
 --                                 product_meter_replacements.reading_id).
 -- =============================================================================
 
+CREATE TABLE IF NOT EXISTS public.power_meter_changes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plant_id UUID NOT NULL REFERENCES public.plants(id) ON DELETE CASCADE,
+  meter_index INTEGER NOT NULL DEFAULT 0,
+  old_multiplier NUMERIC NOT NULL DEFAULT 1,
+  new_multiplier NUMERIC NOT NULL DEFAULT 1,
+  change_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  changed_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.power_meter_changes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "power_meter_changes_plant_access" ON public.power_meter_changes;
+CREATE POLICY "power_meter_changes_plant_access" ON public.power_meter_changes
+  FOR ALL TO authenticated
+  USING (public.user_has_plant_access(plant_id))
+  WITH CHECK (public.user_has_plant_access(plant_id));
+
 ALTER TABLE public.power_meter_changes
   ADD COLUMN IF NOT EXISTS old_meter_final_reading   NUMERIC,
   ADD COLUMN IF NOT EXISTS new_meter_initial_reading NUMERIC,

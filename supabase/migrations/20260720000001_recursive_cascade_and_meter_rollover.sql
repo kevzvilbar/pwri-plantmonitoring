@@ -43,9 +43,12 @@ ALTER TABLE well_readings
   ADD COLUMN IF NOT EXISTS is_meter_rollover BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS meter_rollover_max NUMERIC;
 
-ALTER TABLE product_meter_readings
-  ADD COLUMN IF NOT EXISTS is_meter_rollover BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS meter_rollover_max NUMERIC;
+DO $$ BEGIN
+  ALTER TABLE product_meter_readings
+    ADD COLUMN IF NOT EXISTS is_meter_rollover BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS meter_rollover_max NUMERIC;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- locator_readings.daily_volume is GENERATED ALWAYS AS (current_reading -
 -- COALESCE(previous_reading,0)) STORED with no rollover awareness AND no
