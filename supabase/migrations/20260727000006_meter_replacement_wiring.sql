@@ -105,6 +105,7 @@ COMMENT ON COLUMN public.ro_trains.reject_meter_serial IS
 -- ── 4. ro_train_readings — granular replacement flags ───────────────────────
 
 ALTER TABLE public.ro_train_readings
+  ADD COLUMN IF NOT EXISTS is_meter_replacement BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_feed_meter_replacement     BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_permeate_meter_replacement BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_reject_meter_replacement   BOOLEAN NOT NULL DEFAULT false;

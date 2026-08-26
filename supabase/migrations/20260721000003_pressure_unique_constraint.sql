@@ -14,4 +14,4 @@
 -- =============================================================================
 
 CREATE UNIQUE INDEX IF NOT EXISTS uix_well_one_per_user_per_hour
-  ON well_readings (well_id, recorded_by, date_trunc('hour', reading_datetime));
+  ON well_readings (well_id, recorded_by, date_trunc('hour', reading_datetime, 'Asia/Manila'));

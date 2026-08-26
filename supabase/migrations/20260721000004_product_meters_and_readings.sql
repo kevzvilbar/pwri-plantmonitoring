@@ -59,7 +59,9 @@ CREATE TABLE IF NOT EXISTS product_meter_readings (
   recorded_by       UUID        REFERENCES user_profiles(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   norm_status       TEXT        NOT NULL DEFAULT 'normal'
-                    CHECK (norm_status IN ('normal', 'erroneous', 'normalized', 'retracted'))
+                    CHECK (norm_status IN ('normal', 'pending_review', 'erroneous', 'normalized', 'retracted')),
+  is_meter_rollover  BOOLEAN     NOT NULL DEFAULT false,
+  meter_rollover_max NUMERIC
 );
 
 -- Keep databases that already had this table aligned with fresh installs.
