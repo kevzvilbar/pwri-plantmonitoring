@@ -28,6 +28,7 @@ import { MapPin, Pencil, X, Droplet, Zap, Upload, Download, FileText, AlertCircl
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { resolveBlendingDateContext } from '@/lib/blendingBackdate';
+import { latestRaw } from '@/lib/blendingRawCache';
 
 // High-voltage transmission tower icon — matches Plants.tsx grid icon exactly.
 
@@ -606,13 +607,14 @@ function BlendingRow({
 
   // Pre-fill the drum with the last persisted raw reading so the operator
   // starts from the real odometer value and rolls only the changed digits.
-  // Priority: localStorage (most recent) → DB latest raw_meter_reading (fallback for
-  // new devices / cleared storage) → nothing (first-ever entry).
+  // Source: whichever of localStorage / DB latest raw_meter_reading is
+  // actually more recent by date (see latestRaw above) — not localStorage
+  // unconditionally.
   // Race-condition fix: same pattern as LocatorRow / WellRow — track last auto-fill
   // in a ref so a poll-driven update to prevRawReading also updates the drum when
   // the user hasn't yet typed anything.
   useEffect(() => {
-    const src = prevRawReading?.reading ?? dbLatestRaw?.reading ?? null;
+    const src = latestRaw(prevRawReading, dbLatestRaw)?.reading ?? null;
     if (src == null) return;
     const expected = src.toFixed(2);
     if (volume === '' || volume === lastPrefilledBlend.current) {
@@ -620,6 +622,20 @@ function BlendingRow({
       lastPrefilledBlend.current = expected;
     }
   }, [prevRawReading, dbLatestRaw, volume]);
+
+  // Self-heal the per-device cache: if the DB's latest reading for this well
+  // is newer than what's cached on this device, adopt it (and re-persist it
+  // locally). Without this, a stale local cache — e.g. left over from a
+  // manual save weeks ago, on a device that never received the newer entries
+  // saved elsewhere or imported elsewhere — shadows the fresher DB value
+  // indefinitely, since localStorage here is otherwise only ever written by
+  // this device's own Save button.
+  useEffect(() => {
+    if (dbLatestRaw && (!prevRawReading || dbLatestRaw.date > prevRawReading.date)) {
+      setPrevRawReading(dbLatestRaw);
+      persistRaw(well.id, dbLatestRaw.reading, dbLatestRaw.date);
+    }
+  }, [dbLatestRaw, prevRawReading, well.id]);
 
   // Δ uses the persisted cumulative reading first, then the DB-fetched
   // raw_meter_reading (for cross-device consistency), finally falling back to
@@ -690,7 +706,7 @@ function BlendingRow({
 
   const prevCumulative: number | null = isBackdated
     ? (backdatedContext?.predecessor?.reading ?? null)
-    : (prevRawReading?.reading ?? dbLatestRaw?.reading ?? previousVolume ?? null);
+    : (latestRaw(prevRawReading, dbLatestRaw)?.reading ?? previousVolume ?? null);
 
   const deltaRaw = volume !== ''
     ? prevCumulative != null ? +volume - prevCumulative : null
@@ -711,7 +727,7 @@ function BlendingRow({
   // makes every entry after it look like a huge, false spike.
   const prevDateStr = isBackdated
     ? (backdatedContext?.predecessor?.date ?? null)
-    : (prevRawReading?.date ?? dbLatestRaw?.date ?? previousDate ?? null);
+    : (latestRaw(prevRawReading, dbLatestRaw)?.date ?? previousDate ?? null);
   const daysElapsedBlend = prevDateStr
     ? (new Date(`${eventDate}T00:00:00`).getTime() - new Date(`${prevDateStr}T00:00:00`).getTime()) / 86_400_000
     : null;
@@ -829,7 +845,7 @@ function BlendingRow({
       // backward — that cache also seeds the prefill + Δ baseline for
       // today's entry, and overwriting it with an older reading would
       // corrupt that baseline the next time this well is opened.
-      const cachedDate = prevRawReading?.date ?? dbLatestRaw?.date ?? null;
+      const cachedDate = latestRaw(prevRawReading, dbLatestRaw)?.date ?? null;
       if (!cachedDate || eventDate >= cachedDate) {
         persistRaw(well.id, +volume, eventDate);
         setPrevRawReading({ reading: +volume, date: eventDate });
