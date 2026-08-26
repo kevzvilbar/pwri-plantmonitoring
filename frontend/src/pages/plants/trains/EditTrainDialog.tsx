@@ -34,53 +34,6 @@ import { format, parseISO, subDays, isValid } from 'date-fns';
 import { PLANT_CHEMICALS } from '../shared';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
 
-// ─── Hybrid Strategy: Backend + Frontend Delta Handling ───────────────────────
-// Plants.tsx owns recomputePermeateDeltas — the authoritative DB write for
-// permeate_meter_delta.  After each successful UPDATE we also call
-// deltaCache.set() so the Dashboard and TrendChart immediately use the
-// recomputed value without waiting for a refetch (Tier-1 shortcut path).
-// When is_meter_replacement is toggled we call deltaCache.invalidate(trainId)
-// to force a Tier-2 raw recompute on the next render.
-import { deltaCache } from '@/lib/deltaCache';
-import { cn } from '@/lib/utils';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
-import { useAppStore } from '@/store/appStore';
-import { usePlants } from '@/hooks/usePlants';
-import { useAuth } from '@/hooks/useAuth';
-import { Card } from '@/components/ui/card';
-import { DataState } from '@/components/DataState';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { StatusPill } from '@/components/StatusPill';
-import { DeleteEntityMenu } from '@/components/DeleteEntityMenu';
-import { ChevronLeft, ChevronDown, Plus, MapPin, Gauge, Wrench, Sun, Zap, Trash2, Loader2, Pencil, Upload, FileDown, X, TrendingUp, Download, BarChart2, Droplet, AlertTriangle, Maximize2, CalendarIcon } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area, Scatter, Legend } from 'recharts';
-import { fmtNum } from '@/lib/calculations';
-import { fmtIsoDate } from '@/lib/format';
-import { toast } from 'sonner';
-import { friendlyError } from '@/lib/supabaseErrors';
-import { format, parseISO, subDays, isValid } from 'date-fns';
-
-
-import { PLANT_CHEMICALS } from '../shared';
-import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
-
 export function EditTrainDialog({
   train,
   plant,
