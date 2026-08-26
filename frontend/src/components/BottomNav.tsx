@@ -185,7 +185,7 @@ export function BottomNav() {
           'flex flex-col items-center justify-center gap-0.5 py-2 px-1 transition-all',
           active
             ? 'text-primary text-xs font-semibold'
-            : 'text-muted-foreground/70 text-[11px] font-medium hover:text-foreground',
+            : 'text-muted-foreground/70 text-3xs font-medium hover:text-foreground',
         )}
       >
         <item.icon
@@ -223,7 +223,7 @@ export function BottomNav() {
             // budget on the narrowest realistic viewport (320px); px-0.5
             // clears it with room to spare. Verified against Inter's actual
             // metrics, not estimated — see BottomNav in the mobile UX audit.
-            'flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-[11px] font-semibold transition-colors -mt-3',
+            'flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 text-3xs font-semibold transition-colors -mt-3',
             isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -245,7 +245,7 @@ export function BottomNav() {
         {/* Side sheet: employees, data exports, and other less-frequent items */}
         <Sheet>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+            <button className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-3xs font-medium text-muted-foreground hover:text-foreground">
               <Menu className="h-[18px] w-[18px]" />
               <span className="leading-none">More</span>
             </button>
@@ -255,7 +255,7 @@ export function BottomNav() {
             <div className="mt-4 space-y-4 overflow-y-auto">
               {visibleGroups.map((group) => (
                 <div key={group.title}>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.title}</div>
+                  <div className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground px-2 mb-1">{group.title}</div>
                   <div className="flex flex-col gap-1">
                     {group.items.map((r) => (
                       <NavLink
