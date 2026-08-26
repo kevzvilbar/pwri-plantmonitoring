@@ -88,8 +88,8 @@ There's no backend `.env` anymore — only the frontend build needs vars:
 ### Frontend (Vercel / GitHub Pages / Vite)
 Both deployment stores must use these exact values:
 ```
-VITE_SUPABASE_URL=https://lreqxclzoxmswglvdstv.supabase.co
-VITE_SUPABASE_PROJECT_ID=lreqxclzoxmswglvdstv
+VITE_SUPABASE_URL=https://sosfbfxovtleuvahxvpm.supabase.co
+VITE_SUPABASE_PROJECT_ID=sosfbfxovtleuvahxvpm
 VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...   # same publishable key for this project
 ```
 
