@@ -36,12 +36,12 @@ jobs:
         working-directory: frontend
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
         run: |
           test -n "$VITE_SUPABASE_URL" || { echo "Missing VITE_SUPABASE_URL"; exit 1; }
-          test -n "$VITE_SUPABASE_PROJECT_ID" || { echo "Missing VITE_SUPABASE_PROJECT_ID"; exit 1; }
-          test "$VITE_SUPABASE_PROJECT_ID" = "sosfbfxovtleuvahxvpm" || { echo "VITE_SUPABASE_PROJECT_ID must be sosfbfxovtleuvahxvpm"; exit 1; }
           test "$VITE_SUPABASE_URL" = "https://sosfbfxovtleuvahxvpm.supabase.co" || { echo "VITE_SUPABASE_URL does not match the canonical Supabase project"; exit 1; }
+          project_id="${VITE_SUPABASE_URL#https://}"
+          project_id="${project_id%.supabase.co}"
+          test "$project_id" = "sosfbfxovtleuvahxvpm" || { echo "VITE_SUPABASE_URL has the wrong Supabase project ID"; exit 1; }
 
       - name: Build
         working-directory: frontend

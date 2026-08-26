@@ -22,8 +22,11 @@ BEGIN
   LIMIT 1;
 
   IF kevin_id IS NULL THEN
-    RAISE EXCEPTION
-      'No auth.users row for kevzvilbar@gmail.com. Sign up at /auth first, then re-run this script.';
+    -- Production promotion is optional during a fresh local/preview bootstrap.
+    -- The auth user may not exist until the application sign-up flow runs.
+    RAISE NOTICE
+      'Skipping Kevin Vilbar admin promotion: no auth.users row exists yet.';
+    RETURN;
   END IF;
 
   -- Upsert profile

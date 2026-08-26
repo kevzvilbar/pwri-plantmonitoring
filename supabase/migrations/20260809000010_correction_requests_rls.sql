@@ -44,6 +44,23 @@
 --     so an operator can never resolve their own or anyone else's request.
 -- =============================================================================
 
+CREATE TABLE IF NOT EXISTS public.correction_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plant_id UUID NOT NULL REFERENCES public.plants(id) ON DELETE CASCADE,
+  source_table TEXT NOT NULL,
+  source_id UUID NOT NULL,
+  original_value NUMERIC NOT NULL,
+  proposed_value NUMERIC NOT NULL,
+  reason TEXT NOT NULL,
+  note TEXT,
+  submitted_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  resolution_note TEXT,
+  resolved_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 ALTER TABLE public.correction_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "correction_requests_insert_own" ON public.correction_requests;

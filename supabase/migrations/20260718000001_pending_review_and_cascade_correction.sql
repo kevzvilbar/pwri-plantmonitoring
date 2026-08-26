@@ -30,10 +30,13 @@ ALTER TABLE well_readings
   ADD CONSTRAINT well_readings_norm_status_check
   CHECK (norm_status IN ('normal', 'pending_review', 'erroneous', 'normalized', 'retracted'));
 
-ALTER TABLE product_meter_readings DROP CONSTRAINT IF EXISTS product_meter_readings_norm_status_check;
-ALTER TABLE product_meter_readings
-  ADD CONSTRAINT product_meter_readings_norm_status_check
-  CHECK (norm_status IN ('normal', 'pending_review', 'erroneous', 'normalized', 'retracted'));
+DO $$ BEGIN
+  ALTER TABLE product_meter_readings DROP CONSTRAINT IF EXISTS product_meter_readings_norm_status_check;
+  ALTER TABLE product_meter_readings
+    ADD CONSTRAINT product_meter_readings_norm_status_check
+    CHECK (norm_status IN ('normal', 'pending_review', 'erroneous', 'normalized', 'retracted'));
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- ro_train_readings may not exist in all deployments; guard as the original migration did
 DO $$ BEGIN

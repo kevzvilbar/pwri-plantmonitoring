@@ -50,10 +50,16 @@ ALTER TABLE well_readings
   CHECK (norm_status IN ('normal', 'erroneous', 'normalized', 'retracted'))
   DEFAULT 'normal';
 
-ALTER TABLE product_meter_readings
-  ADD COLUMN IF NOT EXISTS norm_status TEXT
-  CHECK (norm_status IN ('normal', 'erroneous', 'normalized', 'retracted'))
-  DEFAULT 'normal';
+-- product_meter_readings is created by a later migration in fresh installs;
+-- apply this column when the table already exists, otherwise let its owning
+-- migration add the column after creating the table.
+DO $$ BEGIN
+  ALTER TABLE product_meter_readings
+    ADD COLUMN IF NOT EXISTS norm_status TEXT
+    CHECK (norm_status IN ('normal', 'erroneous', 'normalized', 'retracted'))
+    DEFAULT 'normal';
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- ro_train_readings may not exist in all deployments; guard with a DO block
 DO $$ BEGIN
