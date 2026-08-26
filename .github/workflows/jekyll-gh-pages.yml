@@ -40,8 +40,8 @@ jobs:
         run: |
           test -n "$VITE_SUPABASE_URL" || { echo "Missing VITE_SUPABASE_URL"; exit 1; }
           test -n "$VITE_SUPABASE_PROJECT_ID" || { echo "Missing VITE_SUPABASE_PROJECT_ID"; exit 1; }
-          test "$VITE_SUPABASE_PROJECT_ID" = "lreqxclzoxmswglvdstv" || { echo "VITE_SUPABASE_PROJECT_ID must be lreqxclzoxmswglvdstv"; exit 1; }
-          test "$VITE_SUPABASE_URL" = "https://lreqxclzoxmswglvdstv.supabase.co" || { echo "VITE_SUPABASE_URL does not match the canonical Supabase project"; exit 1; }
+          test "$VITE_SUPABASE_PROJECT_ID" = "sosfbfxovtleuvahxvpm" || { echo "VITE_SUPABASE_PROJECT_ID must be sosfbfxovtleuvahxvpm"; exit 1; }
+          test "$VITE_SUPABASE_URL" = "https://sosfbfxovtleuvahxvpm.supabase.co" || { echo "VITE_SUPABASE_URL does not match the canonical Supabase project"; exit 1; }
 
       - name: Build
         working-directory: frontend
