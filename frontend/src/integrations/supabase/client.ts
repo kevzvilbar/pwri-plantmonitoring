@@ -2,13 +2,30 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+const CANONICAL_SUPABASE_PROJECT_ID = 'lreqxclzoxmswglvdstv';
+const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined;
+
+function projectRefFromUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.split('.')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+const configuredProjectId = projectRefFromUrl(SUPABASE_URL);
 
 export const supabaseConfigError: string | null =
   !SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY
-    ? 'Supabase environment variables are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your Netlify site settings, then redeploy.'
-    : null;
+    ? 'Supabase environment variables are not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, then redeploy.'
+    : configuredProjectId !== CANONICAL_SUPABASE_PROJECT_ID ||
+        (SUPABASE_PROJECT_ID && SUPABASE_PROJECT_ID !== CANONICAL_SUPABASE_PROJECT_ID)
+      ? `Supabase configuration mismatch. This deployment must use ${CANONICAL_SUPABASE_URL}.`
+      : null;
 
 if (supabaseConfigError && typeof console !== 'undefined') {
   console.error('[supabase]', supabaseConfigError);

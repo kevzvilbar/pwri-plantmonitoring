@@ -86,11 +86,14 @@ plus `regression_results` and `raw_edit_log` for the new Data Analysis page.
 There's no backend `.env` anymore — only the frontend build needs vars:
 
 ### Frontend (Vercel / GitHub Pages / Vite)
+Both deployment stores must use these exact values:
 ```
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...
-VITE_SUPABASE_PROJECT_ID=your-project-ref
+VITE_SUPABASE_URL=https://lreqxclzoxmswglvdstv.supabase.co
+VITE_SUPABASE_PROJECT_ID=lreqxclzoxmswglvdstv
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...   # same publishable key for this project
 ```
+
+Vercel Project Settings → Environment Variables and GitHub repository Settings → Secrets and variables → Actions are separate stores; update both together. GitHub Pages now fails its build when the URL or project ID differs from the canonical project, and the frontend shows a configuration error instead of silently querying another database.
 
 **Remove these** (no longer needed — MongoDB was removed earlier, and the
 backend itself is gone as of 2026-08-03):

@@ -244,5 +244,4 @@ ALTER TABLE regression_results
   ADD COLUMN IF NOT EXISTS truncated BOOLEAN NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN regression_results.truncated IS
-  'True when the source date range had more rows than the regression row cap (see ROW_LIMIT in regression_service.py) — the fitted line only reflects the first ROW_LIMIT rows in chronological order.';
-
+  'True when the source date range had more rows than was read (see ROW_LIMIT in regression_service.py) — the fitted line only reflects the first ROW_LIMIT rows in chronological order.';
