@@ -11,7 +11,7 @@
 // delete (see pwri-improvement-plan.md Phase 2).
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
@@ -152,6 +152,16 @@ export function fmtV(v: number | null | undefined, dec = 1) {
 const GAP_ENTITY_TYPE_LABEL: Record<'well' | 'locator' | 'ro_train', 'Well' | 'Locator' | 'RO Train'> = {
   well: 'Well', locator: 'Locator', ro_train: 'RO Train',
 };
+// Underlying table for each entity type — used to resolve plant_id when
+// retroactively logging a gap reason from the Data Summary pivot (see
+// PivotTable in TrendChartTables.tsx). reading_gap_reasons.plant_id is
+// NOT NULL, but locator_readings/well_readings rows don't reliably carry it
+// (see useTrendChartQueries.ts's "locator_readings has no plant_id column"
+// note), so we look it up directly from the entity's own row instead of
+// threading a plant map through every layer between here and TrendChart.tsx.
+export const GAP_ENTITY_TABLE: Record<'well' | 'locator' | 'ro_train', string> = {
+  well: 'wells', locator: 'locators', ro_train: 'ro_trains',
+};
 const GAP_DOWN_STATUSES = new Set(['Inactive', 'Offline', 'Maintenance']);
 
 export type GapReasonHit = { category: string; detail: string | null; source: 'gap' | 'status' };
@@ -166,12 +176,20 @@ export function useGapReasonLookup(
   entityType: 'well' | 'locator' | 'ro_train' | undefined,
   entities: { id: string; label: string }[],
   _dates: string[],
-): (entityId: string, dateKey: string) => GapReasonHit | null {
+): {
+  getReason: (entityId: string, dateKey: string) => GapReasonHit | null;
+  /** Call after writing a new reading_gap_reasons row (see PivotTable's
+   *  retroactive logging dialog) so the new icon appears immediately instead
+   *  of waiting for this query's next natural refetch. */
+  refetchReasons: () => void;
+} {
+  const queryClient = useQueryClient();
   const entityIds = useMemo(() => entities.map((e) => e.id).sort(), [entities]);
   const entityIdsKey = entityIds.join(',');
+  const gapReasonsQueryKey = ['pivot-gap-reasons', entityType, entityIdsKey];
 
   const { data: gapReasons } = useQuery({
-    queryKey: ['pivot-gap-reasons', entityType, entityIdsKey],
+    queryKey: gapReasonsQueryKey,
     enabled: !!entityType && entityIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -199,7 +217,7 @@ export function useGapReasonLookup(
     },
   });
 
-  return useMemo(() => {
+  const getReason = useMemo(() => {
     const gapMap = new Map<string, any>();
     (gapReasons ?? []).forEach((g: any) => { gapMap.set(`${g.entity_id}|${g.gap_date}`, g); });
 
@@ -238,4 +256,10 @@ export function useGapReasonLookup(
       return null;
     };
   }, [gapReasons, statusLog]);
+
+  const refetchReasons = () => {
+    queryClient.invalidateQueries({ queryKey: gapReasonsQueryKey });
+  };
+
+  return { getReason, refetchReasons };
 }

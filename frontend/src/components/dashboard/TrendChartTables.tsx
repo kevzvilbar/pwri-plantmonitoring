@@ -3,12 +3,18 @@
 // TrendChart component doesn't reference either directly (verified before
 // this extraction).
 
-import React from 'react';
+import React, { useState } from 'react';
 import { MessageCircleOff } from 'lucide-react';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { friendlyError } from '@/lib/supabaseErrors';
+import { ReasonDialog } from '@/components/ReasonDialog';
 import { reasonCategoryLabel, reasonEntityPrefix } from '@/lib/reasonCodes';
 import {
   TH, TH_DATE, TH_TOTAL, TD, TD_TOTAL_COL,
   fmtV, fmtDateKey, useGapReasonLookup,
+  GAP_ENTITY_TABLE, type GapReasonHit,
 } from './TrendChartPivotShared';
 
 /** Generic pivot table: Date rows × entity columns × Total column */
@@ -35,7 +41,50 @@ export function PivotTable({
     entities.reduce((s, e) => s + (pivot.get(d)?.get(e.id) ?? 0), 0),
   );
 
-  const getReason = useGapReasonLookup(entityType, entities, dates);
+  const { getReason, refetchReasons } = useGapReasonLookup(entityType, entities, dates);
+  const { user } = useAuth();
+
+  // Single shared dialog for the whole table, rather than one per cell —
+  // avoids mounting hundreds of AlertDialog instances for a large pivot.
+  // Holds whichever blank cell was last clicked, or null when closed.
+  const [gapTarget, setGapTarget] = useState<{
+    entityId: string; entityLabel: string; dateKey: string; existing: GapReasonHit | null;
+  } | null>(null);
+  const [gapSaving, setGapSaving] = useState(false);
+
+  const today = new Date(); today.setHours(23, 59, 59, 999);
+
+  const saveGapReason = async (category: string, detail: string) => {
+    if (!gapTarget || !entityType) return;
+    setGapSaving(true);
+    // reading_gap_reasons.plant_id is NOT NULL, but the entity's plant isn't
+    // reliably available this far down (locator_readings in particular
+    // carries no plant_id — see GAP_ENTITY_TABLE's comment), so resolve it
+    // directly from the entity's own row at save time instead of threading
+    // a plant map through every layer between here and TrendChart.tsx.
+    const { data: entityRow, error: entityErr } = await (supabase.from(GAP_ENTITY_TABLE[entityType] as never) as any)
+      .select('plant_id')
+      .eq('id', gapTarget.entityId)
+      .single();
+    if (entityErr || !entityRow?.plant_id) {
+      setGapSaving(false);
+      toast.error("Couldn't determine this entity's plant — try again.");
+      return;
+    }
+    const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
+      [{
+        entity_type: entityType, entity_id: gapTarget.entityId, plant_id: entityRow.plant_id,
+        gap_date: gapTarget.dateKey, reason_category: category, reason_detail: detail || null,
+        logged_by: user?.id ?? null,
+      }] as any,
+      { onConflict: 'entity_type,entity_id,gap_date' },
+    );
+    setGapSaving(false);
+    if (error) { toast.error(friendlyError(error)); return; }
+    toast.success(`${gapTarget.entityLabel}: reason logged for ${fmtDateKey(gapTarget.dateKey)}`);
+    setGapTarget(null);
+    refetchReasons();
+  };
 
   if (entities.length === 0) {
     return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No entity data found.</div>;
@@ -84,15 +133,55 @@ export function PivotTable({
                 {entities.map((e) => {
                   const val = pivot.get(date)?.get(e.id) ?? null;
                   const reason = val == null ? getReason(e.id, date) : null;
+                  // Only wells/locators/RO trains carry a gap-reason lookup
+                  // (entityType set — see the callers in
+                  // TrendChartDataSummaryPopup.tsx); plain product meters
+                  // keep today's non-interactive dash. Future dates can't be
+                  // explained yet either, so they stay non-interactive too.
+                  const canLog = !!entityType && val == null && new Date(date + 'T00:00:00').getTime() <= today.getTime();
+                  const reasonTitle = reason
+                    ? `${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`
+                    : '';
                   return (
                     <td key={e.id} className={TD}>
-                      {reason ? (
+                      {reason && canLog ? (
+                        // Has a reason on file — either a per-day gap entry, or
+                        // one inferred from a multi-day Offline/Inactive
+                        // interval (source: 'status'). Either way, clicking
+                        // writes a day-specific reading_gap_reasons row, which
+                        // always takes precedence over the inferred interval
+                        // (see getReason above) — so this lets an operator
+                        // layer a more specific note onto one day of a longer
+                        // offline stretch without touching the status log.
+                        <button
+                          type="button"
+                          onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: reason })}
+                          title={`${reasonTitle} (click to edit)`}
+                          className="inline-flex items-center justify-center text-warn cursor-pointer hover:opacity-70 transition-opacity"
+                          data-testid={`pivot-gap-icon-${e.id}-${date}`}
+                        >
+                          <MessageCircleOff className="h-3 w-3" />
+                        </button>
+                      ) : reason ? (
+                        // Only reachable for a future date (see canLog) —
+                        // read-only, matching the original behavior.
                         <span
-                          title={`${reasonEntityPrefix(entityType!, reason.source === 'status')}: ${reasonCategoryLabel(reason.category)}${reason.detail ? ' — ' + reason.detail : ''}`}
+                          title={reasonTitle}
                           className="inline-flex items-center justify-center text-warn cursor-help"
                         >
                           <MessageCircleOff className="h-3 w-3" />
                         </span>
+                      ) : canLog ? (
+                        // Blank cell, no reason on file yet — click to log one.
+                        <button
+                          type="button"
+                          onClick={() => setGapTarget({ entityId: e.id, entityLabel: e.label, dateKey: date, existing: null })}
+                          title="No reading — click to log why"
+                          className="text-muted-foreground/40 hover:text-warn transition-colors cursor-pointer"
+                          data-testid={`pivot-gap-empty-${e.id}-${date}`}
+                        >
+                          —
+                        </button>
                       ) : fmtV(val)}
                     </td>
                   );
@@ -109,6 +198,20 @@ export function PivotTable({
           })}
         </tbody>
       </table>
+
+      <ReasonDialog
+        open={!!gapTarget}
+        onOpenChange={(o) => { if (!o) setGapTarget(null); }}
+        title={
+          gapTarget
+            ? `No reading — why? (${gapTarget.entityLabel}, ${fmtDateKey(gapTarget.dateKey)})`
+            : ''
+        }
+        description="This explains the gap in Data Summary for this date. If a reading later comes in for this day, it takes priority over this note."
+        confirmLabel={gapTarget?.existing ? 'Update reason' : 'Log reason'}
+        busy={gapSaving}
+        onConfirm={saveGapReason}
+      />
     </div>
   );
 }
