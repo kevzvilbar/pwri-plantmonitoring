@@ -617,8 +617,10 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     qc.invalidateQueries({ queryKey });
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') { qc.invalidateQueries({ queryKey: ['op-loc-recent'] }); invalidateLocatorDash(qc); }
-    else if (module === 'well') { qc.invalidateQueries({ queryKey: ['op-well-recent'] }); invalidateWellDash(qc); }
+    // op-loc-recent / op-well-recent are now invalidated inside
+    // invalidateLocatorDash / invalidateWellDash themselves — see shared.tsx.
+    if (module === 'locator') invalidateLocatorDash(qc);
+    else if (module === 'well') invalidateWellDash(qc);
     else if (module === 'power') invalidatePowerDash(qc);
   };
 
@@ -810,10 +812,12 @@ export function ReadingHistoryDialog({ entityName, module, entityId, plantId, as
     setEditReason('');
     setEditCustomReason('');
     qc.invalidateQueries({ queryKey });
-    // Also invalidate the parent form queries so "Last 7 readings" refreshes
+    // Also invalidate the parent form queries so "Last 7 readings" refreshes.
+    // op-loc-recent / op-well-recent are now invalidated inside
+    // invalidateLocatorDash / invalidateWellDash themselves — see shared.tsx.
     if (module === 'power') qc.invalidateQueries({ queryKey: ['op-power', entityId] });
-    if (module === 'locator') { qc.invalidateQueries({ queryKey: ['op-loc-recent'] }); invalidateLocatorDash(qc); }
-    else if (module === 'well') { qc.invalidateQueries({ queryKey: ['op-well-recent'] }); invalidateWellDash(qc); }
+    if (module === 'locator') invalidateLocatorDash(qc);
+    else if (module === 'well') invalidateWellDash(qc);
     else if (module === 'power') invalidatePowerDash(qc);
     else if (module === 'blending') invalidateWellDash(qc);
   };

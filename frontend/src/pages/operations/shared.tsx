@@ -100,6 +100,18 @@ export function invalidateLocatorDash(qc: QueryClient, entityIds?: string[]) {
   qc.invalidateQueries({ queryKey: ['trend-loc-ids'] });
   qc.invalidateQueries({ queryKey: ['dsm-cons-readings'] });
   qc.invalidateQueries({ queryKey: ['dsm-locators'] });
+  // Bug fix (2026-08-28): LocatorSection's own "today" lookup — the query that
+  // decides whether a save UPDATEs today's row or INSERTs a new one — is keyed
+  // ['op-loc-recent', plantId] and was never in this list. Its refetchInterval
+  // is 30s, so any save immediately followed by another save for the same
+  // locator (a completely normal one-visit, multi-field data-entry flow) saw
+  // stale ("no reading yet") data, took the INSERT branch again, and hit the
+  // uix_locator_one_per_user_per_hour unique-index violation — surfaced to the
+  // operator as a false "already saved in the last hour" error even though no
+  // duplicate was ever entered. ReadingHistoryDialog.tsx already worked around
+  // this locally (see its own extra `op-loc-recent` invalidation on delete/edit)
+  // instead of fixing it here, which is where it belongs per the note above.
+  qc.invalidateQueries({ queryKey: ['op-loc-recent'] });
   flushDeltaCache(entityIds);
 }
 
@@ -112,6 +124,17 @@ export function invalidateWellDash(qc: QueryClient, entityIds?: string[]) {
   qc.invalidateQueries({ queryKey: ['trend-well'] });
   qc.invalidateQueries({ queryKey: ['dsm-prod-readings'] });
   qc.invalidateQueries({ queryKey: ['blending-volume'] });
+  // Bug fix (2026-08-28): same class of bug as invalidateLocatorDash above,
+  // for wells. WellSection's ['op-well-recent', plantId] query drives
+  // todayByWell / lastToday, which savePower/saveTds/saveNtu/savePressure (and
+  // the main save) use to decide INSERT vs UPDATE. Without invalidating it
+  // here, a second field saved for the same well within the same ~30s poll
+  // window (e.g. entering current reading, then TDS, then pressure, back to
+  // back during one well visit) still sees no reading for "today", inserts
+  // again, and trips uix_well_one_per_user_per_hour — the "A reading for this
+  // well was already saved in the last hour" toast the operator reported,
+  // despite genuinely not having entered a duplicate reading.
+  qc.invalidateQueries({ queryKey: ['op-well-recent'] });
   flushDeltaCache(entityIds);
 }
 
