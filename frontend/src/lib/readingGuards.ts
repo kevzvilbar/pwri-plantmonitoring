@@ -50,6 +50,14 @@ export const LOCATOR_COOLDOWN_MINUTES = 45;
  */
 export const SPIKE_MULTIPLIER = 2.0;
 
+/**
+ * Hours within which an IDENTICAL current_reading value (vs. the last
+ * confirmed good reading) is treated as an accidental double-submission and
+ * blocked outright, rather than saved with a 0 daily_volume. 'raw'
+ * (cumulative) mode only — see the duplicate-value check below for why.
+ */
+export const DUPLICATE_VALUE_WINDOW_HOURS = 12;
+
 // ── Core guard ───────────────────────────────────────────────────────────────
 
 /**
@@ -130,7 +138,45 @@ export async function evaluateReadingGuard(
   const prevReading: number | null = lastGood?.length ? Number(lastGood[0].current_reading) : null;
   const prevDt: Date | null = lastGood?.length ? new Date(lastGood[0].reading_datetime) : null;
 
-  // ── 3. Backward reading check — 'raw' (cumulative) mode only ──────────────
+  // ── 3. Duplicate-value check — 'raw' (cumulative) mode only ───────────────
+  // A meter reading that's IDENTICAL to the last confirmed value within
+  // DUPLICATE_VALUE_WINDOW_HOURS is virtually always an accidental
+  // double-submission (screen resubmitted, same value copied from the log
+  // sheet, etc.) rather than a genuine zero-flow period — a live meter
+  // essentially never holds the exact same cumulative value for 12 straight
+  // hours. Blocked outright (not sent to pending_review, unlike backward/
+  // spike below): it produces daily_volume = 0 by definition, so there's
+  // nothing for a supervisor to approve — the operator just needs to
+  // re-check the meter and enter the real value, or the actual timestamp.
+  //
+  // Skipped for 'direct' mode (currentReading already IS a period's volume,
+  // e.g. HAMAS — the same day-volume repeating is ordinary, not a fault) and
+  // for the same explicit-override flags the backward check below skips:
+  // meter replacement / rollover, where a value coincidentally matching the
+  // old meter's last reading is a known special case, not an error.
+  if (
+    inputMode === 'raw' &&
+    prevReading !== null &&
+    prevDt !== null &&
+    currentReading === prevReading &&
+    !isMeterReplacement &&
+    !isEstimated &&
+    !isMeterRollover
+  ) {
+    const hoursElapsed = (readingDatetime.getTime() - prevDt.getTime()) / 3_600_000;
+    if (hoursElapsed < DUPLICATE_VALUE_WINDOW_HOURS) {
+      const elapsedLabel = hoursElapsed < 1
+        ? `${Math.max(1, Math.round(hoursElapsed * 60))} min`
+        : `${Math.round(hoursElapsed)} hr`;
+      return {
+        status: 'blocked',
+        reason: 'duplicate',
+        detail: `Reading ${currentReading.toLocaleString()} is identical to the value recorded ${elapsedLabel} ago — that would record zero flow. Double-check the meter before saving.`,
+      };
+    }
+  }
+
+  // ── 4. Backward reading check — 'raw' (cumulative) mode only ──────────────
   // For 'direct' mode, currentReading already IS the period's volume, so a
   // lower value than yesterday is ordinary day-to-day variation, not a fault.
   if (
@@ -149,7 +195,7 @@ export async function evaluateReadingGuard(
     };
   }
 
-  // ── 4. Spike check ────────────────────────────────────────────────────────
+  // ── 5. Spike check ────────────────────────────────────────────────────────
   // Routed through the shared classifier (flowRateGuards.ts) so this DB-round-
   // trip guard and each page's own reactive cosmetic banner can never drift
   // apart the way they used to (the banner was comparing against

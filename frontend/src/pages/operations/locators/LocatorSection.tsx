@@ -905,6 +905,10 @@ function LocatorRow({
         );
         return;
       }
+      if (guard.status === 'blocked' && guard.reason === 'duplicate') {
+        toast.error(`${locator.name}: ${guard.detail}`, { duration: 8000 });
+        return;
+      }
       if (guard.status === 'pending_review') {
         // Save proceeds — DB trigger will also set pending_review independently.
         toast.info(`${locator.name}: ${guard.detail}`, { duration: 8000 });

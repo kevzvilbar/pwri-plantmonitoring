@@ -706,6 +706,10 @@ function WellRow({
         );
         return;
       }
+      if (guard.status === 'blocked' && guard.reason === 'duplicate') {
+        toast.error(`${well.name}: ${guard.detail}`, { duration: 8000 });
+        return;
+      }
       if (guard.status === 'pending_review') {
         guardReason = guard.reason;
         toast.info(`${well.name}: ${guard.detail}`, { duration: 8000 });

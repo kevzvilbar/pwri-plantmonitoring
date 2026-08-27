@@ -18,6 +18,7 @@ import {
   formatCooldown,
   LOCATOR_COOLDOWN_MINUTES,
   SPIKE_MULTIPLIER,
+  DUPLICATE_VALUE_WINDOW_HOURS,
 } from './readingGuards';
 
 /** Loosely-typed stand-in for a mocked DB row — shape varies per test. */
@@ -101,6 +102,96 @@ describe('evaluateReadingGuard — cooldown', () => {
     queueSupabaseResponses([], []); // no cooldown entry, no prior good reading
 
     const r = await evaluateReadingGuard('locator', 'loc-1', 'plant-1', 'user-1', 500, readingDatetime);
+    expect(r).toEqual({ status: 'ok' });
+  });
+});
+
+describe('evaluateReadingGuard — duplicate value (raw mode)', () => {
+  it('blocks an identical current_reading recorded well within the window (e.g. 31 min later)', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z'); // 31 min later
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime);
+    expect(r.status).toBe('blocked');
+    if (r.status === 'blocked' && r.reason === 'duplicate') {
+      expect(r.detail).toContain('220,205');
+      expect(r.detail).toContain('zero flow');
+    } else {
+      expect.fail(`expected a duplicate-value block, got ${JSON.stringify(r)}`);
+    }
+  });
+
+  it(`does not block once ${DUPLICATE_VALUE_WINDOW_HOURS}h have fully elapsed, even with an identical value`, async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date(prevDt.getTime() + (DUPLICATE_VALUE_WINDOW_HOURS + 1) * 3_600_000);
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime);
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('does not fire when the new value differs from the last confirmed reading', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 220300, readingDatetime, false, false, 10);
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('is skipped entirely in direct mode (a repeated day-volume is ordinary, not a duplicate)', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], [{ current_reading: '50', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard(
+      'locator', 'loc-1', 'plant-1', 'user-1', 50, readingDatetime,
+      false, false, null, false, 'direct',
+    );
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('is bypassed by isMeterReplacement', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard(
+      'well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime,
+      /* isMeterReplacement */ true,
+    );
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('is bypassed by isEstimated', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard(
+      'well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime,
+      false, /* isEstimated */ true,
+    );
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('is bypassed by isMeterRollover', async () => {
+    const prevDt = new Date('2026-08-14T07:00:00Z');
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], [{ current_reading: '220205', reading_datetime: prevDt.toISOString() }]);
+
+    const r = await evaluateReadingGuard(
+      'well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime,
+      false, false, null, /* isMeterRollover */ true,
+    );
+    expect(r.status).not.toBe('blocked');
+  });
+
+  it('never fires when there is no prior confirmed reading to compare against', async () => {
+    const readingDatetime = new Date('2026-08-14T07:31:00Z');
+    queueSupabaseResponses([], []); // no cooldown entry, no prior reading at all
+    const r = await evaluateReadingGuard('well', 'well-1', 'plant-1', 'user-1', 220205, readingDatetime);
     expect(r).toEqual({ status: 'ok' });
   });
 });
