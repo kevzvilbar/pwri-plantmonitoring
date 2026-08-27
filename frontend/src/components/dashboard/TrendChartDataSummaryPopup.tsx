@@ -70,8 +70,19 @@ export function DataSummaryPopup({
   // NOTE: use isoDate (yyyy-MM-dd), not the display-only 'MMM d' date field —
   // native <input type="date"> only accepts ISO format and silently renders
   // blank ("mm/dd/yyyy") for anything else.
+  //
+  // Fix: use format() (local timezone) instead of slice(0,10) (UTC date) —
+  // same bug/fix as PowerMeters.tsx. chartData's isoDate is a UTC ISO string
+  // (e.g. "2026-08-17T16:00:00.000Z" for a reading made at Aug 18, midnight
+  // local, UTC+8). slice(0,10) reads the UTC calendar day ("2026-08-17"),
+  // one day behind the local day ("Aug 18") that chartData's own `date`
+  // field and fillDateRange's calendar keys are built from. That mismatch
+  // is what produced the duplicate/blank "Aug 18" row in the Overview
+  // table: the real row got filed under "2026-08-17" while the gap-fill
+  // step, expecting "2026-08-18", couldn't find it and inserted a second,
+  // empty stub row for that date.
   const allDates = chartData
-    .map((d) => (d.isoDate as string | undefined)?.slice(0, 10))
+    .map((d) => (d.isoDate ? format(new Date(d.isoDate as string), 'yyyy-MM-dd') : undefined))
     .filter((d): d is string => !!d);
   const defaultFrom = allDates.length ? allDates[0] : '';
   const defaultTo = allDates.length ? allDates[allDates.length - 1] : '';
@@ -311,7 +322,7 @@ export function DataSummaryPopup({
   const overviewDates = useMemo(() => {
     const allKeys = filteredChartData
       .filter((d) => d.isoDate)
-      .map((d) => (d.isoDate as string).slice(0, 10));
+      .map((d) => format(new Date(d.isoDate as string), 'yyyy-MM-dd'));
     if (allKeys.length === 0) return [];
     const start = filterFrom || allKeys[0];
     const end   = filterTo   || allKeys[allKeys.length - 1];
@@ -323,7 +334,7 @@ export function DataSummaryPopup({
   const overviewByDate = useMemo(() => {
     const map = new Map<string, any>();
     filteredChartData.forEach((d) => {
-      if (d.isoDate) map.set((d.isoDate as string).slice(0, 10), d);
+      if (d.isoDate) map.set(format(new Date(d.isoDate as string), 'yyyy-MM-dd'), d);
     });
     return map;
   }, [filteredChartData]);
