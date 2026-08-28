@@ -46,6 +46,17 @@ const NOT_NULL_PATTERN = /null value in column "(\w+)" .* violates not-null/i;
 const MISSING_COLUMN_PATTERN = /column "(\w+)" of relation "\w+" does not exist/i;
 
 /**
+ * Postgres row-level security violation, e.g.:
+ *   "new row violates row-level security policy for table \"reading_gap_reasons\""
+ *   "record violates row-level security policy for table \"wells\""
+ * Almost every write-policy in this schema is gated by
+ * user_has_plant_access(plant_id) — Active profile + the row's plant in
+ * plant_assignments, or Admin. Surfacing that (instead of the raw Postgres
+ * text) is what actually points the user at the fix.
+ */
+const RLS_PATTERN = /row-level security policy for table "?(\w+)"?/i;
+
+/**
  * Returns a friendly, safe-to-display string for any Supabase/Postgres error.
  * Falls back to the raw message if no specific match is found.
  */
@@ -81,6 +92,19 @@ export function friendlyError(err: AnyError, fallback = 'An unexpected error occ
   // 3. FK violation
   if (FK_PATTERN.test(msg)) {
     return 'This record is still in use by other data and cannot be deleted.';
+  }
+
+  // 3b. Row-level security violation — almost always a plant-access gap,
+  // not a "the app is broken" situation. Tell the user what to check
+  // instead of showing them raw Postgres text.
+  const rlsMatch = msg.match(RLS_PATTERN);
+  if (rlsMatch) {
+    return (
+      "You don't have access to save this for the selected plant. " +
+      "This usually means your account isn't assigned to this plant (or your " +
+      'account is still Pending/Suspended). Ask an admin to check your plant ' +
+      'assignments under Admin Console → Employees, then try again.'
+    );
   }
 
   // 4. Not-null violation
