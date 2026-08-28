@@ -7,6 +7,7 @@
 //
 // Moved verbatim from Dashboard.tsx — no logic changes.
 import { useMemo, useEffect } from 'react';
+import { format } from 'date-fns';
 import { fmtNum, ALERTS } from '@/lib/calculations';
 import {
   evaluateROMeterSpike, evaluatePhaseImbalance, evaluatePhaseLoss, dpPsi, type ROMeterKind,
@@ -15,13 +16,14 @@ import { computeRate, classifyDeviation } from '@/lib/flowRateGuards';
 import type { PlantAlert, PlantAlertSeverity } from '@/store/appStore';
 import type { ReadingGap } from '@/hooks/useReadingGaps';
 import { gapDescription } from '@/hooks/useReadingGaps';
+import type { TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 
 export function useDashboardAlerts(p: Record<string, any>) {
   const {
     selectedPlantId, addAlerts, removeAlerts, plants, plantIds,
     latestRO, roAvgFlowByTrain, recentPretreatment, latestPumpReadings,
     powerAvgByPlant, prevPowerRowByPlant, todayPower, powerIsStale,
-    nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, chemInv, consumption, _qualityTrainMeta2,
+    nrw, nrwBreached, feedAlerts, trainGaps, wellGaps, locatorGaps, trainHourlyGaps, chemInv, consumption, _qualityTrainMeta2,
   } = p;
   // ── Push all live alerts into the TopBar notification bell ─────────────────
   // Converts trainGap / RO quality / low-stock / feed alerts into PlantAlert
@@ -207,6 +209,27 @@ export function useDashboardAlerts(p: Record<string, any>) {
         plantId:     g.plant_id,
         timestamp:   Date.now(),
         linkPath:    roLink(g.plant_id, g.train_id),
+      });
+    });
+
+    // Hourly gap "please explain" nudges — a different signal from the
+    // trainGaps block above, not a duplicate of it. See
+    // useTrainHourlyGaps.ts's header: that one is the 2h hard auto-offline
+    // fallback (useTrainAutoOffline), this is the ~1.5h soft nudge that
+    // never touches train status. Deep-links straight into TrainLogModal
+    // (not the entry form roLink uses) with the specific flagged span
+    // highlighted — there's a reason to log, not a reading to enter.
+    (trainHourlyGaps as TrainHourlyGap[] ?? []).forEach((g) => {
+      const tab = g.source_table === 'ro_train_readings' ? 'ro' : 'pretreat';
+      storeAlerts.push({
+        id:          `train-hourly-gap-${g.train_id}-${g.source_table}-${g.gap.gapStartAt}`,
+        severity:    'warning',
+        title:       `Train ${g.train_number} — ${g.gap.missedHours} hr${g.gap.missedHours === 1 ? '' : 's'} missing`,
+        description: `${tab === 'ro' ? 'RO Train' : 'Pre-Treatment'} reading not logged from ${format(new Date(g.gap.gapStartAt), 'HH:mm')} to ${format(new Date(new Date(g.gap.gapEndAt).getTime() - 1), 'HH:mm')} — log why`,
+        source:      'RO Trains',
+        plantId:     g.plant_id,
+        timestamp:   Date.now(),
+        linkPath:    `/ro-trains?tab=overview&plant=${g.plant_id}&train=${g.train_id}&log=1&logTab=${tab}&highlight=${encodeURIComponent(`gap:${g.gap.gapStartAt}`)}`,
       });
     });
 
@@ -476,7 +499,7 @@ export function useDashboardAlerts(p: Record<string, any>) {
       addAlerts(Array.from(dedupedMap.values()));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trainGaps, wellGaps, locatorGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
+  }, [trainGaps, wellGaps, locatorGaps, trainHourlyGaps, latestRO, chemInv, feedAlerts, selectedPlantId, nrw, nrwBreached,
       pretreatmentAlerts, pumpElectricalAlerts, roMeterSpikes, todayPower, powerIsStale, powerAvgByPlant, plantNameById]);
 
   return { plantNameById, roMeterSpikes, pretreatmentAlerts, pumpElectricalAlerts };

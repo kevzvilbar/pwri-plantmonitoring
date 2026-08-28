@@ -931,11 +931,36 @@ export function PretreatmentAndROLog() {
     // intent (toggling back to online and submitting) is sufficient authority to
     // resolve the offline period. offlineEnd is recorded for audit purposes only.
     if (!trainOnline) {
+      // Only log a train_status_log row the moment the train actually
+      // transitions to Offline — not on every subsequent submit while it
+      // stays offline (this branch re-runs each time). Guarded the same
+      // way the "coming back online" branch below already guards its own
+      // ro_trains write, so exactly one Offline row and one Running row
+      // bookend each shutdown, giving the shutdown-window renderer in
+      // TrainLogModal a real start/end pair to read instead of nothing.
+      if (train?.status !== 'Offline') {
+        try {
+          await supabase.from('train_status_log').insert({
+            train_id: trainId, plant_id: plantId, status: 'Offline',
+            reason: offlineReasonFinal || null,
+            confirmed_by: activeOperator?.id ?? null,
+            confirmed_at: offlineStart ? new Date(offlineStart).toISOString() : new Date().toISOString(),
+          });
+        } catch { /* best-effort — see ro_trains write below, which is authoritative */ }
+      }
       await supabase.from('ro_trains').update({ status: 'Offline' }).eq('id', trainId);
     } else if (train?.status === 'Offline') {
       // Clear the offline hard-lock. Covers two cases:
       //   a) Operator explicitly resolves an offline period (entered offlineEnd).
       //   b) Brand-new train (default status='Offline') gets its first online reading.
+      try {
+        await supabase.from('train_status_log').insert({
+          train_id: trainId, plant_id: plantId, status: 'Running',
+          reason: null,
+          confirmed_by: activeOperator?.id ?? null,
+          confirmed_at: offlineEnd ? new Date(offlineEnd).toISOString() : new Date().toISOString(),
+        });
+      } catch { /* best-effort — see ro_trains write below, which is authoritative */ }
       await supabase.from('ro_trains').update({ status: 'Running' }).eq('id', trainId);
     }
 

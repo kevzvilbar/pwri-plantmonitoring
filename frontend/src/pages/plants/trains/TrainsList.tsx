@@ -47,7 +47,8 @@ import { PretreatCFChart } from './PretreatCFChart';
 import { PretreatHPPChart } from './PretreatHPPChart';
 import { MeterDetailButton } from '../charts/EntityHistoryChart';
 import { ReplaceTrainMeterDialog } from '../../ro-trains/ReplaceTrainMeterDialog';
-import { parseCsv, downloadTemplate, CsvPreviewTable, CollapsibleSection, logStatusChange } from '../shared';
+import { parseCsv, downloadTemplate, CsvPreviewTable, CollapsibleSection } from '../shared';
+import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { ReasonDialog } from '@/components/ReasonDialog';
 import { ReasonField } from '../locators/LocatorDialogs';
 
@@ -174,18 +175,32 @@ export function TrainsList({ plantId }: { plantId: string }) {
   const applyTrainStatusChange = async (t: any, newStatus: 'Running' | 'Offline' | 'Maintenance', reasonCategory?: string, reasonDetail?: string) => {
     const { error } = await supabase.from('ro_trains').update({ status: newStatus }).eq('id', t.id);
     if (error) { toast.error(friendlyError(error)); return; }
-    await logStatusChange({
-      user_id: activeOperator?.id ?? user?.id ?? null,
-      plant_id: t.plant_id,
-      entity_type: 'RO Train',
-      entity_id: t.id,
-      entity_label: `Train ${t.train_number}${t.name ? ' · ' + t.name : ''}`,
-      from_status: t.status,
-      to_status: newStatus,
-      timestamp: new Date().toISOString(),
-      reason_category: reasonCategory ?? null,
-      reason_detail: reasonDetail || null,
-    });
+    // train_status_log, not entity_status_audit_log — this is the RO-train
+    // status timeline TrainLogModal reconstructs shutdown/maintenance
+    // banners from, and the same table the 2h auto-offline safety net and
+    // the operator hourly-log offline toggle both write to. Its RLS has no
+    // manager gate (unlike entity_status_audit_log), so this insert
+    // succeeds regardless of who's driving this page. Folded into one
+    // human-readable string rather than a category/detail pair — this
+    // table only ever stores free text (see the auto-offline hook's
+    // "Auto-flagged: no reading for Xh" messages), so there's no separate
+    // reason_category column here to keep in sync.
+    try {
+      await supabase.from('train_status_log').insert({
+        train_id: t.id,
+        plant_id: t.plant_id,
+        status: newStatus,
+        reason: reasonCategory
+          ? `${reasonCategoryLabel(reasonCategory)}${reasonDetail ? `: ${reasonDetail}` : ''}`
+          : null,
+        confirmed_by: activeOperator?.id ?? user?.id ?? null,
+      });
+    } catch {
+      // Best-effort — the status change on ro_trains above already
+      // succeeded and is what actually gates the train's behavior; a
+      // failure here only means this transition won't render as a banner
+      // in the operator log later, not a broken save.
+    }
     qc.invalidateQueries({ queryKey: ['ro-trains', plantId] });
     qc.invalidateQueries({ queryKey: ['plants-summary-counts'] });
     toast.success(`Train ${t.train_number} → ${newStatus}`);

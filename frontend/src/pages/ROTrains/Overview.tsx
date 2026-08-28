@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { type Database } from '@/integrations/supabase/types';
 import { useAppStore } from '@/store/appStore';
@@ -8,10 +8,10 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { fmtNum } from '@/lib/calculations';
-import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { deriveTrainStatus, TrainCard } from '../ro-trains';
 import { loadThresholds, DEFAULT_THRESHOLDS } from '@/pages/Compliance';
+import { useTrainHourlyGaps, type TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 
 import { PlantPicker } from './shared/PlantPicker';
 
@@ -19,7 +19,6 @@ import { PlantPicker } from './shared/PlantPicker';
 // Renders the per-plant train grid.  TrainCard and all helpers are imported
 // from ./ro-trains (§4 item 2 decomposition).
 export function Overview() {
-  const qc = useQueryClient();
   const [plantId, setPlantId] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Running' | 'Maintenance' | 'Offline'>('All');
   const [search, setSearch] = useState('');
@@ -162,25 +161,18 @@ export function Overview() {
   });
 
   const allReadings  = Object.values(lastReadings ?? {});
-  const todayDateStr = format(new Date(), 'yyyy-MM-dd');
 
-  const { data: gapReasons } = useQuery({
-    queryKey: ['train-gap-reasons', plantId, todayDateStr],
-    enabled: !!plantId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('reading_gap_reasons' as any)
-        .select('*').eq('plant_id', plantId).eq('entity_type', 'ro_train').eq('gap_date', todayDateStr);
-      if (error) return [];
-      return (data ?? []) as any[];
-    },
-  });
-  const gapReasonsByTrain = useMemo(() => {
-    const m: Record<string, any> = {};
-    (gapReasons ?? []).forEach((g: any) => { m[g.entity_id] = g; });
+  // Superseded the daily "no reading today" reading_gap_reasons badge —
+  // see TrainCard.tsx's header comment for why. useTrainHourlyGaps already
+  // excludes spans someone has logged a reason for, so anything it returns
+  // here is genuinely still unresolved.
+  const trainHourlyGaps = useTrainHourlyGaps(plantId ? [plantId] : []);
+  const hourlyGapsByTrain = useMemo(() => {
+    const m: Record<string, TrainHourlyGap[]> = {};
+    trainHourlyGaps.forEach((g) => { (m[g.train_id] ??= []).push(g); });
     return m;
-  }, [gapReasons]);
+  }, [trainHourlyGaps]);
 
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
 
   const onlineCount  = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Running').length;
   const maintCount   = (trains ?? []).filter((t: any) => deriveTrainStatus(t, lastReadings?.[t.id]) === 'Maintenance').length;
@@ -287,9 +279,7 @@ export function Overview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {filtered.map((t: any) => (
           <TrainCard key={t.id} train={t} last={lastReadings?.[t.id] ?? null} spark={sparkData?.[t.id] ?? []}
-            hasReadingToday={!!lastReadings?.[t.id]?.reading_datetime && new Date(lastReadings[t.id].reading_datetime) >= startOfToday}
-            gapReason={gapReasonsByTrain[t.id] ?? null}
-            onGapReasonSaved={() => qc.invalidateQueries({ queryKey: ['train-gap-reasons', plantId, todayDateStr] })}
+            hourlyGaps={hourlyGapsByTrain[t.id] ?? []}
             autoOpenLog={deepLog && deepTrain === t.id}
             autoOpenTab={deepLogTab}
             autoOpenHighlightId={deepHighlight}

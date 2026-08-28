@@ -3,20 +3,25 @@
  *
  * Mini card shown in the RO Trains Overview grid — one card per train.
  * Extracted from ROTrains.tsx (§4 item 2 decomposition).
+ *
+ * The "no reading today" badge this card used to render (reading_gap_reasons,
+ * entity_type='ro_train', daily grain) was retired 2026-08 in favor of
+ * useTrainHourlyGaps — the hourly-cadence version built for TrainLogModal's
+ * own gap badges. Daily grain couldn't answer "which hour", so clicking it
+ * only ever opened a standalone ReasonDialog floating on the card with no
+ * connection to the actual missing span. The hourly badge below instead
+ * deep-links straight into TrainLogModal's own gap badge (same
+ * ReasonDialog, same ro_train_data_gaps row, just anchored to the specific
+ * hour it's about) — see GapBadgeRow in TrainLogModal.tsx.
  */
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { MessageCircleOff } from 'lucide-react';
-import { toast } from 'sonner';
-import { friendlyError } from '@/lib/supabaseErrors';
 import { Card } from '@/components/ui/card';
-import { ReasonDialog } from '@/components/ReasonDialog';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { fmtNum } from '@/lib/calculations';
-import { reasonCategoryLabel } from '@/lib/reasonCodes';
 import { cn } from '@/lib/utils';
 import { Sparkline, deriveTrainStatus } from './helpers';
+import type { TrainHourlyGap } from '@/hooks/useTrainHourlyGaps';
 
 // TrainLogModal is imported lazily to avoid a circular module reference —
 // TrainCard → TrainLogModal → (various) → TrainCard would be a cycle.
@@ -28,9 +33,8 @@ interface TrainCardProps {
   train: any;
   last: any;
   spark: any[];
-  hasReadingToday?: boolean;
-  gapReason?: any | null;
-  onGapReasonSaved?: () => void;
+  /** This train's currently-unresolved hourly gaps (already excludes anything logged), from useTrainHourlyGaps via Overview.tsx. */
+  hourlyGaps?: TrainHourlyGap[];
   /** Deep-link from a Dashboard alert — auto-opens the log modal for this card. */
   autoOpenLog?: boolean;
   autoOpenTab?: 'ro' | 'pretreat';
@@ -43,18 +47,18 @@ export function TrainCard({
   train,
   last,
   spark,
-  hasReadingToday,
-  gapReason,
-  onGapReasonSaved,
+  hourlyGaps,
   autoOpenLog,
   autoOpenTab,
   autoOpenHighlightId,
   onAutoOpenConsumed,
 }: TrainCardProps) {
-  const [logOpen, setLogOpen]         = useState(false);
-  const [gapDialogOpen, setGapDialogOpen] = useState(false);
-  const [gapSaving, setGapSaving]     = useState(false);
-  const { user } = useAuth();
+  const [logOpen, setLogOpen] = useState(false);
+  // Set when the hourly-gap badge below is clicked (a click originating on
+  // this card, not a Dashboard-alert deep-link) — takes priority over the
+  // autoOpen* props while set, so the modal opens on the right tab, right
+  // at the gap that was clicked.
+  const [localOpenTarget, setLocalOpenTarget] = useState<{ tab: 'ro' | 'pretreat'; highlightId: string } | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -94,30 +98,32 @@ export function TrainCard({
         </div>
       </div>
 
-      {/* Gap reason badge / prompt */}
-      {!hasReadingToday && (
-        gapReason ? (
+      {/* Hourly gap badge — most recently-ended unresolved span, if any. See
+          this file's header comment for why this replaced the old daily
+          "no reading today" badge. */}
+      {hourlyGaps && hourlyGaps.length > 0 && (() => {
+        const sorted = [...hourlyGaps].sort((a, b) => new Date(b.gap.gapEndAt).getTime() - new Date(a.gap.gapEndAt).getTime());
+        const primary = sorted[0];
+        const totalMissed = hourlyGaps.reduce((s, g) => s + g.gap.missedHours, 0);
+        const extraSpans = hourlyGaps.length - 1;
+        return (
           <button
             type="button"
-            onClick={() => setGapDialogOpen(true)}
-            title={`No reading today — ${reasonCategoryLabel(gapReason.reason_category)}${gapReason.reason_detail ? ': ' + gapReason.reason_detail : ''} (click to edit)`}
+            onClick={() => {
+              setLocalOpenTarget({
+                tab: primary.source_table === 'ro_train_readings' ? 'ro' : 'pretreat',
+                highlightId: `gap:${primary.gap.gapStartAt}`,
+              });
+              setLogOpen(true);
+            }}
+            title={`${totalMissed} hr${totalMissed === 1 ? '' : 's'} missing${extraSpans > 0 ? ` across ${hourlyGaps.length} spans` : ''} — click to log why`}
             className="inline-flex items-center gap-1 text-2xs font-medium text-warn bg-warn-soft border border-warn px-1.5 py-0.5 rounded-full hover:bg-warn-soft transition-colors w-fit"
           >
             <MessageCircleOff className="h-2.5 w-2.5" />
-            {reasonCategoryLabel(gapReason.reason_category)}
+            {totalMissed} hr{totalMissed === 1 ? '' : 's'} missing{extraSpans > 0 ? ` (+${extraSpans})` : ''} — log why
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setGapDialogOpen(true)}
-            title="No reading today — log why"
-            className="inline-flex items-center gap-1 text-2xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-fit px-1 py-0.5 rounded"
-          >
-            <MessageCircleOff className="h-3 w-3" />
-            No reading today — why?
-          </button>
-        )
-      )}
+        );
+      })()}
 
       {/* Stats row */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -151,37 +157,11 @@ export function TrainCard({
           trainId={train.id}
           trainLabel={trainLabel}
           plantId={train.plant_id}
-          onClose={() => setLogOpen(false)}
-          initialTab={autoOpenTab}
-          highlightId={autoOpenHighlightId}
+          onClose={() => { setLogOpen(false); setLocalOpenTarget(null); }}
+          initialTab={localOpenTarget?.tab ?? autoOpenTab}
+          highlightId={localOpenTarget?.highlightId ?? autoOpenHighlightId}
         />
       )}
-
-      <ReasonDialog
-        open={gapDialogOpen}
-        onOpenChange={setGapDialogOpen}
-        title={`No reading today for Train ${train.train_number} — why?`}
-        description="This explains the gap in Data Summary for today. If a reading comes in later today, it takes priority over this note."
-        confirmLabel="Log reason"
-        busy={gapSaving}
-        onConfirm={async (category, detail) => {
-          setGapSaving(true);
-          const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-          const { error } = await supabase.from('reading_gap_reasons' as any).upsert(
-            [{
-              entity_type: 'ro_train', entity_id: train.id, plant_id: train.plant_id,
-              gap_date: todayDateStr, reason_category: category, reason_detail: detail || null,
-              logged_by: user?.id ?? null,
-            }] as any,
-            { onConflict: 'entity_type,entity_id,gap_date' },
-          );
-          setGapSaving(false);
-          if (error) { toast.error(friendlyError(error)); return; }
-          toast.success(`Train ${train.train_number}: reason logged`);
-          setGapDialogOpen(false);
-          onGapReasonSaved?.();
-        }}
-      />
     </Card>
   );
 }
