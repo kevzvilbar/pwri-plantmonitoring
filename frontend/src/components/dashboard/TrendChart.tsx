@@ -239,6 +239,10 @@ export function TrendChart({
   const [locatorSearch, setLocatorSearch] = useState('');
   const [showLocatorFilter, setShowLocatorFilter] = useState(false);
 
+  // Well filter for Raw Water breakdown
+  const [wellSearch, setWellSearch] = useState('');
+  const [showWellFilter, setShowWellFilter] = useState(false);
+
   // ── Production Cost line toggles ─────────────────────────────────────────
   const [showPowerCostLine, setShowPowerCostLine] = useState(true);
   const [showChemCostLine,  setShowChemCostLine]  = useState(true);
@@ -338,7 +342,10 @@ export function TrendChart({
 
   const {
     drillEntities, usePermeateForSource, sourceDrillEntities, activeEntities, visibleEntities,
-    filteredLocatorList, wellEntities, visibleWellEntities, wellEntityRows, handleWellLegendIsolate,
+    filteredLocatorList, locatorTotals, selectTopNLocators,
+    wellEntities, visibleWellEntities, wellEntityRows, handleWellLegendIsolate,
+    filteredWellList, wellTotals, selectTopNWells, allWellsSelected, noneWellsSelected,
+    toggleWell, selectAllWells, clearAllWells,
     allSelected, noneSelected, toggleLocator, selectAllLocators, clearAllLocators,
     entityRows, roTrainEntities, visibleTrainEntities, filteredTrainList, allTrainsSelected, noTrainsSelected,
     toggleTrain, selectAllTrains, clearAllTrains, valueKey, roUnit,
@@ -350,7 +357,7 @@ export function TrendChart({
     metric, compact, drillFocus, setDrillFocus, drillMode, range,
     selectedLocatorIds, setSelectedLocatorIds, locatorSearch,
     selectedTrainIds, setSelectedTrainIds, trainSearch,
-    selectedWellIds, setSelectedWellIds,
+    selectedWellIds, setSelectedWellIds, wellSearch,
     prodDrillSource, roDrillMode, phDrillMode, setPhDrillMode, phDayFocus, setPhDayFocus,
     viewGran, setViewGran, viewBreakdown, setViewBreakdown, rawwaterBreakdown,
     hasConsumptionDrill, hasRoDrill, hasPlantHealth,
@@ -386,6 +393,7 @@ export function TrendChart({
           selectedWellIds={selectedWellIds} setSelectedWellIds={setSelectedWellIds}
           roDrillMode={roDrillMode} setRoDrillMode={setRoDrillMode}
           showTrainFilter={showTrainFilter} setShowTrainFilter={setShowTrainFilter}
+          showWellFilter={showWellFilter} setShowWellFilter={setShowWellFilter}
           phDrillMode={phDrillMode} setPhDrillMode={setPhDrillMode}
           phDayFocus={phDayFocus} setPhDayFocus={setPhDayFocus}
           showTotalCostLine={showTotalCostLine} setShowTotalCostLine={setShowTotalCostLine}
@@ -395,13 +403,20 @@ export function TrendChart({
           hasConsumptionDrill={hasConsumptionDrill} hasRoDrill={hasRoDrill} hasPlantHealth={hasPlantHealth}
           allSelected={allSelected} noneSelected={noneSelected}
           selectAllLocators={selectAllLocators} clearAllLocators={clearAllLocators} toggleLocator={toggleLocator}
+          allWellsSelected={allWellsSelected} noneWellsSelected={noneWellsSelected}
+          selectAllWells={selectAllWells} clearAllWells={clearAllWells} toggleWell={toggleWell}
           allTrainsSelected={allTrainsSelected} noTrainsSelected={noTrainsSelected}
           selectAllTrains={selectAllTrains} clearAllTrains={clearAllTrains} toggleTrain={toggleTrain}
           drillEntities={drillEntities} roTrainEntities={roTrainEntities} selectedTrainIds={selectedTrainIds}
+          wellEntities={wellEntities}
           filteredLocatorList={filteredLocatorList} filteredTrainList={filteredTrainList}
+          filteredWellList={filteredWellList}
           locatorSearch={locatorSearch} setLocatorSearch={setLocatorSearch}
           trainSearch={trainSearch} setTrainSearch={setTrainSearch}
+          wellSearch={wellSearch} setWellSearch={setWellSearch}
           showLocatorFilter={showLocatorFilter} setShowLocatorFilter={setShowLocatorFilter}
+          locatorTotals={locatorTotals} wellTotals={wellTotals}
+          selectTopNLocators={selectTopNLocators} selectTopNWells={selectTopNWells}
         />
         }
       />

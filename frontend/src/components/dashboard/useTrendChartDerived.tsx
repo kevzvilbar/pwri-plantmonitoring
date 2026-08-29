@@ -116,13 +116,30 @@ export function useTrendChartDerived(p: Record<string, any>) {
     [activeEntities, locatorSearch],
   );
 
+  // Calculate total volume per locator over the date range for ranking & smart presets
+  const locatorTotals = useMemo<Map<string, number>>(() => {
+    const totals = new Map<string, number>();
+    if (!locReadings) return totals;
+    const sorted = [...locReadings].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot } = buildEntityPivot(sorted, 'locator_id', _directLocatorIds);
+    pivot.forEach((entityMap) => {
+      entityMap.forEach((val, id) => {
+        totals.set(id, (totals.get(id) ?? 0) + val);
+      });
+    });
+    return totals;
+  }, [locReadings, _directLocatorIds]);
+
+  // Quick Preset Actions for Locators
+  const selectTopNLocators = (n: number) => {
+    const sorted = [...activeEntities].sort((a, b) => (locatorTotals.get(b.id) ?? 0) - (locatorTotals.get(a.id) ?? 0));
+    const topIds = sorted.slice(0, n).map((e) => e.id);
+    setSelectedLocatorIds(new Set(topIds));
+  };
+
   // ── Raw Water — well entities + per-well pivot rows ─────────────────────
-  // Same computeEntityDeltas/buildEntityPivot strategy chartData already
-  // uses for the well-summed Total series (see the "Raw Water = sum of
-  // per-well deltas" comment above) — this is the SAME data, just kept
-  // per-well instead of summed, then run through the same
-  // buildEntityPivotRows the Production/NRW breakdown uses for its
-  // daily/weekly/monthly bucketing. No new fetch, no new delta logic.
   const wellEntities = useMemo<{ id: string; label: string; color: string }[]>(() => {
     if (metric !== 'rawwater') return [];
     const ids = Array.from(new Set((wellReadings ?? []).map((r: any) => r.well_id).filter(Boolean)));
@@ -134,6 +151,39 @@ export function useTrendChartDerived(p: Record<string, any>) {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [metric, wellReadings, wellNames]);
+
+  const wellSearch = p.wellSearch ?? '';
+  const filteredWellList = useMemo(
+    () => wellSearch.trim() === ''
+      ? wellEntities
+      : wellEntities.filter((e) =>
+          e.label.toLowerCase().includes(wellSearch.trim().toLowerCase()),
+        ),
+    [wellEntities, wellSearch],
+  );
+
+  // Calculate total volume per well over the date range for ranking & smart presets
+  const wellTotals = useMemo<Map<string, number>>(() => {
+    const totals = new Map<string, number>();
+    if (!wellReadings) return totals;
+    const sorted = [...wellReadings].sort(
+      (a, b) => new Date(a.reading_datetime).getTime() - new Date(b.reading_datetime).getTime(),
+    );
+    const { pivot } = buildEntityPivot(sorted, 'well_id');
+    pivot.forEach((entityMap) => {
+      entityMap.forEach((val, id) => {
+        totals.set(id, (totals.get(id) ?? 0) + val);
+      });
+    });
+    return totals;
+  }, [wellReadings]);
+
+  // Quick Preset Actions for Wells
+  const selectTopNWells = (n: number) => {
+    const sorted = [...wellEntities].sort((a, b) => (wellTotals.get(b.id) ?? 0) - (wellTotals.get(a.id) ?? 0));
+    const topIds = sorted.slice(0, n).map((e) => e.id);
+    setSelectedWellIds(new Set(topIds));
+  };
 
   const visibleWellEntities = useMemo(
     () => selectedWellIds === null ? wellEntities : wellEntities.filter((e) => selectedWellIds.has(e.id)),
@@ -154,6 +204,26 @@ export function useTrendChartDerived(p: Record<string, any>) {
     if (!id) return;
     setSelectedWellIds((prev) => toggleIsolateEntity(prev, id, wellEntities.map((x) => x.id)));
   };
+
+  // Helpers for well selector
+  const allWellsSelected = selectedWellIds === null || selectedWellIds.size === wellEntities.length;
+  const noneWellsSelected = selectedWellIds !== null && selectedWellIds.size === 0;
+
+  function toggleWell(id: string) {
+    setSelectedWellIds((prev) => {
+      const current = prev ?? new Set(wellEntities.map((e) => e.id));
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next.size === wellEntities.length ? null : next;
+    });
+  }
+
+  function selectAllWells() { setSelectedWellIds(null); }
+  function clearAllWells() { setSelectedWellIds(new Set()); }
 
   // Helpers for the locator selector
   const allSelected = selectedLocatorIds === null || selectedLocatorIds.size === activeEntities.length;
@@ -727,7 +797,10 @@ export function useTrendChartDerived(p: Record<string, any>) {
 
   return {
     drillEntities, usePermeateForSource, sourceDrillEntities, activeEntities, visibleEntities,
-    filteredLocatorList, wellEntities, visibleWellEntities, wellEntityRows, handleWellLegendIsolate,
+    filteredLocatorList, locatorTotals, selectTopNLocators,
+    wellEntities, visibleWellEntities, wellEntityRows, handleWellLegendIsolate,
+    filteredWellList, wellTotals, selectTopNWells, allWellsSelected, noneWellsSelected,
+    toggleWell, selectAllWells, clearAllWells,
     allSelected, noneSelected, toggleLocator, selectAllLocators, clearAllLocators,
     entityRows, roTrainEntities, visibleTrainEntities, filteredTrainList, allTrainsSelected, noTrainsSelected,
     toggleTrain, selectAllTrains, clearAllTrains, valueKey, roUnit,

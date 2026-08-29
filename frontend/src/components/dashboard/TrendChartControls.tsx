@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/popover';
 import { isGranularityUsable } from './TrendChartAggregate';
 import { GranularityControl, StackToggle } from './TrendChartDrill';
+import { cn } from '@/lib/utils';
 
 export function TrendChartControls(props: Record<string, any>) {
   const {
@@ -26,15 +27,19 @@ export function TrendChartControls(props: Record<string, any>) {
     kwhSource, setKwhSource, chartData, range, rangeDays,
     selectedLocatorIds, setSelectedLocatorIds, selectedWellIds, setSelectedWellIds,
     roDrillMode, setRoDrillMode, showTrainFilter, setShowTrainFilter,
+    showWellFilter, setShowWellFilter,
     phDrillMode, setPhDrillMode, phDayFocus, setPhDayFocus,
     showTotalCostLine, setShowTotalCostLine, showPowerCostLine, setShowPowerCostLine,
     showChemCostLine, setShowChemCostLine, prodDrillSource, usePermeateForSource, drillMode,
     hasConsumptionDrill, hasRoDrill, hasPlantHealth,
     allSelected, noneSelected, selectAllLocators, clearAllLocators, toggleLocator,
+    allWellsSelected, noneWellsSelected, selectAllWells, clearAllWells, toggleWell,
     allTrainsSelected, noTrainsSelected, selectAllTrains, clearAllTrains, toggleTrain,
-    drillEntities, roTrainEntities, selectedTrainIds,
-    filteredLocatorList, filteredTrainList, locatorSearch, setLocatorSearch, trainSearch, setTrainSearch,
+    drillEntities, roTrainEntities, selectedTrainIds, wellEntities,
+    filteredLocatorList, filteredTrainList, filteredWellList,
+    locatorSearch, setLocatorSearch, trainSearch, setTrainSearch, wellSearch, setWellSearch,
     showLocatorFilter, setShowLocatorFilter,
+    locatorTotals, wellTotals, selectTopNLocators, selectTopNWells,
   } = props;
   return (
         <>
@@ -362,6 +367,29 @@ export function TrendChartControls(props: Record<string, any>) {
                   : 'bg-muted text-muted-foreground hover:text-foreground border-border',
               ].join(' ')}
             >By well</button>
+            {rawwaterBreakdown === 'by-well' && (
+              <button
+                onClick={() => setShowWellFilter((v) => !v)}
+                data-testid="drill-filter-rawwater"
+                className={[
+                  'h-5 px-1.5 rounded text-2xs font-medium transition-colors leading-none flex items-center gap-0.5 border',
+                  showWellFilter
+                    ? 'bg-warn text-white border-warn'
+                    : !allWellsSelected
+                      ? 'bg-warn-soft text-warn border-warn'
+                      : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+                title="Filter wells"
+                aria-label="Filter wells"
+              >
+                <Filter className="h-3 w-3" />
+                {!allWellsSelected && (
+                  <span className="font-semibold" aria-hidden>
+                    {selectedWellIds?.size ?? wellEntities.length}/{wellEntities.length}
+                  </span>
+                )}
+              </button>
+            )}
             {rawwaterBreakdown === 'by-well' && viewGran !== 'daily' && (
               <>
                 <span className="hidden sm:inline-block h-3 border-l border-border mx-1" aria-hidden />
@@ -714,32 +742,59 @@ export function TrendChartControls(props: Record<string, any>) {
         </div>
       )}
       {hasConsumptionDrill && drillMode !== 'default' && showLocatorFilter && (
-        <div className="mb-2 rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-1.5" data-testid={`locator-filter-panel-${metric}`}>
-          {/* Header row */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-foreground shrink-0">Filter Locators</span>
+        <div className="mb-2 rounded-lg border border-border/80 bg-card/90 shadow-sm p-2.5 flex flex-col gap-2 backdrop-blur-sm" data-testid={`locator-filter-panel-${metric}`}>
+          {/* Header row with Smart Presets */}
+          <div className="flex items-center justify-between gap-2 flex-wrap pb-1 border-b border-border/50">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-foreground shrink-0">Filter Locators</span>
+              <span className="text-3xs text-muted-foreground">| Quick Presets:</span>
+              <button
+                onClick={() => selectTopNLocators(3)}
+                className="h-5 px-2 rounded-md text-3xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                title="Select Top 3 highest volume locators"
+              >
+                Top 3
+              </button>
+              <button
+                onClick={() => selectTopNLocators(5)}
+                className="h-5 px-2 rounded-md text-3xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                title="Select Top 5 highest volume locators"
+              >
+                Top 5
+              </button>
+              {drillEntities.length > 10 && (
+                <button
+                  onClick={() => selectTopNLocators(10)}
+                  className="h-5 px-2 rounded-md text-3xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                  title="Select Top 10 highest volume locators"
+                >
+                  Top 10
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-1 ml-auto">
               <button
                 onClick={selectAllLocators}
                 className={[
-                  'h-5 px-2 rounded text-2xs font-medium border transition-colors leading-none',
+                  'h-5 px-2 rounded text-2xs font-semibold border transition-colors leading-none',
                   allSelected
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                 ].join(' ')}
               >
-                All
+                All ({drillEntities.length})
               </button>
               <button
                 onClick={clearAllLocators}
                 className={[
-                  'h-5 px-2 rounded text-2xs font-medium border transition-colors leading-none',
+                  'h-5 px-2 rounded text-2xs font-semibold border transition-colors leading-none',
                   noneSelected
                     ? 'bg-danger text-white border-danger'
                     : 'bg-muted text-muted-foreground hover:text-foreground border-border',
                 ].join(' ')}
               >
-                None
+                Clear
               </button>
               <button
                 onClick={() => setShowLocatorFilter(false)}
@@ -755,68 +810,217 @@ export function TrendChartControls(props: Record<string, any>) {
           {/* Search box */}
           {drillEntities.length > 6 && (
             <div className="relative">
-              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 value={locatorSearch}
                 onChange={(e) => setLocatorSearch(e.target.value)}
-                placeholder="Search locators…"
-                className="w-full h-6 pl-6 pr-2 rounded border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder="Search locator name or area…"
+                className="w-full h-7 pl-7 pr-6 rounded-md border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
               {locatorSearch && (
                 <button
                   onClick={() => setLocatorSearch('')}
                   aria-label="Clear search"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-3 w-3" />
                 </button>
               )}
             </div>
           )}
 
           {/* Locator chip grid */}
-          <div className="flex flex-wrap gap-1 max-h-[130px] overflow-y-auto pr-0.5">
+          <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-0.5 py-0.5">
             {filteredLocatorList.length === 0 && (
               <span className="text-xs text-muted-foreground py-1">No locators match search.</span>
             )}
-            {filteredLocatorList.map((entity) => {
+            {filteredLocatorList.map((entity: any) => {
               const isActive = selectedLocatorIds === null || selectedLocatorIds.has(entity.id);
+              const vol = locatorTotals?.get(entity.id);
+              const volLabel = vol != null && vol > 0
+                ? vol >= 1000 ? `${(vol / 1000).toFixed(1)}k m³` : `${Math.round(vol)} m³`
+                : null;
+
               return (
                 <button
                   key={entity.id}
                   onClick={() => toggleLocator(entity.id)}
-                  title={entity.label}
+                  title={`${entity.label}${volLabel ? ` — Total: ${volLabel}` : ''}`}
                   className={[
-                    'flex items-center gap-1 h-6 px-2 rounded-full text-2xs font-medium border transition-all leading-none max-w-[180px]',
+                    'flex items-center gap-1.5 h-6 px-2.5 rounded-full text-2xs font-semibold border transition-all leading-none max-w-[220px]',
                     isActive
-                      ? 'text-white border-transparent shadow-sm'
-                      : 'bg-background text-muted-foreground border-border hover:border-foreground/30',
+                      ? 'text-white border-transparent shadow-xs'
+                      : 'bg-background/80 text-muted-foreground border-border/80 hover:border-foreground/40 hover:bg-muted/30 opacity-60',
                   ].join(' ')}
                   style={isActive ? { backgroundColor: entity.color, borderColor: entity.color } : {}}
                 >
-                  {isActive && <Check className="h-2.5 w-2.5 shrink-0" />}
+                  {isActive ? <Check className="h-3 w-3 shrink-0" /> : <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: entity.color }} />}
                   <span className="truncate">{entity.label}</span>
+                  {volLabel && (
+                    <span className={cn('text-3xs font-mono ml-0.5 shrink-0 opacity-85', isActive ? 'text-white' : 'text-muted-foreground')}>
+                      {volLabel}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
 
           {/* Summary footer */}
-          <div className="text-2xs text-muted-foreground flex items-center gap-2 pt-0.5 border-t border-border/50">
+          <div className="text-2xs text-muted-foreground flex items-center justify-between pt-1 border-t border-border/50 font-medium">
             <span>
               {allSelected
-                ? `All ${drillEntities.length} locators shown`
+                ? `Showing all ${drillEntities.length} locators`
                 : noneSelected
-                  ? 'No locators selected — chart will be empty'
-                  : `${selectedLocatorIds!.size} of ${drillEntities.length} locators shown`}
+                  ? 'No locators selected — select at least one'
+                  : `Showing ${selectedLocatorIds!.size} of ${drillEntities.length} locators`}
             </span>
-            {!allSelected && !noneSelected && (
+            {!allSelected && (
               <button
                 onClick={selectAllLocators}
-                className="ml-auto text-2xs text-primary hover:underline"
+                className="text-2xs font-semibold text-primary hover:underline"
               >
-                Reset
+                Reset to All
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Raw Water Well Filter Drawer ── */}
+      {metric === 'rawwater' && rawwaterBreakdown === 'by-well' && showWellFilter && (
+        <div className="mb-2 rounded-lg border border-border/80 bg-card/90 shadow-sm p-2.5 flex flex-col gap-2 backdrop-blur-sm" data-testid="well-filter-panel-rawwater">
+          {/* Header row with Smart Presets */}
+          <div className="flex items-center justify-between gap-2 flex-wrap pb-1 border-b border-border/50">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-foreground shrink-0">Filter Extraction Wells</span>
+              <span className="text-3xs text-muted-foreground">| Quick Presets:</span>
+              <button
+                onClick={() => selectTopNWells(3)}
+                className="h-5 px-2 rounded-md text-3xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                title="Select Top 3 highest yield wells"
+              >
+                Top 3
+              </button>
+              <button
+                onClick={() => selectTopNWells(5)}
+                className="h-5 px-2 rounded-md text-3xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                title="Select Top 5 highest yield wells"
+              >
+                Top 5
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={selectAllWells}
+                className={[
+                  'h-5 px-2 rounded text-2xs font-semibold border transition-colors leading-none',
+                  allWellsSelected
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >
+                All ({wellEntities.length})
+              </button>
+              <button
+                onClick={clearAllWells}
+                className={[
+                  'h-5 px-2 rounded text-2xs font-semibold border transition-colors leading-none',
+                  noneWellsSelected
+                    ? 'bg-danger text-white border-danger'
+                    : 'bg-muted text-muted-foreground hover:text-foreground border-border',
+                ].join(' ')}
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowWellFilter(false)}
+                className="h-5 w-5 flex items-center justify-center rounded border border-border bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Close filter"
+                aria-label="Close filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* Search box */}
+          {wellEntities.length > 6 && (
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={wellSearch}
+                onChange={(e) => setWellSearch(e.target.value)}
+                placeholder="Search well number or locator…"
+                className="w-full h-7 pl-7 pr-6 rounded-md border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              {wellSearch && (
+                <button
+                  onClick={() => setWellSearch('')}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Well chip grid */}
+          <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-0.5 py-0.5">
+            {filteredWellList.length === 0 && (
+              <span className="text-xs text-muted-foreground py-1">No wells match search.</span>
+            )}
+            {filteredWellList.map((entity: any) => {
+              const isActive = selectedWellIds === null || selectedWellIds.has(entity.id);
+              const vol = wellTotals?.get(entity.id);
+              const volLabel = vol != null && vol > 0
+                ? vol >= 1000 ? `${(vol / 1000).toFixed(1)}k m³` : `${Math.round(vol)} m³`
+                : null;
+
+              return (
+                <button
+                  key={entity.id}
+                  onClick={() => toggleWell(entity.id)}
+                  title={`${entity.label}${volLabel ? ` — Total: ${volLabel}` : ''}`}
+                  className={[
+                    'flex items-center gap-1.5 h-6 px-2.5 rounded-full text-2xs font-semibold border transition-all leading-none max-w-[200px]',
+                    isActive
+                      ? 'text-white border-transparent shadow-xs'
+                      : 'bg-background/80 text-muted-foreground border-border/80 hover:border-foreground/40 hover:bg-muted/30 opacity-60',
+                  ].join(' ')}
+                  style={isActive ? { backgroundColor: entity.color, borderColor: entity.color } : {}}
+                >
+                  {isActive ? <Check className="h-3 w-3 shrink-0" /> : <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: entity.color }} />}
+                  <span className="truncate">{entity.label}</span>
+                  {volLabel && (
+                    <span className={cn('text-3xs font-mono ml-0.5 shrink-0 opacity-85', isActive ? 'text-white' : 'text-muted-foreground')}>
+                      {volLabel}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Summary footer */}
+          <div className="text-2xs text-muted-foreground flex items-center justify-between pt-1 border-t border-border/50 font-medium">
+            <span>
+              {allWellsSelected
+                ? `Showing all ${wellEntities.length} extraction wells`
+                : noneWellsSelected
+                  ? 'No wells selected — select at least one'
+                  : `Showing ${selectedWellIds!.size} of ${wellEntities.length} wells`}
+            </span>
+            {!allWellsSelected && (
+              <button
+                onClick={selectAllWells}
+                className="text-2xs font-semibold text-primary hover:underline"
+              >
+                Reset to All
               </button>
             )}
           </div>
