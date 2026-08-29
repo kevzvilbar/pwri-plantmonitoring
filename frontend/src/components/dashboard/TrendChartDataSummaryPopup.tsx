@@ -1,14 +1,12 @@
-// Extracted from TrendChart.tsx (Phase 1 of pwri-improvement-plan.md).
-// Invoked once from the main TrendChart component (see TrendChart.tsx) when
-// a KPI's "Data Summary" action is clicked.
-
 import { useState, useMemo } from 'react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { DSMTab, buildEntityPivot, fillDateRange } from './TrendChartPivotShared';
+import { Download, Droplet, Receipt, Gauge, Sparkles } from 'lucide-react';
+import { DSMTab, buildEntityPivot, fillDateRange, fmtDateKey } from './TrendChartPivotShared';
 import { PivotTable, OverviewTable } from './TrendChartTables';
 
 // ── DataSummaryPopup — 3-tab popup shown when "Data Summary" is clicked ───────
@@ -397,11 +395,70 @@ export function DataSummaryPopup({
   const activeTab: DSMTab = (!hasProdTab && tab === 'production') || (!hasConsTab && tab === 'consumption') ? 'overview' : tab;
 
   // The shared "dates" for footer count — use per-tab.
-  // For rawwater overview: use prodDates so the footer count matches Per Well.
-  const tabDates = activeTab === 'consumption' ? consDates
-    : activeTab === 'production' ? prodDates
-    : metric === 'rawwater' ? prodDates
-    : overviewDates;
+  // Aggregated Summary Statistics across the active date range
+  const summaryStats = useMemo(() => {
+    const totalProd = overviewChartRows.reduce((s, r) => s + (r.production ?? 0), 0);
+    const totalCons = overviewChartRows.reduce((s, r) => s + (r.consumption ?? 0), 0);
+    const totalRaw  = overviewChartRows.reduce((s, r) => s + (r.rawwater ?? 0), 0);
+    const daysCount = Math.max(1, tabDates.length);
+    const avgDailyProd = totalProd / daysCount;
+    const avgDailyCons = totalCons / daysCount;
+    const peakRow = overviewChartRows.reduce((max, r) => (r.production ?? 0) > (max?.production ?? 0) ? r : max, null as any);
+    const nrwPct = totalProd > 0 ? Math.max(0, ((totalProd - totalCons) / totalProd) * 100) : 0;
+
+    return {
+      totalProd,
+      totalCons,
+      totalRaw,
+      avgDailyProd,
+      avgDailyCons,
+      peakProd: peakRow?.production ?? 0,
+      peakDate: peakRow?.date ?? '—',
+      nrwPct,
+    };
+  }, [overviewChartRows, tabDates]);
+
+  const handleExportCsv = () => {
+    let csvContent = '';
+    if (activeTab === 'overview') {
+      const headers = ['Date', 'Production (m3)', 'Consumption (m3)', 'NRW (%)', 'Raw Water (m3)', 'Recovery (%)', 'Permeate TDS (ppm)'];
+      const rows = overviewChartRows.map(r => [
+        r.date,
+        r.production ?? '',
+        r.consumption ?? '',
+        r.nrw ?? '',
+        r.rawwater ?? '',
+        r.recovery ?? '',
+        r.tds ?? ''
+      ].join(','));
+      csvContent = [headers.join(','), ...rows].join('\n');
+    } else if (activeTab === 'production') {
+      const headers = ['Date', ...prodEntities.map(e => `"${e.label.replace(/"/g, '""')}"`), 'Total (m3)'];
+      const rows = [...prodDates].reverse().map(d => {
+        const entityVals = prodEntities.map(e => prodPivotMap.get(d)?.get(e.id) ?? 0);
+        const rowTot = entityVals.reduce((a, b) => a + b, 0);
+        return [fmtDateKey(d), ...entityVals, rowTot].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
+    } else if (activeTab === 'consumption') {
+      const headers = ['Date', ...consEntities.map(e => `"${e.label.replace(/"/g, '""')}"`), 'Total (m3)'];
+      const rows = [...consDates].reverse().map(d => {
+        const entityVals = consEntities.map(e => consPivot.get(d)?.get(e.id) ?? 0);
+        const rowTot = entityVals.reduce((a, b) => a + b, 0);
+        return [fmtDateKey(d), ...entityVals, rowTot].join(',');
+      });
+      csvContent = [headers.join(','), ...rows].join('\n');
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `data-summary-${metric}-${activeTab}-${format(new Date(), 'yyyyMMdd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -410,16 +467,75 @@ export function DataSummaryPopup({
         data-testid={`dsm-popup-${metric}`}
       >
         {/* Header */}
-        <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0">
-          <DialogTitle className="text-sm font-semibold pb-2">
-            Data Summary — {title ?? metric}
-          </DialogTitle>
+        <DialogHeader className="px-5 pt-4 pb-0 border-b shrink-0 bg-card">
+          <div className="flex items-center justify-between gap-3 pb-2 flex-wrap">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span>Data Summary — {title ?? metric}</span>
+            </DialogTitle>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportCsv}
+                className="h-7 px-2.5 text-2xs gap-1.5 font-semibold text-muted-foreground hover:text-foreground"
+              >
+                <Download className="h-3 w-3 text-primary" />
+                <span>Export CSV</span>
+              </Button>
+            </div>
+          </div>
+          
           <DialogDescription className="sr-only">
             Multi-tab data summary for {title ?? metric}.
           </DialogDescription>
 
+          {/* Quick Aggregate Snapshot Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pb-3">
+            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Droplet className="h-3 w-3 text-primary" />
+                <span>Total Prod</span>
+              </div>
+              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                {summaryStats.totalProd > 0 ? summaryStats.totalProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+              </div>
+            </div>
+
+            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Receipt className="h-3 w-3 text-highlight" />
+                <span>Total Cons</span>
+              </div>
+              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                {summaryStats.totalCons > 0 ? summaryStats.totalCons.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³</span>
+              </div>
+            </div>
+
+            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Gauge className="h-3 w-3 text-sky-500" />
+                <span>Daily Avg Output</span>
+              </div>
+              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                {summaryStats.avgDailyProd > 0 ? summaryStats.avgDailyProd.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'} <span className="text-3xs font-normal text-muted-foreground">m³/day</span>
+              </div>
+            </div>
+
+            <div className="p-2 rounded-lg bg-muted/40 border border-border/50">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-emerald-500" />
+                <span>Period NRW Loss</span>
+              </div>
+              <div className="font-mono text-sm font-bold text-foreground mt-0.5">
+                {summaryStats.totalProd > 0 ? `${summaryStats.nrwPct.toFixed(1)}%` : '—'}
+              </div>
+            </div>
+          </div>
+
           {/* Date range filter */}
-          <div className="flex items-center gap-2 pb-2 flex-wrap">
+          <div className="flex items-center gap-2 pb-2 flex-wrap border-t pt-2 border-border/40">
             <span className="text-2xs text-muted-foreground font-medium shrink-0">Date range:</span>
             <Input
               type="date"
@@ -457,7 +573,7 @@ export function DataSummaryPopup({
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={[
-                  'px-5 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+                  'px-5 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
                   activeTab === t.key
                     ? 'border-primary text-primary bg-background'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
